@@ -12,6 +12,7 @@ import { Explain, InfoPanel, WorkedExample } from '@/components/ui/Explain';
 import { ClipboardCheckIcon, WarningIcon } from '@/components/ui/Icon';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
+import { useStackBack } from '@/hooks/useStackBack';
 import { useProductList, useProductSearch, type Product } from '@/lib/stacks/catalog-stack';
 import { getSupabase } from '@/lib/supabase/client';
 import { describeVariance, formatMoney, formatQty, pluralUnit } from '@/lib/format';
@@ -50,6 +51,7 @@ const REASONS = [
  * one honest input into a rubber stamp.
  */
 export default function CountPage() {
+  const goBack = useStackBack();
   const { store } = useAuth();
   const { can } = usePermission();
 
@@ -169,7 +171,7 @@ export default function CountPage() {
 
   if (!can('stock.count')) {
     return (
-      <PageScaffold title="Count" subtitle="Check the shelf against the records">
+      <PageScaffold onBack={goBack} title="Count" subtitle="Check the shelf against the records">
         <InfoPanel tone="info" title="Not part of your job here">
           Counting stock and closing the day is done by a manager or the owner.
         </InfoPanel>

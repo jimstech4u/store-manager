@@ -1,5 +1,13 @@
 /* ── Customer tabs ────────────────────────────────────────────────────────────────── */
 
+/* Edge-to-edge scroller.
+
+   A horizontal rail inside a padded container stops short of both edges, which reads as clipped
+   and wastes swipe distance on a phone. Pulling it out with negative margin and putting the
+   padding INSIDE means the first chip still aligns with the page text, the last one can scroll
+   fully into view, and the row bleeds off both edges the way a native carousel does.
+
+   scroll-padding matches, so a snapped item lands aligned rather than under the edge. */
 .tabStrip {
   display: flex;
   gap: var(--space-2);
@@ -7,10 +15,15 @@
   /* Momentum scrolling with a snap, so a tab never comes to rest half off-screen. */
   scroll-snap-type: x proximity;
   -webkit-overflow-scrolling: touch;
-  padding: var(--space-2) var(--space-4);
+  scrollbar-width: none;
+
+  /* Out to the page edges, past the scaffold's own body padding. */
+  margin: calc(var(--space-5) * -1) calc(var(--space-4) * -1) var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  scroll-padding-left: var(--space-4);
+
   background: var(--surface);
   border-bottom: 1px solid var(--border);
-  scrollbar-width: none;
 }
 
 .tabStrip::-webkit-scrollbar {
@@ -112,10 +125,32 @@
   background: var(--danger-subtle);
 }
 
+/*
+ * One column on a phone. Two columns here put a stepper — two 56px buttons plus a number field
+ * plus a unit label — into roughly 97px, which squeezed the number field's content box to zero
+ * and made the quantity invisible. Quantity and price both need room to be read at a glance and
+ * hit with a thumb; side by side they get neither.
+ */
 .lineGrid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0 var(--space-3);
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+}
+
+@media (min-width: 560px) {
+  .lineGrid {
+    grid-template-columns: 1fr 1fr;
+    gap: 0 var(--space-3);
+  }
+}
+
+.claimActions {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.claimActions > * {
+  flex: 1;
 }
 
 /* The line's own total, so a mistyped quantity is caught on the line that caused it rather
@@ -383,8 +418,12 @@
   gap: var(--space-2);
   overflow-x: auto;
   scrollbar-width: none;
-  margin-bottom: var(--space-3);
-  padding-bottom: var(--space-1);
+
+  /* Out to the edges of its CARD, not the page — the chips belong to the line they sit in, and
+     bleeding them past the card would break that grouping. */
+  margin: 0 calc(var(--space-4) * -1) var(--space-3);
+  padding: 0 var(--space-4) var(--space-1);
+  scroll-padding-left: var(--space-4);
 }
 
 .unitRow::-webkit-scrollbar {
@@ -405,6 +444,84 @@
 }
 
 .unitActive {
+  border-color: var(--primary);
+  background: var(--primary-subtle);
+  color: var(--primary);
+}
+
+
+/* ── Selling-as row ───────────────────────────────────────────────────────────────── */
+
+/*
+ * Sits directly above the line total rather than at the top of the line.
+ *
+ * Changing the shape changes the price and therefore the total, so the control belongs beside the
+ * number it moves. At the top of the card it was separated from its own effect by the quantity
+ * and price fields, and sellers were setting a price and only then noticing they were still on
+ * "Pack".
+ */
+.unitBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.unitLabel {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* The code is five characters read aloud across a counter; a placeholder keeps the row the same
+   height before it arrives so nothing below it moves. */
+.codePending {
+  color: var(--text-muted);
+  letter-spacing: 0.3em;
+}
+
+
+/* ── Quick fractions ──────────────────────────────────────────────────────────────── */
+
+.fractionBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.fractionLabel {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.fractionRow {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/*
+ * Square-ish and generous. These carry single glyphs (¼, ½), which are small targets by nature,
+ * and they sit next to the line total where a mis-tap changes the money.
+ */
+.fraction {
+  flex: 1;
+  min-height: var(--touch-comfortable);
+  border: 2px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.fraction:hover:not(:disabled) {
+  background: var(--surface-sunken);
+}
+
+.fractionActive {
   border-color: var(--primary);
   background: var(--primary-subtle);
   color: var(--primary);

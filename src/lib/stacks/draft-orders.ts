@@ -124,18 +124,30 @@ export function draftTotal(order: DraftOrder): number {
   return draftSubtotal(order) + (Number.isFinite(fee) ? fee : 0);
 }
 
+/**
+ * How many base units one of whatever is being sold amounts to.
+ *
+ * A sale unit wins over the pack: "half pack" is 6 base units, which no pack multiple can say.
+ *
+ * Exported, and used everywhere this conversion is needed, because it was previously open-coded
+ * in two places that disagreed. The price-vs-cost check divided by the PACK size while the
+ * quantity maths divided by the SALE UNIT — so selling a half pack at a healthy margin was
+ * flagged as below cost, and the warning only cleared at nearly twice the right price. Anything
+ * converting sale units to base units belongs here.
+ */
+export function baseUnitsPerSaleUnit(line: DraftLine): number {
+  if (line.saleUnitBaseQty) {
+    const each = Number(line.saleUnitBaseQty);
+    if (Number.isFinite(each) && each > 0) return each;
+  }
+  const factor = line.packId && line.packQty ? Number(line.packQty) : 1;
+  return Number.isFinite(factor) && factor > 0 ? factor : 1;
+}
+
 export function lineBaseQty(line: DraftLine): number {
   const qty = Number(line.qty);
   if (!Number.isFinite(qty)) return 0;
-
-  // A sale unit wins over the pack: "half pack" is 6 base units, which no pack multiple can say.
-  if (line.saleUnitBaseQty) {
-    const each = Number(line.saleUnitBaseQty);
-    if (Number.isFinite(each)) return qty * each;
-  }
-
-  const factor = line.packId && line.packQty ? Number(line.packQty) : 1;
-  return qty * (Number.isFinite(factor) ? factor : 1);
+  return qty * baseUnitsPerSaleUnit(line);
 }
 
 export function useDraftOrders(storeId: string | null) {

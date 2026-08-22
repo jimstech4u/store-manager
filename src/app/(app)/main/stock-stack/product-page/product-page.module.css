@@ -1,0 +1,51 @@
+.facts {
+  display: grid;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+@media (min-width: 480px) {
+  .facts {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.fact {
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.factLabel {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  margin-bottom: var(--space-1);
+}
+
+.factValue {
+  font-family: var(--font-numeric);
+  font-size: var(--text-xl);
+  font-weight: 700;
+  /* Tabular figures so two of these stacked line up on the decimal rather than wandering. */
+  font-variant-numeric: tabular-nums;
+}
+
+.factUnit {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.low {
+  color: var(--danger);
+}
+
+.factCode {
+  font-family: var(--font-numeric);
+  font-size: var(--text-base);
+  /* A code is read aloud, copied and compared character by character, so let it break anywhere
+     rather than overflow its card. */
+  word-break: break-all;
+}

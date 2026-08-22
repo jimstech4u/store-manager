@@ -3,10 +3,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import styles from './sell-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
+import { useStackBack } from '@/hooks/useStackBack';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { SearchField, useDebounced } from '@/components/ui/SearchField';
 import { InfoPanel } from '@/components/ui/Explain';
+import { Collapsible } from '@/components/ui/Collapsible';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { CloseIcon, MinusIcon, PlusIcon, ReceiptIcon, ReturnIcon } from '@/components/ui/Icon';
 import { TakePayment } from './TakePayment';
@@ -18,7 +20,7 @@ import { fetchSaleUnits, useProductSearch, type SaleUnit } from '@/lib/stacks/ca
 import {
   draftSubtotal,
   draftTotal,
-  lineBaseQty,
+  baseUnitsPerSaleUnit,
   lineTotal,
   makeDraftLine,
   useDraftOrders,
@@ -37,7 +39,23 @@ import { formatMoney, formatQty, pluralUnit } from '@/lib/format';
  *  · a share code, so an order can be handed to a colleague to finish
  *  · the total never more than a glance away
  */
+/**
+ * The fractional amounts a seller can tap straight onto a line.
+ *
+ * A fixed list rather than a setting: these are the fractions a pack is physically broken into,
+ * and offering an arbitrary one would mean sellers picking a fraction the goods do not divide
+ * into. Which of them actually appear is decided per line by whether they land on whole base
+ * units.
+ */
+const FRACTIONS = [
+  { label: '¼', value: 0.25 },
+  { label: '½', value: 0.5 },
+  { label: '¾', value: 0.75 },
+  { label: '1', value: 1 },
+] as const;
+
 export default function SellPage() {
+  const goBack = useStackBack();
   const { store } = useAuth();
   const {
     orders,
@@ -99,6 +117,27 @@ export default function SellPage() {
     }
     const first = units[0];
 
+    /*
+     * Already on this receipt in the same shape? Add to it rather than starting a second line.
+     *
+     * Sellers add the same item repeatedly as a customer keeps asking for more, and two "Coca-Cola
+     * PET" lines on one receipt is how a quantity gets miscounted at the counter and disputed
+     * afterwards. Matched on the sale unit too, deliberately: a pack line and a loose-piece line
+     * of the same product are genuinely different lines and must stay apart.
+     */
+    const existing = activeOrder.lines.find(
+      (l) => l.productId === product.id && l.saleUnitId === (first?.id ?? null),
+    );
+    if (existing) {
+      const current = Number(existing.qty);
+      updateLine(activeOrder.clientUuid, existing.key, {
+        qty: String((Number.isFinite(current) ? current : 0) + 1),
+      });
+      setPicking(false);
+      setQuery('');
+      return;
+    }
+
     addLine(
       activeOrder.clientUuid,
       makeDraftLine({
@@ -133,8 +172,9 @@ export default function SellPage() {
   const belowCost = (line: DraftLine): boolean => {
     const product = productById.get(line.productId);
     if (!product || !line.unitPrice) return false;
-    const perBase =
-      Number(line.unitPrice) / (line.packId && line.packQty ? Number(line.packQty) : 1);
+    // Divide by what is actually being sold, not by the pack. Dividing a half-pack price by 12
+    // made every half pack and every single piece look like it was sold at a loss.
+    const perBase = Number(line.unitPrice) / baseUnitsPerSaleUnit(line);
     return Number.isFinite(perBase) && perBase < Number(product.avgUnitCost);
   };
 
@@ -155,6 +195,7 @@ export default function SellPage() {
 
   return (
     <PageScaffold
+      onBack={goBack}
       title="Sell"
       subtitle={store.name}
       action={
@@ -162,9 +203,13 @@ export default function SellPage() {
           type="button"
           className={styles.claimButton}
           onClick={() => setClaiming((v) => !v)}
-          aria-label="Take over an order using its code"
+          // The icon and the label both flip. A control that opens a panel and then looks
+          // identical while the panel is open gives no way to tell that tapping it again is what
+          // closes it — so people hunt for a way out and there isn't one.
+          aria-label={claiming ? 'Close the order code box' : 'Take over an order using its code'}
+          aria-expanded={claiming}
         >
-          <ReturnIcon />
+          {claiming ? <CloseIcon /> : <ReturnIcon />}
         </button>
       }
       footer={
@@ -216,18 +261,30 @@ export default function SellPage() {
             autoCapitalize="characters"
             autoCorrect="off"
           />
-          <Button
-            fullWidth
-            onClick={async () => {
-              const claimed = await claimByCode(code);
-              if (claimed) {
+          <div className={styles.claimActions}>
+            {/* Cancel sits beside the action rather than only in the header: this panel covers the
+                order being worked on, and the way out has to be where the eye already is. */}
+            <Button
+              variant="secondary"
+              onClick={() => {
                 setClaiming(false);
                 setCode('');
-              }
-            }}
-          >
-            Take over this order
-          </Button>
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                const claimed = await claimByCode(code);
+                if (claimed) {
+                  setClaiming(false);
+                  setCode('');
+                }
+              }}
+            >
+              Take over this order
+            </Button>
+          </div>
         </div>
       )}
 
@@ -269,22 +326,28 @@ export default function SellPage() {
             ) : (
               <>
                 <span className={styles.customerName}>Walk-in customer</span>
-                <span className={styles.customerHint}>
-                  Tap to attach someone — only needed for credit
-                </span>
+                <span className={styles.customerHint}>Tap to attach someone</span>
               </>
             )}
           </button>
 
-          {activeOrder.code && (
-            <div className={styles.codeRow}>
-              <span className={styles.codeLabel}>Order code</span>
-              <span className={styles.codeValue}>{activeOrder.code}</span>
-              <span className={styles.codeHint}>
-                {syncing ? 'Saving…' : 'Read this out to hand the order over'}
-              </span>
-            </div>
-          )}
+          {/* The row is always here once a customer is being served; only the CODE waits on the
+              server. Rendering the whole block conditionally made it appear a second later and
+              push everything below it down — the page visibly jumped while the seller was already
+              reading it. Reserving the space costs one row and removes the jump entirely. */}
+          <div className={styles.codeRow}>
+            <span className={styles.codeLabel}>Order code</span>
+            <span className={`${styles.codeValue} ${activeOrder.code ? '' : styles.codePending}`}>
+              {activeOrder.code ?? '·····'}
+            </span>
+            <span className={styles.codeHint}>
+              {activeOrder.code
+                ? 'Read this out to hand the order over'
+                : syncing
+                  ? 'Getting a code…'
+                  : 'A code appears once this order reaches the shop'}
+            </span>
+          </div>
 
           {/* ── Lines ─────────────────────────────────────────────────────────── */}
           {activeOrder.lines.length > 0 && (
@@ -294,13 +357,10 @@ export default function SellPage() {
                 return (
                   <div className={styles.line} key={line.key}>
                     <div className={styles.lineHead}>
-                      <div>
-                        <p className={styles.lineName}>{line.productName}</p>
-                        <p className={styles.lineMeta}>
-                          {formatQty(lineBaseQty(line))}{' '}
-                          {pluralUnit(line.baseUnit, lineBaseQty(line))} in total
-                        </p>
-                      </div>
+                      {/* Just the name. The base-unit total ("12 pieces in total") used to sit
+                          here and was read as a second quantity to check against the one being
+                          entered — two numbers for one line, with nothing saying which mattered. */}
+                      <p className={styles.lineName}>{line.productName}</p>
                       <button
                         type="button"
                         className={styles.lineRemove}
@@ -312,7 +372,9 @@ export default function SellPage() {
                     </div>
 
                     {(saleUnits[line.productId]?.length ?? 0) > 1 && (
-                      <div className={styles.unitRow} role="group" aria-label="How it is being sold">
+                      <div className={styles.unitBlock}>
+                        <span className={styles.unitLabel}>Selling as</span>
+                        <div className={styles.unitRow} role="group" aria-label="How it is being sold">
                         {saleUnits[line.productId].map((u) => (
                           <button
                             key={u.id}
@@ -336,6 +398,7 @@ export default function SellPage() {
                             {u.name}
                           </button>
                         ))}
+                        </div>
                       </div>
                     )}
 
@@ -384,6 +447,54 @@ export default function SellPage() {
                         error={under ? 'Below what this cost you' : null}
                       />
                     </div>
+
+                    {(() => {
+                      /*
+                       * Quick fractions of whatever is being sold — a quarter, half or three
+                       * quarters of a pack, straight onto the quantity.
+                       *
+                       * Typing "0.25" into a number field at a counter is slower and easier to
+                       * get wrong than tapping a button, and these three are most of the
+                       * fractional sales a distributor makes.
+                       *
+                       * OFFERED ONLY WHEN THEY LAND ON WHOLE BASE UNITS. A quarter of a 12-piece
+                       * pack is 3 pieces and is real; a quarter of a single bottle is not, and
+                       * the database rejects it — so the guard belongs here too rather than
+                       * letting the seller build a line that cannot be settled.
+                       */
+                      const per = baseUnitsPerSaleUnit(line);
+                      const options = FRACTIONS.filter((f) => (per * f.value) % 1 === 0);
+                      if (options.length === 0) return null;
+                      return (
+                        <div className={styles.fractionBlock}>
+                          <span className={styles.fractionLabel}>Quick amount</span>
+                          <div
+                            className={styles.fractionRow}
+                            role="group"
+                            aria-label="Set the quantity to a fraction"
+                          >
+                            {options.map((f) => {
+                              const on = Number(line.qty) === f.value;
+                              return (
+                                <button
+                                  key={f.label}
+                                  type="button"
+                                  className={`${styles.fraction} ${on ? styles.fractionActive : ''}`}
+                                  aria-pressed={on}
+                                  onClick={() =>
+                                    updateLine(activeOrder.clientUuid, line.key, {
+                                      qty: String(f.value),
+                                    })
+                                  }
+                                >
+                                  {f.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     <div className={styles.lineTotal}>
                       <span>Line total</span>
@@ -474,47 +585,67 @@ export default function SellPage() {
                 </div>
               </div>
 
-              <Field
-                label="Extra charge"
-                optional
-                numeric
-                prefix="₦"
-                value={activeOrder.feeAmount}
-                onChange={(e) =>
-                  updateOrder(activeOrder.clientUuid, { feeAmount: e.target.value })
+              {/* Needed on some sales, not most. Collapsed by default so the items and the
+                  total own the screen — but the summary states the charge, so folding it away
+                  never folds away money. */}
+              <Collapsible
+                tone="card"
+                title="Extra charge or note"
+                defaultOpen={Number(activeOrder.feeAmount) > 0 || activeOrder.note !== ''}
+                summary={
+                  Number(activeOrder.feeAmount) > 0
+                    ? `${activeOrder.feeLabel.trim() || 'Charge'} ${formatMoney(activeOrder.feeAmount)}`
+                    : activeOrder.note
+                      ? 'Note added'
+                      : 'None'
                 }
-                placeholder="0"
-                hint="Delivery or anything else added to this customer's bill."
-              />
-
-              {Number(activeOrder.feeAmount) > 0 && (
-                <Field
-                  label="What is the charge for?"
-                  value={activeOrder.feeLabel}
-                  onChange={(e) =>
-                    updateOrder(activeOrder.clientUuid, { feeLabel: e.target.value })
-                  }
-                  placeholder="Delivery"
-                />
-              )}
-
-              <Field
-                label="Note"
-                optional
-                value={activeOrder.note}
-                onChange={(e) => updateOrder(activeOrder.clientUuid, { note: e.target.value })}
-                placeholder="Anything to remember about this sale"
-              />
-
-              <Button
-                variant="ghost"
-                fullWidth
-                onClick={() => closeOrder(activeOrder.clientUuid)}
               >
-                Close this tab without selling
-              </Button>
+                <Field
+                  label="Extra charge"
+                  optional
+                  numeric
+                  prefix="₦"
+                  value={activeOrder.feeAmount}
+                  onChange={(e) =>
+                    updateOrder(activeOrder.clientUuid, { feeAmount: e.target.value })
+                  }
+                  placeholder="0"
+                  hint="Delivery or anything else added to this customer's bill."
+                />
+
+                {Number(activeOrder.feeAmount) > 0 && (
+                  <Field
+                    label="What is the charge for?"
+                    value={activeOrder.feeLabel}
+                    onChange={(e) =>
+                      updateOrder(activeOrder.clientUuid, { feeLabel: e.target.value })
+                    }
+                    placeholder="Delivery"
+                  />
+                )}
+
+                <Field
+                  label="Note"
+                  optional
+                  value={activeOrder.note}
+                  onChange={(e) => updateOrder(activeOrder.clientUuid, { note: e.target.value })}
+                  placeholder="Anything to remember about this sale"
+                />
+              </Collapsible>
+
             </>
           )}
+
+          {/* Outside the "has lines" block on purpose. It used to live inside it, so emptying a
+              receipt took away the only way to close the tab — leaving a customer tab that could
+              not be sold and could not be dismissed. Closing is most needed exactly then. */}
+          <Button
+            variant="ghost"
+            fullWidth
+            onClick={() => closeOrder(activeOrder.clientUuid)}
+          >
+            Close this tab without selling
+          </Button>
         </>
       )}
       {activeOrder && (

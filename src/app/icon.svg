@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Store Manager">
+  <!--
+    The app mark.
+
+    Designed at 16px first, not scaled down to it. A favicon is the size a mark actually has to
+    survive at, and detail that reads beautifully at 512 turns to mud in a browser tab — so this
+    is three shapes and nothing else: a crate, a division across it, and a tally.
+
+    The crate says stock. The line across it says a crate is divisible — the half-pack, the
+    quarter, the loose piece that this whole product exists to account for. The tally marks are
+    the count.
+
+    Solid teal ground rather than an outline: at 16px an outlined glyph loses its interior, while
+    a filled tile keeps a recognisable silhouette against any tab colour.
+  -->
+  <rect width="64" height="64" rx="14" fill="#0b6252"/>
+
+  <!-- Crate -->
+  <path d="M16 22h32v24a4 4 0 0 1-4 4H20a4 4 0 0 1-4-4V22Z"
+        fill="none" stroke="#ffffff" stroke-width="4" stroke-linejoin="round"/>
+
+  <!-- Lid line: the crate opens, and what comes out of it is counted separately. -->
+  <path d="M13 22h38" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- Tally: three units inside the crate. -->
+  <path d="M25 32v10M32 32v10M39 32v10"
+        stroke="#8fcbbe" stroke-width="4" stroke-linecap="round"/>
+</svg>

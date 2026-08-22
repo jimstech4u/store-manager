@@ -85,6 +85,25 @@ export default function MainShell() {
           // every native tab bar has, and the fastest way out of a stack several pages deep.
           onReselect={(id) => popStackToRoot(id)}
           onScroll={(callback) => scrollBroadcaster.subscribe(callback)}
+          /*
+           * Float on scroll, the way academix-app's bar does.
+           *
+           * A bar pinned flat to the bottom edge eats a full row of content on a short phone
+           * screen, and these lists — stock, receipts, customers — are exactly the screens where
+           * the extra row is worth having. Detaching it once the page starts moving gives the
+           * content back without ever taking the tabs away, which `autohide` would.
+           *
+           * The threshold keeps it still at the top of a page: a bar that lifts off on a
+           * two-pixel scroll reads as a glitch rather than as a response.
+           */
+          mode="float"
+          floatScrollThreshold={48}
+          barBorderRadius="18px"
+          barShadow={
+            isDark
+              ? '0 6px 24px rgba(0, 0, 0, 0.55)'
+              : '0 6px 24px rgba(11, 40, 34, 0.18)'
+          }
           className={styles.nav}
           activeColor={isDark ? '#8fcbbe' : '#0b6252'}
           inactiveColor={isDark ? '#a8b3b1' : '#4d5554'}

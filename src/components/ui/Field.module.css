@@ -33,6 +33,18 @@
 
 .input {
   width: 100%;
+  /*
+   * `min-width: auto` resolves to the min-content size, and for an <input> that is ZERO in
+   * Chromium. Inside a flex row with an affix, in a narrow column, the input duly shrank to its
+   * padding and rendered a 0px content box — the value was in the DOM the whole time with no
+   * room to be drawn. Measured at 36px wide with 32px of that padding.
+   *
+   * A floor in `ch` keeps room for the digits that are the entire point of the field. The affix
+   * is what gives way instead, because a clipped unit label still leaves a readable number,
+   * while the reverse leaves a seller entering quantities blind.
+   */
+  flex: 1 1 auto;
+  min-width: 4.5ch;
   min-height: var(--touch-comfortable);
   padding: var(--space-3) var(--space-4);
 
@@ -93,6 +105,9 @@
 .affix {
   display: inline-flex;
   align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
   padding: 0 var(--space-3);
   background: var(--surface-sunken);
   border: 2px solid var(--border-strong);

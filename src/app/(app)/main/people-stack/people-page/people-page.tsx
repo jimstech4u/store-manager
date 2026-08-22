@@ -3,6 +3,7 @@
 import { useCallback, useState } from 'react';
 import styles from '../../money-stack/money-page/money-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
+import { useStackBack } from '@/hooks/useStackBack';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
 import { SearchField, useDebounced } from '@/components/ui/SearchField';
@@ -29,6 +30,7 @@ interface CustomerRow {
  * customer only needs saving when they buy on credit. This is where the ones who were saved live.
  */
 export default function PeoplePage() {
+  const goBack = useStackBack();
   const { store } = useAuth();
   const [query, setQuery] = useState('');
   const debounced = useDebounced(query);
@@ -72,6 +74,7 @@ export default function PeoplePage() {
 
   return (
     <PageScaffold
+      onBack={goBack}
       title="People"
       subtitle="Your customers"
       footer={

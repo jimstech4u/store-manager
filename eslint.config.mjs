@@ -51,6 +51,11 @@ export default defineConfig([
       // let the TS-aware version do the job — running both means real findings get lost among
       // false ones, which is how a lint step stops being read.
       'no-unused-vars': 'off',
+      // Same class of problem, and the same fix. `no-undef` predates TypeScript and has no idea
+      // that `CanvasImageSource` or `RequestInit` are types rather than variables, so it reports
+      // every type-only DOM global as undefined. tsc already rejects genuinely undefined
+      // identifiers — and does it correctly — so this rule can only produce false positives here.
+      'no-undef': 'off',
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
       'react/prop-types': 'off',
     },

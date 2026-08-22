@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import styles from './review-page.module.css';
-import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
@@ -10,6 +9,7 @@ import { Explain, InfoPanel, WorkedExample } from '@/components/ui/Explain';
 import { BoxIcon, CheckIcon, CloseIcon, PeopleIcon } from '@/components/ui/Icon';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
+import { useStackBack } from '@/hooks/useStackBack';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatDateTime, formatQty, pluralUnit } from '@/lib/format';
 
@@ -63,7 +63,7 @@ const KIND_LABEL: Record<string, string> = {
  * word people click without knowing what they agreed to.
  */
 export default function ReviewPage() {
-  const nav = useNav();
+  const goBack = useStackBack();
   const { store } = useAuth();
   const { can } = usePermission();
 
@@ -104,7 +104,7 @@ export default function ReviewPage() {
 
   if (!can('records.confirm')) {
     return (
-      <PageScaffold title="Waiting for approval" onBack={() => nav.pop()}>
+      <PageScaffold onBack={goBack} title="Waiting for approval">
         <InfoPanel tone="info" title="A manager handles this">
           Anything you add is saved and usable straight away. A manager or the owner checks it
           afterwards — you do not need to wait for them before serving a customer.
@@ -120,9 +120,9 @@ export default function ReviewPage() {
 
   return (
     <PageScaffold
+      onBack={goBack}
       title="Waiting for you"
       subtitle={total === 0 ? 'Nothing to check' : `${total} to check`}
-      onBack={() => nav.pop()}
     >
       {error && (
         <InfoPanel tone="danger" title="Could not do that">

@@ -1,4 +1,5 @@
 .page {
+  position: relative;   /* anchors the close button */
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
@@ -79,4 +80,25 @@
 .sentTo {
   font-weight: 700;
   word-break: break-all;
+}
+
+/* Top-right exit. Full touch size, and pulled out to the corner so it never crowds the title. */
+.close {
+  position: absolute;
+  top: calc(var(--space-3) + var(--safe-top));
+  right: var(--space-3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--touch-min);
+  min-height: var(--touch-min);
+  border-radius: var(--radius-full);
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.close:hover {
+  color: var(--text);
+  background: var(--surface-sunken);
 }

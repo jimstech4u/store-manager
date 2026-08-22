@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import styles from './receive-page.module.css';
 import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
+import { useStackBack } from '@/hooks/useStackBack';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { Sheet } from '@/components/ui/Sheet';
@@ -43,6 +44,7 @@ const newKey = () => Math.random().toString(36).slice(2);
  */
 export default function ReceivePage() {
   const nav = useNav();
+  const goBack = useStackBack();
   const { store } = useAuth();
 
   const [lines, setLines] = useState<ReceiveLine[]>([]);
@@ -152,7 +154,7 @@ export default function ReceivePage() {
 
   if (done) {
     return (
-      <PageScaffold title="Delivery recorded" onBack={() => nav.pop()}>
+      <PageScaffold onBack={goBack} title="Delivery recorded">
         <InfoPanel tone="success" title="Stock is in">
           Your stock has gone up and the cost of each item now includes the delivery and
           distribution fees.
@@ -166,9 +168,9 @@ export default function ReceivePage() {
 
   return (
     <PageScaffold
+      onBack={goBack}
       title="Record a delivery"
       subtitle="What came in, and what it really cost"
-      onBack={() => nav.pop()}
       footer={
         lines.length > 0 ? (
           <>

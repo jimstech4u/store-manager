@@ -35,18 +35,33 @@
   gap: var(--space-2);
 }
 
+/* The whole row is one button opening the product. Written as button resets rather than by
+   wrapping the contents in a link, so the touch target is the entire row — the difference between
+   hitting it first time and hitting it third time on a phone at a counter. */
 .item {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  /* Full touch height even though rows are not yet tappable: they will open a detail page, and
-     sizing them correctly now avoids the layout shifting under people later. */
+  width: 100%;
   min-height: var(--touch-comfortable);
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.item:hover {
+  background: var(--surface-sunken);
+}
+
+.itemChevron {
+  flex: none;
+  color: var(--text-muted);
 }
 
 .itemMain {

@@ -20,6 +20,8 @@ export interface Product {
   id: string;
   name: string;
   sku: string | null;
+  /** Only populated by `fetchProduct` — the list RPCs do not return it. */
+  barcode?: string | null;
   baseUnit: string;
   categoryId: string | null;
   categoryName: string | null;
@@ -36,6 +38,7 @@ interface ProductRow {
   id: string;
   name: string;
   sku: string | null;
+  barcode?: string | null;
   base_unit: string;
   category_id: string | null;
   category_name: string | null;
@@ -53,6 +56,7 @@ function toProduct(r: ProductRow): Product {
     id: r.id,
     name: r.name,
     sku: r.sku,
+    barcode: r.barcode ?? null,
     baseUnit: r.base_unit,
     categoryId: r.category_id,
     categoryName: r.category_name,
@@ -127,6 +131,21 @@ export function useProductList(storeId: string | null) {
   });
 
   return { products: list.items, ...list };
+}
+
+/**
+ * One product, for a detail screen.
+ *
+ * Goes back to the server rather than reusing the row the list already has in memory. The list
+ * row is a snapshot from whenever that page loaded, and by the time someone opens a product,
+ * takes a photograph and comes back, the stock figure on it may be minutes old and wrong — which
+ * on the screen that shows what is on the shelf is the one number that must not be stale.
+ */
+export async function fetchProduct(productId: string): Promise<Product | null> {
+  const { data, error } = await getSupabase().rpc('get_product', { p_product_id: productId });
+  if (error) throw error;
+  const rows = (data ?? []) as ProductRow[];
+  return rows.length > 0 ? toProduct(rows[0]) : null;
 }
 
 

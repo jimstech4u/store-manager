@@ -1,7 +1,9 @@
 .backdrop {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  /* Above the tab bar and every stack transition layer. Portalled to <body>, so this
+     competes only with other top-level overlays rather than with page content. */
+  z-index: 1000;
   background: rgba(10, 14, 13, 0.55);
   display: flex;
   align-items: flex-end;

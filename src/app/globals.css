@@ -113,6 +113,17 @@
 
   /* Safe areas, so a bottom bar clears the iOS home indicator and Android gesture bar. */
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  /*
+   * Height of the tab bar, as a token rather than a number repeated per page.
+   *
+   * The bar floats on scroll, which means it stops reserving its own space in the layout and
+   * starts sitting ON TOP of the content — so the last row of every list was disappearing behind
+   * it. Every scrolling surface pads by this, the way academix-web's pages do.
+   *
+   * Must match `normalHeight` on the NavigationBar in main/page.tsx.
+   */
+  --nav-height: 74px;
   --safe-top:    env(safe-area-inset-top, 0px);
 }
 

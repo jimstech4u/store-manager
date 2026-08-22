@@ -12,6 +12,7 @@ import { InfoPanel } from '@/components/ui/Explain';
 import { CashIcon, ChevronRightIcon } from '@/components/ui/Icon';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
+import { useStackBack } from '@/hooks/useStackBack';
 import { usePaginatedList, useInfiniteScroll } from '@/hooks/usePaginatedList';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatDate, formatMoney } from '@/lib/format';
@@ -44,6 +45,7 @@ interface StatementRow {
  * and why they keep a paper book beside it.
  */
 export default function MoneyPage() {
+  const goBack = useStackBack();
   const { store } = useAuth();
   const { can } = usePermission();
 
@@ -134,7 +136,7 @@ export default function MoneyPage() {
   }
 
   return (
-    <PageScaffold title="Money" subtitle="Who owes you, and what has been paid">
+    <PageScaffold onBack={goBack} title="Money" subtitle="Who owes you, and what has been paid">
       <div className={styles.summary}>
         <span className={styles.summaryLabel}>
           {list.hasMore ? 'Owed by those loaded so far' : 'Owed to you'}

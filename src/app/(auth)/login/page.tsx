@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState, type FormEvent } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import styles from './page.module.css';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
+import { FullPageMessage } from '@/components/ui/FullPageMessage';
+import { CloseIcon } from '@/components/ui/Icon';
 import { getSupabase } from '@/lib/supabase/client';
 
 type Mode = 'signin' | 'signup';
@@ -18,9 +20,24 @@ type Mode = 'signin' | 'signup';
  * the middle of a working day. A password they can be told once and reuse is the pattern that
  * actually survives in this setting.
  */
+/**
+ * Wrapped in Suspense because useSearchParams opts the page out of prerendering otherwise.
+ * Next builds this route statically and cannot know the query string at build time, so the
+ * part that reads it has to be allowed to resolve on the client.
+ */
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<FullPageMessage title="Opening" tone="loading" />}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
-  const [mode, setMode] = useState<Mode>('signin');
+  const params = useSearchParams();
+  // The marketplace's "Open a shop" lands here expecting the signup form, not sign-in.
+  const [mode, setMode] = useState<Mode>(params.get('mode') === 'signup' ? 'signup' : 'signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -111,6 +128,20 @@ export default function LoginPage() {
   return (
     <div className={styles.page}>
       <div className={styles.inner}>
+        {/* A way back out.
+
+            Someone who tapped "Open a shop" from the marketplace and changed their mind has no
+            other exit on a phone — no browser chrome in a PWA, and the back gesture is not
+            obvious to everyone. A dead end on a sign-up screen is where people leave for good. */}
+        <button
+          type="button"
+          className={styles.close}
+          onClick={() => router.push('/')}
+          aria-label="Close and go back to the shops"
+        >
+          <CloseIcon size="1.4em" />
+        </button>
+
         <h1 className={styles.brand}>Store Manager</h1>
         <p className={styles.tagline}>Stock, sales and accounts for your business.</p>
 

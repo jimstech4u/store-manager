@@ -6,10 +6,11 @@ import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { InfoPanel } from '@/components/ui/Explain';
 import { SearchField, useDebounced } from '@/components/ui/SearchField';
 import { Button } from '@/components/ui/Button';
-import { PlusIcon } from '@/components/ui/Icon';
+import { ChevronRightIcon, PlusIcon } from '@/components/ui/Icon';
 import { useNav } from '@academix-admin/navigation-stack';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
+import { useStackBack } from '@/hooks/useStackBack';
 import { useProductList, useProductSearch } from '@/lib/stacks/catalog-stack';
 import { useInfiniteScroll } from '@/hooks/usePaginatedList';
 import { formatMoney, formatQty, pluralUnit } from '@/lib/format';
@@ -24,6 +25,7 @@ import styles from './stock-page.module.css';
  */
 export default function StockPage() {
   const nav = useNav();
+  const goBack = useStackBack();
   const { store } = useAuth();
   const { can } = usePermission();
   const [query, setQuery] = useState('');
@@ -73,6 +75,7 @@ export default function StockPage() {
 
   return (
     <PageScaffold
+      onBack={goBack}
       title="Stock"
       subtitle={store.name}
       footer={
@@ -122,7 +125,15 @@ export default function StockPage() {
             {products.map((p) => {
               const out = Number(p.onHand) <= 0;
               return (
-                <li className={styles.item} key={p.id}>
+                <li key={p.id}>
+                  {/* A button, not a div with onClick: this has to be reachable by keyboard and
+                      announced as an action, and the whole row is the target so it is easy to hit
+                      without aiming. */}
+                  <button
+                    type="button"
+                    className={styles.item}
+                    onClick={() => nav.push('product_page', { id: p.id })}
+                  >
                   <div className={styles.itemMain}>
                     <p className={styles.itemName}>{p.name}</p>
                     <p className={styles.itemMeta}>
@@ -139,6 +150,8 @@ export default function StockPage() {
                       {pluralUnit(p.baseUnit, Number(p.onHand))}
                     </span>
                   </div>
+                  <ChevronRightIcon className={styles.itemChevron} />
+                  </button>
                 </li>
               );
             })}

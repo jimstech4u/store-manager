@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Tells a client we handle both schemes ourselves, so it stops force-inverting the message
+     and applies the media query below instead. Without these two lines, dark-mode clients
+     invert the whole email and the code panel can end up unreadable. -->
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<title>Confirm your new email</title>
+<style>
+  /* Only clients that keep <style> get this; everything essential is also inlined below, so the
+     email is correct without it. */
+  @media (prefers-color-scheme: dark) {
+    .sm-bg    { background:#0f1413 !important; }
+    .sm-card  { background:#171d1c !important; border-color:#2a3231 !important; }
+    .sm-text  { color:#eef2f1 !important; }
+    .sm-muted { color:#a8b3b1 !important; }
+    .sm-rule  { border-color:#2a3231 !important; }
+  }
+  @media (max-width:600px) {
+    .sm-pad { padding:24px !important; }
+    .sm-code { font-size:30px !important; letter-spacing:6px !important; }
+  }
+</style>
+</head>
+<body class="sm-bg" style="margin:0;padding:0;background:#f7f8f8;">
+  <!-- Preheader: the grey line a phone shows next to the subject. Hidden in the body itself. -->
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">
+    Your Store Manager confirmation code is {{ .Token }}
+  </div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+         class="sm-bg" style="background:#f7f8f8;">
+    <tr>
+      <td align="center" style="padding:32px 16px;">
+
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+               style="max-width:520px;">
+
+          <!-- Brand -->
+          <tr>
+            <td align="center" style="padding-bottom:24px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="padding-right:10px;" valign="middle">
+                    <!-- The same crate mark as the app icon, inline so no image needs loading —
+                         most clients block remote images by default. -->
+                    <svg width="34" height="34" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+                      <rect width="64" height="64" rx="14" fill="#0b6252"/>
+                      <path d="M16 22h32v24a4 4 0 0 1-4 4H20a4 4 0 0 1-4-4V22Z" fill="none"
+                            stroke="#ffffff" stroke-width="4" stroke-linejoin="round"/>
+                      <path d="M13 22h38" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+                      <path d="M25 32v10M32 32v10M39 32v10" stroke="#8fcbbe" stroke-width="4"
+                            stroke-linecap="round"/>
+                    </svg>
+                  </td>
+                  <td valign="middle" class="sm-text"
+                      style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+                             font-size:19px;font-weight:700;color:#141918;letter-spacing:-0.2px;">
+                    Store Manager
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Card -->
+          <tr>
+            <td class="sm-card sm-pad"
+                style="background:#ffffff;border:1px solid #dde1e0;border-radius:16px;padding:32px;">
+
+              <h1 class="sm-text"
+                  style="margin:0 0 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+                         font-size:23px;line-height:1.3;font-weight:700;color:#141918;">
+                Confirm your new email
+              </h1>
+
+              <p class="sm-muted"
+                 style="margin:0 0 28px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+                        font-size:17px;line-height:1.55;color:#4d5554;">
+                Use the code below to confirm this address for your Store Manager account.
+              </p>
+
+              <!-- The code.
+                   White on teal, both stated explicitly. A client that inverts the surrounding
+                   email leaves this panel legible because it never relied on the page background
+                   in the first place. -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center"
+                      style="background:#0b6252;border-radius:12px;padding:22px 16px;">
+                    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+                                font-size:13px;font-weight:700;letter-spacing:1px;
+                                text-transform:uppercase;color:#c5e4dd;margin-bottom:8px;">
+                      Your code
+                    </div>
+                    <div class="sm-code"
+                         style="font-family:'SF Mono',ui-monospace,Menlo,Consolas,monospace;
+                                font-size:34px;font-weight:700;letter-spacing:9px;color:#ffffff;">
+                      {{ .Token }}
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Button: a table cell, not an <a> with padding, because Outlook ignores padding
+                   on inline elements. 48px+ tall for a thumb. -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                     style="margin-top:28px;">
+                <tr>
+                  <td align="center" bgcolor="#0b6252" style="border-radius:10px;">
+                    <a href="{{ .ConfirmationURL }}"
+                       style="display:block;padding:16px 24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+                              font-size:17px;font-weight:600;color:#ffffff;text-decoration:none;">
+                      Confirm this address
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <hr class="sm-rule"
+                  style="border:none;border-top:1px solid #dde1e0;margin:28px 0 20px;">
+
+              <p class="sm-muted"
+                 style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+                        font-size:15px;line-height:1.55;color:#4d5554;">
+                If the button does not work, copy this link into your browser:
+              </p>
+              <p style="margin:8px 0 0;font-family:'SF Mono',ui-monospace,Menlo,Consolas,monospace;
+                        font-size:13px;line-height:1.5;word-break:break-all;">
+                <a href="{{ .ConfirmationURL }}" style="color:#0f7a66;">{{ .ConfirmationURL }}</a>
+              </p>
+            </td>
+          </tr>
+
+          <tr>
+            <td align="center" style="padding-top:24px;">
+              <p class="sm-muted"
+                 style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+                        font-size:13px;line-height:1.5;color:#6b7574;">
+                If you did not ask to change your email, ignore this — your account is unchanged.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

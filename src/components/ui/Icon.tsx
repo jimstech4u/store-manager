@@ -225,3 +225,34 @@ export const OfflineIcon = (p: IconProps) => (
     <path d="M12 20h.01" />
   </Svg>
 );
+
+export const CameraIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.2l1.2-2h8.2l1.2 2h2.2A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z" />
+    <circle cx="12" cy="13" r="3.4" />
+  </Svg>
+);
+
+export const ImageIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <circle cx="8.5" cy="9.5" r="1.6" />
+    <path d="m4 17 4.5-4.5a1.6 1.6 0 0 1 2.2 0L15 17" />
+    <path d="m14 15 1.6-1.6a1.6 1.6 0 0 1 2.2 0L20 15.6" />
+  </Svg>
+);
+
+export const TrashIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 7h16" />
+    <path d="M9 7V5h6v2" />
+    <path d="M6 7v12a1.6 1.6 0 0 0 1.6 1.6h8.8A1.6 1.6 0 0 0 18 19V7" />
+    <path d="M10 11v6M14 11v6" />
+  </Svg>
+);
+
+export const StarIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="m12 3.6 2.6 5.3 5.8.85-4.2 4.1 1 5.8-5.2-2.75L6.8 19.65l1-5.8-4.2-4.1 5.8-.85z" />
+  </Svg>
+);

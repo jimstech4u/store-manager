@@ -1,0 +1,548 @@
+/* =====================================================================================
+   The public marketplace.
+
+   Mobile-first like the rest of the app, but this one has a second audience: shoppers, on any
+   device, who have never seen this software. So it carries a real top bar with the two things a
+   visitor needs — a way in (sign in / open a shop) and a way to search.
+   ===================================================================================== */
+
+.page {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+/* ── Top bar ──────────────────────────────────────────────────────────────────────── */
+
+.top {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  padding: calc(var(--space-3) + var(--safe-top)) var(--space-4) var(--space-3);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.topRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  max-width: 1100px;
+  margin: 0 auto;
+  /* Without this the row can grow past its container and the last action ends up flush against
+     the screen edge, outside the bar's own padding. */
+  min-width: 0;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  /* The brand yields first: on a narrow phone the way IN matters more than the wordmark, so the
+     name truncates rather than pushing the buttons off-screen. */
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.brandMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: var(--primary);
+  color: var(--primary-text);
+  flex: none;
+}
+
+.topSpacer {
+  flex: 1;
+}
+
+.topActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+  /* Belt and braces: the actions never shrink, and never spill past the bar's padding. */
+  margin-left: auto;
+}
+
+/* On a phone the brand plus two buttons is already the whole width, so the secondary action
+   drops away rather than squeezing every target below the touch floor. */
+.hideNarrow {
+  display: none;
+}
+
+/* On a phone the wordmark is dropped before any action is: the mark alone still identifies the
+   site, and losing a button loses a route into the product. */
+.brandName {
+  display: none;
+}
+
+.searchRow {
+  max-width: 1100px;
+  margin: var(--space-3) auto 0;
+}
+
+/* ── Hero ─────────────────────────────────────────────────────────────────────────── */
+
+.hero {
+  position: relative;
+  padding: var(--space-7) var(--space-4);
+  text-align: center;
+  isolation: isolate;
+
+  /* Two layers, in this order: a scrim, then the picture. The scrim is what makes the headline
+     legible over a photograph whose brightness we do not control at the top of the page — it is
+     deliberately redundant with the darkening already baked into the file, because the file can
+     be swapped by a designer later and the text must not silently lose contrast when it is.
+
+     background-color underneath is not decoration: it is what the hero looks like for the moment
+     before the image arrives, and on a slow connection that moment is most of the first visit. */
+  background-color: #052e27;
+  background-image:
+    linear-gradient(180deg, rgba(2, 24, 20, 0.34), rgba(2, 24, 20, 0.66)),
+    url('/hero.png');
+  background-size: cover, cover;
+  background-position: center, center 40%;
+  background-repeat: no-repeat, no-repeat;
+}
+
+/* The hero is a fixed dark surface in both themes — the picture does not have a light variant —
+   so its text colours are literal rather than tokens. A token here would flip to dark text on a
+   dark photograph the moment the theme changed. */
+.hero .heroTitle {
+  color: #ffffff;
+}
+
+.hero .heroText {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+/* On the photograph the normal teal primary button loses its edges against the teal ground.
+   Inverting it — white plate, teal label — is both the highest-contrast option available and the
+   clearest signal of which of the two actions is the main one. */
+.hero .heroPrimary {
+  background: #ffffff;
+  color: #0b6252;
+  border-color: #ffffff;
+}
+
+.hero .heroPrimary:hover:not(:disabled) {
+  background: #eef5f3;
+}
+
+.hero .heroSecondary {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.55);
+}
+
+.hero .heroSecondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.heroInner {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.heroTitle {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: var(--leading-tight);
+  margin-bottom: var(--space-3);
+}
+
+.heroText {
+  font-size: var(--text-base);
+  color: var(--text-muted);
+  margin-bottom: var(--space-5);
+}
+
+.heroActions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: 360px;
+  margin: 0 auto;
+}
+
+/* ── Body ─────────────────────────────────────────────────────────────────────────── */
+
+.body {
+  flex: 1;
+  padding: var(--space-5) var(--space-4) calc(var(--space-7) + var(--safe-bottom));
+}
+
+.inner {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-1);
+}
+
+.sectionTitle {
+  font-size: var(--text-xl);
+  font-weight: 700;
+}
+
+.sectionNote {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  margin-bottom: var(--space-4);
+}
+
+/* ── Category rail ────────────────────────────────────────────────────────────────── */
+
+/* Edge-to-edge scroller.
+
+   A horizontal rail inside a padded container stops short of both edges, which reads as clipped
+   and wastes swipe distance on a phone. Pulling it out with negative margin and putting the
+   padding INSIDE means the first chip still aligns with the page text, the last one can scroll
+   fully into view, and the row bleeds off both edges the way a native carousel does.
+
+   scroll-padding matches, so a snapped item lands aligned rather than under the edge. */
+.rail {
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+
+  margin-left: calc(var(--space-4) * -1);
+  margin-right: calc(var(--space-4) * -1);
+  padding-left: var(--space-4);
+  padding-right: var(--space-4);
+  scroll-padding-left: var(--space-4);
+
+  padding-bottom: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+
+.rail::-webkit-scrollbar {
+  display: none;
+}
+
+.chip {
+  flex: none;
+  min-height: var(--touch-min);
+  padding: 0 var(--space-4);
+  border: 2px solid var(--border-strong);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.chipActive {
+  border-color: var(--primary);
+  background: var(--primary-subtle);
+  color: var(--primary);
+}
+
+/* ── Grids ────────────────────────────────────────────────────────────────────────── */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+.storeGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  /* Lets the fallback tile size its initials against the card rather than the viewport. */
+  container-type: inline-size;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  min-height: var(--touch-comfortable);
+}
+
+.card:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-sunken);
+}
+
+.cardName {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.cardMeta {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.cardPrice {
+  margin-top: var(--space-2);
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.tags {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-top: var(--space-2);
+}
+
+.tag {
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.tagBulk {
+  background: var(--primary-subtle);
+  color: var(--primary);
+}
+
+.tagOut {
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+}
+
+.tagIn {
+  background: var(--success-subtle);
+  color: var(--success);
+}
+
+.storeTag {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.sentinel {
+  padding: var(--space-5) 0;
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  min-height: var(--touch-min);
+}
+
+.empty {
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.emptyTitle {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--text);
+  margin: var(--space-3) 0 var(--space-2);
+}
+
+/* ── Footer ───────────────────────────────────────────────────────────────────────── */
+
+.foot {
+  padding: var(--space-5) var(--space-4) calc(var(--space-5) + var(--safe-bottom));
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+@media (min-width: 640px) {
+  .hideNarrow {
+    display: inline-flex;
+  }
+
+  .brandName {
+    display: inline;
+  }
+
+  .heroActions {
+    flex-direction: row;
+    max-width: none;
+    justify-content: center;
+  }
+
+  .heroTitle {
+    font-size: var(--text-3xl);
+  }
+}
+
+
+/* ── Media on cards ───────────────────────────────────────────────────────────────── */
+
+/* Full-bleed inside the card: a picture inset by the card's padding reads as a stamp stuck on,
+   where an edge-to-edge one reads as the product itself. */
+.cardMedia {
+  margin: calc(var(--space-4) * -1) calc(var(--space-4) * -1) var(--space-3);
+}
+
+.cardMedia > * {
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.storeCover {
+  margin: calc(var(--space-4) * -1) calc(var(--space-4) * -1) var(--space-3);
+}
+
+.storeCover > * {
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.distance {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.gallery {
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 0 calc(var(--space-4) * -1) var(--space-4);
+  padding: 0 var(--space-4);
+  scroll-snap-type: x mandatory;
+}
+
+.gallery::-webkit-scrollbar { display: none; }
+
+.galleryItem {
+  flex: none;
+  width: 78%;
+  scroll-snap-align: center;
+}
+
+.mapLink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--touch-min);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--primary);
+}
+
+/* A visible way back, for arrivals that have no history to go back to — someone who typed a shop
+   code, or opened a shared link in a new tab. */
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--touch-min);
+  margin-bottom: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.backLink:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ── Section banners ──────────────────────────────────────────────────────────────── */
+
+/*
+ * A titled strip of artwork introducing each section.
+ *
+ * The plain headings that were here read as a wall of text on a phone: three near-identical rows
+ * of dark bold type with grids between them, and no way to tell at a glance where one section
+ * ended and the next began. A band of colour per section gives the page landmarks you can scroll
+ * against — which matters most for the people this is built for, who are scrolling one-handed and
+ * not reading every heading.
+ *
+ * The artwork is decorative and carries no information the heading does not, so it is a
+ * background rather than an <img> — nothing for a screen reader to announce and nothing to
+ * caption.
+ */
+.banner {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  min-height: 108px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  padding: var(--space-4);
+  margin-bottom: var(--space-3);
+  background-color: #0b6252;
+  background-size: cover;
+  /* Bottom-anchored: the artwork stands its goods on a shelf line near the foot of the image, and
+     centring the crop cuts them off at the knees. */
+  background-position: center bottom;
+  background-repeat: no-repeat;
+}
+
+/* Scrim, so the title holds its contrast wherever the art happens to be light. */
+.banner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(2, 24, 20, 0.86), rgba(2, 24, 20, 0.42));
+}
+
+.bannerText {
+  position: relative;
+}
+
+.bannerTitle {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #ffffff;
+}
+
+.bannerNote {
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.bannerShops { background-image: url('/band-shops.png'); }
+.bannerProducts { background-image: url('/band-products.png'); }
+.bannerCategories { background-image: url('/band-categories.png'); }
+
+/* The category strip is a label for the chips below it, not a section of its own — half the
+   height, so it introduces without competing with the two real sections. */
+.bannerCategories {
+  min-height: 76px;
+  padding: var(--space-3) var(--space-4);
+}
+
+.bannerCategories .bannerTitle {
+  font-size: var(--text-base);
+}

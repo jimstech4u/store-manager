@@ -10,12 +10,19 @@ import { Explain, InfoPanel } from '@/components/ui/Explain';
 import { useNav } from '@academix-admin/navigation-stack';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
+import { useStackBack } from '@/hooks/useStackBack';
 import { ROLE_DESCRIPTION, ROLE_LABEL } from '@/lib/permissions';
 import { getSupabase } from '@/lib/supabase/client';
 import { useTheme } from '@/context/ThemeContext';
 
 /** Common thermal roll widths, offered as shortcuts beside a free field — like a print dialog. */
 const PRESET_WIDTHS = [40, 58, 80, 100];
+
+interface StoreRow {
+  is_public: boolean;
+  public_description: string | null;
+  code: string | null;
+}
 
 interface Settings {
   printer_width_mm: string;
@@ -40,6 +47,7 @@ interface Settings {
  */
 export default function SettingsPage() {
   const nav = useNav();
+  const goBack = useStackBack();
   const { store, user, signOut } = useAuth();
   const { can, role } = usePermission();
   const { theme, storedTheme, setTheme } = useTheme();
@@ -49,6 +57,7 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(0);
+  const [shop, setShop] = useState<StoreRow | null>(null);
 
   useEffect(() => {
     if (!store) return;
@@ -84,6 +93,41 @@ export default function SettingsPage() {
       cancelled = true;
     };
   }, [store, can]);
+
+  // The public storefront row lives on `stores`, not `store_settings`.
+  useEffect(() => {
+    if (!store) return;
+    let cancelled = false;
+    void (async () => {
+      const { data } = await getSupabase()
+        .from('stores')
+        .select('is_public, public_description, code')
+        .eq('id', store.id)
+        .maybeSingle();
+      if (!cancelled && data) setShop(data as StoreRow);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [store]);
+
+  const saveShop = async (next: Partial<StoreRow>) => {
+    if (!store || !shop) return;
+    const merged = { ...shop, ...next };
+    setShop(merged);
+
+    // Turning the storefront on needs a code for people to find it by.
+    if (merged.is_public && !merged.code) {
+      const { data } = await getSupabase().rpc('ensure_store_code', { p_store_id: store.id });
+      if (data) merged.code = data as string;
+      setShop({ ...merged });
+    }
+
+    await getSupabase()
+      .from('stores')
+      .update({ is_public: merged.is_public, public_description: merged.public_description })
+      .eq('id', store.id);
+  };
 
   const patch = (next: Partial<Settings>) =>
     setSettings((prev) => (prev ? { ...prev, ...next } : prev));
@@ -122,6 +166,7 @@ export default function SettingsPage() {
 
   return (
     <PageScaffold
+      onBack={goBack}
       title="Settings"
       subtitle={store.name}
       footer={
@@ -267,6 +312,47 @@ export default function SettingsPage() {
               <InfoPanel tone="info" title="Old receipts keep their old details">
                 Changing these does not alter receipts already issued — each one keeps the account
                 it was printed with.
+              </InfoPanel>
+            </>
+          )}
+        </>
+      )}
+
+      {editable && shop && (
+        <>
+          <h2 className={styles.section}>Public storefront</h2>
+          <p className={styles.sectionNote}>
+            Off by default. Your prices and what you sell are your own business — turn this on
+            only if you want shoppers to find you.
+          </p>
+
+          <label className={styles.toggle}>
+            <input
+              type="checkbox"
+              checked={shop.is_public}
+              onChange={(e) => void saveShop({ is_public: e.target.checked })}
+            />
+            <span>List my shop publicly</span>
+          </label>
+
+          {shop.is_public && (
+            <>
+              <Field
+                label="A line about your shop"
+                optional
+                value={shop.public_description ?? ''}
+                onChange={(e) => setShop({ ...shop, public_description: e.target.value })}
+                onBlur={() => void saveShop({})}
+                placeholder="Drinks and provisions, wholesale and retail"
+              />
+              <InfoPanel tone="info" title={`Your shop code is ${shop.code ?? '…'}`}>
+                Give this to customers. They can open{' '}
+                <strong>/s/{shop.code ?? 'CODE'}</strong> to see what you sell.
+                <Explain label="What do shoppers see?">
+                  Your shop name, what you sell, your selling prices, any bulk prices, and whether
+                  something is in stock. They never see what you paid for anything, how much you
+                  hold, your customers, or who owes you.
+                </Explain>
               </InfoPanel>
             </>
           )}
