@@ -1,0 +1,25 @@
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;      /* each stack scrolls its own page; the shell itself never does */
+  background: var(--bg);
+}
+
+.stacks {
+  flex: 1;
+  min-height: 0;         /* lets the flex child actually shrink so its own scroll works */
+  position: relative;
+}
+
+.navWrap {
+  flex: none;
+  padding-bottom: var(--safe-bottom);
+  background: var(--surface);
+}
+
+/* The tab bar. Sized generously on purpose: it is the single most-tapped control in the app,
+   often one-handed while holding goods, and a cramped bar is where mis-taps happen. */
+.nav {
+  border-top: 1px solid var(--border);
+}

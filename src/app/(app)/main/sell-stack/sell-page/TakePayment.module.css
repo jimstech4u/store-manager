@@ -1,0 +1,220 @@
+.due {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  margin-bottom: var(--space-5);
+  border-radius: var(--radius);
+  background: var(--primary-subtle);
+  text-align: center;
+}
+
+.dueLabel {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.dueValue {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-3xl);
+  font-weight: 700;
+  color: var(--primary);
+  line-height: var(--leading-tight);
+}
+
+/* ── Method chips ─────────────────────────────────────────────────────────────────── */
+
+.methods {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.method {
+  flex: 1;
+  min-height: var(--touch-comfortable);
+  border: 2px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: var(--text-sm);
+}
+
+.methodActive {
+  border-color: var(--primary);
+  background: var(--primary-subtle);
+  color: var(--primary);
+}
+
+/* ── Payment rows ─────────────────────────────────────────────────────────────────── */
+
+.payments {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.payment {
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.paymentHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.paymentTitle {
+  font-weight: 700;
+  font-size: var(--text-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--touch-min);
+  min-height: var(--touch-min);
+  margin: calc(var(--space-2) * -1);
+  border-radius: var(--radius);
+  color: var(--danger);
+}
+
+/* ── Summary ──────────────────────────────────────────────────────────────────────── */
+
+.summary {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+  background: var(--surface-sunken);
+}
+
+.row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-2) 0;
+}
+
+.row + .row {
+  border-top: 1px solid var(--border);
+}
+
+.value {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Change and remaining-debt are the two numbers a seller acts on immediately — one decides what
+   comes out of the drawer, the other what goes in the book. Both are sized to be read at a
+   glance and coloured, with a word beside them so colour is never the only signal. */
+.big {
+  font-size: var(--text-xl);
+  font-weight: 700;
+}
+
+.change {
+  color: var(--success);
+}
+
+.owing {
+  color: var(--warning);
+}
+
+.outstanding {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  border-left: 4px solid var(--warning);
+  border-radius: var(--radius-sm);
+  background: var(--warning-subtle);
+  font-size: var(--text-sm);
+}
+
+.outstandingValue {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.quickRow {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.quick {
+  flex: 1;
+  min-height: var(--touch-min);
+  padding: 0 var(--space-2);
+  border: 2px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* ── Who this is for ──────────────────────────────────────────────────────────────── */
+/* A row, not a dialog. It answers the question by default (anonymous) and offers to change it,
+   so the commonest sale needs no decision while the option is still present at settle time. */
+
+.forRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--touch-comfortable);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  text-align: left;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.forRow:hover {
+  background: var(--surface-sunken);
+}
+
+.forLabel {
+  flex: none;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.forValue {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.forAction {
+  flex: none;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

@@ -1,0 +1,99 @@
+.scaffold {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg);
+}
+
+.header {
+  flex: none;
+  padding: calc(var(--space-4) + var(--safe-top)) var(--space-4) var(--space-4);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.headerRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--touch-min);
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: var(--touch-min);
+  min-height: var(--touch-min);
+  /* Pulled left so the icon lines up with the content below, while the touch area stays full
+     size — the common alternative (shrinking the button) trades alignment for hit accuracy. */
+  margin-left: calc(var(--space-3) * -1);
+  border-radius: var(--radius);
+  color: var(--text);
+}
+
+.back:hover {
+  background: var(--surface-sunken);
+}
+
+.titles {
+  min-width: 0;
+  flex: 1;
+}
+
+.title {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: var(--leading-tight);
+  /* Wraps rather than truncating: a shop name or product cut off mid-word is worse than a
+     header two lines tall. */
+  overflow-wrap: anywhere;
+}
+
+.subtitle {
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.headerAction {
+  flex: none;
+}
+
+/* The one scrolling region. Owned here rather than by each page, so scroll restoration and the
+   nav bar's scroll subscription have a single, predictable container to watch. */
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  padding: var(--space-5) var(--space-4);
+  padding-bottom: calc(var(--space-7) + var(--safe-bottom));
+}
+
+.bodyFlush {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.inner {
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+/* A sticky action bar for screens whose primary action must stay reachable while scrolling —
+   recording a sale, saving a count. */
+.footer {
+  flex: none;
+  padding: var(--space-3) var(--space-4) calc(var(--space-3) + var(--safe-bottom));
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+.footerInner {
+  max-width: 640px;
+  margin: 0 auto;
+}

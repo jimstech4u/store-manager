@@ -1,0 +1,62 @@
+.wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: var(--space-4);
+}
+
+.icon {
+  position: absolute;
+  left: var(--space-4);
+  display: inline-flex;
+  color: var(--text-muted);
+  pointer-events: none;   /* the icon must never eat a tap meant for the field */
+}
+
+.input {
+  width: 100%;
+  min-height: var(--touch-comfortable);
+  /* Left padding clears the icon; right clears the clear-button. */
+  padding: var(--space-3) var(--touch-min) var(--space-3) calc(var(--space-4) + 30px);
+  font-size: var(--text-base);
+  color: var(--text);
+  background: var(--surface);
+  border: 2px solid var(--border-strong);
+  border-radius: var(--radius-full);
+}
+
+.input::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-subtle);
+}
+
+.clear {
+  position: absolute;
+  right: var(--space-1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--touch-min);
+  min-height: var(--touch-min);
+  border-radius: var(--radius-full);
+  color: var(--text-muted);
+}
+
+.clear:hover {
+  background: var(--surface-sunken);
+  color: var(--text);
+}
+
+/* Announced to screen readers as results change, so someone who cannot see the list still knows
+   whether the search found anything. */
+.count {
+  margin: calc(var(--space-2) * -1) 0 var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}

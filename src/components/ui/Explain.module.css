@@ -1,0 +1,151 @@
+/* =====================================================================================
+   The help system.
+
+   Designed against one belief: for this audience, help that hides behind a "?" nobody taps is
+   the same as no help. So there are three deliberately different weights —
+
+     InlineHint  always visible, sits under a field. For things everyone needs every time.
+     Explain     a tappable "What's this?" that opens in place. For the concept behind a field.
+     InfoPanel   a persistent block, usually with a worked example, at the top of a screen.
+
+   Every one of them can carry a concrete example, because "Opening stock" means nothing to a
+   shop owner in the abstract and everything next to "yesterday you closed with 851 pieces".
+   ===================================================================================== */
+
+.hint {
+  display: block;
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  color: var(--text-muted);
+}
+
+/* ── Explain (disclosure) ─────────────────────────────────────────────────────────── */
+
+.explainWrap {
+  margin-top: var(--space-2);
+}
+
+.explainTrigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  /* Full touch height even though it reads as a small text link: the people most likely to need
+     the explanation are the least likely to hit a 20px tap target. */
+  min-height: var(--touch-min);
+  padding: 0 var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.explainIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: var(--radius-full);
+  background: var(--primary-subtle);
+  color: var(--primary);
+}
+
+.explainBody {
+  margin-top: var(--space-2);
+  padding: var(--space-4);
+  background: var(--surface-sunken);
+  border-left: 4px solid var(--primary);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  color: var(--text);
+}
+
+/* ── InfoPanel ────────────────────────────────────────────────────────────────────── */
+
+.panel {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  margin-bottom: var(--space-5);
+}
+
+.panelInfo    { border-left: 4px solid var(--primary); background: var(--primary-subtle); }
+.panelWarning { border-left: 4px solid var(--warning); background: var(--warning-subtle); }
+.panelDanger  { border-left: 4px solid var(--danger);  background: var(--danger-subtle); }
+.panelSuccess { border-left: 4px solid var(--success); background: var(--success-subtle); }
+
+.panelIcon {
+  flex: none;
+  display: inline-flex;
+  /* Nudged to sit on the title's optical centre rather than its box top. */
+  padding-top: 2px;
+}
+
+.panelInfo    .panelIcon { color: var(--primary); }
+.panelWarning .panelIcon { color: var(--warning); }
+.panelDanger  .panelIcon { color: var(--danger); }
+.panelSuccess .panelIcon { color: var(--success); }
+
+.panelContent { min-width: 0; }
+
+.panelTitle {
+  font-size: var(--text-base);
+  font-weight: 700;
+  margin-bottom: var(--space-1);
+}
+
+.panelText {
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  color: var(--text);
+}
+
+/* ── Worked example ───────────────────────────────────────────────────────────────── */
+
+.example {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  background: var(--surface);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
+.exampleLabel {
+  display: block;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: var(--space-2);
+}
+
+.exampleRow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-1) 0;
+  font-size: var(--text-sm);
+}
+
+.exampleRow + .exampleRow {
+  border-top: 1px solid var(--border);
+}
+
+.exampleValue {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.exampleEmphasis {
+  color: var(--primary);
+}

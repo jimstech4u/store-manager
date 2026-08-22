@@ -1,34 +1,296 @@
+/* =====================================================================================
+   Design tokens.
+
+   Two constraints drive every number here, and they are not decoration:
+
+   1. MOBILE FIRST. This is used one-handed, standing at a counter, often in bright sunlight
+      and often on a low-end Android device. Every base rule targets a phone; larger screens
+      are the progressive enhancement, never the other way round.
+
+   2. USABLE BY OLDER PEOPLE. The people running these businesses are frequently 45–70. That
+      is not a niche accessibility case to bolt on later — it is the primary user. So:
+        · body text starts at 17px, not the 14px that "looks tidy" in a designer's mockup
+        · touch targets start at 48px and primary actions are 56px
+        · contrast targets WCAG AAA (7:1) for body text, not the AA 4.5:1 minimum
+        · nothing communicates by colour alone — every state carries a word or an icon
+   ===================================================================================== */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* ── Palette ───────────────────────────────────────────────────────────────────────
+     Deep teal reads as money and trust across this market, and is deliberately distinct
+     from Academix's green so the two products are never confused at a glance. */
+  --teal-50:  #e8f4f1;
+  --teal-100: #c5e4dd;
+  --teal-200: #8fcbbe;
+  --teal-500: #0f7a66;
+  --teal-600: #0b6252;
+  --teal-700: #084c40;
+  --teal-800: #063a31;
+
+  --grey-0:   #ffffff;
+  --grey-50:  #f7f8f8;
+  --grey-100: #eef0f0;
+  --grey-200: #dde1e0;
+  --grey-300: #c2c8c7;
+  --grey-400: #98a1a0;
+  --grey-500: #6b7574;
+  --grey-600: #4d5554;
+  --grey-700: #343b3a;
+  --grey-800: #212726;
+  --grey-900: #141918;
+
+  --red-100:  #fde4e1;
+  --red-500:  #c0392b;
+  --red-600:  #9d2d21;
+  --amber-100:#fdf0d5;
+  --amber-500:#a86a00;
+  --green-100:#dff3e4;
+  --green-600:#1a7f3c;
+
+  /* ── Semantic colours (light) ────────────────────────────────────────────────────── */
+  --bg:              var(--grey-50);
+  --surface:         var(--grey-0);
+  --surface-sunken:  var(--grey-100);
+  --text:            var(--grey-900);   /* 15.9:1 on surface — AAA */
+  --text-muted:      var(--grey-600);   /*  7.4:1 on surface — AAA, so secondary text is
+                                            genuinely readable rather than decorative grey */
+  --border:          var(--grey-200);
+  --border-strong:   var(--grey-300);
+
+  --primary:         var(--teal-600);
+  --primary-hover:   var(--teal-700);
+  --primary-text:    var(--grey-0);
+  --primary-subtle:  var(--teal-50);
+
+  --danger:          var(--red-500);
+  --danger-subtle:   var(--red-100);
+  --warning:         var(--amber-500);
+  --warning-subtle:  var(--amber-100);
+  --success:         var(--green-600);
+  --success-subtle:  var(--green-100);
+
+  --focus-ring:      var(--teal-500);
+
+  /* ── Typography ──────────────────────────────────────────────────────────────────── */
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  /* Tabular figures for every money and quantity column: digits must line up so a wrong
+     number is visible as a wrong SHAPE, which is how people actually scan a ledger. */
+  --font-numeric: ui-monospace, 'SF Mono', 'Roboto Mono', 'Courier New', monospace;
+
+  --text-xs:   0.8125rem;  /* 13px — labels, never body copy */
+  --text-sm:   0.9375rem;  /* 15px */
+  --text-base: 1.0625rem;  /* 17px — body baseline */
+  --text-lg:   1.1875rem;  /* 19px */
+  --text-xl:   1.4375rem;  /* 23px */
+  --text-2xl:  1.75rem;    /* 28px */
+  --text-3xl:  2.125rem;   /* 34px — money on a summary card */
+
+  --leading-tight:  1.25;
+  --leading-normal: 1.55;
+
+  /* ── Space ───────────────────────────────────────────────────────────────────────── */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+
+  /* ── Touch ───────────────────────────────────────────────────────────────────────── */
+  --touch-min:         48px;  /* the floor, everywhere, no exceptions */
+  --touch-comfortable: 56px;  /* primary actions and form fields */
+  --touch-large:       64px;  /* the main action on a screen: "Record sale" */
+
+  --radius-sm: 6px;
+  --radius:    10px;
+  --radius-lg: 16px;
+  --radius-full: 999px;
+
+  --shadow-sm: 0 1px 2px rgba(20, 25, 24, 0.06);
+  --shadow:    0 2px 8px rgba(20, 25, 24, 0.08);
+  --shadow-lg: 0 8px 28px rgba(20, 25, 24, 0.14);
+
+  /* Safe areas, so a bottom bar clears the iOS home indicator and Android gesture bar. */
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top:    env(safe-area-inset-top, 0px);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+[data-theme='dark'] {
+  --bg:             #0f1413;
+  --surface:        #171d1c;
+  --surface-sunken: #101514;
+  --text:           #eef2f1;
+  --text-muted:     #a8b3b1;   /* 7.1:1 on dark surface — AAA */
+  --border:         #2a3231;
+  --border-strong:  #3b4544;
+
+  --primary:        var(--teal-200);   /* light-on-dark: the 600 would fail contrast here */
+  --primary-hover:  var(--teal-100);
+  --primary-text:   #06231d;
+  --primary-subtle: #0d2b25;
+
+  --danger:         #ff8a7a;
+  --danger-subtle:  #3a1c18;
+  --warning:        #f0b45c;
+  --warning-subtle: #3a2c12;
+  --success:        #6ddc93;
+  --success-subtle: #12301d;
+
+  --focus-ring:     var(--teal-200);
 }
 
-html,
-body {
-  max-width: 100vw;
-  overflow-x: hidden;
-}
+/* ── Reset ─────────────────────────────────────────────────────────────────────────── */
 
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
-
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
-  padding: 0;
   margin: 0;
+  padding: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;   /* never shrink text when the phone rotates */
+}
+
+body {
+  font-family: var(--font);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100dvh;
+  /* Kill the 300ms tap delay and accidental double-tap zoom on repeated taps at a counter,
+     without disabling pinch zoom — which people with poor eyesight genuinely rely on. */
+  touch-action: manipulation;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  background: none;
+  border: none;
+  cursor: pointer;
 }
 
 a {
-  color: inherit;
-  text-decoration: none;
+  color: var(--primary);
+  text-decoration: underline;      /* underlined, so a link is not identified by colour alone */
+  text-underline-offset: 2px;
+}
+
+/* ── Focus ─────────────────────────────────────────────────────────────────────────── */
+/* Always visible for keyboard users, and thick enough to actually see. Removing focus rings
+   is the single most common accessibility failure in "clean-looking" interfaces. */
+
+:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ── Preferences ───────────────────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --border:        var(--grey-400);
+    --border-strong: var(--grey-600);
+    --text-muted:    var(--grey-700);
+  }
+}
+
+/* ── Utilities ─────────────────────────────────────────────────────────────────────── */
+
+/* Visible to screen readers, invisible on screen. For the context a sighted user gets from
+   layout and a screen-reader user would otherwise lose. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.numeric {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+}
+
+/* =====================================================================================
+   Printing a receipt.
+
+   Global rather than per-component: `body *` cannot appear in a CSS module (modules require a
+   local class in every selector), and both the in-app receipt and the public shared page need
+   identical behaviour. Anything marked data-print-root is what reaches the paper.
+
+   Hiding everything and revealing one subtree — rather than repositioning the receipt — means no
+   stray fixed-position element (a sheet backdrop, a nav bar) can print alongside it.
+   ===================================================================================== */
+
+@media print {
+  @page {
+    /* The element sets --receipt-width from the store's configured millimetres, so an unusual
+       printer gets its real width rather than the nearest preset. auto height lets a thermal
+       roll cut at the content. */
+    size: var(--receipt-width, 80mm) auto;
+    margin: 0;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  [data-print-root],
+  [data-print-root] * {
+    visibility: visible;
+  }
+
+  [data-print-root] {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: var(--receipt-width, 80mm);
+    margin: 0;
+    padding: 2mm 3mm;
+    border: none;
+    border-radius: 0;
+    /* Black on white whatever the app's theme: a thermal printer only marks where it burns, so
+       a dark-mode receipt would come out as a nearly blank page. */
+    background: #fff;
+    color: #000;
+    font-size: 10pt;
+  }
+
+  /* Muted greys dither into something unreadable on thermal paper. */
+  [data-print-root] * {
+    color: #000 !important;
+    border-color: #000 !important;
+  }
+
+  [data-print-no-print] {
+    display: none !important;
+  }
 }

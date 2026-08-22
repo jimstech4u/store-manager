@@ -1,0 +1,126 @@
+.summary,
+.balanceCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-5);
+  margin-bottom: var(--space-5);
+  border-radius: var(--radius-lg);
+  background: var(--primary-subtle);
+  border: 1px solid var(--border);
+}
+
+.summaryLabel {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.summaryValue {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-3xl);
+  font-weight: 700;
+  color: var(--primary);
+  line-height: var(--leading-tight);
+}
+
+.sectionLabel {
+  font-weight: 700;
+  margin-bottom: var(--space-3);
+}
+
+.list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--touch-comfortable);
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.row:hover {
+  background: var(--surface-sunken);
+}
+
+.rowMain {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.rowName {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.rowMeta {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* A balance is a pill with a WORD when clear, not just a colour change — colour alone fails in
+   sunlight and for colour-blind users, which is most of this product's working conditions. */
+.rowBalance {
+  flex: none;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.owing {
+  background: var(--warning-subtle);
+  color: var(--warning);
+}
+
+.clear {
+  background: var(--success-subtle);
+  color: var(--success);
+}
+
+.sentinel {
+  padding: var(--space-5) 0;
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  min-height: var(--touch-min);
+}
+
+.methods {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.method {
+  flex: 1;
+  min-height: var(--touch-comfortable);
+  border: 2px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: var(--text-sm);
+}
+
+.methodActive {
+  border-color: var(--primary);
+  background: var(--primary-subtle);
+  color: var(--primary);
+}

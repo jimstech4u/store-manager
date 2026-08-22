@@ -1,0 +1,126 @@
+.section {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  margin: var(--space-6) 0 var(--space-2);
+}
+
+.section:first-of-type {
+  margin-top: 0;
+}
+
+.sectionNote {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  margin-bottom: var(--space-4);
+}
+
+.presets,
+.themeRow {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.preset {
+  flex: 1;
+  min-height: var(--touch-comfortable);
+  border: 2px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: var(--text-sm);
+}
+
+.preset:disabled {
+  opacity: 0.55;
+}
+
+.presetActive {
+  border-color: var(--primary);
+  background: var(--primary-subtle);
+  color: var(--primary);
+}
+
+/* The whole row is the target, not just the box. A bare checkbox is far below the 48px touch
+   floor and is among the most commonly mis-tapped controls on a phone. */
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--touch-comfortable);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.toggle input {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  accent-color: var(--primary);
+}
+
+.you {
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.youName {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* ── Link rows ────────────────────────────────────────────────────────────────────── */
+
+.linkRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--touch-comfortable);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.linkRow:hover {
+  background: var(--surface-sunken);
+}
+
+.linkMain {
+  flex: 1;
+  min-width: 0;
+}
+
+.linkName {
+  display: block;
+  font-weight: 600;
+}
+
+/* A count, not a dot. "3" tells you whether it is worth opening now; a dot does not. */
+.badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--warning);
+  color: #fff;
+  font-family: var(--font-numeric);
+  font-weight: 700;
+  font-size: var(--text-sm);
+}

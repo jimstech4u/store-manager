@@ -1,0 +1,134 @@
+.field {
+  display: block;
+  margin-bottom: var(--space-5);
+}
+
+.label {
+  display: block;
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: var(--space-2);
+}
+
+.optional {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+/* Required is marked with the WORD, not a red asterisk. An asterisk is a convention people
+   learn; "required" is a thing people read. */
+.required {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.inputWrap {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+
+.input {
+  width: 100%;
+  min-height: var(--touch-comfortable);
+  padding: var(--space-3) var(--space-4);
+
+  /* 17px is not a style choice. Mobile Safari zooms the whole page when a focused input is
+     under 16px, which throws the layout sideways mid-entry — and the resulting rescale is
+     hardest on exactly the users who most need legible text. */
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+
+  color: var(--text);
+  background: var(--surface);
+  border: 2px solid var(--border-strong);
+  border-radius: var(--radius);
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.input::placeholder {
+  color: var(--text-muted);
+  opacity: 1;                 /* Firefox dims placeholders by default, below AA contrast */
+}
+
+.input:hover:not(:disabled) {
+  border-color: var(--text-muted);
+}
+
+.input:focus {
+  outline: none;              /* replaced by the ring below, not removed */
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-subtle);
+}
+
+.input:disabled {
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.inputError {
+  border-color: var(--danger);
+}
+
+.inputError:focus {
+  box-shadow: 0 0 0 3px var(--danger-subtle);
+}
+
+/* Numbers — money, quantities — get tabular figures so columns line up and a mistyped extra
+   digit is visible as a wrong shape rather than needing to be read. */
+.numeric {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  text-align: right;
+}
+
+/* ── Prefix / suffix (₦, kg, pieces) ──────────────────────────────────────────────── */
+
+.affix {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-3);
+  background: var(--surface-sunken);
+  border: 2px solid var(--border-strong);
+  color: var(--text-muted);
+  font-size: var(--text-base);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.prefix {
+  border-right: none;
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+
+.suffix {
+  border-left: none;
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.hasPrefix { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.hasSuffix { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+
+/* ── Error ────────────────────────────────────────────────────────────────────────── */
+
+.error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.errorIcon {
+  flex: none;
+  display: inline-flex;
+  padding-top: 1px;
+}

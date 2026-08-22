@@ -1,0 +1,175 @@
+/* =====================================================================================
+   Shared receipt page (public).
+
+   Deliberately a copy of the in-app receipt styles rather than an import: this page is opened by
+   people outside the business, on unknown devices, and it must keep working exactly as it does
+   today even as the in-app receipt evolves. Coupling them would mean a layout tweak inside the
+   app silently changes a receipt a customer already holds a link to.
+
+   Receipt.
+
+   On screen this is a preview. What matters is the PRINT rules at the bottom: the page size
+   comes from a CSS custom property the component sets from the store's configured width, so a
+   shop with a 57.5mm printer gets 57.5mm rather than the nearest of four presets.
+
+   Print isolation lives in globals.css (a CSS module cannot hold global selectors like
+   `body *`, and both receipts need the same behaviour anyway). The element carries
+   data-print-root; this file only styles it.
+
+   A narrow roll is not a scaled-down wide one. At 40mm you get roughly 32 characters, which
+   cannot hold "description / qty / price / total" as columns — so the narrow layout stacks each
+   line instead. That is a different layout, chosen by width, not a smaller font.
+   ===================================================================================== */
+
+.receipt {
+  font-family: var(--font-numeric);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+}
+
+.head {
+  text-align: center;
+  padding-bottom: var(--space-3);
+  border-bottom: 1px dashed var(--border-strong);
+}
+
+.shop {
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+
+.headLine {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.meta {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  border-bottom: 1px dashed var(--border-strong);
+}
+
+.lines {
+  padding: var(--space-2) 0;
+  border-bottom: 1px dashed var(--border-strong);
+}
+
+.line {
+  padding: var(--space-2) 0;
+}
+
+.lineName {
+  font-weight: 600;
+}
+
+.lineDetail {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.lineTotal {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.totals {
+  padding: var(--space-2) 0;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 2px 0;
+}
+
+.grand {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-strong);
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+
+.value {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.foot {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px dashed var(--border-strong);
+  text-align: center;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.transfer {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  white-space: pre-line;   /* the bank block is stored with real newlines */
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+/* Three full-width buttons stack on a phone — side by side at 360px they would each be under the
+   48px touch floor. */
+@media (min-width: 560px) {
+  .actions {
+    flex-direction: row;
+  }
+}
+
+
+
+.shareNote {
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+
+.page {
+  min-height: 100dvh;
+  padding: calc(var(--space-5) + var(--safe-top)) var(--space-4)
+           calc(var(--space-6) + var(--safe-bottom));
+  background: var(--bg);
+}
+
+.page .receipt {
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.page .actions {
+  max-width: 420px;
+  margin: var(--space-4) auto 0;
+}
+
+.owing {
+  font-weight: 700;
+  color: var(--warning);
+}

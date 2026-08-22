@@ -1,0 +1,135 @@
+.page {
+  min-height: 100dvh;
+  padding: calc(var(--space-6) + var(--safe-top)) var(--space-4)
+           calc(var(--space-6) + var(--safe-bottom));
+  background: var(--bg);
+}
+
+.inner {
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.step {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--primary);
+  margin-bottom: var(--space-2);
+}
+
+.heading {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: var(--space-2);
+}
+
+.sub {
+  color: var(--text-muted);
+  margin-bottom: var(--space-5);
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-sm);
+}
+
+.note {
+  margin-top: var(--space-5);
+}
+
+/* ── Opening balances ─────────────────────────────────────────────────────────────── */
+
+.sectionTitle {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  margin-bottom: var(--space-1);
+}
+
+.sectionSub {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  margin-bottom: var(--space-4);
+}
+
+.rowList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.row {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+  background: var(--surface);
+}
+
+.rowHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.rowTitle {
+  font-weight: 700;
+}
+
+.removeButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--touch-min);
+  min-height: var(--touch-min);
+  margin: calc(var(--space-2) * -1);
+  border-radius: var(--radius);
+  color: var(--danger);
+}
+
+.removeButton:hover {
+  background: var(--danger-subtle);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0 var(--space-3);
+}
+
+.addRow {
+  margin-bottom: var(--space-5);
+}
+
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+.skip {
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+@media (min-width: 560px) {
+  .grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .footer {
+    flex-direction: row-reverse;
+  }
+  .footer > * {
+    flex: 1;
+  }
+}

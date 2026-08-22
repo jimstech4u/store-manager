@@ -1,0 +1,72 @@
+.list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--touch-comfortable);
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.row:hover {
+  background: var(--surface-sunken);
+}
+
+.rowMain {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rowName {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.rowMeta {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* Shown on the row rather than only after selecting: whether someone already owes you is the
+   fact that decides whether to extend more credit, and it should be visible while choosing. */
+.rowBalance {
+  flex: none;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--warning-subtle);
+  color: var(--warning);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.empty {
+  text-align: center;
+  padding: var(--space-6) var(--space-4);
+  color: var(--text-muted);
+}
+
+.emptyTitle {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--text);
+  margin: var(--space-3) 0 var(--space-2);
+}
+
+.createRow {
+  margin-top: var(--space-2);
+}

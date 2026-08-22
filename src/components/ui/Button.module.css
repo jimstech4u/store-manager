@@ -1,0 +1,95 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+
+  /* Touch target floor. Applied to every variant including "small" — a small button may look
+     lighter but must never be harder to hit, which is where most mobile UIs quietly fail
+     people with less steady hands. */
+  min-height: var(--touch-comfortable);
+  min-width: var(--touch-min);
+  padding: 0 var(--space-5);
+
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: var(--leading-tight);
+  text-align: center;
+  text-decoration: none;
+
+  border: 2px solid transparent;
+  border-radius: var(--radius);
+  transition: background-color 120ms ease, border-color 120ms ease, transform 80ms ease;
+}
+
+.button:active:not(:disabled) {
+  /* Physical feedback matters more here than on desktop: a counter is noisy and the screen may
+     be in sunlight, so the press itself has to be felt as well as seen. */
+  transform: scale(0.985);
+}
+
+.button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── Variants ─────────────────────────────────────────────────────────────────────── */
+
+.primary {
+  background: var(--primary);
+  color: var(--primary-text);
+}
+.primary:hover:not(:disabled) { background: var(--primary-hover); }
+
+.secondary {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.secondary:hover:not(:disabled) { background: var(--surface-sunken); }
+
+.ghost {
+  background: transparent;
+  color: var(--primary);
+}
+.ghost:hover:not(:disabled) { background: var(--primary-subtle); }
+
+.danger {
+  background: var(--danger);
+  color: var(--grey-0);
+}
+.danger:hover:not(:disabled) { filter: brightness(0.92); }
+
+/* ── Sizes ────────────────────────────────────────────────────────────────────────── */
+
+.small {
+  min-height: var(--touch-min);
+  padding: 0 var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.large {
+  min-height: var(--touch-large);
+  font-size: var(--text-lg);
+  padding: 0 var(--space-6);
+}
+
+.fullWidth {
+  width: 100%;
+}
+
+/* ── Busy state ───────────────────────────────────────────────────────────────────── */
+
+.spinner {
+  width: 1.1em;
+  height: 1.1em;
+  border: 2.5px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 700ms linear infinite;
+  flex: none;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
