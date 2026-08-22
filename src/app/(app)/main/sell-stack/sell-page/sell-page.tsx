@@ -14,8 +14,10 @@ import { CloseIcon, MinusIcon, PlusIcon, ReceiptIcon, ReturnIcon } from '@/compo
 import { TakePayment } from './TakePayment';
 import { Receipt } from './Receipt';
 import { CustomerPicker } from '@/components/customers/CustomerPicker';
+import { ProductForm } from '@/components/catalog/ProductForm';
 import { Sheet } from '@/components/ui/Sheet';
 import { useAuth } from '@/providers/AuthProvider';
+import { usePermission } from '@/hooks/usePermission';
 import { fetchSaleUnits, useProductSearch, type SaleUnit } from '@/lib/stacks/catalog-stack';
 import {
   draftSubtotal,
@@ -27,6 +29,7 @@ import {
   type DraftLine,
 } from '@/lib/stacks/draft-orders';
 import { formatMoney, formatQty, pluralUnit } from '@/lib/format';
+import { getSupabase } from '@/lib/supabase/client';
 
 /**
  * The sale screen — over 90% of what this product does.
@@ -40,22 +43,24 @@ import { formatMoney, formatQty, pluralUnit } from '@/lib/format';
  *  · the total never more than a glance away
  */
 /**
- * The fractional amounts a seller can tap straight onto a line.
+ * The part-amounts a seller can add on top of a whole quantity.
  *
- * A fixed list rather than a setting: these are the fractions a pack is physically broken into,
- * and offering an arbitrary one would mean sellers picking a fraction the goods do not divide
- * into. Which of them actually appear is decided per line by whether they land on whole base
- * units.
+ * ADDITIVE AND TOGGLEABLE, not "set the quantity to this". Two and a half crates is the ordinary
+ * request, and it is entered as 2 on the stepper plus ½ here. Tapping ½ again takes it back off
+ * and leaves 2 — so the button shows the current state rather than firing a one-way action.
+ *
+ * A fixed list rather than a setting: these are the parts a pack is physically broken into.
+ * Which of them appear is decided per line by whether they land on whole base units.
  */
 const FRACTIONS = [
   { label: '¼', value: 0.25 },
   { label: '½', value: 0.5 },
   { label: '¾', value: 0.75 },
-  { label: '1', value: 1 },
 ] as const;
 
 export default function SellPage() {
   const goBack = useStackBack();
+  const { can } = usePermission();
   const { store } = useAuth();
   const {
     orders,
@@ -75,6 +80,12 @@ export default function SellPage() {
   } = useDraftOrders(store?.id ?? null);
 
   const [picking, setPicking] = useState(false);
+  const [addingProduct, setAddingProduct] = useState(false);
+
+  /** Which empties pools each product on the receipt belongs to, keyed by product id. */
+  const [returnables, setReturnables] = useState<
+    Record<string, { categoryId: string; categoryName: string; kind: string }[]>
+  >({});
   const [paying, setPaying] = useState(false);
   const [settledSale, setSettledSale] = useState<string | null>(null);
   const [claiming, setClaiming] = useState(false);
@@ -116,6 +127,28 @@ export default function SellPage() {
       }
     }
     const first = units[0];
+
+    // Which empties pools this product belongs to, so the line can ask about crates going out.
+    // Fetched once per product and cached: a receipt often has the same item added repeatedly.
+    if (!returnables[productId]) {
+      const { data } = await getSupabase().rpc('returnables_for_sale', {
+        p_product_id: productId,
+        p_base_qty: 1,
+        p_containers: 1,
+      });
+      setReturnables((prev) => ({
+        ...prev,
+        [productId]: ((data ?? []) as {
+          empties_category_id: string;
+          category_name: string;
+          kind: string;
+        }[]).map((r) => ({
+          categoryId: r.empties_category_id,
+          categoryName: r.category_name,
+          kind: r.kind,
+        })),
+      }));
+    }
 
     /*
      * Already on this receipt in the same shape? Add to it rather than starting a second line.
@@ -160,12 +193,53 @@ export default function SellPage() {
     setQuery('');
   };
 
+  /**
+   * Ask the server what this line should cost at its current quantity and shape.
+   *
+   * The bulk ladder — "₦3,700 each, ₦3,600 from the sixth" — and any rate agreed with this
+   * particular customer live in the database, and `resolve_price` knows to take the better of the
+   * two. Until now nothing called it: tiers a shop had carefully set up never reached the
+   * counter, and ten bottles were quoted at ten times the single price.
+   *
+   * Resolved server-side rather than reimplemented here, because the bands, their overlap rules
+   * and the customer-price precedence are all enforced in the database. A second copy of that in
+   * the client is a second answer waiting to disagree with the first.
+   */
+  const repriceLine = async (line: DraftLine, qty: string, saleUnitId: string | null) => {
+    // Never overwrite a figure the seller typed. Re-suggesting on the next quantity nudge would
+    // silently undo a deliberate decision — a favour, a haggle — and nobody would see it happen.
+    if (!activeOrder || line.priceTouched) return;
+
+    const n = Number(qty);
+    if (!Number.isFinite(n) || n <= 0) return;
+
+    const { data, error } = await getSupabase().rpc('resolve_price', {
+      p_product_id: line.productId,
+      p_qty: n,
+      p_sale_unit_id: saleUnitId,
+      p_customer_id: activeOrder.customerId ?? null,
+    });
+
+    // A failure here must not break the line. The seller can always type a price, and a sale that
+    // cannot be built because a suggestion failed to load is far worse than one priced by hand.
+    if (error || !data) return;
+
+    const r = data as { suggested?: string | number | null; reason?: string | null };
+    if (r.suggested === null || r.suggested === undefined) return;
+
+    updateLine(activeOrder.clientUuid, line.key, {
+      unitPrice: String(r.suggested),
+      priceReason: r.reason ?? null,
+    });
+  };
+
   const step = (line: DraftLine, by: number) => {
     if (!activeOrder) return;
     const current = Number(line.qty);
     const next = (Number.isFinite(current) ? current : 0) + by;
     if (next < 0) return;
     updateLine(activeOrder.clientUuid, line.key, { qty: String(next) });
+    void repriceLine(line, String(next), line.saleUnitId);
   };
 
   /** Priced under what the stock cost. A warning, never a block — the seller may mean it. */
@@ -383,7 +457,7 @@ export default function SellPage() {
                               line.saleUnitId === u.id ? styles.unitActive : ''
                             }`}
                             aria-pressed={line.saleUnitId === u.id}
-                            onClick={() =>
+                            onClick={() => {
                               updateLine(activeOrder.clientUuid, line.key, {
                                 saleUnitId: u.id,
                                 saleUnitName: u.name,
@@ -392,8 +466,10 @@ export default function SellPage() {
                                 // and keeping the previous one would quietly sell a half pack
                                 // at the full pack price.
                                 unitPrice: u.price ?? line.unitPrice,
-                              })
-                            }
+                              });
+                              // ...then let any bulk band for the NEW shape apply on top.
+                              void repriceLine(line, line.qty, u.id);
+                            }}
                           >
                             {u.name}
                           </button>
@@ -418,9 +494,12 @@ export default function SellPage() {
                             label="Quantity"
                             numeric
                             value={line.qty}
-                            onChange={(e) =>
-                              updateLine(activeOrder.clientUuid, line.key, { qty: e.target.value })
-                            }
+                            onChange={(e) => {
+                              updateLine(activeOrder.clientUuid, line.key, {
+                                qty: e.target.value,
+                              });
+                              void repriceLine(line, e.target.value, line.saleUnitId);
+                            }}
                             suffix={line.saleUnitName ?? line.packName ?? line.baseUnit}
                           />
                         </div>
@@ -442,20 +521,33 @@ export default function SellPage() {
                         onChange={(e) =>
                           updateLine(activeOrder.clientUuid, line.key, {
                             unitPrice: e.target.value,
+                            // From here on, this line keeps the seller's own figure.
+                            priceTouched: true,
+                            priceReason: null,
                           })
                         }
                         error={under ? 'Below what this cost you' : null}
+                        /*
+                         * Say why this figure appeared. A price that changes on its own when the
+                         * quantity crosses a band looks like a glitch unless it explains itself —
+                         * and the seller needs to be able to tell the customer what they are
+                         * getting, which is half the point of offering a bulk price at all.
+                         */
+                        hint={
+                          line.priceTouched
+                            ? 'Your own price'
+                            : line.priceReason === 'bulk'
+                              ? 'Bulk price for this quantity'
+                              : line.priceReason === 'customer'
+                                ? "This customer's agreed price"
+                                : undefined
+                        }
                       />
                     </div>
 
                     {(() => {
                       /*
-                       * Quick fractions of whatever is being sold — a quarter, half or three
-                       * quarters of a pack, straight onto the quantity.
-                       *
-                       * Typing "0.25" into a number field at a counter is slower and easier to
-                       * get wrong than tapping a button, and these three are most of the
-                       * fractional sales a distributor makes.
+                       * Part-amounts on top of the whole number in the stepper.
                        *
                        * OFFERED ONLY WHEN THEY LAND ON WHOLE BASE UNITS. A quarter of a 12-piece
                        * pack is 3 pieces and is real; a quarter of a single bottle is not, and
@@ -465,27 +557,40 @@ export default function SellPage() {
                       const per = baseUnitsPerSaleUnit(line);
                       const options = FRACTIONS.filter((f) => (per * f.value) % 1 === 0);
                       if (options.length === 0) return null;
+
+                      const current = Number(line.qty);
+                      const safe = Number.isFinite(current) && current >= 0 ? current : 0;
+                      const whole = Math.floor(safe);
+                      // Rounded before comparing: 2.5 - 2 is not exactly 0.5 in binary floating
+                      // point, and an un-rounded compare leaves the button that IS selected
+                      // looking unselected.
+                      const part = Number((safe - whole).toFixed(4));
+
                       return (
                         <div className={styles.fractionBlock}>
-                          <span className={styles.fractionLabel}>Quick amount</span>
+                          <span className={styles.fractionLabel}>
+                            Add a part{part > 0 ? ` — now ${formatQty(safe)}` : ''}
+                          </span>
                           <div
                             className={styles.fractionRow}
                             role="group"
-                            aria-label="Set the quantity to a fraction"
+                            aria-label="Add a part of one to the quantity"
                           >
                             {options.map((f) => {
-                              const on = Number(line.qty) === f.value;
+                              const on = part === f.value;
                               return (
                                 <button
                                   key={f.label}
                                   type="button"
                                   className={`${styles.fraction} ${on ? styles.fractionActive : ''}`}
                                   aria-pressed={on}
-                                  onClick={() =>
-                                    updateLine(activeOrder.clientUuid, line.key, {
-                                      qty: String(f.value),
-                                    })
-                                  }
+                                  onClick={() => {
+                                    // Tapping the selected part removes it and leaves the whole
+                                    // number behind.
+                                    const next = String(on ? whole : whole + f.value);
+                                    updateLine(activeOrder.clientUuid, line.key, { qty: next });
+                                    void repriceLine(line, next, line.saleUnitId);
+                                  }}
                                 >
                                   {f.label}
                                 </button>
@@ -495,6 +600,41 @@ export default function SellPage() {
                         </div>
                       );
                     })()}
+
+                    {/*
+                      Crates, kegs and dispenser bottles leaving with the goods.
+
+                      The line already carried `containersOut` and it was sent to the server on
+                      every settle — with nothing anywhere able to set it. So a shop could sell
+                      three crates of beer and the crates themselves were never recorded as owed
+                      back, which is the larger half of what a distributor is actually tracking.
+
+                      Bottles are not asked about: for a 'content' pool the server derives the
+                      count from the quantity sold, because twelve bottles sold is twelve bottles
+                      owed and asking would be asking someone to restate what they just entered.
+                      Containers genuinely have to be declared — a customer often brings their own
+                      crates, or takes the goods loose.
+                    */}
+                    {(returnables[line.productId]?.some((r) => r.kind === 'container') ?? false) && (
+                      <div className={styles.emptiesBlock}>
+                        <Field
+                          label={`${
+                            returnables[line.productId].find((r) => r.kind === 'container')
+                              ?.categoryName ?? 'Containers'
+                          } going out`}
+                          optional
+                          numeric
+                          value={line.containersOut}
+                          onChange={(e) =>
+                            updateLine(activeOrder.clientUuid, line.key, {
+                              containersOut: e.target.value,
+                            })
+                          }
+                          placeholder="0"
+                          hint="Leave empty if they brought their own, or took it loose."
+                        />
+                      </div>
+                    )}
 
                     <div className={styles.lineTotal}>
                       <span>Line total</span>
@@ -523,9 +663,26 @@ export default function SellPage() {
               {status === 'loading' && products.length === 0 ? (
                 <FullPageMessage title="Searching" tone="loading" />
               ) : products.length === 0 ? (
-                <InfoPanel tone="info" title="Nothing found">
-                  Try part of the name, or a category like &ldquo;water&rdquo;.
-                </InfoPanel>
+                <>
+                  <InfoPanel tone="info" title="Nothing found">
+                    Try part of the name, or a category like &ldquo;water&rdquo;.
+                  </InfoPanel>
+                  {/*
+                    The most useful moment to add a product is the one where the shop is being
+                    asked for something it has never entered. Sending the seller to another screen
+                    here means abandoning a half-built receipt, so the form comes to them.
+                  */}
+                  {can('products.manage') && (
+                    <Button
+                      variant="secondary"
+                      size="large"
+                      fullWidth
+                      onClick={() => setAddingProduct(true)}
+                    >
+                      <PlusIcon /> Add &ldquo;{query.trim() || 'a new item'}&rdquo; to your shop
+                    </Button>
+                  )}
+                </>
               ) : (
                 <div className={styles.lines}>
                   {products.map((p) => (
@@ -648,6 +805,21 @@ export default function SellPage() {
           </Button>
         </>
       )}
+      {activeOrder && (
+        <ProductForm
+          open={addingProduct}
+          onClose={() => setAddingProduct(false)}
+          storeId={store.id}
+          initialName={query.trim()}
+          onSaved={(created) => {
+            // Straight onto the receipt. Adding it and then making the seller search for it
+            // again would be the same interruption in two steps instead of one.
+            setAddingProduct(false);
+            void addProduct(created.id);
+          }}
+        />
+      )}
+
       {activeOrder && (
         <CustomerPicker
           open={pickingCustomer}

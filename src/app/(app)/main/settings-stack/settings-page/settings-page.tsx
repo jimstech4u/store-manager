@@ -188,9 +188,45 @@ export default function SettingsPage() {
         </InfoPanel>
       )}
 
-      {can('records.confirm') && (
+      {can('store.settings') && (
+        <>
+          <h2 className={styles.section}>Money</h2>
+          <button
+            type="button"
+            className={styles.linkRow}
+            onClick={() => nav.push('bank_page')}
+          >
+            <span className={styles.linkMain}>
+              <span className={styles.linkName}>Bank accounts</span>
+              <span className={styles.sectionNote}>
+                Where customers transfer money, and which one the counter offers first
+              </span>
+            </span>
+          </button>
+        </>
+      )}
+
+      {can('staff.manage') && (
         <>
           <h2 className={styles.section}>Your team</h2>
+          <button
+            type="button"
+            className={styles.linkRow}
+            onClick={() => nav.push('staff_page')}
+          >
+            <span className={styles.linkMain}>
+              <span className={styles.linkName}>People who work here</span>
+              <span className={styles.sectionNote}>
+                Add staff, set what each of them can do, remove someone who has left
+              </span>
+            </span>
+          </button>
+        </>
+      )}
+
+      {can('records.confirm') && (
+        <>
+          <h2 className={styles.section}>Checks</h2>
           <button
             type="button"
             className={styles.linkRow}

@@ -1,0 +1,92 @@
+[
+  {
+    "name": "customer exists in the list",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "account page opened",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "opening money owed is 200,000",
+    "ok": true,
+    "detail": "₦200,000"
+  },
+  {
+    "name": "3 NBL crates out",
+    "ok": true,
+    "detail": "3"
+  },
+  {
+    "name": "4 Guinness bottles out",
+    "ok": true,
+    "detail": "4"
+  },
+  {
+    "name": "3 dispenser bottles out",
+    "ok": true,
+    "detail": "3"
+  },
+  {
+    "name": "shop is holding 20,000",
+    "ok": true,
+    "detail": "₦20,000"
+  },
+  {
+    "name": "history records every step",
+    "ok": true,
+    "detail": "4 events"
+  },
+  {
+    "name": "half crate of Trophy is 4,100",
+    "ok": true,
+    "detail": "4100"
+  },
+  {
+    "name": "1 pack of Coca-Cola is 4,500",
+    "ok": true,
+    "detail": "4500"
+  },
+  {
+    "name": "3 crates of Goldberg is 27,000",
+    "ok": true,
+    "detail": "27000"
+  },
+  {
+    "name": "Malta overridden to 13,000",
+    "ok": true,
+    "detail": "13000"
+  },
+  {
+    "name": "10 American Cola at the bulk price is 36,000",
+    "ok": true,
+    "detail": "36000"
+  },
+  {
+    "name": "total is goods 84,600 plus 2,000 transport",
+    "ok": true,
+    "detail": "86600"
+  },
+  {
+    "name": "the customer tab reset, so the sale was settled",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "owes 200,000 + 86,600 - 40,000 = 246,600",
+    "ok": false,
+    "detail": "₦200,000"
+  },
+  {
+    "name": "NBL crates now 13 + 3.5 out from this sale",
+    "ok": false,
+    "detail": "13"
+  },
+  {
+    "name": "history now carries the whole story",
+    "ok": true,
+    "detail": "12 events"
+  }
+]

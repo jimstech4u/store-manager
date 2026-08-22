@@ -1,0 +1,44 @@
+.actions {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.actions > * {
+  flex: 1;
+}
+
+.field {
+  margin-bottom: var(--space-4);
+}
+
+.label {
+  display: block;
+  margin-bottom: var(--space-2);
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+/*
+ * A native <select>, not a custom listbox.
+ *
+ * The platform picker is the control this audience already knows, it scrolls with a thumb, it
+ * works with a screen reader without any work, and it does not need a scroll trap inside a sheet
+ * that is already trapping focus. A hand-built dropdown here would be worse in every way that
+ * matters and better only in how it looks.
+ */
+.select {
+  width: 100%;
+  min-height: var(--touch-comfortable);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-base);
+  color: var(--text);
+  background: var(--surface);
+  border: 2px solid var(--border-strong);
+  border-radius: var(--radius);
+}
+
+.select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-subtle);
+}

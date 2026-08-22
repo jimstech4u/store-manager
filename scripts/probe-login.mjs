@@ -1,0 +1,13 @@
+import { chromium } from '@playwright/test';
+const b = await chromium.launch();
+const p = await (await b.newContext({ viewport:{width:390,height:844} })).newPage();
+const errs=[]; p.on('pageerror',e=>errs.push(e.message));
+await p.goto(process.argv[2]+'/login',{waitUntil:'networkidle'});
+await p.waitForTimeout(3000);
+console.log('title:', await p.title());
+console.log('inputs:', await p.locator('input').count());
+console.log('types:', await p.locator('input').evaluateAll(els=>els.map(e=>e.type+':'+(e.getAttribute('aria-label')||e.placeholder||''))));
+console.log('body text:', (await p.locator('body').innerText()).slice(0,300).replace(/\n+/g,' | '));
+console.log('errors:', errs.slice(0,3));
+await p.screenshot({path:'shots/login-probe.png'});
+await b.close();

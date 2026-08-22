@@ -49,3 +49,18 @@
      rather than overflow its card. */
   word-break: break-all;
 }
+
+.removeActions {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.removeActions > * {
+  flex: 1;
+}
+
+.removeNote {
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}

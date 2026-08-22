@@ -35,6 +35,21 @@ export interface DraftLine {
   saleUnitId: string | null;
   saleUnitName: string | null;
   saleUnitBaseQty: string | null;
+
+  /**
+   * The seller typed a price themselves, so stop suggesting one.
+   *
+   * Bulk bands are re-resolved whenever the quantity or the shape changes, which is right up
+   * until somebody deliberately charges something else — a favour, a haggle, a mistake being
+   * corrected. Overwriting that the next time they nudge the quantity would silently undo a
+   * decision they made on purpose, and the shop would never know it happened.
+   *
+   * Client-side only; never sent to the server, which stores the price that was actually agreed.
+   */
+  priceTouched?: boolean;
+
+  /** Why the current suggestion was chosen — 'bulk', 'customer' or 'list'. For the hint text. */
+  priceReason?: string | null;
 }
 
 export interface DraftOrder {
@@ -104,6 +119,8 @@ export function makeDraftLine(partial: Partial<DraftLine> = {}): DraftLine {
     saleUnitId: null,
     saleUnitName: null,
     saleUnitBaseQty: null,
+    priceTouched: false,
+    priceReason: null,
     ...partial,
   };
 }

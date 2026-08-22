@@ -124,3 +124,21 @@
   background: var(--primary-subtle);
   color: var(--primary);
 }
+
+
+/*
+ * Turns a `.row` into a tappable row without changing `.row` itself — this stylesheet is shared
+ * with the People list, and giving every row a pointer cursor there would promise navigation the
+ * money rows do not have.
+ */
+.rowLink {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.rowLink:hover {
+  background: var(--surface-sunken);
+}

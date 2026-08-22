@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 import styles from '../../money-stack/money-page/money-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { useStackBack } from '@/hooks/useStackBack';
+import { useNav } from '@academix-admin/navigation-stack';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
 import { SearchField, useDebounced } from '@/components/ui/SearchField';
@@ -31,6 +32,7 @@ interface CustomerRow {
  */
 export default function PeoplePage() {
   const goBack = useStackBack();
+  const nav = useNav();
   const { store } = useAuth();
   const [query, setQuery] = useState('');
   const debounced = useDebounced(query);
@@ -102,7 +104,13 @@ export default function PeoplePage() {
               const balance = Number(c.balance);
               return (
                 <li key={c.id}>
-                  <div className={styles.row}>
+                  {/* The chevron has always been here promising a detail page that did not
+                      exist. It exists now. */}
+                  <button
+                    type="button"
+                    className={`${styles.row} ${styles.rowLink}`}
+                    onClick={() => nav.push('account_page', { id: c.id })}
+                  >
                     <span className={styles.rowMain}>
                       <span className={styles.rowName}>{c.display_name}</span>
                       <span className={styles.rowMeta}>
@@ -116,7 +124,7 @@ export default function PeoplePage() {
                       {balance > 0 ? formatMoney(balance) : 'Clear'}
                     </span>
                     <ChevronRightIcon />
-                  </div>
+                  </button>
                 </li>
               );
             })}

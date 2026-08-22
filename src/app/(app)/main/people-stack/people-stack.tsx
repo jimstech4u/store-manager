@@ -2,9 +2,11 @@
 
 import NavigationStack from '@academix-admin/navigation-stack';
 import PeoplePage from './people-page/people-page';
+import AccountPage from './account-page/account-page';
 
 const navLink = {
   people_page: PeoplePage,
+  account_page: AccountPage,
 };
 
 export const PeopleStack = () => (

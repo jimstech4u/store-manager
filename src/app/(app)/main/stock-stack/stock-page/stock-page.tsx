@@ -14,6 +14,7 @@ import { useStackBack } from '@/hooks/useStackBack';
 import { useProductList, useProductSearch } from '@/lib/stacks/catalog-stack';
 import { useInfiniteScroll } from '@/hooks/usePaginatedList';
 import { formatMoney, formatQty, pluralUnit } from '@/lib/format';
+import { ProductForm } from '@/components/catalog/ProductForm';
 import styles from './stock-page.module.css';
 
 /**
@@ -29,6 +30,7 @@ export default function StockPage() {
   const { store } = useAuth();
   const { can } = usePermission();
   const [query, setQuery] = useState('');
+  const [adding, setAdding] = useState(false);
   const debounced = useDebounced(query);
   const searching = debounced.trim() !== '';
 
@@ -78,6 +80,18 @@ export default function StockPage() {
       onBack={goBack}
       title="Stock"
       subtitle={store.name}
+      actions={
+        can('products.manage')
+          ? [
+              {
+                key: 'add',
+                icon: <PlusIcon />,
+                onClick: () => setAdding(true),
+                ariaLabel: 'Add an item you sell',
+              },
+            ]
+          : undefined
+      }
       footer={
         can('stock.receive') ? (
           <Button size="large" fullWidth onClick={() => nav.push('receive_page')}>
@@ -92,6 +106,17 @@ export default function StockPage() {
         placeholder="Search products or a category"
         label="Search your stock"
         resultCount={searching ? products.length : undefined}
+      />
+
+      <ProductForm
+        open={adding}
+        onClose={() => setAdding(false)}
+        storeId={store.id}
+        initialName={searching ? query : ''}
+        onSaved={() => {
+          setQuery('');
+          void browse.reload();
+        }}
       />
 
       {products.length === 0 ? (

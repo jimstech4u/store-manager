@@ -526,3 +526,9 @@
   background: var(--primary-subtle);
   color: var(--primary);
 }
+
+/* Containers leaving with the goods. Sits between the price and the line total, because it is
+   part of what the customer is taking away and not an afterthought. */
+.emptiesBlock {
+  margin-bottom: var(--space-3);
+}

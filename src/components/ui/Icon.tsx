@@ -256,3 +256,40 @@ export const StarIcon = (p: IconProps) => (
     <path d="m12 3.6 2.6 5.3 5.8.85-4.2 4.1 1 5.8-5.2-2.75L6.8 19.65l1-5.8-4.2-4.1 5.8-.85z" />
   </Svg>
 );
+
+export const EditIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17z" />
+    <path d="M14.5 6.5 17.5 9.5" />
+  </Svg>
+);
+
+export const BankIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3 10 12 4l9 6" />
+    <path d="M5 10v9M19 10v9M9 10v9M15 10v9" />
+    <path d="M3 20h18" />
+  </Svg>
+);
+
+export const ShieldIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 3 5 6v6c0 4.2 2.9 7.6 7 9 4.1-1.4 7-4.8 7-9V6z" />
+    <path d="m9 12 2 2 4-4" />
+  </Svg>
+);
+
+export const HistoryIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1" />
+    <path d="M3 4v4h4" />
+    <path d="M12 8v4.5l3 1.8" />
+  </Svg>
+);
+
+export const RefreshIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1" />
+    <path d="M21 3v5h-5" />
+  </Svg>
+);

@@ -1,0 +1,23 @@
+import { chromium } from '@playwright/test';
+import fs from 'node:fs';
+const BASE = process.argv[2];
+const raw = fs.readFileSync('.env.local','utf8');
+const env = k => (raw.match(new RegExp(`^${k}=(.*)$`,'m'))??[])[1]?.trim().replace(/^"|"$/g,'');
+const b = await chromium.launch();
+const p = await (await b.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true})).newPage();
+await p.goto(BASE+'/login',{waitUntil:'networkidle'});
+await p.locator('input[type="email"]').first().fill(env('SAMPLE_EMAIL'));
+await p.locator('input[type="password"]').first().evaluate((el,v)=>{Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set.call(el,v);el.dispatchEvent(new Event('input',{bubbles:true}));},env('SAMPLE_PASSWORD'));
+await p.locator('button[type="submit"]').first().click();
+await p.waitForTimeout(7000);
+await p.getByRole('button',{name:'People',exact:true}).first().click();
+await p.waitForTimeout(3000);
+const info = await p.evaluate(() => [...document.querySelectorAll('input[aria-label="Search customers"]')].map(el=>{
+  const r = el.getBoundingClientRect();
+  const stack = el.closest('[data-nav-stack],[id*="stack"]');
+  return { id: el.id, w: Math.round(r.width), h: Math.round(r.height), display: getComputedStyle(el.parentElement).display, hiddenAncestor: (()=>{let n=el;while(n){const cs=getComputedStyle(n);if(cs.display==='none'||cs.visibility==='hidden')return n.className||n.tagName;n=n.parentElement;}return null;})() };
+}));
+console.log(JSON.stringify(info,null,2));
+console.log('people heading:', await p.getByText('People',{exact:true}).count());
+await p.screenshot({path:'shots/probe-people.png'});
+await b.close();
