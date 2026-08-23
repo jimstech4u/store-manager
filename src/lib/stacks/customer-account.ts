@@ -89,6 +89,31 @@ export function useCustomerAccount(customerId: string | null) {
     void reload();
   }, [reload]);
 
+  /*
+   * Re-read periodically while this screen is on show.
+   *
+   * A FALLBACK, and worth being honest about why. This page displays a live position — money
+   * owed, containers out, deposits held — and it goes stale the moment a sale is settled on
+   * another tab, because every tab stack stays mounted and nothing here remounts.
+   *
+   * Four ways of detecting "the user is looking at this again" were tried and none fires on every
+   * path back to it: `window.focus`/`visibilitychange` (the window never loses focus when tabs
+   * change inside the app), navigation-stack's `useIsTop`, its `usePageLifecycle`
+   * onResume/onEnter, and its `usePageState().isActive`. Returning from a receipt pushed on top
+   * of this page missed all of them.
+   *
+   * So it polls, gated on document visibility so a backgrounded tab costs nothing. Twenty seconds
+   * on a screen someone reads for a minute is two or three cheap reads; the alternative is a
+   * shopkeeper quoting a balance that a sale two minutes ago already changed.
+   */
+  useEffect(() => {
+    if (!customerId || typeof document === 'undefined') return;
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') void reload();
+    }, 20000);
+    return () => clearInterval(id);
+  }, [customerId, reload]);
+
   return { account, history, loading, error, reload };
 }
 

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useLocation, useNav, usePageLifecycle } from '@academix-admin/navigation-stack';
+import { useEffect, useRef, useState } from 'react';
+import { useLocation, useNav, usePageState } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
@@ -70,11 +70,23 @@ export default function AccountPage() {
    * on the group container's active class (neither transition happens the way it was assumed to).
    */
   const nav = useNav();
-  usePageLifecycle(nav, {
-    onResume: () => {
-      void reload();
-    },
-  }, [reload]);
+  /*
+   * Reload whenever this page becomes active again.
+   *
+   * `usePageState` exposes activity as reactive STATE rather than as a callback, which is what
+   * finally made this work. The callback forms — `onResume`, `onEnter` — fire on some paths and
+   * not others: coming back from a receipt pushed on top of this page missed both, and the screen
+   * showed the customer's balance from before the sale that had just changed it.
+   *
+   * A ref holds the previous value so the effect only fires on the inactive → active edge, not on
+   * every render while the page happens to be active.
+   */
+  const { isActive } = usePageState(nav);
+  const wasActive = useRef(isActive);
+  useEffect(() => {
+    if (isActive && !wasActive.current) void reload();
+    wasActive.current = isActive;
+  }, [isActive, reload]);
 
   const [action, setAction] = useState<ActionKind>(null);
   const [amount, setAmount] = useState('');

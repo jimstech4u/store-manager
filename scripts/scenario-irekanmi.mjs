@@ -448,8 +448,10 @@ const run = async () => {
     await row2.click();
   }
   await page.getByText(/Everything that has happened/i).first().waitFor({ timeout: 25000 });
-  // The page refreshes itself on focus; give that round trip time to land.
-  await page.waitForTimeout(3500);
+  // The page re-reads on a 20s poll (see useCustomerAccount); tap its refresh action rather
+  // than idling through a cycle, which is what a seller would do anyway.
+  await onScreen(page, 'button[aria-label="Check for changes"]').click();
+  await page.waitForTimeout(2500);
   await shot(page, 'account-after-sale');
 
   state = await readState();

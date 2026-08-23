@@ -78,6 +78,24 @@ export function Sheet({
     const marker = `sheet-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     window.history.pushState({ ...(window.history.state ?? {}), smSheet: marker }, '');
 
+    /*
+     * How deep the history was once this sheet's entry existed.
+     *
+     * A GUARD AGAINST A LIBRARY BUG, and it comes out when the fix ships. navigation-stack 0.13.0
+     * pushes with `{ ...history.state, navStack }`, which copies THIS MARKER onto the entry it
+     * creates — so a sheet closing in the same tick as a page push saw its own id on the pushed
+     * entry, decided the entry was its own, and popped the page. That is what made the receipt
+     * vanish after settling a sale.
+     *
+     * Fixed in navigation-stack 0.13.1 (packages/navigation-stack, changeset
+     * navstack-push-state-isolation): a push no longer inherits the previous entry's state. Once
+     * 0.13.1 is published and this app depends on it, `depthAtPush` and its half of the condition
+     * below should be deleted — the marker alone is then sufficient, and this was verified against
+     * a local 0.13.1 build.
+     */
+    const depthAtPush = window.history.length;
+
+
     const onPop = () => {
       // Whatever we landed on, this sheet's entry is gone — so the sheet must close. Guarding on
       // `dismissible` would strand a non-dismissible sheet over a page it no longer belongs to.
@@ -89,7 +107,11 @@ export function Sheet({
       window.removeEventListener('popstate', onPop);
       // Closed by a button rather than by back: our entry is still on the stack, so take it off.
       // Otherwise the next back press appears to do nothing at all.
-      if ((window.history.state as { smSheet?: string } | null)?.smSheet === marker) {
+      //
+      // Both conditions, until 0.13.1 ships. The marker says the top entry is a sheet's; the
+      // unchanged depth says nothing has been pushed on top of it since.
+      const state = window.history.state as { smSheet?: string } | null;
+      if (state?.smSheet === marker && window.history.length === depthAtPush) {
         window.history.back();
       }
     };

@@ -71,18 +71,33 @@
   },
   {
     "name": "a receipt page opened after settling",
-    "ok": false,
+    "ok": true,
     "detail": ""
   },
   {
+    "name": "receipt itemises Transport",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "receipt itemises Loading separately",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "receipt shows what is still with the customer",
+    "ok": true,
+    "detail": "16.5 · ₦20,000 held | OPAY | 8023115864 | AJIBEWA OLANIKE | Thank you for your patronage | Share receipt | Send as picture | Print / PDF"
+  },
+  {
     "name": "owes 200,000 + 87,100 - 40,000 = 247,100",
-    "ok": false,
-    "detail": "₦200,000"
+    "ok": true,
+    "detail": "₦247,100"
   },
   {
     "name": "NBL crates now 13 + 3.5 out from this sale",
-    "ok": false,
-    "detail": "13"
+    "ok": true,
+    "detail": "16.5"
   },
   {
     "name": "history now carries the whole story",
