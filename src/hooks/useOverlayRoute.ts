@@ -49,9 +49,26 @@ export function useOverlayRoute(name: string, open: boolean, onClose: () => void
     window.addEventListener('popstate', onPop);
     return () => {
       window.removeEventListener('popstate', onPop);
-      // Closed by a button rather than by back: our entry is still on the stack, so take it off,
-      // or the next back press appears to do nothing at all.
-      if (readOverlayFragment() === name) window.history.back();
+
+      /*
+       * Closed by a button rather than by back: our entry is still on the stack, so take it off,
+       * or the next back press appears to do nothing at all.
+       *
+       * Deferred by a tick, and only if the entry on top is still OURS.
+       *
+       * Choosing something inside an overlay usually closes it and pushes a page in the same
+       * handler. React runs this cleanup before the push completes, so the immediate version saw
+       * its own fragment, queued a step back, and that step landed on the page that had just been
+       * pushed — tapping a customer in the search results dismissed the search and went nowhere,
+       * every time. `axOverlay` is the marker navigation-stack's codec puts on the entry it
+       * created; once a page has been pushed the top entry carries the stack's own state instead,
+       * which is how we tell "still our overlay" from "already moved on".
+       */
+      const ours = name;
+      window.setTimeout(() => {
+        const state = window.history.state as { axOverlay?: string } | null;
+        if (readOverlayFragment() === ours && state?.axOverlay === ours) window.history.back();
+      }, 0);
     };
   }, [name, open]);
 }

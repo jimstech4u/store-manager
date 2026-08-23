@@ -193,29 +193,58 @@ const run = async () => {
   const dialog = page.locator('[role="dialog"]').first();
   check('customer dialog opened', (await dialog.count()) > 0);
   if (await dialog.count()) {
+    /*
+     * Asserted through the dialog itself rather than by class name.
+     *
+     * The sheet is `@academix-admin/bottom-viewer`'s now, not the app's, and the previous version
+     * of this looked for `Sheet_backdrop` — an app CSS-module class that no longer exists. Naming
+     * the implementation is how a suite goes green on a screen it stopped describing, or red on a
+     * screen that is fine. What actually matters is: something covers the viewport, it is mounted
+     * outside the page's transform, and a tap where the tabs are lands in it.
+     */
     const covers = await page.evaluate(() => {
-      const back = document.querySelector('[class*="Sheet_backdrop"]');
-      if (!back) return null;
+      const dlg = document.querySelector('[role="dialog"]');
+      if (!dlg) return null;
+      // Walk up to the outermost fixed-position layer the dialog sits in — the backdrop.
+      let back = dlg, node = dlg.parentElement;
+      while (node && node !== document.body) {
+        if (getComputedStyle(node).position === 'fixed') back = node;
+        node = node.parentElement;
+      }
       const r = back.getBoundingClientRect();
+      // Portalled OUT of the page: no ancestor may carry a transform, or `position: fixed` is
+      // resolved against that ancestor instead of the viewport — which is what once left the
+      // backdrop stopping short of the tab bar with taps falling straight through it.
+      let transformed = false;
+      for (let n = back.parentElement; n && n !== document.body; n = n.parentElement) {
+        if (getComputedStyle(n).transform !== 'none') { transformed = true; break; }
+      }
       return {
         full: Math.round(r.height) >= window.innerHeight - 1 && Math.round(r.width) >= window.innerWidth - 1,
-        inBody: back.parentElement === document.body,
+        inBody: !transformed,
+        cls: back.className?.toString?.().slice(0, 60) ?? '',
       };
     });
     check('backdrop covers the whole viewport', covers?.full === true, JSON.stringify(covers));
-    check('sheet is portalled to <body>, not trapped in the page', covers?.inBody === true);
+    check('sheet is portalled out of the page transform, not trapped in it', covers?.inBody === true);
 
     /*
      * A tap where the tab bar sits must land INSIDE the dialog — on its backdrop or on its own
-     * footer, either is correct. The first version of this asserted the backdrop specifically and
+     * content, either is correct. The first version of this asserted the backdrop specifically and
      * failed on a sheet whose footer button legitimately covered that point: the app was right and
      * the assertion was too narrow.
      */
     const hit = await page.evaluate(() => {
       const el = document.elementFromPoint(window.innerWidth / 2, window.innerHeight - 30);
-      const sheet = document.querySelector('[class*="Sheet_backdrop"]');
-      return { inSheet: !!(el && sheet && (sheet === el || sheet.contains(el))),
-               cls: el?.className?.toString?.().slice(0, 50) ?? '' };
+      const dlg = document.querySelector('[role="dialog"]');
+      if (!el || !dlg) return { inSheet: false, cls: '' };
+      // Inside the dialog, or inside the fixed layer that holds it.
+      let layer = dlg, node = dlg.parentElement;
+      while (node && node !== document.body) {
+        if (getComputedStyle(node).position === 'fixed') layer = node;
+        node = node.parentElement;
+      }
+      return { inSheet: layer === el || layer.contains(el), cls: el.className?.toString?.().slice(0, 50) ?? '' };
     });
     check('tap over the tab bar is captured by the dialog', hit.inSheet === true, hit.cls);
   }

@@ -5,7 +5,7 @@ import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
-import { Sheet } from '@/components/ui/Sheet';
+import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Explain, InfoPanel } from '@/components/ui/Explain';
 import { EditIcon, PlusIcon, StarIcon, TrashIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -198,7 +198,7 @@ export default function BankPage() {
         </InfoPanel>
       )}
 
-      <Sheet
+      <BottomSheet
         open={open}
         onClose={() => setOpen(false)}
         title={editing ? 'Edit this account' : 'Add an account'}
@@ -258,9 +258,9 @@ export default function BankPage() {
             </span>
           </span>
         </label>
-      </Sheet>
+      </BottomSheet>
 
-      <Sheet
+      <BottomSheet
         open={confirmRemove !== null}
         onClose={() => setConfirmRemove(null)}
         title="Remove this account?"
@@ -287,7 +287,7 @@ export default function BankPage() {
           It stops being offered at the counter. Transfers already recorded against it keep their
           record, so your past months still reconcile.
         </p>
-      </Sheet>
+      </BottomSheet>
     </PageScaffold>
   );
 }

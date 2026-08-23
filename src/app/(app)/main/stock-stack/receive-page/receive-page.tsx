@@ -7,7 +7,7 @@ import { PageScaffold } from '@/components/ui/PageScaffold';
 import { useStackBack } from '@/hooks/useStackBack';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
-import { Sheet } from '@/components/ui/Sheet';
+import { BottomSheet } from '@/components/ui/BottomSheet';
 import { SearchField, useDebounced } from '@/components/ui/SearchField';
 import { Explain, InfoPanel, WorkedExample } from '@/components/ui/Explain';
 import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
@@ -345,7 +345,7 @@ export default function ReceivePage() {
         </>
       )}
 
-      <Sheet open={picking} onClose={() => setPicking(false)} title="What came in?">
+      <BottomSheet open={picking} onClose={() => setPicking(false)} title="What came in?">
         <SearchField
           value={query}
           onChange={setQuery}
@@ -376,7 +376,7 @@ export default function ReceivePage() {
             ))}
           </div>
         )}
-      </Sheet>
+      </BottomSheet>
     </PageScaffold>
   );
 }

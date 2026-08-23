@@ -168,6 +168,56 @@ const sheet = (page) => page.locator('[role="dialog"]').first();
  */
 const onScreen = (page, selector) => page.locator(`${selector}:visible`).first();
 
+/**
+ * Search a page that uses the SearchLauncher + SearchViewer pair, and open the result.
+ *
+ * The in-page control is a BUTTON that looks like a search box; tapping it opens a full-screen
+ * viewer holding the real input AND the results. This used to be a plain input with the list
+ * filtering beneath it, and the scenario reached straight for
+ * `input[aria-label="Search customers"]` — which now matches nothing, because that name belongs to
+ * the launcher button.
+ *
+ * The result must be tapped INSIDE the viewer. The page's own unfiltered list is still mounted
+ * underneath, so clicking a row by name alone resolves the buried one and Playwright sits there
+ * reporting that the viewer's row on top is intercepting the click.
+ *
+ * Returns false when the page has no launcher — the tab was left on a detail page rather than the
+ * list — so a caller can carry on instead of failing.
+ */
+async function pageSearch(page, label, text, { pick } = {}) {
+  const launcher = page.locator(`button[aria-label="${label}"]:visible`).first();
+  if ((await launcher.count()) === 0) return false;
+  await launcher.click();
+  await page.waitForTimeout(1200);
+  // The viewer's own input: the last visible text input once the viewer is up.
+  await page.locator('input:visible').last().fill(text);
+  await page.waitForTimeout(2200);
+  if (pick) {
+    // `.last()` is the viewer's row — it is portalled after the page, so it comes last in the DOM.
+    const hit = page.getByRole('button', { name: new RegExp(pick) }).last();
+    const n = await page.getByRole('button', { name: new RegExp(pick) }).count();
+    console.log(`   pick "${pick}": ${n} candidate rows`);
+    await hit.scrollIntoViewIfNeeded();
+    await hit.click();
+    await page.waitForTimeout(2500);
+    await page.screenshot({ path: 'shots/after-pick.png' });
+    return true;
+  }
+
+  /*
+   * Nothing to pick: count what the search found, then CLOSE the viewer.
+   *
+   * Leaving it open is not a neutral act — it covers the whole screen, so the next step's tap on
+   * the launcher lands on a result row instead and the run stalls with Playwright reporting that
+   * something is intercepting the click. Counting before closing is why this returns a number
+   * rather than a boolean: once the viewer is gone, so are the results.
+   */
+  const found = await page.getByText(text, { exact: false }).count();
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(1200);
+  return found;
+}
+
 const run = async () => {
   const browser = await chromium.launch();
   const ctx = await browser.newContext({
@@ -205,18 +255,14 @@ const run = async () => {
   }
   await shot(page, 'people-list');
   // Search for them, so the row is on screen regardless of how many customers exist.
-  await onScreen(page, 'input[aria-label="Search customers"]').fill(CUSTOMER);
-  await page.waitForTimeout(1800);
-  check('customer exists in the list',
-    (await page.getByText(CUSTOMER, { exact: false }).count()) > 0);
+  const found = await pageSearch(page, 'Search customers', CUSTOMER);
+  check('customer exists in the list', found > 0, `${found} matches`);
 
   // ── 2 · Open the account ────────────────────────────────────────────────────────
   step('2. Open their account');
   // The row BUTTON, not the name span inside it, and scrolled into view first: the People list
   // is its own scroll container and the row can sit below the fold.
-  const row = page.getByRole('button', { name: new RegExp(CUSTOMER) }).first();
-  await row.scrollIntoViewIfNeeded();
-  await row.click();
+  await pageSearch(page, 'Search customers', CUSTOMER, { pick: CUSTOMER });
 
   /*
    * Wait for the account to actually arrive rather than for a fixed number of milliseconds.
@@ -483,14 +529,7 @@ const run = async () => {
    * on rather than the list. That is correct — it is what makes tabs feel like places — so the
    * scenario has to cope with either, not assume the list.
    */
-  const onList = await onScreen(page, 'input[aria-label="Search customers"]').count();
-  if (onList) {
-    await onScreen(page, 'input[aria-label="Search customers"]').fill(CUSTOMER);
-    await page.waitForTimeout(1900);
-    const row2 = page.getByRole('button', { name: new RegExp(CUSTOMER) }).first();
-    await row2.scrollIntoViewIfNeeded();
-    await row2.click();
-  }
+  await pageSearch(page, 'Search customers', CUSTOMER, { pick: CUSTOMER });
   await page.getByText(/Everything that has happened/i).first().waitFor({ timeout: 25000 });
   // Give the page a fair, generous window to refresh ITSELF before touching anything.
   console.log('    waiting 10s for an automatic refresh...');

@@ -8,7 +8,7 @@ import { InfoPanel } from '@/components/ui/Explain';
 import { Button } from '@/components/ui/Button';
 import { PhotoUpload } from '@/components/ui/PhotoUpload';
 import { ProductForm } from '@/components/catalog/ProductForm';
-import { Sheet } from '@/components/ui/Sheet';
+import { BottomSheet } from '@/components/ui/BottomSheet';
 import { EditIcon, TrashIcon } from '@/components/ui/Icon';
 import { getSupabase } from '@/lib/supabase/client';
 import { useAuth } from '@/providers/AuthProvider';
@@ -124,7 +124,7 @@ export default function ProductPage() {
         sheet has to be able to say that and offer the override — otherwise the seller meets a
         raw database error with no way forward.
       */}
-      <Sheet
+      <BottomSheet
         open={removing}
         onClose={() => setRemoving(false)}
         title={`Remove ${product.name}?`}
@@ -177,7 +177,7 @@ export default function ProductPage() {
           Past sales keep this item and still add up correctly. It just stops appearing when you
           are selling or counting.
         </p>
-      </Sheet>
+      </BottomSheet>
 
       <dl className={styles.facts}>
         <div className={styles.fact}>

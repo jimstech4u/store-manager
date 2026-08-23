@@ -2,7 +2,7 @@
   {
     "name": "customer exists in the list",
     "ok": true,
-    "detail": ""
+    "detail": "2 matches"
   },
   {
     "name": "account page opened",

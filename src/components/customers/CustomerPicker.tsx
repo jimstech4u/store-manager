@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import styles from './CustomerPicker.module.css';
-import { Sheet } from '@/components/ui/Sheet';
+import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { SearchField, useDebounced } from '@/components/ui/SearchField';
@@ -122,7 +122,7 @@ export function CustomerPicker({
   };
 
   return (
-    <Sheet
+    <BottomSheet
       open={open}
       onClose={onClose}
       title={creating ? 'New customer' : 'Who is this for?'}
@@ -236,6 +236,6 @@ export function CustomerPicker({
           </div>
         </>
       )}
-    </Sheet>
+    </BottomSheet>
   );
 }

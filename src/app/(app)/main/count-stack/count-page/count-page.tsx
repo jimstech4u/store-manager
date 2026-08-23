@@ -6,14 +6,16 @@ import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
-import { Sheet } from '@/components/ui/Sheet';
-import { SearchField, useDebounced } from '@/components/ui/SearchField';
+import { BottomSheet } from '@/components/ui/BottomSheet';
+import { SearchLauncher } from '@/components/ui/SearchLauncher';
+import { SearchSheet } from '@/components/ui/SearchSheet';
+import { useSearchController } from '@academix-admin/search-viewer';
 import { Explain, InfoPanel, WorkedExample } from '@/components/ui/Explain';
 import { ClipboardCheckIcon, WarningIcon } from '@/components/ui/Icon';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
 import { useStackBack } from '@/hooks/useStackBack';
-import { useProductList, useProductSearch, type Product } from '@/lib/stacks/catalog-stack';
+import { searchProducts, useProductList, type Product } from '@/lib/stacks/catalog-stack';
 import { getSupabase } from '@/lib/supabase/client';
 import { describeVariance, formatMoney, formatQty, pluralUnit } from '@/lib/format';
 
@@ -55,13 +57,11 @@ export default function CountPage() {
   const { store } = useAuth();
   const { can } = usePermission();
 
-  const [query, setQuery] = useState('');
-  const debounced = useDebounced(query);
-  const searching = debounced.trim() !== '';
+  // Browsing here; searching happens in the sheet, where the results get the whole screen.
+  const [searchId, searchOps, isSearchOpen] = useSearchController();
 
   const browse = useProductList(store?.id ?? null);
-  const search = useProductSearch(store?.id ?? null, searching ? debounced : null);
-  const products = searching ? search.products : browse.products;
+  const products = browse.products;
 
   const [active, setActive] = useState<Product | null>(null);
   const [counted, setCounted] = useState('');
@@ -194,12 +194,49 @@ export default function CountPage() {
         your records say it should be.
       </InfoPanel>
 
-      <SearchField
-        value={query}
-        onChange={setQuery}
-        placeholder="Search products or a category"
+      <SearchLauncher
         label="Find a product to count"
-        resultCount={searching ? products.length : undefined}
+        placeholder="Search products or a category"
+        onOpen={searchOps.open}
+      />
+
+      <SearchSheet<Product>
+        id={searchId}
+        isOpen={isSearchOpen}
+        onClose={searchOps.close}
+        placeholder="Search products or a category"
+        onInitialData={(text) => {
+          const t = text.trim().toLowerCase();
+          if (!t) return browse.products;
+          return browse.products.filter(
+            (p) =>
+              p.name.toLowerCase().includes(t) ||
+              (p.categoryName ?? '').toLowerCase().includes(t),
+          );
+        }}
+        localDataDeps={[browse.products]}
+        queryData={async (_cursor, text) => ({ data: await searchProducts(store.id, text) })}
+        keyOf={(p) => p.id}
+        emptyText="Try part of the name, or a category like “water”."
+        renderRow={(p) => (
+          <button
+            type="button"
+            className={styles.row}
+            onClick={() => {
+              searchOps.close();
+              reset();
+              setActive(p);
+            }}
+          >
+            <span className={styles.rowMain}>
+              <span className={styles.rowName}>{p.name}</span>
+              <span className={styles.rowMeta}>
+                records say {formatQty(p.onHand)} {pluralUnit(p.baseUnit, Number(p.onHand))}
+              </span>
+            </span>
+            <ClipboardCheckIcon />
+          </button>
+        )}
       />
 
       {products.length === 0 ? (
@@ -232,7 +269,7 @@ export default function CountPage() {
       )}
 
       {/* ── Counting sheet ──────────────────────────────────────────────────────── */}
-      <Sheet
+      <BottomSheet
         open={active !== null}
         onClose={reset}
         title={active?.name ?? 'Count'}
@@ -408,7 +445,7 @@ export default function CountPage() {
             )}
           </>
         )}
-      </Sheet>
+      </BottomSheet>
     </PageScaffold>
   );
 }

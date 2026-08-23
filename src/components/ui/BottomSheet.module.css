@@ -1,0 +1,62 @@
+/*
+ * Chrome only. The backdrop, the rounded rising panel, the grabber, the max width and the
+ * wide-screen centring are all the sheet package's own — duplicating them here is how the two
+ * drift apart.
+ */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  /* The package caps the sheet's height; this makes the body the part that scrolls within it
+     rather than the whole panel overflowing past the footer. */
+  min-height: 0;
+  max-height: 100%;
+}
+
+.head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-xl);
+  font-weight: 700;
+}
+
+.close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: var(--touch-min);
+  min-height: var(--touch-min);
+  margin: calc(var(--space-2) * -1);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+}
+
+.close:hover {
+  background: var(--surface-sunken);
+  color: var(--text);
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;   /* scrolling the sheet must not scroll the page behind it */
+  padding: var(--space-5) var(--space-4);
+}
+
+.footer {
+  flex: none;
+  padding: var(--space-4) var(--space-4) calc(var(--space-4) + var(--safe-bottom));
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}

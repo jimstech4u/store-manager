@@ -1,11 +1,13 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
-import { SearchField, useDebounced } from '@/components/ui/SearchField';
+import { SearchLauncher } from '@/components/ui/SearchLauncher';
+import { SearchSheet } from '@/components/ui/SearchSheet';
+import { useSearchController } from '@academix-admin/search-viewer';
 import { InfoPanel } from '@/components/ui/Explain';
 import { ChevronRightIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -44,8 +46,8 @@ export default function SalesPage() {
   const nav = useNav();
   const { store } = useAuth();
 
-  const [query, setQuery] = useState('');
-  const debounced = useDebounced(query);
+  // Browsing here; searching happens in the sheet, where the results get the whole screen.
+  const [searchId, searchOps, isSearchOpen] = useSearchController();
 
   const fetchPage = useCallback(
     async (cursor: unknown | null, limit: number) => {
@@ -54,7 +56,7 @@ export default function SalesPage() {
 
       const { data, error } = await getSupabase().rpc('list_sales', {
         p_store_id: store.id,
-        p_query: debounced.trim() || null,
+        p_query: null,
         p_after_at: c?.at ?? null,
         p_after_id: c?.id ?? null,
         p_limit: limit,
@@ -65,13 +67,13 @@ export default function SalesPage() {
       const last = rows[rows.length - 1];
       return { rows, cursor: last ? { at: last.occurred_at, id: last.id } : null };
     },
-    [store, debounced],
+    [store],
   );
 
   const list = usePaginatedList<SaleRow>({
     fetchPage,
     getId: (s) => s.id,
-    deps: [store?.id ?? '', debounced],
+    deps: [store?.id ?? ''],
     enabled: Boolean(store),
   });
 
@@ -98,19 +100,68 @@ export default function SalesPage() {
 
   return (
     <PageScaffold onBack={goBack} title="Sales" subtitle="Every receipt you have issued">
-      <SearchField
-        value={query}
-        onChange={setQuery}
-        placeholder="Search by customer or note"
+      <SearchLauncher
         label="Search sales"
-        resultCount={debounced.trim() ? list.items.length : undefined}
+        placeholder="Search by customer or note"
+        onOpen={searchOps.open}
+      />
+
+      <SearchSheet<SaleRow>
+        id={searchId}
+        isOpen={isSearchOpen}
+        onClose={searchOps.close}
+        placeholder="Search by customer or note"
+        onInitialData={(text) => {
+          const t = text.trim().toLowerCase();
+          if (!t) return list.items;
+          return list.items.filter((r) =>
+            (r.customer_name ?? 'Walk-in customer').toLowerCase().includes(t),
+          );
+        }}
+        localDataDeps={[list.items]}
+        queryData={async (_cursor, text) => {
+          const { data, error } = await getSupabase().rpc('list_sales', {
+            p_store_id: store.id,
+            p_query: text.trim() || null,
+            p_after_at: null,
+            p_after_id: null,
+            p_limit: 50,
+          });
+          if (error) throw error;
+          return { data: (data ?? []) as SaleRow[] };
+        }}
+        keyOf={(r) => r.id}
+        emptyText="Try a customer name, or part of a note you added to the sale."
+        renderRow={(r) => (
+          <button
+            type="button"
+            className={styles.row}
+            onClick={async () => {
+              // Navigate first, then close — see money-page for why the order matters.
+              await nav.push('receipt_page', { id: r.id });
+              searchOps.close();
+            }}
+          >
+            <span className={styles.rowMain}>
+              <span className={styles.rowName}>{r.customer_name ?? 'Walk-in customer'}</span>
+              <span className={styles.rowMeta}>
+                {formatDateTime(r.occurred_at)} · {r.line_count}{' '}
+                {Number(r.line_count) === 1 ? 'item' : 'items'}
+              </span>
+            </span>
+            <span className={styles.rowMoney}>
+              <span className={styles.rowTotal}>{formatMoney(r.total)}</span>
+              {Number(r.outstanding) > 0 && (
+                <span className={styles.rowOwing}>{formatMoney(r.outstanding)} unpaid</span>
+              )}
+            </span>
+          </button>
+        )}
       />
 
       {list.items.length === 0 ? (
-        <InfoPanel tone="info" title={debounced.trim() ? 'Nothing found' : 'No sales yet'}>
-          {debounced.trim()
-            ? 'Try a customer name, or part of a note you added to the sale.'
-            : 'Sales appear here as soon as you take a payment.'}
+        <InfoPanel tone="info" title="No sales yet">
+          Sales appear here as soon as you take a payment.
         </InfoPanel>
       ) : (
         <>

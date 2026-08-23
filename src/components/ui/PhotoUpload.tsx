@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from './Button';
 import { Explain, InfoPanel } from './Explain';
 import { CameraIcon, CheckIcon, ImageIcon, StarIcon, TrashIcon } from './Icon';
-import { Sheet } from './Sheet';
+import { BottomSheet } from './BottomSheet';
 import { normaliseProductImage } from '@/lib/image-pipeline';
 import { mediaUrl } from '@/lib/stacks/storefront';
 import {
@@ -276,7 +276,7 @@ export function PhotoUpload({
         </div>
       )}
 
-      <Sheet
+      <BottomSheet
         open={pending !== null}
         onClose={() => setPending(null)}
         title="Check the picture"
@@ -337,7 +337,7 @@ export function PhotoUpload({
             )}
           </>
         )}
-      </Sheet>
+      </BottomSheet>
     </section>
   );
 }

@@ -6,7 +6,7 @@ import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
-import { Sheet } from '@/components/ui/Sheet';
+import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Explain, InfoPanel } from '@/components/ui/Explain';
 import { CashIcon, HistoryIcon, RefreshIcon, ReturnIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -436,7 +436,7 @@ export default function AccountPage() {
 
       {/* ── Action sheet ────────────────────────────────────────────────────── */}
 
-      <Sheet
+      <BottomSheet
         open={action !== null}
         onClose={() => setAction(null)}
         title={
@@ -615,7 +615,7 @@ export default function AccountPage() {
             placeholder={action === 'breakage' ? '3 bottles cracked' : 'Anything worth remembering'}
           />
         )}
-      </Sheet>
+      </BottomSheet>
     </PageScaffold>
   );
 }

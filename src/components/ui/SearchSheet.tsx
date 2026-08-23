@@ -107,6 +107,8 @@ export function SearchSheet<T>({
       }}
       childrenDirection="vertical"
       zIndex={1000}
+      // Names the modal, so it is announced as what it searches rather than just "dialog".
+      ariaLabel={placeholder}
       onResult={setResults}
     >
       {results.map((r) => (

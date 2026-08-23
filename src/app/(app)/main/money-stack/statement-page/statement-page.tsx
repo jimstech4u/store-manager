@@ -6,7 +6,7 @@ import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
-import { Sheet } from '@/components/ui/Sheet';
+import { BottomSheet } from '@/components/ui/BottomSheet';
 import { InfoPanel } from '@/components/ui/Explain';
 import { usePermission } from '@/hooks/usePermission';
 import { ChevronRightIcon } from '@/components/ui/Icon';
@@ -159,7 +159,7 @@ export default function StatementPage() {
           ))}
         </ul>
       )}
-      <Sheet
+      <BottomSheet
         open={paying}
         onClose={() => setPaying(false)}
         title="Record a payment"
@@ -228,7 +228,7 @@ export default function StatementPage() {
             </button>
           ))}
         </div>
-      </Sheet>
+      </BottomSheet>
     </PageScaffold>
   );
 }

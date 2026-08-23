@@ -7,7 +7,9 @@ import { useStackBack } from '@/hooks/useStackBack';
 import { useNav } from '@academix-admin/navigation-stack';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
-import { SearchField, useDebounced } from '@/components/ui/SearchField';
+import { SearchLauncher } from '@/components/ui/SearchLauncher';
+import { SearchSheet } from '@/components/ui/SearchSheet';
+import { useSearchController } from '@academix-admin/search-viewer';
 import { InfoPanel } from '@/components/ui/Explain';
 import { ChevronRightIcon, PlusIcon } from '@/components/ui/Icon';
 import { CustomerPicker } from '@/components/customers/CustomerPicker';
@@ -34,9 +36,15 @@ export default function PeoplePage() {
   const goBack = useStackBack();
   const nav = useNav();
   const { store } = useAuth();
-  const [query, setQuery] = useState('');
-  const debounced = useDebounced(query);
   const [adding, setAdding] = useState(false);
+
+  /*
+   * The list browses; searching happens in the SearchViewer sheet.
+   *
+   * The page used to swap its own list between browsing and results, which put the matches under
+   * the box that produced them with the phone keyboard over the top. The sheet gets the screen.
+   */
+  const [searchId, searchOps, isSearchOpen] = useSearchController();
 
   const fetchPage = useCallback(
     async (cursor: unknown | null, limit: number) => {
@@ -44,7 +52,7 @@ export default function PeoplePage() {
       const c = cursor as { name: string; id: string } | null;
       const { data, error } = await getSupabase().rpc('list_customers', {
         p_store_id: store.id,
-        p_query: debounced.trim() || null,
+        p_query: null,
         p_after_name: c?.name ?? null,
         p_after_id: c?.id ?? null,
         p_limit: limit,
@@ -54,13 +62,13 @@ export default function PeoplePage() {
       const last = rows[rows.length - 1];
       return { rows, cursor: last ? { name: last.display_name, id: last.id } : null };
     },
-    [store, debounced],
+    [store],
   );
 
   const list = usePaginatedList<CustomerRow>({
     fetchPage,
     getId: (r) => r.id,
-    deps: [store?.id, debounced],
+    deps: [store?.id],
     enabled: Boolean(store),
   });
 
@@ -85,16 +93,72 @@ export default function PeoplePage() {
         </Button>
       }
     >
-      <SearchField
-        value={query}
-        onChange={setQuery}
-        placeholder="Search by name or phone"
+      <SearchLauncher
         label="Search customers"
-        resultCount={debounced.trim() ? list.items.length : undefined}
+        placeholder="Search by name or phone"
+        onOpen={searchOps.open}
+      />
+
+      <SearchSheet<CustomerRow>
+        id={searchId}
+        isOpen={isSearchOpen}
+        onClose={searchOps.close}
+        placeholder="Search by name or phone"
+        onInitialData={(text) => {
+          const t = text.trim().toLowerCase();
+          if (!t) return list.items;
+          return list.items.filter(
+            (c) =>
+              c.display_name.toLowerCase().includes(t) ||
+              (c.business_name ?? '').toLowerCase().includes(t) ||
+              c.phone.includes(t),
+          );
+        }}
+        localDataDeps={[list.items]}
+        queryData={async (_cursor, text) => {
+          const { data, error } = await getSupabase().rpc('list_customers', {
+            p_store_id: store.id,
+            p_query: text.trim() || null,
+            p_after_name: null,
+            p_after_id: null,
+            p_limit: 50,
+          });
+          if (error) throw error;
+          return { data: (data ?? []) as CustomerRow[] };
+        }}
+        keyOf={(c) => c.id}
+        emptyText="Try part of the name, or the phone number they gave you."
+        renderRow={(c) => (
+          <button
+            type="button"
+            className={`${styles.row} ${styles.rowLink}`}
+            onClick={async () => {
+              // Navigate first, then close — see money-page for why the order matters.
+              await nav.push('account_page', { id: c.id });
+              searchOps.close();
+            }}
+          >
+            <span className={styles.rowMain}>
+              <span className={styles.rowName}>{c.display_name}</span>
+              <span className={styles.rowMeta}>
+                {c.phone}
+                {c.business_name ? ` · ${c.business_name}` : ''}
+              </span>
+            </span>
+            <span
+              className={`${styles.rowBalance} ${
+                Number(c.balance) > 0 ? styles.owing : styles.clear
+              }`}
+            >
+              {Number(c.balance) > 0 ? formatMoney(c.balance) : 'Clear'}
+            </span>
+            <ChevronRightIcon />
+          </button>
+        )}
       />
 
       {list.items.length === 0 ? (
-        <InfoPanel tone="info" title={debounced.trim() ? 'Nobody by that name' : 'No customers saved yet'}>
+        <InfoPanel tone="info" title="No customers saved yet">
           You only need to save someone when they are buying on credit. Cash sales need nothing.
         </InfoPanel>
       ) : (

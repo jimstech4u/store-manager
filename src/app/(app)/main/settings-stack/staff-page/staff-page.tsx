@@ -5,7 +5,7 @@ import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
-import { Sheet } from '@/components/ui/Sheet';
+import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Explain, InfoPanel } from '@/components/ui/Explain';
 import { PlusIcon, TrashIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -345,7 +345,7 @@ export default function StaffPage() {
         </>
       )}
 
-      <Sheet
+      <BottomSheet
         open={inviting}
         onClose={() => setInviting(false)}
         title="Add someone to your team"
@@ -394,9 +394,9 @@ export default function StaffPage() {
           </select>
           <p className={styles.roleNote}>{ROLE_SUMMARY[roleCode]}</p>
         </div>
-      </Sheet>
+      </BottomSheet>
 
-      <Sheet
+      <BottomSheet
         open={confirmRemove !== null}
         onClose={() => setConfirmRemove(null)}
         title={`Remove ${confirmRemove?.email ?? ''}?`}
@@ -433,7 +433,7 @@ export default function StaffPage() {
           They lose access to this shop immediately. Everything they recorded stays exactly as it
           is — sales, payments and counts keep their name on them.
         </p>
-      </Sheet>
+      </BottomSheet>
     </PageScaffold>
   );
 }

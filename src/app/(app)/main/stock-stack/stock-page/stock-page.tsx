@@ -136,9 +136,10 @@ export default function StockPage() {
           <button
             type="button"
             className={styles.item}
-            onClick={() => {
+            onClick={async () => {
+              // Navigate first, then close — see money-page for why the order matters.
+              await nav.push('product_page', { id: p.id });
               searchOps.close();
-              void nav.push('product_page', { id: p.id });
             }}
           >
             <div className={styles.itemMain}>

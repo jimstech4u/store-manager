@@ -9,7 +9,7 @@ import { SearchField, useDebounced } from '@/components/ui/SearchField';
 import { InfoPanel } from '@/components/ui/Explain';
 import { Thumb } from '@/components/ui/Thumb';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
-import { Sheet } from '@/components/ui/Sheet';
+import { BottomSheet } from '@/components/ui/BottomSheet';
 import { ChevronLeftIcon, SearchIcon } from '@/components/ui/Icon';
 import { useInfiniteScroll } from '@/hooks/usePaginatedList';
 import {
@@ -232,7 +232,7 @@ export default function StorefrontPage({ params }: { params: Promise<{ code: str
       </main>
 
       {/* ── One item, with its bulk ladder ──────────────────────────────────────── */}
-      <Sheet
+      <BottomSheet
         open={openProduct !== null}
         onClose={() => {
           setOpenProduct(null);
@@ -299,7 +299,7 @@ export default function StorefrontPage({ params }: { params: Promise<{ code: str
             </div>
           </>
         )}
-      </Sheet>
+      </BottomSheet>
     </MarketShell>
   );
 }

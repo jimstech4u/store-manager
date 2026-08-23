@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Sheet } from '@/components/ui/Sheet';
+import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { Explain, InfoPanel, InlineHint } from '@/components/ui/Explain';
@@ -143,7 +143,7 @@ export function ProductForm({
   };
 
   return (
-    <Sheet
+    <BottomSheet
       open={open}
       onClose={onClose}
       title={editing ? 'Edit this item' : 'Add an item you sell'}
@@ -265,6 +265,6 @@ export function ProductForm({
           paid.
         </InfoPanel>
       )}
-    </Sheet>
+    </BottomSheet>
   );
 }

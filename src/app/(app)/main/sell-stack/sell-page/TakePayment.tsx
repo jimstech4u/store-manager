@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import styles from './TakePayment.module.css';
-import { Sheet } from '@/components/ui/Sheet';
+import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Button } from '@/components/ui/Button';
 import { useBankAccounts } from '@/lib/stacks/bank-accounts';
 import { Field } from '@/components/ui/Field';
@@ -156,7 +156,7 @@ export function TakePayment({
   };
 
   return (
-    <Sheet
+    <BottomSheet
       open={open}
       onClose={onClose}
       title="Take payment"
@@ -420,6 +420,6 @@ export function TakePayment({
           </Button>
         </>
       )}
-    </Sheet>
+    </BottomSheet>
   );
 }
