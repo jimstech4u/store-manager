@@ -4,14 +4,16 @@ import { useMemo, useState } from 'react';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { InfoPanel } from '@/components/ui/Explain';
-import { SearchField, useDebounced } from '@/components/ui/SearchField';
+import { SearchLauncher } from '@/components/ui/SearchLauncher';
+import { SearchSheet } from '@/components/ui/SearchSheet';
+import { useSearchController } from '@academix-admin/search-viewer';
 import { Button } from '@/components/ui/Button';
 import { ChevronRightIcon, PlusIcon } from '@/components/ui/Icon';
 import { useNav } from '@academix-admin/navigation-stack';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
 import { useStackBack } from '@/hooks/useStackBack';
-import { useProductList, useProductSearch } from '@/lib/stacks/catalog-stack';
+import { searchProducts, useProductList, type Product } from '@/lib/stacks/catalog-stack';
 import { useInfiniteScroll } from '@/hooks/usePaginatedList';
 import { formatMoney, formatQty, pluralUnit } from '@/lib/format';
 import { ProductForm } from '@/components/catalog/ProductForm';
@@ -29,20 +31,24 @@ export default function StockPage() {
   const goBack = useStackBack();
   const { store } = useAuth();
   const { can } = usePermission();
-  const [query, setQuery] = useState('');
   const [adding, setAdding] = useState(false);
-  const debounced = useDebounced(query);
-  const searching = debounced.trim() !== '';
+
+  /*
+   * The list browses; searching happens in the SearchViewer sheet.
+   *
+   * The page used to switch its own list between "browse" and "search results", which meant the
+   * results were squeezed under the box that produced them with the keyboard over the top. The
+   * sheet gets the whole screen, and this page goes back to doing one thing.
+   */
+  const [searchId, searchOps, isSearchOpen] = useSearchController();
 
   const browse = useProductList(store?.id ?? null);
-  const search = useProductSearch(store?.id ?? null, searching ? debounced : null);
-
-  const products = searching ? search.products : browse.products;
-  const loading = searching ? search.status === 'loading' : browse.loading;
-  const error = searching ? search.error : browse.error;
+  const products = browse.products;
+  const loading = browse.loading;
+  const error = browse.error;
 
   const sentinelRef = useInfiniteScroll(browse.loadMore, {
-    enabled: !searching && browse.hasMore && !browse.loading,
+    enabled: browse.hasMore && !browse.loading,
   });
 
   // Deliberately the value of what is LOADED, not of the whole catalogue: claiming a total while
@@ -65,7 +71,7 @@ export default function StockPage() {
         title="Could not load your stock"
         tone="error"
         action={
-          <Button fullWidth onClick={searching ? search.reload : browse.reload}>
+          <Button fullWidth onClick={browse.reload}>
             Try again
           </Button>
         }
@@ -100,34 +106,70 @@ export default function StockPage() {
         ) : undefined
       }
     >
-      <SearchField
-        value={query}
-        onChange={setQuery}
-        placeholder="Search products or a category"
+      <SearchLauncher
         label="Search your stock"
-        resultCount={searching ? products.length : undefined}
+        placeholder="Search products or a category"
+        onOpen={searchOps.open}
+      />
+
+      <SearchSheet<Product>
+        id={searchId}
+        isOpen={isSearchOpen}
+        onClose={searchOps.close}
+        placeholder="Search products or a category"
+        // What is already loaded answers the first keystroke with no round trip.
+        onInitialData={(text) => {
+          const t = text.trim().toLowerCase();
+          if (!t) return browse.products;
+          return browse.products.filter(
+            (p) =>
+              p.name.toLowerCase().includes(t) ||
+              (p.categoryName ?? '').toLowerCase().includes(t) ||
+              (p.sku ?? '').toLowerCase().includes(t),
+          );
+        }}
+        localDataDeps={[browse.products]}
+        queryData={async (_cursor, text) => ({ data: await searchProducts(store.id, text) })}
+        keyOf={(p) => p.id}
+        emptyText="Try part of the name, or a category like “water”."
+        renderRow={(p) => (
+          <button
+            type="button"
+            className={styles.item}
+            onClick={() => {
+              searchOps.close();
+              void nav.push('product_page', { id: p.id });
+            }}
+          >
+            <div className={styles.itemMain}>
+              <p className={styles.itemName}>{p.name}</p>
+              <p className={styles.itemMeta}>
+                {formatMoney(p.avgUnitCost, 2)} per {p.baseUnit} cost
+                {p.categoryName && <span>· {p.categoryName}</span>}
+              </p>
+            </div>
+            <div className={styles.itemQty}>
+              <span className={styles.qtyValue}>{formatQty(p.onHand)}</span>
+              <span className={styles.qtyUnit}>{pluralUnit(p.baseUnit, Number(p.onHand))}</span>
+            </div>
+          </button>
+        )}
       />
 
       <ProductForm
         open={adding}
         onClose={() => setAdding(false)}
         storeId={store.id}
-        initialName={searching ? query : ''}
-        onSaved={() => {
-          setQuery('');
-          void browse.reload();
-        }}
+        onSaved={() => void browse.reload()}
       />
 
       {products.length === 0 ? (
-        <InfoPanel tone="info" title={searching ? 'Nothing found' : 'Nothing here yet'}>
-          {searching
-            ? 'Try part of the name, or a category like “water”.'
-            : 'Add what you sell and it will show up here with what it cost and what you have left.'}
+        <InfoPanel tone="info" title="Nothing here yet">
+          Add what you sell and it will show up here with what it cost and what you have left.
         </InfoPanel>
       ) : (
         <>
-          {!searching && (
+          {(
             <div className={styles.summary}>
               <span className={styles.summaryLabel}>
                 {browse.hasMore ? 'Loaded so far, worth' : 'Stock is worth'}
@@ -184,7 +226,7 @@ export default function StockPage() {
 
           {/* Sentinel: loading starts before this is visible, so the list stays ahead of the
               reader rather than stalling at the bottom. */}
-          {!searching && browse.hasMore && (
+          {browse.hasMore && (
             <div ref={sentinelRef} className={styles.sentinel}>
               {browse.loadingMore ? 'Loading more…' : ''}
             </div>

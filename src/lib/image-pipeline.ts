@@ -269,6 +269,9 @@ export async function normaliseProductImage(
  * here rather than leaving it to the driver means what the shop previews is what the paper shows —
  * every driver dithers differently, and a shop that approved a preview should not be surprised.
  */
+/** Thrown when a logo cannot be made to look right on the paper it is going on. */
+export class LogoRejected extends Error {}
+
 export async function normaliseReceiptLogo(
   file: File,
   { widthPx = 576, threshold = 0.62 }: { widthPx?: number; threshold?: number } = {},
@@ -293,6 +296,39 @@ export async function normaliseReceiptLogo(
   // Trim the surrounding white so the mark itself fills the width it is given.
   const image = wctx.getImageData(0, 0, sw, sh);
   const box = contentBounds(image.data, sw, sh) ?? { x: 0, y: 0, w: sw, h: sh };
+
+  /*
+   * Refuse what cannot print well, rather than printing it badly.
+   *
+   * A receipt is one bit per dot and only 288 or 576 dots wide, so the paper is unforgiving in
+   * ways a screen is not. Accepting anything and letting the shop discover the result on a roll
+   * of thermal paper — after a customer has walked off with it — is the wrong way round. Each of
+   * these is a specific way a logo comes out unusable:
+   */
+
+  // Too small: upscaling to the paper width turns a 90px mark into soft blocks. The paper cannot
+  // add detail that was never in the file.
+  if (box.w < widthPx * 0.5) {
+    throw new LogoRejected(
+      `That picture is only ${box.w} pixels wide. For ${Math.round(widthPx / 8)}mm paper it needs ` +
+        `to be at least ${Math.round(widthPx * 0.5)} pixels wide — about ${Math.round(widthPx)} is ideal.`,
+    );
+  }
+
+  // Too tall for its width: a logo taller than it is wide eats the top of every receipt, and on a
+  // roll that is paper the shop pays for on every single sale.
+  const ratio = box.h / box.w;
+  if (ratio > 1.2) {
+    throw new LogoRejected(
+      'That picture is much taller than it is wide, so it would take up most of the top of every ' +
+        'receipt. Crop it to a wide shape — about three times as wide as it is tall works best.',
+    );
+  }
+
+  // Almost nothing there: a blank or near-blank image trims to a sliver and prints as a smudge.
+  if (box.w < 24 || box.h < 12) {
+    throw new LogoRejected('There is almost nothing in that picture to print.');
+  }
 
   const scale = widthPx / box.w;
   const outW = Math.max(1, Math.round(box.w * scale));

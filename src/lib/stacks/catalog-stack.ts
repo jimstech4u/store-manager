@@ -70,6 +70,23 @@ function toProduct(r: ProductRow): Product {
   };
 }
 
+/**
+ * One relevance-ordered search, as a plain call.
+ *
+ * The hook form below is for a page that owns a search box. This is for the search VIEWER, which
+ * owns its own query state and just wants results — and it keeps the row-to-Product mapping in
+ * this module rather than leaking `ProductRow` into every screen that searches.
+ */
+export async function searchProducts(storeId: string, query: string): Promise<Product[]> {
+  const { data, error } = await getSupabase().rpc('search_products', {
+    p_store_id: storeId,
+    p_query: query.trim() || null,
+    p_limit: 50,
+  });
+  if (error) throw error;
+  return ((data ?? []) as ProductRow[]).map(toProduct);
+}
+
 /** Relevance-ordered search. Pass null to disable (e.g. while the picker is closed). */
 export function useProductSearch(storeId: string | null, query: string | null) {
   const fetchPage = useCallback(async () => {

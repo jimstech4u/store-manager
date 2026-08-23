@@ -1,0 +1,39 @@
+/*
+ * Identical to SearchField's input, by composition rather than by copying.
+ *
+ * The two must look the same — the whole idea is that the box does not change, only what happens
+ * when it is tapped. Duplicating the rules would mean the day someone adjusts the real field's
+ * height or radius, this one silently stops matching it.
+ */
+.launcher {
+  composes: input from './SearchField.module.css';
+
+  display: flex;
+  align-items: center;
+  text-align: start;
+  cursor: pointer;
+  /* An input's text sits on the baseline; a flex button's does not, so the vertical padding that
+     centres text in the real field would push it low here. */
+  padding-block: 0;
+}
+
+.launcher:hover {
+  background: var(--surface-sunken);
+}
+
+.launcher:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-subtle);
+}
+
+.placeholder {
+  color: var(--text-muted);
+}
+
+.value {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

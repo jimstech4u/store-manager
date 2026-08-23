@@ -291,7 +291,8 @@ const run = async () => {
     await back.click();
     await page.waitForTimeout(1500);
     check('back returns to the stock list',
-      (await page.getByLabel('Search your stock').count()) > 0);
+      // The stock search is a launcher button now, not an input — it opens the SearchViewer.
+      (await page.locator('button[aria-label="Search your stock"]:visible').count()) > 0);
   }
 
   check('no uncaught page errors', consoleErrors.length === 0, consoleErrors.slice(0, 2).join(' | '));

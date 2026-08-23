@@ -50,7 +50,7 @@ await page.screenshot({ path: 'shots/12-product-detail.png', fullPage: true });
 // Back must return to the Stock list, not leave the app.
 await page.goBack();
 await page.waitForTimeout(2000);
-console.log('back returned to stock:', await page.getByText('Search your stock').count() > 0
+console.log('back returned to stock:', await page.locator('button[aria-label="Search your stock"]').count() > 0
   || await page.locator('input[placeholder*="Search products or a category"]').count() > 0);
 
 console.log('console errors:', errors.length ? errors.slice(0, 4) : 'none');

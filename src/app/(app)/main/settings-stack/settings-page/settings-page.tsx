@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { ReceiptPreview } from '@/components/receipt/ReceiptPreview';
-import { normaliseReceiptLogo } from '@/lib/image-pipeline';
+import { LogoRejected, normaliseReceiptLogo } from '@/lib/image-pipeline';
 import styles from './settings-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
@@ -348,7 +348,15 @@ export default function SettingsPage() {
 
                   patch({ receipt_logo_path: path });
                 } catch (err) {
-                  setLogoError(err instanceof Error ? err.message : 'That logo could not be used.');
+                  // A rejection carries an explanation of what is wrong with the picture and what
+                  // would work instead; anything else is a genuine failure.
+                  setLogoError(
+                    err instanceof LogoRejected
+                      ? err.message
+                      : err instanceof Error
+                        ? err.message
+                        : 'That logo could not be used.',
+                  );
                 } finally {
                   setLogoBusy(false);
                 }
@@ -375,8 +383,14 @@ export default function SettingsPage() {
               )}
             </div>
 
+            <p className={styles.sectionNote}>
+              A wide picture works best — roughly three times as wide as it is tall, and at least
+              {' '}{Math.round(Number(settings.printer_width_mm) * 8 * 0.45)} pixels across. It is
+              printed in plain black and white, so a simple mark reads better than a photograph.
+            </p>
+
             {logoError && (
-              <InfoPanel tone="danger" title="Logo not used">
+              <InfoPanel tone="warning" title="That picture will not print well">
                 {logoError}
               </InfoPanel>
             )}
