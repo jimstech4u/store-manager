@@ -148,6 +148,7 @@ const run = async () => {
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (m) => { const t = m.text(); if (t.startsWith('[acct]')) console.log('    ' + t); });
 
   await signIn(page);
 

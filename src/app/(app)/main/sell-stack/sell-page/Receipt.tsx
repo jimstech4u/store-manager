@@ -19,6 +19,10 @@ interface SaleDetail {
     transfer_details: string | null;
   };
   customer: { id: string; name: string; phone: string; balance: string } | null;
+  /** Named additions to the bill — transport, loading — each answerable on its own. */
+  charges: { label: string; amount: string }[];
+  /** What the customer still holds of the shop's, per pool, after this sale. */
+  empties: { category: string; qty: string; held: string }[];
   lines: {
     id: string;
     product_name: string;
@@ -97,7 +101,7 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
     return <FullPageMessage title="Preparing the receipt" tone="loading" />;
   }
 
-  const { sale, customer, lines, payments } = detail;
+  const { sale, customer, lines, payments, charges, empties } = detail;
   const paid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
   const owing = Number(sale.total) - paid;
   const width = settings?.width ?? 80;
@@ -148,7 +152,17 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
         </div>
 
         <div className={styles.totals}>
-          {Number(sale.fee_amount) > 0 && (
+          {/* Each charge on its own line. Summing them under one heading is exactly what makes
+              a bill unanswerable when the customer asks about it a fortnight later. */}
+          {(charges ?? []).map((c, i) => (
+            <div className={styles.row} key={`${c.label}-${i}`}>
+              <span>{c.label}</span>
+              <span className={styles.value}>{formatMoney(c.amount)}</span>
+            </div>
+          ))}
+
+          {/* An order started on an older build still carries its fee here and nowhere else. */}
+          {(charges ?? []).length === 0 && Number(sale.fee_amount) > 0 && (
             <div className={styles.row}>
               <span>{sale.fee_label || 'Extra charge'}</span>
               <span className={styles.value}>{formatMoney(sale.fee_amount)}</span>
@@ -184,6 +198,29 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
             </div>
           )}
         </div>
+
+        {/*
+          What the customer still has of ours, printed on the receipt itself.
+          The money half of an account has always been printed and the containers never were — and
+          the containers are the half that gets disputed, because nobody has anything in writing
+          about them.
+        */}
+        {(empties ?? []).length > 0 && (
+          <div className={styles.totals}>
+            <div className={styles.row}>
+              <span className={styles.emptiesHead}>Still with you</span>
+            </div>
+            {empties.map((e) => (
+              <div className={styles.row} key={e.category}>
+                <span>{e.category}</span>
+                <span className={styles.value}>
+                  {formatQty(e.qty)}
+                  {Number(e.held) > 0 ? ` · ${formatMoney(e.held)} held` : ''}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {sale.note && <p className={styles.foot}>{sale.note}</p>}
 

@@ -532,3 +532,33 @@
 .emptiesBlock {
   margin-bottom: var(--space-3);
 }
+
+/* ── Named charges ────────────────────────────────────────────────────────────────── */
+
+/* Label, amount and a way to remove it, on one row. The remove button keeps a full touch target
+   even though it sits beside two fields — deleting a charge changes the bill. */
+.chargeRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  align-items: start;
+  gap: var(--space-2);
+}
+
+.chargeRemove {
+  width: var(--touch-comfortable);
+  height: var(--touch-comfortable);
+  /* Clears the field label above, so the button lines up with the inputs, not with their text. */
+  margin-top: 1.9rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--danger);
+  cursor: pointer;
+}
+
+.chargeRemove:hover {
+  background: var(--surface-sunken);
+}

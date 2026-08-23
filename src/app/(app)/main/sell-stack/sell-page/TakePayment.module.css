@@ -218,3 +218,58 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+/* ── Which account a transfer landed in ───────────────────────────────────────────── */
+
+.accountBlock {
+  margin-bottom: var(--space-4);
+}
+
+.accountLabel {
+  display: block;
+  margin-bottom: var(--space-2);
+  font-weight: 600;
+}
+
+.accountSelect {
+  width: 100%;
+  min-height: var(--touch-comfortable);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-base);
+  color: var(--text);
+  background: var(--surface);
+  border: 2px solid var(--border-strong);
+  border-radius: var(--radius);
+}
+
+.accountSelect:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-subtle);
+}
+
+/*
+ * The number again, large.
+ *
+ * This is the line the seller reads aloud across a counter while the customer types it into a
+ * banking app. Tabular figures and open tracking so no two digits can be confused, and big enough
+ * to read at arm's length without picking the phone up.
+ */
+.accountNumber {
+  margin-top: var(--space-2);
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-xl);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.accountName {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  letter-spacing: normal;
+  color: var(--text-muted);
+}

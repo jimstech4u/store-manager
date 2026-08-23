@@ -20,6 +20,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
 import { fetchSaleUnits, useProductSearch, type SaleUnit } from '@/lib/stacks/catalog-stack';
 import {
+  chargesTotal,
   draftSubtotal,
   draftTotal,
   baseUnitsPerSaleUnit,
@@ -52,6 +53,12 @@ import { getSupabase } from '@/lib/supabase/client';
  * A fixed list rather than a setting: these are the parts a pack is physically broken into.
  * Which of them appear is decided per line by whether they land on whole base units.
  */
+/** Stable keys for charge rows, so editing one does not re-key the others and lose focus. */
+const newChargeKey = () =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
 const FRACTIONS = [
   { label: '¼', value: 0.25 },
   { label: '½', value: 0.5 },
@@ -730,12 +737,14 @@ export default function SellPage() {
                   <span>Items</span>
                   <span className={styles.totalValue}>{formatMoney(subtotal)}</span>
                 </div>
-                {Number(activeOrder.feeAmount) > 0 && (
-                  <div className={styles.totalRow}>
-                    <span>{activeOrder.feeLabel.trim() || 'Extra charge'}</span>
-                    <span className={styles.totalValue}>{formatMoney(activeOrder.feeAmount)}</span>
-                  </div>
-                )}
+                {(activeOrder.charges ?? [])
+                  .filter((c) => Number(c.amount) > 0)
+                  .map((c) => (
+                    <div className={styles.totalRow} key={c.key}>
+                      <span>{c.label.trim() || 'Charge'}</span>
+                      <span className={styles.totalValue}>{formatMoney(c.amount)}</span>
+                    </div>
+                  ))}
                 <div className={`${styles.totalRow} ${styles.grandRow}`}>
                   <span className={styles.grandLabel}>Total</span>
                   <span className={styles.grandValue}>{formatMoney(total)}</span>
@@ -748,38 +757,78 @@ export default function SellPage() {
               <Collapsible
                 tone="card"
                 title="Extra charge or note"
-                defaultOpen={Number(activeOrder.feeAmount) > 0 || activeOrder.note !== ''}
+                defaultOpen={(activeOrder.charges?.length ?? 0) > 0 || activeOrder.note !== ''}
                 summary={
-                  Number(activeOrder.feeAmount) > 0
-                    ? `${activeOrder.feeLabel.trim() || 'Charge'} ${formatMoney(activeOrder.feeAmount)}`
+                  chargesTotal(activeOrder) > 0
+                    ? `${activeOrder.charges.length} · ${formatMoney(chargesTotal(activeOrder))}`
                     : activeOrder.note
                       ? 'Note added'
                       : 'None'
                 }
               >
-                <Field
-                  label="Extra charge"
-                  optional
-                  numeric
-                  prefix="₦"
-                  value={activeOrder.feeAmount}
-                  onChange={(e) =>
-                    updateOrder(activeOrder.clientUuid, { feeAmount: e.target.value })
-                  }
-                  placeholder="0"
-                  hint="Delivery or anything else added to this customer's bill."
-                />
+                {/*
+                  A list, not one box.
+                  A distributor's bill routinely carries transport AND loading AND an amount
+                  carried over. Added together under one name they become a number the customer
+                  cannot check and the shop cannot explain weeks later.
+                */}
+                {(activeOrder.charges ?? []).map((c, i) => (
+                  <div key={c.key} className={styles.chargeRow}>
+                    <Field
+                      label={`Charge ${i + 1}`}
+                      value={c.label}
+                      onChange={(e) =>
+                        updateOrder(activeOrder.clientUuid, {
+                          charges: activeOrder.charges.map((x) =>
+                            x.key === c.key ? { ...x, label: e.target.value } : x,
+                          ),
+                        })
+                      }
+                      placeholder="Transport"
+                    />
+                    <Field
+                      label="Amount"
+                      numeric
+                      prefix="₦"
+                      value={c.amount}
+                      onChange={(e) =>
+                        updateOrder(activeOrder.clientUuid, {
+                          charges: activeOrder.charges.map((x) =>
+                            x.key === c.key ? { ...x, amount: e.target.value } : x,
+                          ),
+                        })
+                      }
+                      placeholder="0"
+                    />
+                    <button
+                      type="button"
+                      className={styles.chargeRemove}
+                      onClick={() =>
+                        updateOrder(activeOrder.clientUuid, {
+                          charges: activeOrder.charges.filter((x) => x.key !== c.key),
+                        })
+                      }
+                      aria-label={`Remove ${c.label.trim() || `charge ${i + 1}`}`}
+                    >
+                      <CloseIcon />
+                    </button>
+                  </div>
+                ))}
 
-                {Number(activeOrder.feeAmount) > 0 && (
-                  <Field
-                    label="What is the charge for?"
-                    value={activeOrder.feeLabel}
-                    onChange={(e) =>
-                      updateOrder(activeOrder.clientUuid, { feeLabel: e.target.value })
-                    }
-                    placeholder="Delivery"
-                  />
-                )}
+                <Button
+                  variant="secondary"
+                  fullWidth
+                  onClick={() =>
+                    updateOrder(activeOrder.clientUuid, {
+                      charges: [
+                        ...(activeOrder.charges ?? []),
+                        { key: newChargeKey(), label: '', amount: '' },
+                      ],
+                    })
+                  }
+                >
+                  <PlusIcon /> Add a charge
+                </Button>
 
                 <Field
                   label="Note"
@@ -854,6 +903,7 @@ export default function SellPage() {
           open={paying}
           onClose={() => setPaying(false)}
           order={activeOrder}
+          storeId={store.id}
           total={total}
           onNeedCustomer={() => {
             setPaying(false);

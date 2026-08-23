@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import styles from './TakePayment.module.css';
 import { Sheet } from '@/components/ui/Sheet';
 import { Button } from '@/components/ui/Button';
+import { useBankAccounts } from '@/lib/stacks/bank-accounts';
 import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
 import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
@@ -24,6 +25,8 @@ interface PaymentRow {
   method: Method;
   amount: string;
   reference: string;
+  /** Which of the shop's accounts a transfer landed in. Null until the shop has any. */
+  bankAccountId?: string | null;
 }
 
 const newKey = () => Math.random().toString(36).slice(2);
@@ -47,6 +50,7 @@ export function TakePayment({
   open,
   onClose,
   order,
+  storeId,
   total,
   onNeedCustomer,
   onSettled,
@@ -54,13 +58,17 @@ export function TakePayment({
   open: boolean;
   onClose: () => void;
   order: DraftOrder;
+  /** Needed to look up the shop's bank accounts; a draft does not carry its store. */
+  storeId: string;
   total: number;
   /** Asked for only when part of the money is going on account. */
   onNeedCustomer: () => void;
   onSettled: (saleId: string) => void;
 }) {
+  const accounts = useBankAccounts(storeId);
+
   const [rows, setRows] = useState<PaymentRow[]>([
-    { key: newKey(), method: 'cash', amount: '', reference: '' },
+    { key: newKey(), method: 'cash', amount: '', reference: '', bankAccountId: null },
   ]);
   const [tendered, setTendered] = useState('');
   const [busy, setBusy] = useState(false);
@@ -109,6 +117,13 @@ export function TakePayment({
           amount: Number(r.amount),
           method: r.method,
           reference: r.reference || null,
+          // Falls back to the shop's main account, which is what the seller was shown and read
+          // out. Sending null when the picker was never touched would record a transfer that
+          // cannot be matched to any account at reconciliation time.
+          bank_account_id:
+            r.method === 'transfer'
+              ? r.bankAccountId ?? accounts.find((a) => a.is_default)?.id ?? null
+              : null,
         }));
 
       // Credit needs someone to owe it. Without a customer there is no account to carry the
@@ -247,6 +262,47 @@ export function TakePayment({
               placeholder="0"
             />
 
+            {/*
+              Which account the money is going into.
+              A distributor collects into more than one and picks depending on the customer, so
+              the seller reads the number straight off the screen instead of from memory — the
+              single easiest number in this business to get wrong, and getting it wrong sends
+              somebody else's money somewhere else.
+            */}
+            {row.method === 'transfer' && accounts.length > 0 && (
+              <div className={styles.accountBlock}>
+                <label className={styles.accountLabel} htmlFor={`acct-${row.key}`}>
+                  Paid into
+                </label>
+                <select
+                  id={`acct-${row.key}`}
+                  className={styles.accountSelect}
+                  value={row.bankAccountId ?? accounts.find((a) => a.is_default)?.id ?? ''}
+                  onChange={(e) => patch(row.key, { bankAccountId: e.target.value || null })}
+                >
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.bank_name} · {a.account_number}
+                      {a.is_default ? ' (main)' : ''}
+                    </option>
+                  ))}
+                </select>
+                {(() => {
+                  const chosen =
+                    accounts.find(
+                      (a) => a.id === (row.bankAccountId ?? accounts.find((x) => x.is_default)?.id),
+                    ) ?? accounts[0];
+                  // Repeated big, because this is the line the seller reads aloud.
+                  return chosen ? (
+                    <p className={styles.accountNumber}>
+                      {chosen.account_number}
+                      <span className={styles.accountName}>{chosen.account_name}</span>
+                    </p>
+                  ) : null;
+                })()}
+              </div>
+            )}
+
             {row.method !== 'cash' && (
               <Field
                 label="Reference"
@@ -290,7 +346,7 @@ export function TakePayment({
         onClick={() =>
           setRows((prev) => [
             ...prev,
-            { key: newKey(), method: 'transfer', amount: '', reference: '' },
+            { key: newKey(), method: 'transfer', amount: '', reference: '', bankAccountId: null },
           ])
         }
       >

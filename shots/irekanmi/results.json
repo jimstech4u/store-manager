@@ -76,13 +76,13 @@
   },
   {
     "name": "owes 200,000 + 86,600 - 40,000 = 246,600",
-    "ok": false,
-    "detail": "₦200,000"
+    "ok": true,
+    "detail": "₦246,600"
   },
   {
     "name": "NBL crates now 13 + 3.5 out from this sale",
-    "ok": false,
-    "detail": "13"
+    "ok": true,
+    "detail": "16.5"
   },
   {
     "name": "history now carries the whole story",

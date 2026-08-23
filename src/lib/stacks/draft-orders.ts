@@ -52,6 +52,12 @@ export interface DraftLine {
   priceReason?: string | null;
 }
 
+export interface DraftCharge {
+  key: string;
+  label: string;
+  amount: string;
+}
+
 export interface DraftOrder {
   id: string | null;
   /** Stable client id, used for idempotency until the server assigns an id. */
@@ -63,8 +69,21 @@ export interface DraftOrder {
   customerPhone: string;
   label: string;
   lines: DraftLine[];
+  /**
+   * @deprecated Kept so an order saved by an older build still loads. New charges go in
+   * `charges`; anything found here is migrated into it on load.
+   */
   feeAmount: string;
   feeLabel: string;
+
+  /**
+   * Several named additions to the bill — transport, loading, an amount carried over.
+   *
+   * A list rather than one box because a distributor's bill routinely carries more than one, and
+   * adding them together under a single name destroys the only thing that makes them answerable
+   * weeks later: what each was for.
+   */
+  charges: DraftCharge[];
   note: string;
   /** False while there are edits the server has not accepted yet. */
   synced: boolean;
@@ -99,6 +118,7 @@ export function makeDraft(): DraftOrder {
     lines: [],
     feeAmount: '',
     feeLabel: '',
+    charges: [],
     note: '',
     synced: false,
   };
@@ -136,9 +156,18 @@ export function draftSubtotal(order: DraftOrder): number {
   return order.lines.reduce((sum, l) => sum + lineTotal(l), 0);
 }
 
+export function chargesTotal(order: DraftOrder): number {
+  return (order.charges ?? []).reduce((sum, c) => {
+    const n = Number(c.amount);
+    return sum + (Number.isFinite(n) ? n : 0);
+  }, 0);
+}
+
 export function draftTotal(order: DraftOrder): number {
+  // `feeAmount` is still counted for an order that was started by an older build and has not been
+  // re-saved since. Dropping it would quietly lower a bill someone is part-way through.
   const fee = Number(order.feeAmount);
-  return draftSubtotal(order) + (Number.isFinite(fee) ? fee : 0);
+  return draftSubtotal(order) + chargesTotal(order) + (Number.isFinite(fee) ? fee : 0);
 }
 
 /**
@@ -203,6 +232,9 @@ export function useDraftOrders(storeId: string | null) {
           p_label: order.label || order.customerName || null,
           p_fee_amount: Number(order.feeAmount) || 0,
           p_fee_label: order.feeLabel || null,
+          p_charges: (order.charges ?? [])
+            .filter((c) => Number(c.amount) > 0)
+            .map((c) => ({ label: c.label.trim() || 'Charge', amount: Number(c.amount) })),
           p_note: order.note || null,
           p_client_uuid: order.clientUuid,
           p_lines: order.lines
@@ -370,6 +402,7 @@ export function useDraftOrders(storeId: string | null) {
           label: row?.label ?? '',
           feeAmount: '',
           feeLabel: '',
+          charges: [],
           note: '',
           synced: true,
           lines: ((lineRows ?? []) as unknown as LineRow[]).map((l) => ({

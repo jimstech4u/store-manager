@@ -1,7 +1,7 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { useLocation } from '@academix-admin/navigation-stack';
+import { useState } from 'react';
+import { useLocation, useNav, usePageLifecycle } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
@@ -10,7 +10,6 @@ import { Sheet } from '@/components/ui/Sheet';
 import { Explain, InfoPanel } from '@/components/ui/Explain';
 import { CashIcon, HistoryIcon, RefreshIcon, ReturnIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
-import { useOnBecameVisible } from '@/hooks/useOnBecameVisible';
 import { usePermission } from '@/hooks/usePermission';
 import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
@@ -56,15 +55,26 @@ export default function AccountPage() {
   const pools = useEmptiesPools(store?.id ?? null);
 
   /*
-   * Reload when this tab is looked at again.
+   * Reload when this page is resumed.
    *
-   * All six tab stacks stay mounted, so this page keeps whatever it last loaded. Settle a sale on
-   * the Sell tab, come back to People, and it showed the position from before that sale.
+   * Tab stacks stay mounted — that is what makes switching instant and keeps each tab's scroll
+   * and history — so a page that loaded once keeps showing whatever it loaded. Settle a sale on
+   * the Sell tab, come back to People, and this showed the customer's position from BEFORE that
+   * sale: the right screen with stale numbers, which is worse than a spinner because nothing
+   * about it looks wrong.
+   *
+   * `usePageLifecycle` is the library's own answer and covers group-level pause/resume, which is
+   * precisely this case. Four other signals were tried first and none of them fires here: window
+   * focus (the browser window never loses focus moving between tabs inside the app), `useIsTop`
+   * (the page never stops being top of its OWN stack), IntersectionObserver and a MutationObserver
+   * on the group container's active class (neither transition happens the way it was assumed to).
    */
-  const pageRef = useRef<HTMLDivElement | null>(null);
-  useOnBecameVisible(pageRef, () => {
-    void reload();
-  });
+  const nav = useNav();
+  usePageLifecycle(nav, {
+    onResume: () => {
+      void reload();
+    },
+  }, [reload]);
 
   const [action, setAction] = useState<ActionKind>(null);
   const [amount, setAmount] = useState('');
@@ -232,8 +242,6 @@ export default function AccountPage() {
         },
       ]}
     >
-      <div ref={pageRef} />
-
       <Explain label="How to read this page">
         This customer has up to three separate things running with you, and they are kept apart on
         purpose.

@@ -1,0 +1,112 @@
+.wrap {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-4) calc(var(--space-7) + var(--safe-bottom));
+}
+
+.title {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: var(--space-2);
+}
+
+.lede {
+  color: var(--text-muted);
+  margin-bottom: var(--space-5);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.order {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: var(--space-4);
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--space-3);
+}
+
+.shop {
+  font-weight: 700;
+}
+
+/* The code, spaced out: it is read aloud and compared character by character. */
+.code {
+  font-family: var(--font-numeric);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: var(--text-muted);
+}
+
+.lines {
+  list-style: none;
+}
+
+.line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+}
+
+.lineName {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.lineQty {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.lineTotal {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  flex: none;
+}
+
+.grand {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 2px solid var(--border-strong);
+  font-weight: 700;
+}
+
+.grandValue {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-xl);
+  color: var(--primary);
+}
+
+.empty,
+.live {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.live {
+  margin-top: var(--space-3);
+}

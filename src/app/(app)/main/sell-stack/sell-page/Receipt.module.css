@@ -143,3 +143,9 @@
   color: var(--text-muted);
   text-align: center;
 }
+
+/* Heading for the containers block on the receipt. Bold rather than a separate rule, because on
+   40mm thermal paper every horizontal line costs a row of usable width. */
+.emptiesHead {
+  font-weight: 700;
+}
