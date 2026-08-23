@@ -96,8 +96,16 @@ export default function MainShell() {
            * The threshold keeps it still at the top of a page: a bar that lifts off on a
            * two-pixel scroll reads as a glitch rather than as a response.
            */
-          mode="float"
-          floatScrollThreshold={48}
+          /*
+           * `autohide`, the same as academix-web.
+           *
+           * `float` was tried first and it SHRINKS the bar's height rather than moving it, which
+           * with a 0px shrink height collapses the tabs to nothing while scrolling — the tabs
+           * vanish in place instead of sliding away, and they are the app's primary navigation.
+           * `autohide` slides the whole bar down out of the way and brings it straight back on
+           * an upward scroll, which is the behaviour being asked for.
+           */
+          mode="autohide"
           barBorderRadius="18px"
           barShadow={
             isDark

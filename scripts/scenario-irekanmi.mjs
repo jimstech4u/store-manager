@@ -68,7 +68,38 @@ async function signIn(page) {
   await page.waitForTimeout(7000);
 }
 
+/**
+ * Bring the tab bar back before reaching for it.
+ *
+ * The bar autohides on a downward scroll, so after working down a long page it is translated off
+ * the bottom of the screen and Playwright reports the tab as "outside of the viewport". A person
+ * scrolls up to get it back; so does this.
+ *
+ * Every visible scroll container is scrolled, not just the one that looks scrollable: the page in
+ * front may not be the one that was scrolled, and the bar only re-reveals on an upward event from
+ * whichever container it last heard from. Then it waits for the bar to actually return rather than
+ * assuming a fixed delay covers the transition.
+ */
+async function revealTabs(page) {
+  await page.evaluate(() => {
+    document.querySelectorAll('[class*="PageScaffold_body"]').forEach((c) => {
+      if (c.scrollTop > 0) c.scrollTop = 0;
+    });
+  });
+  await page
+    .waitForFunction(() => {
+      const nav = document.querySelector('nav.navigation-bar');
+      if (!nav) return true;
+      const m = getComputedStyle(nav).transform;
+      return m === 'none' || /matrix\(1, 0, 0, 1, 0, 0\)/.test(m);
+    }, undefined, { timeout: 5000 })
+    .catch(() => {});
+  await page.waitForTimeout(300);
+}
+
+
 const tab = async (page, name) => {
+  await revealTabs(page);
   await page.getByRole('button', { name, exact: true }).first().click();
   // Wait for the tab's own content, not a fixed delay: switching remounts nothing (all stacks
   // stay alive) but the newly visible stack still needs a frame to become hit-testable.
@@ -284,6 +315,18 @@ const run = async () => {
 
   // 5 - Build the receipt
   step('5. Build the sale');
+  console.log('    nav state: ' + JSON.stringify(await page.evaluate(() => {
+    const nav = document.querySelector('nav.navigation-bar');
+    const sell = [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Sell');
+    const r = (e) => { const x = e.getBoundingClientRect(); return { top: Math.round(x.top), bottom: Math.round(x.bottom) }; };
+    return {
+      vh: window.innerHeight,
+      navTransform: nav ? getComputedStyle(nav).transform : 'none',
+      nav: nav ? r(nav) : null,
+      sell: sell ? { ...r(sell), visible: sell.offsetParent !== null } : null,
+      dialogs: document.querySelectorAll('[role="dialog"]').length,
+    };
+  })));
   await tab(page, 'Sell');
   const startBtn = onScreen(page, 'button:has-text("Start a customer")');
   if (await startBtn.count()) { await startBtn.click(); await page.waitForTimeout(1200); }

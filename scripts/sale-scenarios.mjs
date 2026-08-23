@@ -20,6 +20,36 @@ fs.mkdirSync(OUT, { recursive: true });
 const raw = fs.readFileSync('.env.local', 'utf8');
 const env = (k) => (raw.match(new RegExp(`^${k}=(.*)$`, 'm')) ?? [])[1]?.trim().replace(/^"|"$/g, '');
 
+/**
+ * Bring the tab bar back before reaching for it.
+ *
+ * The bar autohides on a downward scroll, so after working down a long page it is translated off
+ * the bottom of the screen and Playwright reports the tab as "outside of the viewport". A person
+ * scrolls up to get it back; so does this.
+ *
+ * Every visible scroll container is scrolled, not just the one that looks scrollable: the page in
+ * front may not be the one that was scrolled, and the bar only re-reveals on an upward event from
+ * whichever container it last heard from. Then it waits for the bar to actually return rather than
+ * assuming a fixed delay covers the transition.
+ */
+async function revealTabs(page) {
+  await page.evaluate(() => {
+    document.querySelectorAll('[class*="PageScaffold_body"]').forEach((c) => {
+      if (c.scrollTop > 0) c.scrollTop = 0;
+    });
+  });
+  await page
+    .waitForFunction(() => {
+      const nav = document.querySelector('nav.navigation-bar');
+      if (!nav) return true;
+      const m = getComputedStyle(nav).transform;
+      return m === 'none' || /matrix\(1, 0, 0, 1, 0, 0\)/.test(m);
+    }, undefined, { timeout: 5000 })
+    .catch(() => {});
+  await page.waitForTimeout(300);
+}
+
+
 const results = [];
 const check = (name, ok, detail = '') => {
   results.push({ name, ok, detail });
@@ -54,6 +84,7 @@ async function signIn(page) {
 }
 
 async function openSell(page) {
+  await revealTabs(page);
   await page.getByRole('button', { name: 'Sell' }).first().click();
   await page.waitForTimeout(1500);
   const start = page.getByRole('button', { name: 'Start a customer' }).first();
@@ -126,11 +157,18 @@ const run = async () => {
   const half = page.getByRole('button', { name: '½' }).first();
   check('half button offered on a 12-piece pack', (await half.count()) > 0);
   if (await half.count()) {
+    // ADDITIVE, and toggleable: the quantity is 2, so tapping ½ makes it 2.5 rather than
+    // replacing it with 0.5. Two and a half crates is the request a seller actually gets.
     await half.click();
-    await page.waitForTimeout(700);
-    check('quantity became 0.5', (await qtyInput(page).inputValue()) === '0.5');
+    await page.waitForTimeout(800);
+    check('half is added to the whole number', (await qtyInput(page).inputValue()) === '2.5');
     lineTotal = money(await page.locator('[class*="lineTotalValue"]').first().innerText());
-    check('half a pack at pack price is 2250', lineTotal === 2250, String(lineTotal));
+    check('2.5 packs at 4,500 is 11,250', lineTotal === 11250, String(lineTotal));
+
+    // Tapping it again takes the part back off and leaves the whole number.
+    await half.click();
+    await page.waitForTimeout(800);
+    check('tapping it again returns to 2', (await qtyInput(page).inputValue()) === '2');
   }
   await shot(page, '03-fraction-half');
 
@@ -184,6 +222,22 @@ const run = async () => {
   await page.keyboard.press('Escape');
   await page.waitForTimeout(800);
 
+  // ── 5b · A line with no quantity must not be sellable ───────────────────────────
+  console.log('');
+  console.log('5b. zero quantity is refused');
+  {
+    const qty = qtyInput(page);
+    await qty.fill('0');
+    await page.waitForTimeout(900);
+    const flagged = await page.getByText(/Add a quantity, or remove this item/i).count();
+    check('the line itself says what is wrong', flagged > 0, `${flagged} markers`);
+    const pay = page.getByRole('button', { name: /Take payment/i }).first();
+    check('taking payment is blocked', await pay.isDisabled());
+    await qty.fill('1');
+    await page.waitForTimeout(900);
+    check('fixing the quantity unblocks it', !(await pay.isDisabled()));
+  }
+
   // ── 6 · Emptying the receipt still leaves a way out ─────────────────────────────
   console.log('\n6. emptying the receipt');
   const remove = page.locator('[class*="lineRemove"]').first();
@@ -199,6 +253,7 @@ const run = async () => {
 
   // ── 7 · Nothing hides under the floating tab bar ────────────────────────────────
   console.log('\n7. tab bar clearance');
+  await revealTabs(page);
   await page.getByRole('button', { name: 'Stock' }).first().click();
   await page.waitForTimeout(2500);
   /*

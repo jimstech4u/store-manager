@@ -16,12 +16,13 @@
 
 /* The one scrolling region. Owned here rather than by each page, so scroll restoration and the
    nav bar's scroll subscription have a single, predictable container to watch. */
+/*
+ * Padding only. The scrolling itself is ColumnBody's job now — it owns the container the stack
+ * registers with the scroll broadcaster, which is what makes the tab bar react to scrolling and
+ * what restores position when a page is returned to. Re-declaring `overflow` here would create a
+ * second scroller inside it and break both.
+ */
 .body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior-y: contain;
   padding: var(--space-5) var(--space-4);
   /* Clears the floating tab bar as well as the home indicator. Without the nav height the
      last item in every list sits under the bar and cannot be tapped. */

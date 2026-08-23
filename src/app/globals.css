@@ -305,3 +305,21 @@ a {
     display: none !important;
   }
 }
+
+
+/*
+ * Icons line up with the text beside them, everywhere.
+ *
+ * An inline <svg> is baseline-aligned, which sits it a couple of pixels high next to a label —
+ * visible on every button in the app once it is pointed out. The nudge puts it on the text's
+ * optical centre instead.
+ *
+ * `vertical-align`, NOT `display: block`. Blockifying was tried and is wrong: an icon inside a
+ * line of text then takes a line of its own, which put the icon above the label on every button
+ * rather than beside it. `flex: none` still applies where the icon IS a flex item, so a long
+ * label cannot squeeze it.
+ */
+svg[data-icon] {
+  vertical-align: -0.125em;
+  flex: none;
+}

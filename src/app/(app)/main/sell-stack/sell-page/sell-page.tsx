@@ -117,6 +117,19 @@ export default function SellPage() {
   const subtotal = activeOrder ? draftSubtotal(activeOrder) : 0;
   const total = activeOrder ? draftTotal(activeOrder) : 0;
 
+  /*
+   * Lines with nothing on them.
+   *
+   * A quantity can reach zero by tapping minus, or by the field being cleared while retyping, and
+   * a zero-quantity line is not a sale — it is a line somebody meant to remove. Letting it through
+   * puts a row on the customer's receipt for goods that never moved and a stock movement of zero
+   * in the ledger, both of which have to be explained later.
+   *
+   * Flagged rather than silently dropped: quietly deleting a line the seller is halfway through
+   * editing is worse than telling them about it.
+   */
+  const emptyLines = (activeOrder?.lines ?? []).filter((l) => !(Number(l.qty) > 0));
+
   const addProduct = async (productId: string) => {
     const product = productById.get(productId);
     if (!product || !activeOrder) return;
@@ -267,6 +280,9 @@ export default function SellPage() {
    */
   const openPayment = async () => {
     if (!activeOrder || !store) return;
+    // The button is disabled for this, but the check is repeated here because `openPayment` is
+    // also reachable from the payment sheet's resume path after choosing a customer.
+    if (emptyLines.length > 0) return;
     await push(activeOrder);
     setPaying(true);
   };
@@ -299,7 +315,21 @@ export default function SellPage() {
               <span className={styles.footerLabel}>Total to pay</span>
               <span className={styles.footerTotal}>{formatMoney(total)}</span>
             </div>
-            <Button size="large" fullWidth onClick={() => void openPayment()}>
+            {emptyLines.length > 0 && (
+              <p className={styles.blocked} role="status">
+                {emptyLines.length === 1
+                  ? `${emptyLines[0].productName} has no quantity yet.`
+                  : `${emptyLines.length} items have no quantity yet.`}
+              </p>
+            )}
+            <Button
+              size="large"
+              fullWidth
+              // Blocked at the button as well as marked on the line: the seller may be looking at
+              // the total rather than the item that is wrong.
+              disabled={emptyLines.length > 0}
+              onClick={() => void openPayment()}
+            >
               Take payment
             </Button>
           </>
@@ -507,6 +537,9 @@ export default function SellPage() {
                               void repriceLine(line, e.target.value, line.saleUnitId);
                             }}
                             suffix={line.saleUnitName ?? line.packName ?? line.baseUnit}
+                            error={
+                              Number(line.qty) > 0 ? null : 'Add a quantity, or remove this item'
+                            }
                           />
                         </div>
                         <button

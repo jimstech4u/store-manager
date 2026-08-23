@@ -51,7 +51,15 @@ export function Button({
       {...rest}
     >
       {busy && <span className={styles.spinner} aria-hidden="true" />}
-      <span>{busy ? busyLabel : children}</span>
+      {/*
+        The label is its own flex row.
+
+        `children` is usually an icon followed by text, and this span was a plain one — so the two
+        sat in normal inline flow, where the icon rides the text baseline and reads as misaligned.
+        The button's own `align-items: center` could not help, because from its point of view this
+        span is a single item.
+      */}
+      <span className={styles.label}>{busy ? busyLabel : children}</span>
     </button>
   );
 }

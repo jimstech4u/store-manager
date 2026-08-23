@@ -571,3 +571,12 @@
 .chargeRemove:hover {
   background: var(--surface-sunken);
 }
+
+/* Why the payment button is refusing. Sits directly above it, where the eye already is. */
+.blocked {
+  margin-bottom: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--danger);
+  text-align: center;
+}

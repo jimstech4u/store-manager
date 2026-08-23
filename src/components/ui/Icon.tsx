@@ -40,6 +40,16 @@ function Svg({ size = '1.25em', title, children, ...rest }: IconProps & { childr
       role={title ? 'img' : undefined}
       aria-hidden={title ? undefined : true}
       focusable="false"
+      /*
+       * Marks every icon for the one global rule that takes it off the text baseline.
+       *
+       * An <svg> defaults to `display: inline`, which sits it on the baseline and leaves descender
+       * space underneath — so beside a label it renders a couple of pixels high. Fixing that per
+       * container was tried and missed cases: the rule was written for buttons and the icons in
+       * rows, headers and list items kept the fault. An attribute on the icon itself cannot be
+       * missed by a consumer that composes icons somewhere new.
+       */
+      data-icon=""
       {...rest}
     >
       {title && <title>{title}</title>}

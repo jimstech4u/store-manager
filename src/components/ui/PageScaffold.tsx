@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 import Header, { type HeaderAction } from '@academix-admin/header';
+import { Scaffold } from '@academix-admin/navigation-stack';
 import styles from './PageScaffold.module.css';
 import { useTheme } from '@/context/ThemeContext';
 
@@ -46,32 +47,47 @@ export function PageScaffold({
 }) {
   const { theme } = useTheme();
 
+  /*
+   * The frame comes from navigation-stack's own Scaffold now, not from a hand-rolled flex column.
+   *
+   * The hand-rolled body was a plain scrolling <div>, and the tab bar never reacted to scrolling
+   * because NOTHING WAS PUBLISHING SCROLL EVENTS. `NavigationBar` subscribes to
+   * `scrollBroadcaster`, and the broadcaster is fed by the scroll container the stack knows about
+   * — which a div of our own is not. That is why the bar sat still here while academix-web's
+   * lifts away.
+   *
+   * Delegating also picks up scroll restoration and a bottom bar that rides above the keyboard,
+   * both of which were on the list to build. Same lesson as the header: the package already does
+   * this, and a second implementation is a second thing to keep correct.
+   */
   return (
-    <div className={styles.scaffold}>
-      <Header
-        // 'title' rather than 'bar': the bar variant positions itself fixed, which would take it
-        // out of this flex column and let the body scroll underneath it.
-        variant="title"
-        position="static"
-        theme={theme}
-        title={title}
-        description={subtitle}
-        onBack={onBack}
-        backAriaLabel={backLabel}
-        actions={actions}
-        rightContent={action}
-        className={styles.header}
-      />
-
-      <div className={`${styles.body} ${flush ? styles.bodyFlush : ''}`}>
-        <div className={styles.inner}>{children}</div>
-      </div>
-
-      {footer && (
-        <div className={styles.footer}>
-          <div className={styles.footerInner}>{footer}</div>
-        </div>
-      )}
-    </div>
+    <Scaffold
+      appBar={
+        <Header
+          // 'title' rather than 'bar': the bar variant positions itself fixed, which would take it
+          // out of this flex column and let the body scroll underneath it.
+          variant="title"
+          position="static"
+          theme={theme}
+          title={title}
+          description={subtitle}
+          onBack={onBack}
+          backAriaLabel={backLabel}
+          actions={actions}
+          rightContent={action}
+          className={styles.header}
+        />
+      }
+      bodyClassName={`${styles.body} ${flush ? styles.bodyFlush : ''}`}
+      bottomBar={
+        footer ? (
+          <div className={styles.footer}>
+            <div className={styles.footerInner}>{footer}</div>
+          </div>
+        ) : undefined
+      }
+    >
+      <div className={styles.inner}>{children}</div>
+    </Scaffold>
   );
 }

@@ -113,9 +113,25 @@
 .affix {
   display: inline-flex;
   align-items: center;
-  /* Never shrinks: it is a short word, and a clipped unit reads as a rendering fault. The input
-     beside it gives way instead, down to its own 4.5ch floor. */
+  justify-content: center;
+
+  /*
+   * The unit box keeps its own width; the value takes what is left.
+   *
+   * `flex: 0 0 auto` alone was not enough — the basis resolved short of the text and clipped the
+   * last letter ("Bottle" printed as "Bottl"), which reads as a rendering fault rather than as a
+   * long word. `width: max-content` states the intent outright: size to the label plus its
+   * padding, and let the input beside it give way.
+   *
+   * `max-width` is the cap for a unit nobody has invented yet. Past that it ellipsises rather
+   * than eating the whole row — a truncated unit is legible, a two-character quantity box is not.
+   */
   flex: 0 0 auto;
+  width: max-content;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
   padding: 0 var(--space-3);
   background: var(--surface-sunken);
   border: 2px solid var(--border-strong);
