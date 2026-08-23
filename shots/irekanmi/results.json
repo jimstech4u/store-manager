@@ -65,24 +65,24 @@
     "detail": "36000"
   },
   {
-    "name": "total is goods 84,600 plus 2,000 transport",
+    "name": "total is 84,600 goods + 2,000 transport + 500 loading",
     "ok": true,
-    "detail": "86600"
+    "detail": "87100"
   },
   {
-    "name": "the customer tab reset, so the sale was settled",
-    "ok": true,
+    "name": "a receipt page opened after settling",
+    "ok": false,
     "detail": ""
   },
   {
-    "name": "owes 200,000 + 86,600 - 40,000 = 246,600",
-    "ok": true,
-    "detail": "₦246,600"
+    "name": "owes 200,000 + 87,100 - 40,000 = 247,100",
+    "ok": false,
+    "detail": "₦200,000"
   },
   {
     "name": "NBL crates now 13 + 3.5 out from this sale",
-    "ok": true,
-    "detail": "16.5"
+    "ok": false,
+    "detail": "13"
   },
   {
     "name": "history now carries the whole story",

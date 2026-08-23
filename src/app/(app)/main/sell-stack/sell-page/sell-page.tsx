@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import styles from './sell-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { useStackBack } from '@/hooks/useStackBack';
+import { useNav } from '@academix-admin/navigation-stack';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { SearchField, useDebounced } from '@/components/ui/SearchField';
@@ -12,10 +13,8 @@ import { Collapsible } from '@/components/ui/Collapsible';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { CloseIcon, MinusIcon, PlusIcon, ReceiptIcon, ReturnIcon } from '@/components/ui/Icon';
 import { TakePayment } from './TakePayment';
-import { Receipt } from './Receipt';
 import { CustomerPicker } from '@/components/customers/CustomerPicker';
 import { ProductForm } from '@/components/catalog/ProductForm';
-import { Sheet } from '@/components/ui/Sheet';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
 import { fetchSaleUnits, useProductSearch, type SaleUnit } from '@/lib/stacks/catalog-stack';
@@ -67,6 +66,7 @@ const FRACTIONS = [
 
 export default function SellPage() {
   const goBack = useStackBack();
+  const nav = useNav();
   const { can } = usePermission();
   const { store } = useAuth();
   const {
@@ -94,7 +94,6 @@ export default function SellPage() {
     Record<string, { categoryId: string; categoryName: string; kind: string }[]>
   >({});
   const [paying, setPaying] = useState(false);
-  const [settledSale, setSettledSale] = useState<string | null>(null);
   const [claiming, setClaiming] = useState(false);
   const [pickingCustomer, setPickingCustomer] = useState(false);
   // Remembers that the picker was opened mid-payment, so choosing someone returns to the
@@ -520,6 +519,97 @@ export default function SellPage() {
                         </button>
                       </div>
 
+                      {(() => {
+                        /*
+                         * Part-amounts on top of the whole number in the stepper.
+                         *
+                         * OFFERED ONLY WHEN THEY LAND ON WHOLE BASE UNITS. A quarter of a 12-piece
+                         * pack is 3 pieces and is real; a quarter of a single bottle is not, and
+                         * the database rejects it — so the guard belongs here too rather than
+                         * letting the seller build a line that cannot be settled.
+                         */
+                        const per = baseUnitsPerSaleUnit(line);
+                        const options = FRACTIONS.filter((f) => (per * f.value) % 1 === 0);
+                        if (options.length === 0) return null;
+
+                        const current = Number(line.qty);
+                        const safe = Number.isFinite(current) && current >= 0 ? current : 0;
+                        const whole = Math.floor(safe);
+                        // Rounded before comparing: 2.5 - 2 is not exactly 0.5 in binary floating
+                        // point, and an un-rounded compare leaves the button that IS selected
+                        // looking unselected.
+                        const part = Number((safe - whole).toFixed(4));
+
+                        return (
+                          <div className={styles.fractionBlock}>
+                            <span className={styles.fractionLabel}>
+                              Add a part{part > 0 ? ` — now ${formatQty(safe)}` : ''}
+                            </span>
+                            <div
+                              className={styles.fractionRow}
+                              role="group"
+                              aria-label="Add a part of one to the quantity"
+                            >
+                              {options.map((f) => {
+                                const on = part === f.value;
+                                return (
+                                  <button
+                                    key={f.label}
+                                    type="button"
+                                    className={`${styles.fraction} ${on ? styles.fractionActive : ''}`}
+                                    aria-pressed={on}
+                                    onClick={() => {
+                                      // Tapping the selected part removes it and leaves the whole
+                                      // number behind.
+                                      const next = String(on ? whole : whole + f.value);
+                                      updateLine(activeOrder.clientUuid, line.key, { qty: next });
+                                      void repriceLine(line, next, line.saleUnitId);
+                                    }}
+                                  >
+                                    {f.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/*
+                        Crates, kegs and dispenser bottles leaving with the goods.
+
+                        The line already carried `containersOut` and it was sent to the server on
+                        every settle — with nothing anywhere able to set it. So a shop could sell
+                        three crates of beer and the crates themselves were never recorded as owed
+                        back, which is the larger half of what a distributor is actually tracking.
+
+                        Bottles are not asked about: for a 'content' pool the server derives the
+                        count from the quantity sold, because twelve bottles sold is twelve bottles
+                        owed and asking would be asking someone to restate what they just entered.
+                        Containers genuinely have to be declared — a customer often brings their own
+                        crates, or takes the goods loose.
+                      */}
+                      {(returnables[line.productId]?.some((r) => r.kind === 'container') ?? false) && (
+                        <div className={styles.emptiesBlock}>
+                          <Field
+                            label={`${
+                              returnables[line.productId].find((r) => r.kind === 'container')
+                                ?.categoryName ?? 'Containers'
+                            } going out`}
+                            optional
+                            numeric
+                            value={line.containersOut}
+                            onChange={(e) =>
+                              updateLine(activeOrder.clientUuid, line.key, {
+                                containersOut: e.target.value,
+                              })
+                            }
+                            placeholder="0"
+                            hint="Leave empty if they brought their own, or took it loose."
+                          />
+                        </div>
+                      )}
+
                       <Field
                         label={line.saleUnitName ? `Price per ${line.saleUnitName.toLowerCase()}` : 'Price each'}
                         numeric
@@ -551,97 +641,6 @@ export default function SellPage() {
                         }
                       />
                     </div>
-
-                    {(() => {
-                      /*
-                       * Part-amounts on top of the whole number in the stepper.
-                       *
-                       * OFFERED ONLY WHEN THEY LAND ON WHOLE BASE UNITS. A quarter of a 12-piece
-                       * pack is 3 pieces and is real; a quarter of a single bottle is not, and
-                       * the database rejects it — so the guard belongs here too rather than
-                       * letting the seller build a line that cannot be settled.
-                       */
-                      const per = baseUnitsPerSaleUnit(line);
-                      const options = FRACTIONS.filter((f) => (per * f.value) % 1 === 0);
-                      if (options.length === 0) return null;
-
-                      const current = Number(line.qty);
-                      const safe = Number.isFinite(current) && current >= 0 ? current : 0;
-                      const whole = Math.floor(safe);
-                      // Rounded before comparing: 2.5 - 2 is not exactly 0.5 in binary floating
-                      // point, and an un-rounded compare leaves the button that IS selected
-                      // looking unselected.
-                      const part = Number((safe - whole).toFixed(4));
-
-                      return (
-                        <div className={styles.fractionBlock}>
-                          <span className={styles.fractionLabel}>
-                            Add a part{part > 0 ? ` — now ${formatQty(safe)}` : ''}
-                          </span>
-                          <div
-                            className={styles.fractionRow}
-                            role="group"
-                            aria-label="Add a part of one to the quantity"
-                          >
-                            {options.map((f) => {
-                              const on = part === f.value;
-                              return (
-                                <button
-                                  key={f.label}
-                                  type="button"
-                                  className={`${styles.fraction} ${on ? styles.fractionActive : ''}`}
-                                  aria-pressed={on}
-                                  onClick={() => {
-                                    // Tapping the selected part removes it and leaves the whole
-                                    // number behind.
-                                    const next = String(on ? whole : whole + f.value);
-                                    updateLine(activeOrder.clientUuid, line.key, { qty: next });
-                                    void repriceLine(line, next, line.saleUnitId);
-                                  }}
-                                >
-                                  {f.label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })()}
-
-                    {/*
-                      Crates, kegs and dispenser bottles leaving with the goods.
-
-                      The line already carried `containersOut` and it was sent to the server on
-                      every settle — with nothing anywhere able to set it. So a shop could sell
-                      three crates of beer and the crates themselves were never recorded as owed
-                      back, which is the larger half of what a distributor is actually tracking.
-
-                      Bottles are not asked about: for a 'content' pool the server derives the
-                      count from the quantity sold, because twelve bottles sold is twelve bottles
-                      owed and asking would be asking someone to restate what they just entered.
-                      Containers genuinely have to be declared — a customer often brings their own
-                      crates, or takes the goods loose.
-                    */}
-                    {(returnables[line.productId]?.some((r) => r.kind === 'container') ?? false) && (
-                      <div className={styles.emptiesBlock}>
-                        <Field
-                          label={`${
-                            returnables[line.productId].find((r) => r.kind === 'container')
-                              ?.categoryName ?? 'Containers'
-                          } going out`}
-                          optional
-                          numeric
-                          value={line.containersOut}
-                          onChange={(e) =>
-                            updateLine(activeOrder.clientUuid, line.key, {
-                              containersOut: e.target.value,
-                            })
-                          }
-                          placeholder="0"
-                          hint="Leave empty if they brought their own, or took it loose."
-                        />
-                      </div>
-                    )}
 
                     <div className={styles.lineTotal}>
                       <span>Line total</span>
@@ -912,7 +911,17 @@ export default function SellPage() {
           }}
           onSettled={(saleId) => {
             setPaying(false);
-            setSettledSale(saleId);
+
+            /*
+             * Navigate FIRST, then close the tab.
+             *
+             * Closing empties the order list, which immediately starts a fresh order, and the
+             * churn that follows was swallowing whatever came after it — first a sheet's state,
+             * then the push itself. The sale is already recorded at this point, so the order of
+             * these two is purely about what the seller ends up looking at.
+             */
+            void nav.push('receipt_page', { id: saleId, fresh: '1' });
+
             // The tab closes only once the sale is recorded. Closing it optimistically would
             // lose the order if the write failed.
             closeOrder(activeOrder.clientUuid);
@@ -920,24 +929,6 @@ export default function SellPage() {
         />
       )}
 
-      {settledSale && (
-        <Sheet
-          open
-          onClose={() => setSettledSale(null)}
-          title="Sale recorded"
-          footer={
-            <Button size="large" fullWidth onClick={() => setSettledSale(null)}>
-              Done
-            </Button>
-          }
-        >
-          <InfoPanel tone="success" title="Saved">
-            The stock has come off your shelf and any unpaid part is on the customer&rsquo;s
-            account.
-          </InfoPanel>
-          <Receipt saleId={settledSale} storeId={store.id} />
-        </Sheet>
-      )}
     </PageScaffold>
   );
 }

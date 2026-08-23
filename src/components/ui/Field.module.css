@@ -43,7 +43,15 @@
    * is what gives way instead, because a clipped unit label still leaves a readable number,
    * while the reverse leaves a seller entering quantities blind.
    */
-  flex: 1 1 auto;
+  /*
+   * Basis 0, not auto.
+   *
+   * With `flex-basis: auto` the input's `width: 100%` became its starting size, so it claimed the
+   * whole row and pushed the unit label off the end — "Crate" rendered as "Crat". Starting from
+   * zero lets the affix take its natural width first and the input have everything left, which is
+   * the behaviour that was wanted all along.
+   */
+  flex: 1 1 0;
   min-width: 4.5ch;
   min-height: var(--touch-comfortable);
   padding: var(--space-3) var(--space-4);
@@ -105,9 +113,9 @@
 .affix {
   display: inline-flex;
   align-items: center;
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
+  /* Never shrinks: it is a short word, and a clipped unit reads as a rendering fault. The input
+     beside it gives way instead, down to its own 4.5ch floor. */
+  flex: 0 0 auto;
   padding: 0 var(--space-3);
   background: var(--surface-sunken);
   border: 2px solid var(--border-strong);

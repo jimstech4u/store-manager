@@ -144,6 +144,15 @@
   }
 }
 
+/*
+ * The quick parts belong directly under the quantity they modify and above the price they change.
+ * They were below the whole grid, which put the price field between the control and the number it
+ * acts on — so a seller set a price and only then noticed the amount was still whole.
+ */
+.fractionBlock {
+  margin-top: calc(var(--space-2) * -1);
+}
+
 .claimActions {
   display: flex;
   gap: var(--space-3);

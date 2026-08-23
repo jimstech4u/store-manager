@@ -148,7 +148,7 @@ const run = async () => {
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  page.on('console', (m) => { const t = m.text(); if (t.startsWith('[acct]')) console.log('    ' + t); });
+  page.on('console', (m) => { const t = m.text(); if (t.startsWith('[acct]') || t.startsWith('[sell]')) console.log('    ' + t); });
 
   await signIn(page);
 
@@ -349,27 +349,40 @@ const run = async () => {
   check('10 American Cola at the bulk price is 36,000',
     totalOf('American Cola') === 36000, String(totalOf('American Cola')));
 
-  // 6 - Transport charge
-  step('6. Add the transport charge');
+  // 6 - Two named charges, not one lumped "extra"
+  step('6. Add transport and loading');
   await onScreen(page, 'button:has-text("Extra charge or note")').click();
   await page.waitForTimeout(800);
-  await fieldByLabel(page, 'Extra charge').fill('2000');
-  await page.waitForTimeout(900);
-  await fieldByLabel(page, 'What is the charge for').fill('Transport');
-  await page.waitForTimeout(900);
-  await shot(page, 'receipt-charge');
+
+  for (const [i, c] of [['Transport', '2000'], ['Loading', '500']].entries()) {
+    await onScreen(page, 'button:has-text("Add a charge")').click();
+    await page.waitForTimeout(700);
+    await fieldByLabel(page, `Charge ${i + 1}`).fill(c[0]);
+    await page.waitForTimeout(400);
+    // The amount box belongs to the row just filled, so scope to that row.
+    await page.locator('[class*="chargeRow"]:visible').nth(i).locator('input').nth(1).fill(c[1]);
+    await page.waitForTimeout(600);
+  }
+  await shot(page, 'receipt-charges');
 
   const grand = money(await onScreen(page, '[class*="footerTotal"]').innerText());
   console.log('    total to pay: ' + grand);
-  check('total is goods 84,600 plus 2,000 transport', grand === 86600, String(grand));
-
+  check('total is 84,600 goods + 2,000 transport + 500 loading',
+    grand === 87100, String(grand));
 
   // 7 - Declare the crates going out with the goods
   step('7. Crates going out');
-  await lineFor('Trophy').locator('input').nth(2).fill('0.5');
-  await page.waitForTimeout(500);
-  await lineFor('Goldberg').locator('input').nth(2).fill('3');
-  await page.waitForTimeout(800);
+  /*
+   * By LABEL, not by index.
+   *
+   * The first version used `input.nth(2)`, and moving the quick-parts block changed the input
+   * order — so it typed the crate count into the PRICE field. The total went to ₦56,010 and the
+   * scenario blamed the app for a number the harness had written itself.
+   */
+  await fieldByLabel(lineFor('Trophy'), 'going out').fill('0.5');
+  await page.waitForTimeout(600);
+  await fieldByLabel(lineFor('Goldberg'), 'going out').fill('3');
+  await page.waitForTimeout(900);
   await shot(page, 'crates-out');
 
   // 8 - Attach the customer, then part-pay
@@ -394,11 +407,28 @@ const run = async () => {
     await dlg.getByRole('button', { name: /rest on account/i }).click();
     await page.waitForTimeout(6000);
   }
-  await shot(page, 'receipt');
-  // Assert the SALE landed, not that some word appeared. The first version matched any text
-  // containing "Receipt" and would have passed on the nav bar.
-  check('the customer tab reset, so the sale was settled',
-    (await onScreen(page, 'button:has-text("Add an item")').count()) > 0);
+  // The receipt is a pushed page now, not a sheet held in state.
+  const hasReceipt = await page
+    .getByText(/Sale recorded|Receipt/i)
+    .first()
+    .waitFor({ timeout: 20000 })
+    .then(() => true)
+    .catch(() => false);
+  check('a receipt page opened after settling', hasReceipt);
+
+  if (hasReceipt) {
+    const receipt = page.locator('[class*="PageScaffold_body"]:visible').first();
+    const text = await receipt.innerText();
+    await shot(page, 'receipt');
+    check('receipt itemises Transport', /Transport/.test(text), '');
+    check('receipt itemises Loading separately', /Loading/.test(text), '');
+    check('receipt shows what is still with the customer',
+      /Still with you/.test(text) && /NBL crate/.test(text),
+      text.split(String.fromCharCode(10)).filter(Boolean).slice(-8).join(' | '));
+    // Back out of the receipt the way a seller would.
+    await onScreen(page, 'button[aria-label="Go back"]').click();
+    await page.waitForTimeout(1500);
+  }
 
   // 9 - Back to the account: what stands now
   step('9. The account after the sale');
@@ -424,9 +454,9 @@ const run = async () => {
 
   state = await readState();
   console.log('    ' + JSON.stringify(state));
-  // 200,000 already owed + 86,600 sale - 40,000 paid = 246,600
-  check('owes 200,000 + 86,600 - 40,000 = 246,600',
-    money(state.cards['They owe you']) === 246600, state.cards['They owe you']);
+  // 200,000 already owed + 87,100 sale - 40,000 paid = 247,100
+  check('owes 200,000 + 87,100 - 40,000 = 247,100',
+    money(state.cards['They owe you']) === 247100, state.cards['They owe you']);
   check('NBL crates now 13 + 3.5 out from this sale',
     money(state.pools['NBL crate']) === 16.5, state.pools['NBL crate']);
 

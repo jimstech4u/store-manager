@@ -22,6 +22,18 @@
   transition: background-color 120ms ease, border-color 120ms ease, transform 80ms ease;
 }
 
+/*
+ * Icons sit on the text's centre line, not its baseline.
+ *
+ * An inline <svg> keeps a baseline-aligned line box of its own, which leaves descender space
+ * underneath and pushes the glyph a couple of pixels above the label beside it. `display: block`
+ * removes the line box; `flex: none` stops a long label squashing the icon.
+ */
+.button > svg {
+  display: block;
+  flex: none;
+}
+
 .button:active:not(:disabled) {
   /* Physical feedback matters more here than on desktop: a counter is noisy and the screen may
      be in sunlight, so the press itself has to be felt as well as seen. */

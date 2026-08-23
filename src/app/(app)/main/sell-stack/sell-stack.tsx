@@ -2,9 +2,11 @@
 
 import NavigationStack from '@academix-admin/navigation-stack';
 import SellPage from './sell-page/sell-page';
+import ReceiptPage from './receipt-page/receipt-page';
 
 const navLink = {
   sell_page: SellPage,
+  receipt_page: ReceiptPage,
 };
 
 export const SellStack = () => (
