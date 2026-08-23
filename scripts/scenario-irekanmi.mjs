@@ -448,10 +448,13 @@ const run = async () => {
     await row2.click();
   }
   await page.getByText(/Everything that has happened/i).first().waitFor({ timeout: 25000 });
-  // The page re-reads on a 20s poll (see useCustomerAccount); tap its refresh action rather
-  // than idling through a cycle, which is what a seller would do anyway.
-  await onScreen(page, 'button[aria-label="Check for changes"]').click();
-  await page.waitForTimeout(2500);
+  // Give the page a fair, generous window to refresh ITSELF before touching anything.
+  console.log('    waiting 10s for an automatic refresh...');
+  await page.waitForTimeout(10000);
+  const auto = await readState();
+  console.log('    after 10s idle: ' + JSON.stringify(auto.cards));
+  check('the account refreshed itself on returning to the tab',
+    money(auto.cards['They owe you']) === 247100, auto.cards['They owe you'] || 'n/a');
   await shot(page, 'account-after-sale');
 
   state = await readState();

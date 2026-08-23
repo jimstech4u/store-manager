@@ -81,11 +81,37 @@ export default function AccountPage() {
    * A ref holds the previous value so the effect only fires on the inactive → active edge, not on
    * every render while the page happens to be active.
    */
+  /*
+   * Keep this page's figures current while it is being looked at.
+   *
+   * Tab stacks stay mounted — that is what makes switching instant and keeps each tab's scroll and
+   * history — so a page that loaded once keeps whatever it loaded. Settle a sale on the Sell tab,
+   * come back to People, and this showed the customer's position from BEFORE that sale: the right
+   * screen with stale numbers, which is worse than a spinner because nothing about it looks wrong.
+   *
+   * Two parts, and the second is not decoration. The `isActive` edge catches the common return.
+   * The interval is what makes it RELIABLE: measured against the real flow, no single signal was
+   * enough on its own — `onResume` misses a return from a page pushed on top, `onEnter` fires
+   * before the settled sale is readable so its reload fetches the old figures again, and the
+   * `isActive` edge alone left the balance stale too. Passing only when several were combined is
+   * timing luck, not a mechanism, and this screen states what a customer owes.
+   *
+   * Gated on document visibility, so a backgrounded tab costs nothing, and stopped entirely when
+   * the page is not the active one.
+   */
   const { isActive } = usePageState(nav);
   const wasActive = useRef(isActive);
   useEffect(() => {
     if (isActive && !wasActive.current) void reload();
     wasActive.current = isActive;
+  }, [isActive, reload]);
+
+  useEffect(() => {
+    if (!isActive || typeof document === 'undefined') return;
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') void reload();
+    }, 8000);
+    return () => clearInterval(id);
   }, [isActive, reload]);
 
   const [action, setAction] = useState<ActionKind>(null);
