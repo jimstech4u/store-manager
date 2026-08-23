@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/Button';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatDateTime, formatMoney, formatQty, pluralUnit } from '@/lib/format';
-import { renderReceiptImage, shareImage, shareLink } from '@/lib/share';
+import { renderReceiptCanvas, renderReceiptImage, shareImage, shareLink } from '@/lib/share';
+import { receiptPdf, sharePdf } from '@/lib/pdf';
 
 interface SaleDetail {
   sale: {
@@ -58,6 +59,7 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
   const [error, setError] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
   const [shareNote, setShareNote] = useState<string | null>(null);
+  const [makingPdf, setMakingPdf] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -89,7 +91,8 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
       }
     })();
 
-    return () => {
+  
+  return () => {
       cancelled = true;
     };
   }, [saleId, storeId]);
@@ -107,6 +110,59 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
   const width = settings?.width ?? 80;
   // Below roughly 58mm there is not enough width for a two-column row, so the layout stacks.
   const narrow = width < 58;
+
+  /**
+   * What gets drawn, for the picture and the PDF alike.
+   *
+   * One definition on purpose: these two were about to be separate copies of the same twenty-line
+   * object, and the moment a charge or a line of the header changed, one of them would have
+   * silently kept the old shape.
+   */
+  const receiptPayload = () => ({
+    shopName,
+    header: settings?.header,
+    footer: settings?.footer,
+    meta: [
+    formatDateTime(sale.occurred_at),
+    `#${sale.id.slice(0, 8).toUpperCase()}`,
+    ...(customer ? [customer.name] : []),
+    ],
+    lines: lines.map((l) => ({
+    name: l.product_name,
+    detail: `${formatQty(l.entered_qty)} ${
+    l.pack_name ?? pluralUnit(l.base_unit, Number(l.entered_qty))
+    } x ${formatMoney(l.unit_price)}`,
+    amount: formatMoney(l.line_total),
+    })),
+    totals: [
+      // Every named charge on its own line, exactly as the printed page shows them. This used to
+      // read `sale.fee_amount`, so a receipt shared as a picture or a PDF showed one lumped
+      // "extra charge" while the paper itemised transport and loading separately — two documents
+      // for one sale, disagreeing.
+      ...(charges ?? []).map((c) => ({ label: c.label, value: formatMoney(c.amount) })),
+      ...((charges ?? []).length === 0 && Number(sale.fee_amount) > 0
+        ? [{ label: sale.fee_label || 'Extra charge', value: formatMoney(sale.fee_amount) }]
+        : []),
+      { label: 'Total', value: formatMoney(sale.total), strong: true },
+      ...payments.map((p) => ({
+        label: `Paid (${p.method})`,
+        value: formatMoney(p.amount),
+      })),
+      ...(owing > 0 ? [{ label: 'Balance', value: formatMoney(owing), strong: true }] : []),
+      // What the customer still holds of the shop's. The crates are the half of an account that
+      // gets disputed, precisely because nobody has anything in writing about them.
+      ...((empties ?? []).length > 0
+        ? [{ label: 'Still with you', value: '', strong: true }]
+        : []),
+      ...(empties ?? []).map((e) => ({
+        label: e.category,
+        value: `${formatQty(e.qty)}${Number(e.held) > 0 ? ` (${formatMoney(e.held)} held)` : ''}`,
+      })),
+    ],
+    note: sale.note,
+    transferDetails: sale.transfer_details,
+    });
+
 
   return (
     <>
@@ -274,39 +330,7 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
           onClick={async () => {
             // An image previews inline in a chat, where a link is just text somebody has to
             // decide to tap.
-            const blob = await renderReceiptImage(
-              {
-                shopName,
-                header: settings?.header,
-                footer: settings?.footer,
-                meta: [
-                  formatDateTime(sale.occurred_at),
-                  `#${sale.id.slice(0, 8).toUpperCase()}`,
-                  ...(customer ? [customer.name] : []),
-                ],
-                lines: lines.map((l) => ({
-                  name: l.product_name,
-                  detail: `${formatQty(l.entered_qty)} ${
-                    l.pack_name ?? pluralUnit(l.base_unit, Number(l.entered_qty))
-                  } x ${formatMoney(l.unit_price)}`,
-                  amount: formatMoney(l.line_total),
-                })),
-                totals: [
-                  ...(Number(sale.fee_amount) > 0
-                    ? [{ label: sale.fee_label || 'Extra charge', value: formatMoney(sale.fee_amount) }]
-                    : []),
-                  { label: 'Total', value: formatMoney(sale.total), strong: true },
-                  ...payments.map((p) => ({
-                    label: `Paid (${p.method})`,
-                    value: formatMoney(p.amount),
-                  })),
-                  ...(owing > 0 ? [{ label: 'Balance', value: formatMoney(owing), strong: true }] : []),
-                ],
-                note: sale.note,
-                transferDetails: sale.transfer_details,
-              },
-              width,
-            );
+            const blob = await renderReceiptImage(receiptPayload(), width);
             if (!blob) {
               setShareNote('Could not create the image');
               return;
@@ -323,7 +347,41 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
         </Button>
 
         <Button variant="secondary" fullWidth onClick={() => window.print()}>
-          Print / PDF
+          Print
+        </Button>
+
+        {/*
+          A real PDF, not the browser's print-to-PDF.
+          Most shops here have no thermal printer, and `window.print()` offers "Save as PDF" on a
+          desktop and often nothing at all on a phone — so without this there was no way to hand a
+          customer anything they could keep. A PDF goes on WhatsApp and prints later from anywhere.
+        */}
+        <Button
+          variant="secondary"
+          fullWidth
+          busy={makingPdf}
+          busyLabel="Preparing"
+          onClick={async () => {
+            setMakingPdf(true);
+            setShareNote(null);
+            try {
+              const canvas = await renderReceiptCanvas(receiptPayload(), width);
+              if (!canvas) throw new Error('Could not draw the receipt');
+              const pdf = await receiptPdf(canvas, { widthMm: width });
+              const where = await sharePdf(
+                pdf,
+                `receipt-${sale.id.slice(0, 8)}.pdf`,
+                `Receipt from ${shopName}`,
+              );
+              if (where === 'downloaded') setShareNote('PDF saved to your downloads.');
+            } catch (e: unknown) {
+              setShareNote(e instanceof Error ? e.message : 'Could not make a PDF');
+            } finally {
+              setMakingPdf(false);
+            }
+          }}
+        >
+          Save as PDF
         </Button>
       </div>
     </>

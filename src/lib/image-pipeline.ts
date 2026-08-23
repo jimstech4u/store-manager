@@ -256,3 +256,76 @@ export async function normaliseProductImage(
   if (!blob) throw new Error('Could not prepare that image');
   return { blob, width: size, height: size, backgroundRemoved };
 }
+
+/**
+ * Prepare a logo for a thermal receipt.
+ *
+ * A different job from a product photo, so a different function rather than a flag. A receipt
+ * printer is one bit per dot — it can print a dot or not print it, with no greys at all — and it
+ * is 40mm or 80mm wide, which is 288 or 576 dots. A logo that has not been reckoned with those
+ * two facts prints as a grey smear or as a band of solid black.
+ *
+ * So: trim to the mark, scale to the paper, then threshold to pure black and white. Thresholding
+ * here rather than leaving it to the driver means what the shop previews is what the paper shows —
+ * every driver dithers differently, and a shop that approved a preview should not be surprised.
+ */
+export async function normaliseReceiptLogo(
+  file: File,
+  { widthPx = 576, threshold = 0.62 }: { widthPx?: number; threshold?: number } = {},
+): Promise<{ blob: Blob; width: number; height: number }> {
+  const source = await decode(file);
+  const sw = 'width' in source ? source.width : 0;
+  const sh = 'height' in source ? source.height : 0;
+  if (!sw || !sh) throw new Error('Could not read that image');
+
+  const work = document.createElement('canvas');
+  work.width = sw;
+  work.height = sh;
+  const wctx = work.getContext('2d', { willReadFrequently: true });
+  if (!wctx) throw new Error('Images cannot be processed in this browser');
+
+  // White underneath: a transparent PNG logo — which is what most shops have — would otherwise
+  // composite onto black and print as a solid rectangle.
+  wctx.fillStyle = '#ffffff';
+  wctx.fillRect(0, 0, sw, sh);
+  wctx.drawImage(source, 0, 0, sw, sh);
+
+  // Trim the surrounding white so the mark itself fills the width it is given.
+  const image = wctx.getImageData(0, 0, sw, sh);
+  const box = contentBounds(image.data, sw, sh) ?? { x: 0, y: 0, w: sw, h: sh };
+
+  const scale = widthPx / box.w;
+  const outW = Math.max(1, Math.round(box.w * scale));
+  const outH = Math.max(1, Math.round(box.h * scale));
+
+  const out = document.createElement('canvas');
+  out.width = outW;
+  out.height = outH;
+  const octx = out.getContext('2d', { willReadFrequently: true });
+  if (!octx) throw new Error('Images cannot be processed in this browser');
+
+  octx.fillStyle = '#ffffff';
+  octx.fillRect(0, 0, outW, outH);
+  octx.imageSmoothingQuality = 'high';
+  octx.drawImage(work, box.x, box.y, box.w, box.h, 0, 0, outW, outH);
+
+  // One bit per dot. Luminance weighted for perception, not a flat average: a flat average turns
+  // saturated reds and blues to mid-grey and they land on the wrong side of the threshold.
+  const px = octx.getImageData(0, 0, outW, outH);
+  const cut = threshold * 255;
+  for (let i = 0; i < px.data.length; i += 4) {
+    const lum = 0.2126 * px.data[i] + 0.7152 * px.data[i + 1] + 0.0722 * px.data[i + 2];
+    const v = lum < cut ? 0 : 255;
+    px.data[i] = v;
+    px.data[i + 1] = v;
+    px.data[i + 2] = v;
+    px.data[i + 3] = 255;
+  }
+  octx.putImageData(px, 0, 0);
+
+  // PNG, not WebP: this is two-tone line art, where PNG is both smaller and exact. WebP's lossy
+  // mode would reintroduce the greys that were just removed.
+  const blob = await new Promise<Blob | null>((resolve) => out.toBlob(resolve, 'image/png'));
+  if (!blob) throw new Error('Could not prepare that logo');
+  return { blob, width: outW, height: outH };
+}

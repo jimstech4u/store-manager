@@ -58,10 +58,16 @@ export function canShareLink(): boolean {
  * Width is in millimetres so the image matches the paper it represents; the pixel width is
  * scaled up (8px per mm) so the text stays sharp when a phone displays it full-screen.
  */
-export async function renderReceiptImage(
+/**
+ * Draw the receipt and hand back the CANVAS.
+ *
+ * Split out from `renderReceiptImage` so the PDF writer can embed exactly these pixels rather than
+ * decoding a PNG and re-encoding it. Two renderings of the same receipt could differ; one cannot.
+ */
+export async function renderReceiptCanvas(
   input: ReceiptImageInput,
   widthMm = 80,
-): Promise<Blob | null> {
+): Promise<HTMLCanvasElement | null> {
   if (typeof document === 'undefined') return null;
 
   const scale = 8;                       // px per mm
@@ -128,11 +134,17 @@ export async function renderReceiptImage(
 
   let y = pad;
 
+  /** The px size out of a CSS font shorthand, whether or not it starts with `bold`. */
+  const sizeOf = (font: string): number => Number(font.match(/(\d+(?:\.\d+)?)px/)?.[1] ?? base);
+
   const centred = (text: string, font: string) => {
     ctx.font = font;
     const w = ctx.measureText(text).width;
     ctx.fillText(text, (width - w) / 2, y);
-    y += Math.round(parseInt(font, 10) * 1.45);
+    // `parseInt(font, 10)` was NaN for every bold font — "bold 36px …" does not start with a
+    // digit — so drawing the shop name set y to NaN and EVERY LINE AFTER IT drew at NaN, which
+    // paints nothing. A shared receipt picture has always been just the shop name on blank paper.
+    y += Math.round(sizeOf(font) * 1.45);
   };
 
   const rule = () => {
@@ -203,6 +215,16 @@ export async function renderReceiptImage(
     for (const l of wrap(input.footer, bodyFont, inner)) centred(l, bodyFont);
   }
 
+  return canvas;
+}
+
+/** The same receipt as a PNG, for sharing as a picture. */
+export async function renderReceiptImage(
+  input: ReceiptImageInput,
+  widthMm = 80,
+): Promise<Blob | null> {
+  const canvas = await renderReceiptCanvas(input, widthMm);
+  if (!canvas) return null;
   return new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
 }
 

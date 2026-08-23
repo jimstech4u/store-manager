@@ -35,6 +35,8 @@ interface Member {
   role_rank: number;
   joined_at: string;
   is_you: boolean;
+  status: 'active' | 'removed';
+  removed_at: string | null;
 }
 
 interface Invitation {
@@ -85,7 +87,7 @@ export default function StaffPage() {
     try {
       const supabase = getSupabase();
       const [m, i, r] = await Promise.all([
-        supabase.rpc('list_staff', { p_store_id: store.id }),
+        supabase.rpc('list_staff', { p_store_id: store.id, p_include_removed: true }),
         supabase.rpc('list_invitations', { p_store_id: store.id }),
         supabase.rpc('assignable_roles', { p_store_id: store.id }),
       ]);
@@ -169,7 +171,10 @@ export default function StaffPage() {
     <PageScaffold
       onBack={goBack}
       title="Your team"
-      subtitle={`${members.length} ${members.length === 1 ? 'person' : 'people'}`}
+      subtitle={(() => {
+        const active = members.filter((m) => m.status === 'active').length;
+        return `${active} ${active === 1 ? 'person' : 'people'}`;
+      })()}
       actions={[
         {
           key: 'add',
@@ -216,7 +221,7 @@ export default function StaffPage() {
       )}
 
       <ul className={styles.list}>
-        {members.map((m) => (
+        {members.filter((m) => m.status === 'active').map((m) => (
           <li key={m.user_id} className={styles.row}>
             <div className={styles.rowMain}>
               <p className={styles.email}>
@@ -265,6 +270,47 @@ export default function StaffPage() {
           </li>
         ))}
       </ul>
+
+      {/*
+        People who used to work here.
+        Removing somebody marks them rather than deleting them, so their name stays on every sale,
+        count and payment they recorded and "who had access, and when" is still answerable. Hiding
+        them from this screen entirely would make that record exist and be unfindable.
+      */}
+      {members.some((m) => m.status === 'removed') && (
+        <>
+          <h2 className={styles.section}>No longer here</h2>
+          <ul className={styles.list}>
+            {members
+              .filter((m) => m.status === 'removed')
+              .map((m) => (
+                <li key={m.user_id} className={styles.row}>
+                  <div className={styles.rowMain}>
+                    <p className={styles.email}>{m.email}</p>
+                    <p className={styles.roleNote}>
+                      Was {m.role_name}
+                      {m.removed_at
+                        ? ` · left ${new Date(m.removed_at).toLocaleDateString()}`
+                        : ''}
+                    </p>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    onClick={async () => {
+                      await getSupabase().rpc('restore_member', {
+                        p_store_id: store.id,
+                        p_user_id: m.user_id,
+                      });
+                      await load();
+                    }}
+                  >
+                    Bring back
+                  </Button>
+                </li>
+              ))}
+          </ul>
+        </>
+      )}
 
       {invites.length > 0 && (
         <>

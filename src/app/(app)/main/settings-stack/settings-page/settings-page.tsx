@@ -1,6 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
+import { ReceiptPreview } from '@/components/receipt/ReceiptPreview';
+import { normaliseReceiptLogo } from '@/lib/image-pipeline';
 import styles from './settings-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
@@ -32,6 +34,8 @@ interface Settings {
   transfer_account_no: string | null;
   transfer_account_name: string | null;
   show_transfer_details: boolean;
+  receipt_logo_path: string | null;
+  receipt_logo_width_pct: number;
 }
 
 /**
@@ -52,6 +56,11 @@ export default function SettingsPage() {
   const { can, role } = usePermission();
   const { theme, storedTheme, setTheme } = useTheme();
 
+  // The logo picker's hidden input, and the state around preparing one.
+  const logoInput = useRef<HTMLInputElement | null>(null);
+  const [logoBusy, setLogoBusy] = useState(false);
+  const [logoError, setLogoError] = useState<string | null>(null);
+
   const [settings, setSettings] = useState<Settings | null>(null);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -71,7 +80,10 @@ export default function SettingsPage() {
         setError(err.message);
         return;
       }
-      setSettings((Array.isArray(data) ? data[0] : data) as Settings);
+      const row = (Array.isArray(data) ? data[0] : data) as Settings;
+      // Defaulted here as well as in the column: a settings row written before 0046 comes back
+      // with null, and a null width would render the logo at zero and look like a broken upload.
+      setSettings({ ...row, receipt_logo_width_pct: row.receipt_logo_width_pct ?? 60 });
     })();
     return () => {
       cancelled = true;
@@ -148,6 +160,8 @@ export default function SettingsPage() {
           transfer_account_no: settings.transfer_account_no,
           transfer_account_name: settings.transfer_account_name,
           show_transfer_details: settings.show_transfer_details,
+          receipt_logo_path: settings.receipt_logo_path,
+          receipt_logo_width_pct: settings.receipt_logo_width_pct,
         })
         .eq('store_id', store.id);
       if (err) throw err;
@@ -297,6 +311,91 @@ export default function SettingsPage() {
             placeholder="Shop address or phone number"
           />
 
+          {/*
+            The logo, prepared for the paper it is going on.
+            A receipt printer is one bit per dot and 40mm or 80mm wide, so a colour logo has to be
+            trimmed, scaled and reduced to pure black and white before it means anything. Doing
+            that here, and showing the result, means the shop approves what will actually print
+            rather than what looks good on a phone.
+          */}
+          <div className={styles.logoBlock}>
+            <p className={styles.label}>Logo on the receipt</p>
+
+            <input
+              ref={logoInput}
+              type="file"
+              accept="image/*"
+              className={styles.hiddenInput}
+              tabIndex={-1}
+              aria-hidden="true"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (!file || !store) return;
+                setLogoBusy(true);
+                setLogoError(null);
+                try {
+                  // Dots across the paper at the usual 203dpi: 8 dots per millimetre, less a
+                  // little margin. Preparing at the real dot count means no resampling later.
+                  const dots = Math.round(Number(settings.printer_width_mm) * 8 * 0.9);
+                  const { blob } = await normaliseReceiptLogo(file, { widthPx: dots });
+
+                  const path = `${store.id}/store/receipt-logo-${Date.now().toString(36)}.png`;
+                  const up = await getSupabase()
+                    .storage.from('media')
+                    .upload(path, blob, { contentType: 'image/png', upsert: true });
+                  if (up.error) throw new Error(up.error.message);
+
+                  patch({ receipt_logo_path: path });
+                } catch (err) {
+                  setLogoError(err instanceof Error ? err.message : 'That logo could not be used.');
+                } finally {
+                  setLogoBusy(false);
+                }
+              }}
+            />
+
+            <div className={styles.logoActions}>
+              <Button
+                variant="secondary"
+                busy={logoBusy}
+                disabled={!editable}
+                onClick={() => logoInput.current?.click()}
+              >
+                {settings.receipt_logo_path ? 'Change logo' : 'Add a logo'}
+              </Button>
+              {settings.receipt_logo_path && (
+                <Button
+                  variant="ghost"
+                  disabled={!editable}
+                  onClick={() => patch({ receipt_logo_path: null })}
+                >
+                  Remove it
+                </Button>
+              )}
+            </div>
+
+            {logoError && (
+              <InfoPanel tone="danger" title="Logo not used">
+                {logoError}
+              </InfoPanel>
+            )}
+
+            {settings.receipt_logo_path && (
+              <Field
+                label="How wide on the paper"
+                numeric
+                suffix="%"
+                value={String(settings.receipt_logo_width_pct)}
+                onChange={(e) =>
+                  patch({ receipt_logo_width_pct: Number(e.target.value) || 60 })
+                }
+                disabled={!editable}
+                hint="A share of the paper width, so it stays right if you change printers."
+              />
+            )}
+          </div>
+
           <Field
             label="Line at the bottom"
             optional
@@ -304,6 +403,24 @@ export default function SettingsPage() {
             onChange={(e) => patch({ receipt_footer: e.target.value })}
             disabled={!editable}
             placeholder="Thank you for your patronage"
+          />
+
+          {/* Everything above, as it will print. Shown before the bank details so a mistake in
+              the header or the logo is caught here rather than by a customer. */}
+          <ReceiptPreview
+            widthMm={Number(settings.printer_width_mm) || 80}
+            header={settings.receipt_header}
+            footer={settings.receipt_footer}
+            logoPath={settings.receipt_logo_path}
+            logoWidthPct={settings.receipt_logo_width_pct}
+            shopName={store?.name ?? 'Your shop'}
+            transfer={
+              settings.show_transfer_details && settings.transfer_account_no
+                ? `${settings.transfer_bank_name ?? ''}
+${settings.transfer_account_no}
+${settings.transfer_account_name ?? ''}`.trim()
+                : null
+            }
           />
 
           <h2 className={styles.section}>Bank details on receipts</h2>

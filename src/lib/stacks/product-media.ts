@@ -122,16 +122,17 @@ export async function addProductImage({
   return { id: row.id, path: row.path, alt: row.alt, sortOrder: row.sort_order };
 }
 
-/** Remove a picture — the row first, then the file. */
+/**
+ * Take a picture out of the catalogue.
+ *
+ * Voided, not deleted, and the stored FILE is kept as well. Nothing in this product destroys a
+ * record — a photo removed by mistake would otherwise be unrecoverable, and the storage cost of a
+ * few product images is not worth that. Actually deleting the object is a separate, deliberate
+ * piece of housekeeping.
+ */
 export async function removeProductImage(image: ProductImage): Promise<void> {
-  const supabase = getSupabase();
-  const { error } = await supabase.from('product_media').delete().eq('id', image.id);
+  const { error } = await getSupabase().rpc('void_product_media', { p_id: image.id });
   if (error) throw new Error(error.message);
-
-  // Row gone, file next. If this half fails the picture has already stopped being shown, which is
-  // what was asked for; a stray object is a tidiness problem, not a correctness one, so it is not
-  // worth failing the whole action over.
-  await supabase.storage.from('media').remove([image.path]);
 }
 
 /** Make one picture the product's main image by moving it to the front. */

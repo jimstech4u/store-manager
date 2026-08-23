@@ -9,10 +9,11 @@ import { Field } from '@/components/ui/Field';
 import { Sheet } from '@/components/ui/Sheet';
 import { SearchField, useDebounced } from '@/components/ui/SearchField';
 import { InfoPanel } from '@/components/ui/Explain';
-import { CashIcon, ChevronRightIcon } from '@/components/ui/Icon';
+import { CashIcon, ChevronRightIcon, ReceiptIcon } from '@/components/ui/Icon';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
 import { useStackBack } from '@/hooks/useStackBack';
+import { useNav } from '@academix-admin/navigation-stack';
 import { usePaginatedList, useInfiniteScroll } from '@/hooks/usePaginatedList';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatDate, formatMoney } from '@/lib/format';
@@ -46,6 +47,7 @@ interface StatementRow {
  */
 export default function MoneyPage() {
   const goBack = useStackBack();
+  const nav = useNav();
   const { store } = useAuth();
   const { can } = usePermission();
 
@@ -136,7 +138,19 @@ export default function MoneyPage() {
   }
 
   return (
-    <PageScaffold onBack={goBack} title="Money" subtitle="Who owes you, and what has been paid">
+    <PageScaffold
+      onBack={goBack}
+      title="Money"
+      subtitle="Who owes you, and what has been paid"
+      actions={[
+        {
+          key: 'sales',
+          icon: <ReceiptIcon />,
+          onClick: () => void nav.push('sales_page'),
+          ariaLabel: 'All sales and receipts',
+        },
+      ]}
+    >
       <div className={styles.summary}>
         <span className={styles.summaryLabel}>
           {list.hasMore ? 'Owed by those loaded so far' : 'Owed to you'}

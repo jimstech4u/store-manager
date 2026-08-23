@@ -1,0 +1,86 @@
+.wrap {
+  margin-bottom: var(--space-5);
+}
+
+.caption {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  margin-bottom: var(--space-2);
+}
+
+/*
+ * A sheet of receipt paper.
+ *
+ * White and black regardless of the app's theme, because thermal paper is white and the ink is
+ * black — previewing a receipt in dark mode would show something that cannot be printed. Monospace
+ * for the same reason: thermal printers use a fixed-pitch font, and a proportional preview would
+ * wrap in different places than the paper does.
+ */
+.paper {
+  max-width: 100%;
+  padding: 4mm 3mm;
+  background: #ffffff;
+  color: #000000;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  font-family: var(--font-numeric), ui-monospace, monospace;
+  font-size: 10px;
+  line-height: 1.35;
+  overflow-x: auto;
+}
+
+.logo {
+  display: block;
+  margin: 0 auto var(--space-2);
+  /* Two-tone art scaled down: crisp edges matter more than smooth ones. */
+  image-rendering: crisp-edges;
+}
+
+.shop {
+  text-align: center;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.header {
+  text-align: center;
+  white-space: pre-wrap;
+}
+
+.rule {
+  border-top: 1px dashed #000;
+  margin: 4px 0;
+}
+
+.line {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.qty {
+  padding-inline-start: 6px;
+}
+
+.amount {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.total {
+  font-weight: 700;
+}
+
+.transfer {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px dashed #000;
+  white-space: pre-wrap;
+}
+
+.footer {
+  margin-top: 4px;
+  text-align: center;
+  white-space: pre-wrap;
+}
