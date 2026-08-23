@@ -5,6 +5,7 @@ import { SearchViewer } from '@academix-admin/search-viewer';
 import { FullPageMessage } from './FullPageMessage';
 import { InfoPanel } from './Explain';
 import { useTheme } from '@/context/ThemeContext';
+import { useOverlayRoute } from '@/hooks/useOverlayRoute';
 
 /**
  * The app's one search surface, wrapping `@academix-admin/search-viewer`.
@@ -60,6 +61,10 @@ export function SearchSheet<T>({
   const { theme } = useTheme();
   const dark = theme === 'dark';
   const [results, setResults] = useState<{ data: T }[]>([]);
+
+  // The viewer portals itself and does not register with the navigation stack, so back would walk
+  // straight past it and out of the app.
+  useOverlayRoute(`search:${id}`, isOpen, onClose);
 
   return (
     <SearchViewer<T, unknown>

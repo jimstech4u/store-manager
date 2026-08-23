@@ -580,3 +580,21 @@
   color: var(--danger);
   text-align: center;
 }
+
+
+/* ── Product picker, inside the selection viewer ──────────────────────────────────── */
+
+/* The viewer supplies the sheet, its handle, title and search; this is only the list inside it. */
+.pickList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0 var(--space-4) var(--space-4);
+}
+
+.pickEmpty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
+}

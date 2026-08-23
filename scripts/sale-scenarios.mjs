@@ -96,9 +96,10 @@ async function openSell(page) {
 
 async function addProduct(page, term, name) {
   await page.getByRole('button', { name: /Add an item/i }).first().click();
-  await page.waitForTimeout(900);
-  await page.getByLabel('Search products').first().fill(term);
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(1400);
+  // The picker is a SelectionViewer sheet now; its search box is the viewer's own.
+  await page.locator('input:visible').last().fill(term);
+  await page.waitForTimeout(1800);
   /*
    * Scoped to the picker rows. A by-name lookup matches the line's own "Remove Coca-Cola PET
    * 60cl" button too, and that button comes FIRST in the DOM — so `.first()` was deleting the

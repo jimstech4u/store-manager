@@ -333,9 +333,10 @@ const run = async () => {
 
   const addItem = async (term, name) => {
     await onScreen(page, 'button:has-text("Add an item")').click();
-    await page.waitForTimeout(900);
-    await onScreen(page, 'input[aria-label="Search products"]').fill(term);
-    await page.waitForTimeout(1600);
+    await page.waitForTimeout(1400);
+    // The picker is a SelectionViewer sheet now; its search box is the viewer's own.
+    await page.locator('input:visible').last().fill(term);
+    await page.waitForTimeout(1800);
     await page.locator('[class*="pickItem"]:visible').filter({ hasText: new RegExp(name) })
       .first().click();
     await page.waitForTimeout(1400);

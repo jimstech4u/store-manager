@@ -4,10 +4,13 @@ import { useEffect, useMemo, useState } from 'react';
 import styles from './sell-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { useStackBack } from '@/hooks/useStackBack';
+import { useOverlayRoute } from '@/hooks/useOverlayRoute';
 import { useNav } from '@academix-admin/navigation-stack';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
-import { SearchField, useDebounced } from '@/components/ui/SearchField';
+import { useDebounced } from '@/components/ui/SearchField';
+import { SelectionViewer, useSelectionController } from '@academix-admin/selection-viewer';
+import { useTheme } from '@/context/ThemeContext';
 import { InfoPanel } from '@/components/ui/Explain';
 import { Collapsible } from '@/components/ui/Collapsible';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
@@ -86,7 +89,15 @@ export default function SellPage() {
     syncing,
   } = useDraftOrders(store?.id ?? null);
 
-  const [picking, setPicking] = useState(false);
+  const [pickerId, pickerOps, isPickerOpen] = useSelectionController();
+  const { theme } = useTheme();
+  const dark = theme === 'dark';
+
+  // Back dismisses the picker rather than leaving the app mid-sale.
+  useOverlayRoute('sell:picker', isPickerOpen, () => {
+    pickerOps.close();
+    setQuery('');
+  });
   const [addingProduct, setAddingProduct] = useState(false);
 
   /** Which empties pools each product on the receipt belongs to, keyed by product id. */
@@ -105,7 +116,7 @@ export default function SellPage() {
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebounced(query);
 
-  const { products, status } = useProductSearch(store?.id ?? null, picking ? debouncedQuery : null);
+  const { products, status } = useProductSearch(store?.id ?? null, isPickerOpen ? debouncedQuery : null);
 
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
 
@@ -185,7 +196,7 @@ export default function SellPage() {
       updateLine(activeOrder.clientUuid, existing.key, {
         qty: String((Number.isFinite(current) ? current : 0) + 1),
       });
-      setPicking(false);
+      pickerOps.close();
       setQuery('');
       return;
     }
@@ -208,7 +219,7 @@ export default function SellPage() {
         unitPrice: first?.price ?? product.listPrice ?? '',
       }),
     );
-    setPicking(false);
+    pickerOps.close();
     setQuery('');
   };
 
@@ -688,78 +699,11 @@ export default function SellPage() {
           )}
 
           {/* ── Add an item ───────────────────────────────────────────────────── */}
-          {picking ? (
-            <div>
-              <SearchField
-                value={query}
-                onChange={setQuery}
-                placeholder="Search products or a category"
-                label="Search products"
-                resultCount={products.length}
-                autoFocus
-              />
-
-              {status === 'loading' && products.length === 0 ? (
-                <FullPageMessage title="Searching" tone="loading" />
-              ) : products.length === 0 ? (
-                <>
-                  <InfoPanel tone="info" title="Nothing found">
-                    Try part of the name, or a category like &ldquo;water&rdquo;.
-                  </InfoPanel>
-                  {/*
-                    The most useful moment to add a product is the one where the shop is being
-                    asked for something it has never entered. Sending the seller to another screen
-                    here means abandoning a half-built receipt, so the form comes to them.
-                  */}
-                  {can('products.manage') && (
-                    <Button
-                      variant="secondary"
-                      size="large"
-                      fullWidth
-                      onClick={() => setAddingProduct(true)}
-                    >
-                      <PlusIcon /> Add &ldquo;{query.trim() || 'a new item'}&rdquo; to your shop
-                    </Button>
-                  )}
-                </>
-              ) : (
-                <div className={styles.lines}>
-                  {products.map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      className={styles.pickItem}
-                      onClick={() => void addProduct(p.id)}
-                    >
-                      <span className={styles.lineName}>{p.name}</span>
-                      <span className={styles.lineMeta}>
-                        {formatQty(p.onHand)} {pluralUnit(p.baseUnit, Number(p.onHand))} left
-                        {p.categoryName ? ` · ${p.categoryName}` : ''}
-                        {p.listPrice ? ` · ${formatMoney(p.listPrice)}` : ''}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              <Button
-                variant="ghost"
-                fullWidth
-                onClick={() => {
-                  setPicking(false);
-                  setQuery('');
-                }}
-              >
-                Cancel
-              </Button>
-            </div>
-          ) : (
-            <div style={{ marginBottom: 'var(--space-5)' }}>
-              <Button variant="secondary" size="large" fullWidth onClick={() => setPicking(true)}>
-                <PlusIcon /> Add an item
-              </Button>
-            </div>
-          )}
+          <div style={{ marginBottom: 'var(--space-5)' }}>
+            <Button variant="secondary" size="large" fullWidth onClick={pickerOps.open}>
+              <PlusIcon /> Add an item
+            </Button>
+          </div>
 
           {/* ── Totals ────────────────────────────────────────────────────────── */}
           {activeOrder.lines.length > 0 && (
@@ -886,6 +830,116 @@ export default function SellPage() {
           </Button>
         </>
       )}
+      {/*
+        Choosing a product is a SELECTION, so it uses the selection viewer.
+
+        It was an inline branch that replaced the whole receipt with a search box and a list —
+        the seller lost sight of what they were building at the exact moment they were adding to
+        it. A sheet keeps the order on screen behind it, gets the full height for results, and
+        brings its own search, empty and error states rather than this page hand-rolling three
+        more.
+
+        zIndex 1000: the tab bar is 50 and a sibling of the page, so anything lower is a sheet the
+        tabs punch through.
+      */}
+      {activeOrder && (
+        <SelectionViewer
+          id={pickerId}
+          isOpen={isPickerOpen}
+          onClose={() => {
+            pickerOps.close();
+            setQuery('');
+          }}
+          titleProp={{ text: 'Add an item', textColor: dark ? '#f2f5f4' : '#12201d' }}
+          cancelButton={{
+            position: 'right',
+            onClick: () => {
+              pickerOps.close();
+              setQuery('');
+            },
+            view: <CloseIcon size="1.3em" />,
+          }}
+          searchProp={{
+            text: 'Search products or a category',
+            onChange: setQuery,
+            autoFocus: false,
+            textColor: dark ? '#f2f5f4' : '#12201d',
+            background: dark ? '#1b2322' : '#eef2f1',
+            padding: { l: '4px', r: '4px', t: '0px', b: '0px' },
+          }}
+          loadingProp={{ view: <FullPageMessage title="Searching" tone="loading" /> }}
+          noResultProp={{
+            view: (
+              <div className={styles.pickEmpty}>
+                <InfoPanel tone="info" title="Nothing found">
+                  Try part of the name, or a category like &ldquo;water&rdquo;.
+                </InfoPanel>
+                {/*
+                  The most useful moment to add a product is the one where the shop is being asked
+                  for something it has never entered. Sending the seller elsewhere here means
+                  abandoning a half-built receipt, so the form comes to them.
+                */}
+                {can('products.manage') && (
+                  <Button
+                    variant="secondary"
+                    size="large"
+                    fullWidth
+                    onClick={() => setAddingProduct(true)}
+                  >
+                    <PlusIcon /> Add &ldquo;{query.trim() || 'a new item'}&rdquo; to your shop
+                  </Button>
+                )}
+              </div>
+            ),
+          }}
+          layoutProp={{
+            backgroundColor: dark ? '#121817' : '#ffffff',
+            handleColor: dark ? '#3a4443' : '#c8d2d0',
+            handleWidth: '48px',
+            gapBetweenHandleAndTitle: '12px',
+            gapBetweenTitleAndSearch: '8px',
+            gapBetweenSearchAndContent: '12px',
+          }}
+          childrenDirection="vertical"
+          snapPoints={[0, 1]}
+          initialSnap={1}
+          minHeight="60dvh"
+          maxHeight="92dvh"
+          closeThreshold={0.2}
+          selectionState={
+            status === 'loading' && products.length === 0
+              ? 'loading'
+              : status === 'error'
+                ? 'error'
+                : products.length === 0
+                  ? 'empty'
+                  : 'data'
+          }
+          zIndex={1000}
+        >
+          <div className={styles.pickList}>
+            {products.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className={styles.pickItem}
+                onClick={() => {
+                  pickerOps.close();
+                  void addProduct(p.id);
+                }}
+              >
+                <span className={styles.lineName}>{p.name}</span>
+                <span className={styles.lineMeta}>
+                  {formatQty(p.onHand)} {pluralUnit(p.baseUnit, Number(p.onHand))} left
+                  {p.categoryName ? ` · ${p.categoryName}` : ''}
+                  {p.listPrice ? ` · ${formatMoney(p.listPrice)}` : ''}
+                </span>
+              </button>
+            ))}
+          </div>
+        </SelectionViewer>
+      )}
+
       {activeOrder && (
         <ProductForm
           open={addingProduct}
@@ -896,6 +950,7 @@ export default function SellPage() {
             // Straight onto the receipt. Adding it and then making the seller search for it
             // again would be the same interruption in two steps instead of one.
             setAddingProduct(false);
+            pickerOps.close();
             void addProduct(created.id);
           }}
         />
