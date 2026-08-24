@@ -190,8 +190,26 @@ async function pageSearch(page, label, text, { pick } = {}) {
   await launcher.click();
   await page.waitForTimeout(1200);
   // The viewer's own input: the last visible text input once the viewer is up.
-  await page.locator('input:visible').last().fill(text);
-  await page.waitForTimeout(2200);
+  /*
+   * Type, and RETYPE if nothing comes back.
+   *
+   * The viewer runs its query when the text changes, once. A customer saved a moment ago can miss
+   * that single lookup, and no amount of waiting afterwards helps — there is no second request to
+   * wait for. Clearing the box and typing it again is what a person does, and it is the only thing
+   * that asks the server a second time.
+   */
+  const input = page.locator('input:visible').last();
+  const hit = page.getByText(text, { exact: false }).first();
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (attempt > 0) {
+      await input.fill('');
+      await page.waitForTimeout(700);
+    }
+    await input.fill(text);
+    const seen = await hit.waitFor({ timeout: 5000 }).then(() => true).catch(() => false);
+    if (seen) break;
+  }
+  await page.waitForTimeout(600);
   if (pick) {
     // `.last()` is the viewer's row — it is portalled after the page, so it comes last in the DOM.
     const hit = page.getByRole('button', { name: new RegExp(pick) }).last();
@@ -251,7 +269,25 @@ const run = async () => {
     await fillLabelled(dlg, 'Phone number', PHONE);
     await shot(page, 'new-customer-form');
     await dlg.getByRole('button', { name: /^Save/i }).first().click();
-    await page.waitForTimeout(3000);
+    /*
+     * Wait for the SHEET to go away, which is the app's own signal that the save landed.
+     *
+     * A flat 3s sleep was the whole story here: on a slow save the run walked on while the form was
+     * still up, searched a list the new customer was not in yet, and reported "0 matches" — a
+     * failure that came and went with the network rather than with the code. If it does not close,
+     * say what the sheet is showing instead of failing three steps later on something unrelated.
+     */
+    const closed = await page
+      .locator('[role="dialog"]:visible')
+      .first()
+      .waitFor({ state: 'detached', timeout: 20000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!closed) {
+      const stuck = await sheet(page).innerText().catch(() => '(sheet unreadable)');
+      console.log('    save did not close the sheet:', stuck.replace(/\s+/g, ' ').slice(0, 200));
+    }
+    await page.waitForTimeout(1200);
   }
   await shot(page, 'people-list');
   // Search for them, so the row is on screen regardless of how many customers exist.
@@ -482,8 +518,20 @@ const run = async () => {
   {
     const dlg = sheet(page);
     await dlg.getByLabel('Search customers').fill(CUSTOMER);
-    await page.waitForTimeout(1900);
-    await dlg.locator('button').filter({ hasText: new RegExp(CUSTOMER) }).first().click();
+    /*
+     * The EXISTING customer's row, explicitly not the "Add ..." button.
+     *
+     * Search and create share one screen, so a name that finds nothing offers to add it — and that
+     * offer contains the name too. Matching on the name alone picked whichever came first in the
+     * DOM, which while results were still arriving was the add button: the run went into the new
+     * customer form, the sheet stayed open over the sale, and every later step failed on a sheet
+     * intercepting its clicks. Waiting for the row rather than sleeping also removes the guess about
+     * how long the lookup takes.
+     */
+    const row = dlg.locator('button').filter({ hasText: new RegExp(CUSTOMER) })
+      .filter({ hasNotText: /^Add /i }).first();
+    await row.waitFor({ timeout: 15000 });
+    await row.click();
     await page.waitForTimeout(1600);
   }
 
