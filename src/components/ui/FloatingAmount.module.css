@@ -1,0 +1,53 @@
+/*
+ * Right-hand end of the tab bar's line. The library's floating button holds the left.
+ *
+ * `position: fixed` against the viewport, and portalled nowhere: this renders inside the page, but
+ * the page is not transformed at rest, so fixed resolves against the viewport as intended. (A
+ * sheet is different — it is open DURING a slide transition, which is why those portal to body.)
+ */
+.pill {
+  position: fixed;
+  right: var(--space-4);
+  z-index: 40;                 /* under the tab bar's 50: the tabs must never be blocked */
+
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--touch-comfortable);
+  padding: var(--space-2) var(--space-5);
+
+  border: none;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--primary-text);
+  box-shadow: 0 6px 20px rgba(11, 40, 34, 0.32);
+  cursor: pointer;
+
+  /* Matches the bar's own slide so the two move as one line rather than one chasing the other. */
+  transition: bottom 0.3s ease, background-color 120ms ease;
+}
+
+.pill:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.disabled {
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  cursor: not-allowed;
+}
+
+.label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  /* The amount is what is being read; the label is there to say what the tap does. */
+  opacity: 0.9;
+}
+
+.amount {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-lg);
+  font-weight: 700;
+}

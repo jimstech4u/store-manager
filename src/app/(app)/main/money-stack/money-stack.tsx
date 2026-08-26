@@ -4,6 +4,7 @@ import NavigationStack from '@academix-admin/navigation-stack';
 import MoneyPage from './money-page/money-page';
 import SalesPage from './sales-page/sales-page';
 import StatementPage from './statement-page/statement-page';
+import ReportsPage from './reports-page/reports-page';
 // The same receipt screen the sell stack pushes. Registered here too so a past receipt opens
 // inside Money's own stack, keeping its back button pointing at the sales list.
 import ReceiptPage from '../sell-stack/receipt-page/receipt-page';
@@ -13,6 +14,7 @@ const navLink = {
   sales_page: SalesPage,
   statement_page: StatementPage,
   receipt_page: ReceiptPage,
+  reports_page: ReportsPage,
 };
 
 export const MoneyStack = () => (

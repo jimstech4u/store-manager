@@ -231,6 +231,11 @@ async function pageSearch(page, label, text, { pick } = {}) {
    * rather than a boolean: once the viewer is gone, so are the results.
    */
   const found = await page.getByText(text, { exact: false }).count();
+  if (found === 0) {
+    await page.screenshot({ path: 'shots/search-empty.png' });
+    const body = await page.locator('[role="dialog"]').first().innerText().catch(() => '(no dialog)');
+    console.log('    viewer showed:', body.replace(/\s+/g, ' ').slice(0, 160));
+  }
   await page.keyboard.press('Escape');
   await page.waitForTimeout(1200);
   return found;
@@ -491,7 +496,11 @@ const run = async () => {
   }
   await shot(page, 'receipt-charges');
 
-  const grand = money(await onScreen(page, '[class*="footerTotal"]').innerText());
+  // The pinned footer is gone; the order total is the floating pill above the tab bar. Not
+  // `onScreen`, which filters on `:visible` — a position:fixed element does not satisfy that.
+  const grand = money(
+    await page.locator('[class*="FloatingAmount_amount"]').first().innerText(),
+  );
   console.log('    total to pay: ' + grand);
   check('total is 84,600 goods + 2,000 transport + 500 loading',
     grand === 87100, String(grand));
@@ -535,7 +544,9 @@ const run = async () => {
     await page.waitForTimeout(1600);
   }
 
-  await onScreen(page, 'button:has-text("Take payment")').click();
+  // The floating pill, not `onScreen`: `:visible` excludes position:fixed elements, so the
+  // selector that used to find the pinned footer button never matches it.
+  await page.locator('button:has-text("Take payment")').first().click();
   await page.waitForTimeout(1600);
   {
     const dlg = sheet(page);

@@ -86,44 +86,74 @@ export default function MainShell() {
           onReselect={(id) => popStackToRoot(id)}
           onScroll={(callback) => scrollBroadcaster.subscribe(callback)}
           /*
-           * Float on scroll, the way academix-app's bar does.
-           *
-           * A bar pinned flat to the bottom edge eats a full row of content on a short phone
-           * screen, and these lists — stock, receipts, customers — are exactly the screens where
-           * the extra row is worth having. Detaching it once the page starts moving gives the
-           * content back without ever taking the tabs away, which `autohide` would.
-           *
-           * The threshold keeps it still at the top of a page: a bar that lifts off on a
-           * two-pixel scroll reads as a glitch rather than as a response.
-           */
-          /*
-           * `autohide`, the same as academix-web.
+           * `autohide`, the same configuration academix-web uses, colours aside.
            *
            * `float` was tried first and it SHRINKS the bar's height rather than moving it, which
            * with a 0px shrink height collapses the tabs to nothing while scrolling — the tabs
            * vanish in place instead of sliding away, and they are the app's primary navigation.
-           * `autohide` slides the whole bar down out of the way and brings it straight back on
-           * an upward scroll, which is the behaviour being asked for.
+           * `autohide` slides the whole bar down and brings it straight back on an upward scroll.
            */
           mode="autohide"
-          barBorderRadius="18px"
+          barBorderRadius="16px 16px 0 0"
           barShadow={
-            isDark
-              ? '0 6px 24px rgba(0, 0, 0, 0.55)'
-              : '0 6px 24px rgba(11, 40, 34, 0.18)'
+            isDark ? '0 -4px 20px rgba(0, 0, 0, 0.4)' : '0 -4px 20px rgba(0, 0, 0, 0.1)'
           }
           className={styles.nav}
           activeColor={isDark ? '#8fcbbe' : '#0b6252'}
           inactiveColor={isDark ? '#a8b3b1' : '#4d5554'}
+          hoverColor={isDark ? '#a5d8cb' : '#0f7a66'}
           backgroundColor={isDark ? '#171d1c' : '#ffffff'}
-          // 74px against academix-web's 70: the label sits under the icon and this audience
-          // needs both to stay legible without crowding the touch target.
+          // 74px against academix-web's 70: the label sits under the icon and this audience needs
+          // both to stay legible without crowding the touch target.
           normalHeight="74px"
           shrinkHeight="0px"
           iconSize="22px"
           textSize="12px"
           fontWeight={600}
+          itemSpacing="8px"
+          paddingY="0px"
+          paddingX="0px"
+          breakpointSpacing={{ '800': '32px', '500': '24px', '0': '16px' }}
           barBorderTop={`1px solid ${isDark ? '#2a3231' : '#dde1e0'}`}
+          /*
+           * The library's own floating button, configured as academix-web has it: a circular
+           * action at the left, riding above the bar and staying reachable once the bar hides.
+           *
+           * Tapping it brings the bar back — that behaviour belongs to the package, not to us.
+           * It is what makes `autohide` safe on a long page: the tabs can slide away without the
+           * navigation ever becoming unreachable.
+           *
+           * The sell screen's running total is NOT this. That is our own pill at the other end of
+           * the same line, because this slot holds one control and the two answer to different
+           * things.
+           */
+          floatingButton={
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              height="1.5em"
+              width="1.5em"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M3 6h18M3 12h18M3 18h18"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          }
+          floatingButtonPosition="left"
+          floatingButtonBottom="16px"
+          floatingButtonPadding="16px"
+          floatingButtonColor={isDark ? '#0f7a66' : '#0b6252'}
+          floatingButtonTextColor="#ffffff"
+          floatingButtonRadius="50%"
+          floatingButtonShadow={
+            isDark ? '0 6px 12px rgba(0,0,0,0.4)' : '0 6px 12px rgba(0,0,0,0.25)'
+          }
         />
       </div>
     </div>

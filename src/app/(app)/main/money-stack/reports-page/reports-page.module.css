@@ -1,0 +1,111 @@
+.picker {
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  margin-bottom: var(--space-3);
+  /* Edge-to-edge scroll with the padding inside, so the first and last chip can reach the rail. */
+  scrollbar-width: none;
+}
+
+.picker::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  flex: none;
+  min-height: var(--touch-min);
+  padding: var(--space-2) var(--space-4);
+  border: 2px solid var(--border-strong);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tabActive {
+  border-color: var(--primary);
+  background: var(--primary-subtle);
+  color: var(--primary);
+}
+
+.blurb {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  margin-bottom: var(--space-4);
+}
+
+.sheet {
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  /* A wide table on a narrow phone scrolls inside its own card rather than pushing the page
+     sideways — the printed version has the full width of the paper and needs no such help. */
+  overflow-x: auto;
+}
+
+.head {
+  margin-bottom: var(--space-3);
+}
+
+.reportTitle {
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+
+.reportMeta {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.table th {
+  text-align: start;
+  font-weight: 700;
+  padding: var(--space-2) var(--space-1);
+  border-bottom: 2px solid var(--border-strong);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: var(--space-2) var(--space-1);
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+/* Money and quantities right-aligned and tabular, so a column of figures can be read down. */
+.table th:last-child,
+.table td:last-child,
+.table th:nth-child(2),
+.table td:nth-child(2) {
+  text-align: end;
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.dim {
+  color: var(--text-muted);
+}
+
+.total {
+  margin-top: var(--space-3);
+  font-size: var(--text-base);
+}
+
+.footnote {
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.printRow {
+  margin-top: var(--space-4);
+}

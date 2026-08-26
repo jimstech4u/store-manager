@@ -8,7 +8,7 @@ import { SearchLauncher } from '@/components/ui/SearchLauncher';
 import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
 import { Button } from '@/components/ui/Button';
-import { ChevronRightIcon, PlusIcon } from '@/components/ui/Icon';
+import { BoxIcon, ChevronRightIcon, PlusIcon } from '@/components/ui/Icon';
 import { useNav } from '@academix-admin/navigation-stack';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
@@ -86,8 +86,25 @@ export default function StockPage() {
       onBack={goBack}
       title="Stock"
       subtitle={store.name}
-      actions={
-        can('products.manage')
+      /*
+       * Both actions live in the header now.
+       *
+       * "Record a delivery" was a bar pinned to the bottom of this page: it cost a row of the
+       * list on every screen and covered the last product. Two icons here cost nothing, and the
+       * header is where the other action already was.
+       */
+      actions={[
+        ...(can('stock.receive')
+          ? [
+              {
+                key: 'receive',
+                icon: <BoxIcon />,
+                onClick: () => void nav.push('receive_page'),
+                ariaLabel: 'Record a delivery',
+              },
+            ]
+          : []),
+        ...(can('products.manage')
           ? [
               {
                 key: 'add',
@@ -96,15 +113,8 @@ export default function StockPage() {
                 ariaLabel: 'Add an item you sell',
               },
             ]
-          : undefined
-      }
-      footer={
-        can('stock.receive') ? (
-          <Button size="large" fullWidth onClick={() => nav.push('receive_page')}>
-            <PlusIcon /> Record a delivery
-          </Button>
-        ) : undefined
-      }
+          : []),
+      ]}
     >
       <SearchLauncher
         label="Search your stock"

@@ -261,7 +261,9 @@ const run = async () => {
     await page.waitForTimeout(900);
     const flagged = await page.getByText(/Add a quantity, or remove this item/i).count();
     check('the line itself says what is wrong', flagged > 0, `${flagged} markers`);
-    const pay = page.getByRole('button', { name: /Take payment/i }).first();
+    // The floating total's label changes with its state — "Take payment" normally, "Fix the
+    // quantity" when a line has none — so match either and assert on `disabled` instead.
+    const pay = page.getByRole('button', { name: /Take payment|Fix the quantity/i }).first();
     check('taking payment is blocked', await pay.isDisabled());
     await qty.fill('1');
     await page.waitForTimeout(900);

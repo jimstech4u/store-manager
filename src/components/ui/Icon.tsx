@@ -303,3 +303,18 @@ export const RefreshIcon = (p: IconProps) => (
     <path d="M21 3v5h-5" />
   </Svg>
 );
+
+export const PrinterIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M7 9V4h10v5" />
+    <path d="M7 19H5.6A1.6 1.6 0 0 1 4 17.4v-6.8A1.6 1.6 0 0 1 5.6 9h12.8A1.6 1.6 0 0 1 20 10.6v6.8a1.6 1.6 0 0 1-1.6 1.6H17" />
+    <rect x="7" y="15" width="10" height="5" rx="1" />
+  </Svg>
+);
+
+export const ChartIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 20h16" />
+    <path d="M7 20v-7M12 20V6M17 20v-4" />
+  </Svg>
+);

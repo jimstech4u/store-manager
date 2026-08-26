@@ -9,6 +9,7 @@ import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { Explain, InfoPanel } from '@/components/ui/Explain';
+import { CheckIcon, RefreshIcon } from '@/components/ui/Icon';
 import { useNav } from '@academix-admin/navigation-stack';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
@@ -183,12 +184,24 @@ export default function SettingsPage() {
       onBack={goBack}
       title="Settings"
       subtitle={store.name}
-      footer={
-        editable ? (
-          <Button size="large" fullWidth busy={busy} busyLabel="Saving" onClick={save}>
-            Save settings
-          </Button>
-        ) : undefined
+      /*
+       * Saving is a header action now.
+       *
+       * It was a bar pinned to the foot of a long scrolling form, which meant it sat on top of
+       * whatever field was being edited at the bottom of the screen. In the header it is in the
+       * same place whatever the form is doing, and it can show its own busy state.
+       */
+      actions={
+        editable
+          ? [
+              {
+                key: 'save',
+                icon: busy ? <RefreshIcon /> : <CheckIcon />,
+                onClick: save,
+                ariaLabel: busy ? 'Saving your settings' : 'Save settings',
+              },
+            ]
+          : undefined
       }
     >
       {error && (

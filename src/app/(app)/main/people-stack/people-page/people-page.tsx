@@ -6,7 +6,6 @@ import { PageScaffold } from '@/components/ui/PageScaffold';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useNav } from '@academix-admin/navigation-stack';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
-import { Button } from '@/components/ui/Button';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
 import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
@@ -87,11 +86,15 @@ export default function PeoplePage() {
       onBack={goBack}
       title="People"
       subtitle="Your customers"
-      footer={
-        <Button size="large" fullWidth onClick={() => setAdding(true)}>
-          <PlusIcon /> Add a customer
-        </Button>
-      }
+      // Was a bar pinned to the bottom of the page, which covered the last customer in the list.
+      actions={[
+        {
+          key: 'add',
+          icon: <PlusIcon />,
+          onClick: () => setAdding(true),
+          ariaLabel: 'Add a customer',
+        },
+      ]}
     >
       <SearchLauncher
         label="Search customers"

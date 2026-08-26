@@ -261,13 +261,19 @@ a {
    stray fixed-position element (a sheet backdrop, a nav bar) can print alongside it.
    ===================================================================================== */
 
+/*
+ * Two shapes of printed output, and the page size has to be decided BEFORE the browser opens its
+ * dialog — `@page` cannot be changed per element. So the app sets `--print-size` on <html> just
+ * before printing: a receipt roll for a receipt, A4 for a report. Anything else would print a
+ * three-column debtors table onto 80mm thermal paper.
+ */
 @media print {
   @page {
     /* The element sets --receipt-width from the store's configured millimetres, so an unusual
        printer gets its real width rather than the nearest preset. auto height lets a thermal
        roll cut at the content. */
-    size: var(--receipt-width, 80mm) auto;
-    margin: 0;
+    size: var(--print-size, var(--receipt-width, 80mm) auto);
+    margin: var(--print-margin, 0);
   }
 
   body * {
@@ -322,4 +328,48 @@ a {
 svg[data-icon] {
   vertical-align: -0.125em;
   flex: none;
+}
+
+
+/* ── Reports on paper ─────────────────────────────────────────────────────────────── */
+
+/*
+ * A report is a table on A4, not a receipt on a roll: it needs margins, a readable body size, and
+ * headers that repeat when a long list runs onto a second sheet. `data-print-root="page"` opts a
+ * subtree into that shape; the receipt rules above still apply to everything else.
+ */
+@media print {
+  [data-print-root='page'] {
+    width: auto;
+    padding: 0;
+    font-size: 10pt;
+  }
+
+  [data-print-root='page'] table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  /* Repeat the column headings on every sheet. Without this, page two of a debtors list is a
+     column of names and a column of numbers with nothing saying which is which. */
+  [data-print-root='page'] thead {
+    display: table-header-group;
+  }
+
+  [data-print-root='page'] th,
+  [data-print-root='page'] td {
+    padding: 2mm 1mm;
+    border-bottom: 0.2mm solid #999;
+    text-align: left;
+  }
+
+  [data-print-root='page'] th:last-child,
+  [data-print-root='page'] td:last-child {
+    text-align: right;
+  }
+
+  /* A row split across a page break is a number you cannot trust. */
+  [data-print-root='page'] tr {
+    break-inside: avoid;
+  }
 }

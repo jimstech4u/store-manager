@@ -8,7 +8,7 @@ import { SearchLauncher } from '@/components/ui/SearchLauncher';
 import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
 import { InfoPanel } from '@/components/ui/Explain';
-import { ChevronRightIcon, ReceiptIcon } from '@/components/ui/Icon';
+import { ChartIcon, ChevronRightIcon, ReceiptIcon } from '@/components/ui/Icon';
 import { useAuth } from '@/providers/AuthProvider';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useNav } from '@academix-admin/navigation-stack';
@@ -87,6 +87,12 @@ export default function MoneyPage() {
       title="Money"
       subtitle="Who owes you, and what has been paid"
       actions={[
+        {
+          key: 'reports',
+          icon: <ChartIcon />,
+          onClick: () => void nav.push('reports_page'),
+          ariaLabel: 'Reports you can print or save',
+        },
         {
           key: 'sales',
           icon: <ReceiptIcon />,

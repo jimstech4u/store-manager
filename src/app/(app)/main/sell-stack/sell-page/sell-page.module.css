@@ -598,3 +598,52 @@
   gap: var(--space-3);
   padding: 0 var(--space-4);
 }
+
+/* ── The floating total ───────────────────────────────────────────────────────────── */
+
+/*
+ * Rides above the tab bar in NavigationBar's floating slot, replacing the action bar that used to
+ * be pinned to the bottom of this page.
+ *
+ * A pill rather than a circle: the amount is the point. A seller glances at this while a customer
+ * is still deciding, so the figure has to be readable without opening anything — and the tap
+ * target that takes the payment is the same element, which is the shortest possible path from
+ * "that is the total" to "take it".
+ */
+.floatPay {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: var(--touch-comfortable);
+  padding: var(--space-3) var(--space-5);
+  border: none;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--primary-text);
+  box-shadow: 0 6px 20px rgba(11, 40, 34, 0.32);
+  cursor: pointer;
+}
+
+.floatPay:disabled {
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.floatLabel {
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.floatTotal {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+
+/* Height of the floating total plus its breathing room, so the last line is never under it. */
+.floatSpacer {
+  height: calc(var(--touch-comfortable) + var(--space-5));
+}

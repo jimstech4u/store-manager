@@ -20,6 +20,7 @@ import { CustomerPicker } from '@/components/customers/CustomerPicker';
 import { ProductForm } from '@/components/catalog/ProductForm';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
+import { FloatingAmount } from '@/components/ui/FloatingAmount';
 import { fetchSaleUnits, useProductSearch, type SaleUnit } from '@/lib/stacks/catalog-stack';
 import {
   chargesTotal,
@@ -319,34 +320,21 @@ export default function SellPage() {
           {claiming ? <CloseIcon /> : <ReturnIcon />}
         </button>
       }
-      footer={
-        activeOrder && activeOrder.lines.length > 0 ? (
-          <>
-            <div className={styles.footerRow}>
-              <span className={styles.footerLabel}>Total to pay</span>
-              <span className={styles.footerTotal}>{formatMoney(total)}</span>
-            </div>
-            {emptyLines.length > 0 && (
-              <p className={styles.blocked} role="status">
-                {emptyLines.length === 1
-                  ? `${emptyLines[0].productName} has no quantity yet.`
-                  : `${emptyLines.length} items have no quantity yet.`}
-              </p>
-            )}
-            <Button
-              size="large"
-              fullWidth
-              // Blocked at the button as well as marked on the line: the seller may be looking at
-              // the total rather than the item that is wrong.
-              disabled={emptyLines.length > 0}
-              onClick={() => void openPayment()}
-            >
-              Take payment
-            </Button>
-          </>
-        ) : undefined
-      }
     >
+      {/*
+        The running total, floating at the right-hand end of the tab bar's line.
+        Replaces the action bar this page used to pin to its own bottom edge, which cost a row of
+        the order on every sale and covered the last line in the list.
+      */}
+      {activeOrder && activeOrder.lines.length > 0 && (
+        <FloatingAmount
+          label={emptyLines.length > 0 ? 'Fix the quantity' : 'Take payment'}
+          amount={formatMoney(total)}
+          disabled={emptyLines.length > 0}
+          onClick={() => void openPayment()}
+        />
+      )}
+
       {/* ── Customer tabs ───────────────────────────────────────────────────────── */}
       <div className={styles.tabStrip}>
         {orders.map((order, index) => (
@@ -939,6 +927,16 @@ export default function SellPage() {
           </div>
         </SelectionViewer>
       )}
+
+      {/*
+        Reserves the pill's height at the foot of the page.
+
+        A floating control still covers whatever is under it — measured, the total sat squarely on
+        the quick-fraction buttons of the last line. `--nav-height` already clears the tab bar;
+        this clears the pill that now sits above it. Rendered only while the pill is, so a page
+        with nothing to pay for does not carry a blank gap.
+      */}
+      {activeOrder && activeOrder.lines.length > 0 && <div className={styles.floatSpacer} />}
 
       {activeOrder && (
         <ProductForm
