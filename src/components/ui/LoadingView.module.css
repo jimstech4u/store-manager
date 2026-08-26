@@ -1,0 +1,67 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  min-height: 200px;
+  width: 100%;
+  padding: var(--space-6) var(--space-4);
+  box-sizing: border-box;
+}
+
+.full {
+  min-height: 60dvh;
+}
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  /* Rotating the whole SVG, not the arc's dash offset alone: one transform is cheap, runs on the
+     compositor, and keeps turning smoothly on a phone that is busy doing something else. */
+  animation: spin 900ms linear infinite;
+}
+
+.track {
+  stroke: var(--border);
+}
+
+.arc {
+  stroke: var(--primary);
+  stroke-linecap: round;
+  /* A quarter of the circumference (2πr ≈ 126), so the arc reads as a moving segment. */
+  stroke-dasharray: 32 126;
+}
+
+.text {
+  font-size: var(--text-base);
+  color: var(--text-muted);
+  text-align: center;
+  max-width: 32ch;
+  line-height: var(--leading-normal);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/*
+ * Someone who has asked for less motion still needs to know the app is working, so the spinner
+ * does not simply stop — it pulses in place instead of turning.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+
+  .arc {
+    stroke-dasharray: 126;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+}

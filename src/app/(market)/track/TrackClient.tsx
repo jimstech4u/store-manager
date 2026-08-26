@@ -84,9 +84,19 @@ export function TrackClient() {
     }
   }, []);
 
-  // Poll while an order is being followed. Polling rather than a realtime subscription: this is
-  // an anonymous page, the window is minutes long, and a socket per curious shopper is a cost
-  // with nothing to show for it at this scale.
+  /*
+   * The ONE place in this codebase that polls, and it is deliberate.
+   *
+   * Inside the app, screens never poll: state-stack hydrates the last value and navigation-stack's
+   * `onResume` says when to refresh it, which is both cheaper and more correct — a resume fires at
+   * the moment someone actually looks.
+   *
+   * Neither applies here. This is the PUBLIC tracking page: an anonymous shopper watching a seller
+   * build their order, on no navigation stack, with no state-stack scope, who never leaves and so
+   * never resumes. The only thing that changes is on the server, and nothing on this page can know
+   * it has. Polling rather than a realtime subscription because the window is minutes long and a
+   * socket per curious shopper is a cost with nothing to show for it at this scale.
+   */
   useEffect(() => {
     if (state !== 'found') return;
     const id = setInterval(() => {

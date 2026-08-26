@@ -1,91 +1,114 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { scrollBroadcaster } from '@academix-admin/navigation-stack';
 import styles from './FloatingAmount.module.css';
 
 /**
  * A running total that floats at the right-hand end of the tab bar's line.
  *
- * OURS, not the library's. `NavigationBar` owns one floating slot and it is spoken for: that is
+ * OURS, not the library's. `NavigationBar` owns one floating slot and it is spoken for — that is
  * the circular action at the left, the same one academix-web uses. This sits at the other end of
- * the same line and answers to scrolling on its own terms.
+ * the same line.
  *
- * It exists because the sell screen used to pin a bar to the bottom of the page — "Total to pay"
+ * It exists because the sell screen used to pin a bar to the bottom of the page: "Total to pay"
  * over "Take payment". On a 390px phone that cost a full row of the order while a customer was
- * still adding to it, and it sat on top of the last line in the list. Floating it gives the row
- * back without hiding the one number the seller is watching.
+ * still adding to it, and it sat on top of the last line in the list.
  *
- * The scroll behaviour is deliberately the SAME SHAPE as the bar's autohide — clears the bar while
- * the bar is up, drops into its place once it has gone — because the two are on one line and
- * anything else reads as one of them being broken. It is computed here rather than read from the
- * bar because the bar exposes no such signal; both simply listen to the same broadcaster, which is
- * what keeps them in step.
+ * IT MEASURES THE BAR RATHER THAN PREDICTING IT.
+ *
+ * The first version re-implemented the bar's autohide rules — same thresholds, same page-change
+ * reset — so the two would agree. They did not. At the bottom of a long scroll the pill sat a
+ * bar's height higher than the FAB beside it: two controls on one line, visibly disagreeing about
+ * where that line was. Two copies of a rule are two rules, and they drift on the cases nobody
+ * enumerated.
+ *
+ * So this reads the bar's actual position and sits above it. There is nothing left to disagree
+ * with: whatever the bar does — hide, return, change height, get replaced — the pill follows,
+ * because the bar is the only source.
  */
 export function FloatingAmount({
   label,
   amount,
   onClick,
   disabled = false,
-  /** Height of the tab bar, so this can clear it. Matches `--nav-height`. */
-  barHeight = 74,
 }: {
   label: string;
   amount: ReactNode;
   onClick: () => void;
   disabled?: boolean;
-  barHeight?: number;
 }) {
-  const [barHidden, setBarHidden] = useState(false);
+  /** Distance from the viewport's bottom edge to the top of the bar, plus a gap. */
+  const [bottom, setBottom] = useState<number | null>(null);
+  const frame = useRef<number | null>(null);
 
   useEffect(() => {
-    let previous = 0;
-    let lastSource: string | null = null;
+    if (typeof window === 'undefined') return;
 
-    return scrollBroadcaster.subscribe((e) => {
-      const position = typeof e.position === 'number' ? e.position : 0;
-      const clientHeight = e.clientHeight ?? 0;
-      const scrollHeight = e.scrollHeight ?? 0;
+    const GAP = 16;
 
-      /*
-       * A new page starts with the bar showing.
-       *
-       * The same rule NavigationBar applies (0.1.4), and it has to be applied here too or the two
-       * disagree: measured without it, this pill dropped into the bar's place while the bar was
-       * still up, so the total sat on top of the tabs. Scroll state belongs to the page that was
-       * scrolled, and every tab stack stays mounted, so events arrive from pages nobody is
-       * looking at.
-       */
-      const source = e.pageKey ?? e.uid ?? null;
-      if (source != null && source !== lastSource) {
-        lastSource = source;
-        previous = position;
-        setBarHidden(false);
+    const measure = () => {
+      const bar = document.querySelector('nav.navigation-bar');
+      if (!bar) {
+        setBottom(GAP);
         return;
       }
+      const rect = bar.getBoundingClientRect();
+      // The bar slides below the viewport when it hides, so clamp: once it is off screen the pill
+      // should sit at the bottom edge rather than following it out of sight.
+      //
+      // ROUNDED. `getBoundingClientRect` returns fractional pixels mid-animation, so an unrounded
+      // value changed by hundredths every frame — the pill never held still, and anything checking
+      // whether it had settled (a click, a screenshot) waited forever on movement nobody could see.
+      const above = Math.max(0, Math.round(window.innerHeight - rect.top));
+      setBottom(above + GAP);
+    };
 
-      // A page too short to scroll can never scroll back up, so a bar hidden there could never be
-      // brought back. Same reasoning as the bar's own guard.
-      if (scrollHeight <= clientHeight) {
-        setBarHidden(false);
-        previous = position;
-        return;
-      }
+    /*
+     * Follow the bar THROUGH its slide, not just at the ends.
+     *
+     * The bar animates over 0.3s. Measuring once on a scroll event catches it mid-flight and
+     * leaves the pill parked at whatever it read; measuring for the length of the animation lets
+     * the pill travel with it. The loop is bounded — it stops as soon as the position settles —
+     * so this is not a permanent rAF.
+     */
+    let settledFor = 0;
+    let last = -1;
+    const follow = () => {
+      const bar = document.querySelector('nav.navigation-bar');
+      const top = bar ? Math.round(bar.getBoundingClientRect().top) : -1;
+      measure();
+      settledFor = top === last ? settledFor + 1 : 0;
+      last = top;
+      // Roughly a fifth of a second of no movement is the animation being over.
+      if (settledFor < 12) frame.current = requestAnimationFrame(follow);
+      else frame.current = null;
+    };
 
-      // At the top the bar is always showing, whatever happened on the way there.
-      if (position <= 0) {
-        setBarHidden(false);
-        previous = position;
-        return;
-      }
+    /*
+     * Start following only if the bar has actually moved.
+     *
+     * Scroll is broadcast many times a second, and by every mounted stack — restarting the follow
+     * loop on each one meant it never reached its settled count, so the pill was permanently
+     * "animating" even while nothing moved. Anything waiting for it to hold still waited forever.
+     */
+    const kick = () => {
+      const bar = document.querySelector('nav.navigation-bar');
+      const top = bar ? Math.round(bar.getBoundingClientRect().top) : -1;
+      if (top === last && frame.current === null) return;
+      settledFor = 0;
+      if (frame.current === null) frame.current = requestAnimationFrame(follow);
+    };
 
-      // Only react to actual movement. Scroll is broadcast more than once per frame, and a repeat
-      // at the same position would compare as "not scrolling down" and flicker the pill back.
-      if (position !== previous) {
-        setBarHidden(position > previous && position > 50);
-        previous = position;
-      }
-    });
+    measure();
+    const unsubscribe = scrollBroadcaster.subscribe(kick);
+    window.addEventListener('resize', kick);
+
+    return () => {
+      unsubscribe?.();
+      window.removeEventListener('resize', kick);
+      if (frame.current !== null) cancelAnimationFrame(frame.current);
+    };
   }, []);
 
   return (
@@ -93,9 +116,10 @@ export function FloatingAmount({
       type="button"
       className={`${styles.pill} ${disabled ? styles.disabled : ''}`}
       style={{
-        bottom: barHidden
-          ? 'calc(16px + env(safe-area-inset-bottom, 0px))'
-          : `calc(16px + ${barHeight}px + env(safe-area-inset-bottom, 0px))`,
+        bottom:
+          bottom === null
+            ? 'calc(16px + var(--nav-height) + env(safe-area-inset-bottom, 0px))'
+            : `${bottom}px`,
       }}
       disabled={disabled}
       onClick={onClick}

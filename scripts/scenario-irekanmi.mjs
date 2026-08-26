@@ -364,15 +364,54 @@ const run = async () => {
       return { cards, pools, events };
     });
 
+  /*
+   * Every money action is a PUSHED PAGE now, not a sheet.
+   *
+   * They are all forms — amount, pool, quantity, reason — and a form in a bottom sheet on a phone
+   * puts the keyboard over the half being typed into, turns a reach for a field into a dismiss
+   * gesture, and offers no back button. So this drives a page: click, fill the form that pushes in,
+   * record, and wait to land back on the account.
+   */
   const doAction = async (buttonText, fill) => {
     await onScreen(page, 'button:has-text("' + buttonText + '")').click();
-    await page.waitForTimeout(1300);
-    const dlg = sheet(page);
-    await fill(dlg);
-    await dlg.getByRole('button', { name: /Record it/i }).click();
-    // The sheet closes only once the write has returned and the account reloaded.
-    await dlg.waitFor({ state: 'detached', timeout: 20000 }).catch(() => {});
-    await page.waitForTimeout(1600);
+    /*
+     * Wait for the pushed page to ARRIVE, not for a fixed delay.
+     *
+     * Both pages are on screen during the slide, so filling too early scoped the form to the
+     * account underneath and the action recorded nothing — silently, because every field it
+     * looked for existed there too. "Record it" only exists on the page being pushed.
+     */
+    await page
+      .getByRole('button', { name: /Record it/i })
+      .first()
+      .waitFor({ state: 'visible', timeout: 15000 });
+    await page.waitForTimeout(600);
+    /*
+     * The VISIBLE page body.
+     *
+     * `PageScaffold_scaffold` no longer exists — the scaffold delegates to the navigation stack's
+     * own, which renders a fragment — so that selector fell through to `body`. Every tab stack
+     * stays mounted, so filling against `body` typed into a hidden tab's fields and the action
+     * recorded nothing at all, silently.
+     */
+    const form = page.locator('[class*="PageScaffold_body"]:visible').last();
+    await fill(form);
+    await page.getByRole('button', { name: /Record it/i }).first().click();
+    /*
+     * Wait for the action page to LEAVE, not for the account to appear.
+     *
+     * The account is on screen underneath the whole time — it is the page being pushed onto — so
+     * waiting for its heading returned instantly, and the assertion that followed read the balance
+     * before the write had even landed. "Record it" belongs only to the page on top, so its
+     * disappearance is the honest signal that the action finished and the stack popped.
+     */
+    await page
+      .getByRole('button', { name: /Record it/i })
+      .first()
+      .waitFor({ state: 'hidden', timeout: 25000 })
+      .catch(() => {});
+    // Then let the account's own re-read land.
+    await page.waitForTimeout(1800);
   };
 
   // 3 - What they already owed before this shop had the app
@@ -575,7 +614,22 @@ const run = async () => {
     document.querySelectorAll('[class*="PageScaffold_body"]').forEach((c) => { c.scrollTop = 0; });
   });
   await page.waitForTimeout(1200);
-  await page.locator('button:has-text("Take payment")').first().click();
+  /*
+   * Open the payment sheet only if it is not already open.
+   *
+   * Measured at this step: the pill was present and enabled but COVERED by the payment sheet's own
+   * primary button — the sheet was already up from the preceding step, so reaching for the pill
+   * was reaching through it. Playwright reported a plain click timeout, which says nothing about
+   * an element being underneath something else.
+   */
+  const sheetUp = await page.evaluate(() =>
+    [...document.querySelectorAll('[role="dialog"]')].some(
+      (d) => d.getBoundingClientRect().height > 0,
+    ),
+  );
+  if (!sheetUp) {
+    await page.locator('button:has-text("Take payment")').first().click();
+  }
   await page.waitForTimeout(1600);
   {
     const dlg = sheet(page);

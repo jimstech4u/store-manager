@@ -2,8 +2,9 @@
 
 import { useState, type ReactNode } from 'react';
 import { SearchViewer } from '@academix-admin/search-viewer';
-import { FullPageMessage } from './FullPageMessage';
-import { InfoPanel } from './Explain';
+import { LoadingView } from './LoadingView';
+import { NoResultsView } from './NoResultsView';
+import { OfflineIcon } from './Icon';
 import { useTheme } from '@/context/ThemeContext';
 import { useOverlayRoute } from '@/hooks/useOverlayRoute';
 
@@ -85,19 +86,16 @@ export function SearchSheet<T>({
         background: dark ? '#1b2322' : '#eef2f1',
         padding: { l: '4px', r: '4px', t: '0px', b: '0px' },
       }}
-      loadingProp={{ view: <FullPageMessage title="Searching" tone="loading" /> }}
-      noResultProp={{
-        view: (
-          <InfoPanel tone="info" title="Nothing found">
-            {emptyText}
-          </InfoPanel>
-        ),
-      }}
+      // The same three views every search surface shows, so results, emptiness and failure look
+      // identical wherever someone searches.
+      loadingProp={{ view: <LoadingView text="Searching" /> }}
+      noResultProp={{ view: <NoResultsView text={emptyText} /> }}
       errorProp={{
         view: (
-          <InfoPanel tone="danger" title="Could not search">
-            Check the connection and try again.
-          </InfoPanel>
+          <NoResultsView
+            text="Could not search. Check the connection and try again."
+            icon={<OfflineIcon size="30px" />}
+          />
         ),
       }}
       layoutProp={{

@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import { usePageState, type NavStackAPI } from '@academix-admin/navigation-stack';
+import { usePageLifecycle, type NavStackAPI } from '@academix-admin/navigation-stack';
+import { StateStack } from '@academix-admin/state-stack';
 
 /**
- * Keep a page's figures current while somebody is looking at them.
+ * Reload a screen's figures when it is returned to, and drop them when it is left.
  *
  * Every tab stack stays mounted — that is what makes switching instant and keeps each tab's scroll
  * and history — so a page that loaded once goes on showing whatever it loaded. Settle a sale on
@@ -12,52 +12,38 @@ import { usePageState, type NavStackAPI } from '@academix-admin/navigation-stack
  * the right screen with stale numbers, which is worse than a spinner because nothing about it
  * looks wrong.
  *
- * Two parts, and the second is not decoration:
+ * TWO EVENTS, TWO JOBS — the shape academix-web uses:
  *
- *   THE ACTIVE EDGE catches the common return — another tab, then back to this one.
- *   THE INTERVAL is what makes it reliable. Measured against the real flow, no single signal was
- *   enough: `onResume` misses a return from a page pushed on top of this one, `onEnter` fires
- *   before a just-settled sale is readable so its reload fetches the old figures again, and the
- *   active edge alone still left a balance stale. Passing only when several are combined is timing
- *   luck, not a mechanism, and these screens state what a customer owes.
+ *   onResume  RELOADS. The cached value stays on screen while the request is in flight and is
+ *             then OVERRIDDEN with what came back. Nothing is cleared first, so there is no blank
+ *             frame and no spinner over a figure that is very nearly right.
  *
- * Gated on document visibility so a backgrounded tab costs nothing, and stopped entirely while the
- * page is not the active one.
+ *   onExit    CLEARS the scope. Leaving the page for good is the honest moment to drop what was
+ *             cached about it: the next visit starts from the server rather than from something
+ *             saved before an unknown number of sales.
  *
- * Extracted from the customer account page, which had all of this inline, once the statement page
- * turned out to need exactly the same thing — including the same reasons.
+ * This replaced a polling timer. The timer existed because nothing was telling these screens
+ * anything had changed — which is both wasteful and still wrong for the first seconds after a
+ * sale, exactly when someone is looking at the number. `onResume` is the app saying so.
  */
 export function useLiveRefresh(
   nav: NavStackAPI,
   reload: () => void | Promise<void>,
   {
-    everyMs = 8000,
-    /**
-     * Turn the refresh off while something is happening that it would interrupt.
-     *
-     * A list that re-reads itself under an open search sheet re-renders the sheet, and the sheet
-     * loses the text being typed into it — the results snap back to everything. Measured: typing a
-     * customer's name returned the whole customer list, because the refresh had reset the viewer
-     * between the keystroke and the assertion. Refreshing a list nobody is reading is worth
-     * nothing; interrupting a search is worth less than nothing.
-     */
-    enabled = true,
-  }: { everyMs?: number; enabled?: boolean } = {},
+    /** state-stack scope to drop on exit. Omit to keep the cache across visits. */
+    scope,
+  }: { scope?: string } = {},
 ) {
-  const { isActive } = usePageState(nav);
-  const live = isActive && enabled;
-
-  const wasActive = useRef(live);
-  useEffect(() => {
-    if (live && !wasActive.current) void reload();
-    wasActive.current = live;
-  }, [live, reload]);
-
-  useEffect(() => {
-    if (!live || typeof document === 'undefined') return;
-    const id = setInterval(() => {
-      if (document.visibilityState === 'visible') void reload();
-    }, everyMs);
-    return () => clearInterval(id);
-  }, [live, reload, everyMs]);
+  usePageLifecycle(
+    nav,
+    {
+      onResume: () => {
+        void reload();
+      },
+      onExit: () => {
+        if (scope) void StateStack.core.clearScope(scope);
+      },
+    },
+    [reload, scope],
+  );
 }

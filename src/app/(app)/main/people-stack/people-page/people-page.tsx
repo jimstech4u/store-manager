@@ -80,9 +80,14 @@ export default function PeoplePage() {
    * number, which is the worst version: two screens, one customer, two answers, with no way to
    * tell which to believe.
    */
-  // Paused while the search sheet is up: re-reading the list under it resets what is being
-  // typed, and the results snap back to everything.
-  useLiveRefresh(nav, list.reload, { enabled: !isSearchOpen });
+  /*
+   * Reloaded when this tab is returned to, rather than on a timer.
+   *
+   * `onResume` fires once, when someone actually comes back — so the list is correct at the moment
+   * it is looked at, with no polling in between and no interruption while a search sheet is open
+   * (the sheet is not a resume; nothing fires).
+   */
+  useLiveRefresh(nav, list.reload);
 
   const sentinelRef = useInfiniteScroll(list.loadMore, {
     enabled: list.hasMore && !list.loading,

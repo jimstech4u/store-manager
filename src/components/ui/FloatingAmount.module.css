@@ -23,8 +23,15 @@
   box-shadow: 0 6px 20px rgba(11, 40, 34, 0.32);
   cursor: pointer;
 
-  /* Matches the bar's own slide so the two move as one line rather than one chasing the other. */
-  transition: bottom 0.3s ease, background-color 120ms ease;
+  /*
+   * NO transition on `bottom`.
+   *
+   * The position is measured from the bar every frame while the bar is moving, so the pill is
+   * already following the bar's own easing. A transition on top of that would animate towards a
+   * target that is itself animating — the pill would lag a few frames behind the FAB it shares a
+   * line with, which is the very thing this component exists to avoid.
+   */
+  transition: background-color 120ms ease;
 }
 
 .pill:hover:not(:disabled) {

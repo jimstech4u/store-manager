@@ -1,20 +1,21 @@
 'use client';
 
-import { useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
-import { Field } from '@/components/ui/Field';
-import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Explain, InfoPanel } from '@/components/ui/Explain';
 import { CashIcon, HistoryIcon, RefreshIcon, ReturnIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { usePermission } from '@/hooks/usePermission';
 import { useAuth } from '@/providers/AuthProvider';
-import { getSupabase } from '@/lib/supabase/client';
-import { useCustomerAccount, useEmptiesPools } from '@/lib/stacks/customer-account';
+import {
+  useCustomerAccount,
+  useEmptiesPools,
+  type EmptiesPool,
+  ACCOUNT_SCOPE,
+} from '@/lib/stacks/customer-account';
 import { formatMoney, formatQty } from '@/lib/format';
 import styles from './account-page.module.css';
 
@@ -36,15 +37,6 @@ import styles from './account-page.module.css';
  * by someone who remembers it differently.
  */
 
-type ActionKind =
-  | 'payment'
-  | 'return'
-  | 'deposit'
-  | 'refund'
-  | 'breakage'
-  | 'opening'
-  | null;
-
 export default function AccountPage() {
   const goBack = useStackBack();
   const location = useLocation();
@@ -58,17 +50,8 @@ export default function AccountPage() {
   const nav = useNav();
   // Same staleness problem as the statement page, same answer — see the hook for why a single
   // lifecycle signal was not enough.
-  useLiveRefresh(nav, reload);
+  useLiveRefresh(nav, reload, { scope: ACCOUNT_SCOPE });
 
-  const [action, setAction] = useState<ActionKind>(null);
-  const [amount, setAmount] = useState('');
-  const [qty, setQty] = useState('');
-  const [poolId, setPoolId] = useState('');
-  const [method, setMethod] = useState('cash');
-  const [refundMode, setRefundMode] = useState<'credit' | 'cash' | 'none'>('credit');
-  const [note, setNote] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
 
   if (!store) return null;
   if (!customerId) {
@@ -99,118 +82,8 @@ export default function AccountPage() {
   const owed = Number(account.balance);
   const heldTotal = account.deposits_held.reduce((s, d) => s + Number(d.amount), 0);
 
-  const openAction = (kind: ActionKind) => {
-    setProblem(null);
-    setAmount('');
-    setQty('');
-    setNote('');
-    setPoolId(pools[0]?.id ?? '');
-    setMethod('cash');
-    setRefundMode('credit');
-    setAction(kind);
-  };
-
-  const run = async () => {
-    setBusy(true);
-    setProblem(null);
-    const supabase = getSupabase();
-    try {
-      if (action === 'payment') {
-        const { error: e } = await supabase.rpc('record_payment', {
-          p_store_id: store.id,
-          p_customer_id: customerId,
-          p_amount: Number(amount),
-          p_method: method,
-          p_reference: note.trim() || null,
-          p_occurred_at: new Date().toISOString(),
-          p_client_uuid: crypto.randomUUID(),
-          p_bank_account_id: null,
-        });
-        if (e) throw e;
-      } else if (action === 'return') {
-        const { error: e } = await supabase.rpc('return_empties', {
-          p_store_id: store.id,
-          p_customer_id: customerId,
-          p_category_id: poolId,
-          p_qty: Number(qty),
-          p_occurred_at: new Date().toISOString(),
-          p_client_uuid: crypto.randomUUID(),
-          p_refund_mode: refundMode,
-        });
-        if (e) throw e;
-      } else if (action === 'deposit') {
-        const { error: e } = await supabase.rpc('take_deposit', {
-          p_store_id: store.id,
-          p_customer_id: customerId,
-          p_category_id: poolId,
-          p_qty: Number(qty),
-          p_per_unit: amount.trim() === '' ? null : Number(amount),
-          p_note: note.trim() || null,
-          p_occurred_at: new Date().toISOString(),
-        });
-        if (e) throw e;
-      } else if (action === 'refund') {
-        const { error: e } = await supabase.rpc('refund_deposit', {
-          p_store_id: store.id,
-          p_customer_id: customerId,
-          p_category_id: poolId,
-          p_qty: Number(qty),
-          p_note: note.trim() || null,
-          p_occurred_at: new Date().toISOString(),
-        });
-        if (e) throw e;
-      } else if (action === 'opening') {
-        /*
-         * Opening position: what this customer already owed before the shop started using this
-         * app at all.
-         *
-         * Recorded through `backfill_debtor` / `backfill_empties` rather than as a fake sale, so
-         * it never pretends goods moved on a day they did not. It lands on the timeline as an
-         * opening entry, which is what it is, and every later figure is built on top of it.
-         */
-        if (amount.trim() !== '' && Number(amount) !== 0) {
-          const { error: e } = await supabase.rpc('backfill_debtor', {
-            p_store_id: store.id,
-            p_customer_id: customerId,
-            p_amount: Number(amount),
-            p_as_of: new Date().toISOString().slice(0, 10),
-            p_note: note.trim() || 'Opening balance',
-          });
-          if (e) throw e;
-        }
-        if (qty.trim() !== '' && Number(qty) !== 0 && poolId) {
-          const { error: e } = await supabase.rpc('backfill_empties', {
-            p_store_id: store.id,
-            p_customer_id: customerId,
-            p_category_id: poolId,
-            p_qty: Number(qty),
-            p_as_of: new Date().toISOString().slice(0, 10),
-          });
-          if (e) throw e;
-        }
-      } else if (action === 'breakage') {
-        const { error: e } = await supabase.rpc('forfeit_deposit', {
-          p_store_id: store.id,
-          p_customer_id: customerId,
-          p_category_id: poolId,
-          p_qty: Number(qty),
-          p_amount: Number(amount),
-          p_note: note.trim() || null,
-          p_occurred_at: new Date().toISOString(),
-        });
-        if (e) throw e;
-      }
-      setAction(null);
-      await reload();
-    } catch (e) {
-      setProblem(e instanceof Error ? e.message : 'That could not be recorded.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const poolName = (id: string | null) =>
-    pools.find((p) => p.id === id)?.name ?? account.empties.find((e) => e.category_id === id)?.category ?? '';
+    pools.find((p: EmptiesPool) => p.id === id)?.name ?? account.empties.find((e) => e.category_id === id)?.category ?? '';
 
   return (
     <PageScaffold
@@ -315,26 +188,62 @@ export default function AccountPage() {
 
       {can('payments.record') && (
         <div className={styles.actions}>
-          <Button size="large" fullWidth onClick={() => openAction('payment')}>
+          <Button size="large" fullWidth onClick={() =>
+              void nav.push('account_action_page', {
+                id: customerId,
+                kind: 'payment',
+                owed,
+              })
+            }>
             <CashIcon /> Record a payment
           </Button>
-          <Button variant="secondary" fullWidth onClick={() => openAction('return')}>
+          <Button variant="secondary" fullWidth onClick={() =>
+              void nav.push('account_action_page', {
+                id: customerId,
+                kind: 'return',
+                owed,
+              })
+            }>
             <ReturnIcon /> They brought empties back
           </Button>
-          <Button variant="secondary" fullWidth onClick={() => openAction('deposit')}>
+          <Button variant="secondary" fullWidth onClick={() =>
+              void nav.push('account_action_page', {
+                id: customerId,
+                kind: 'deposit',
+                owed,
+              })
+            }>
             Take a deposit instead
           </Button>
           {can('customers.manage') && (
-            <Button variant="ghost" fullWidth onClick={() => openAction('opening')}>
+            <Button variant="ghost" fullWidth onClick={() =>
+              void nav.push('account_action_page', {
+                id: customerId,
+                kind: 'opening',
+                owed,
+              })
+            }>
               Enter what they already owed
             </Button>
           )}
           {heldTotal !== 0 && (
             <>
-              <Button variant="secondary" fullWidth onClick={() => openAction('refund')}>
+              <Button variant="secondary" fullWidth onClick={() =>
+              void nav.push('account_action_page', {
+                id: customerId,
+                kind: 'refund',
+                owed,
+              })
+            }>
                 Give a deposit back
               </Button>
-              <Button variant="secondary" fullWidth onClick={() => openAction('breakage')}>
+              <Button variant="secondary" fullWidth onClick={() =>
+              void nav.push('account_action_page', {
+                id: customerId,
+                kind: 'breakage',
+                owed,
+              })
+            }>
                 Keep some for breakage
               </Button>
             </>
@@ -380,188 +289,6 @@ export default function AccountPage() {
         </ol>
       )}
 
-      {/* ── Action sheet ────────────────────────────────────────────────────── */}
-
-      <BottomSheet
-        open={action !== null}
-        onClose={() => setAction(null)}
-        title={
-          action === 'payment'
-            ? 'Record a payment'
-            : action === 'return'
-              ? 'Empties brought back'
-              : action === 'deposit'
-                ? 'Take a deposit'
-                : action === 'refund'
-                  ? 'Give a deposit back'
-                  : action === 'opening'
-                    ? 'What they already owed'
-                    : 'Keep some for breakage'
-        }
-        footer={
-          <div className={styles.sheetActions}>
-            <Button variant="secondary" onClick={() => setAction(null)} disabled={busy}>
-              Cancel
-            </Button>
-            <Button busy={busy} onClick={() => void run()}>
-              Record it
-            </Button>
-          </div>
-        }
-      >
-        {problem && (
-          <InfoPanel tone="danger" title="Not recorded">
-            {problem}
-          </InfoPanel>
-        )}
-
-        {action === 'payment' && (
-          <>
-            <Field
-              label="How much did they pay?"
-              numeric
-              prefix="₦"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0"
-              hint={`They owe ${formatMoney(Math.abs(owed))}.`}
-              autoFocus
-            />
-            <div className={styles.field}>
-              <label className={styles.label} htmlFor="pay-method">
-                How did it come in?
-              </label>
-              <select
-                id="pay-method"
-                className={styles.select}
-                value={method}
-                onChange={(e) => setMethod(e.target.value)}
-              >
-                <option value="cash">Cash</option>
-                <option value="transfer">Bank transfer</option>
-                <option value="pos">Card / POS</option>
-                <option value="other">Something else</option>
-              </select>
-            </div>
-            <Field
-              label="Reference"
-              optional
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Teller number, or who brought it"
-            />
-          </>
-        )}
-
-        {action === 'opening' && (
-          <>
-            <InfoPanel tone="info" title="Only for what happened before you started here">
-              Use this once per customer, to bring in what they already owed you and what of yours
-              they already had. It is recorded as an opening entry, not as a sale — nothing moves
-              on your shelf.
-            </InfoPanel>
-            <Field
-              label="Money they already owed"
-              optional
-              numeric
-              prefix="₦"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0"
-            />
-          </>
-        )}
-
-        {action !== 'payment' && (
-          <div className={styles.field}>
-            <label className={styles.label} htmlFor="pool">
-              {action === 'opening' ? 'Which of yours do they already have?' : 'Which ones?'}
-            </label>
-            <select
-              id="pool"
-              className={styles.select}
-              value={poolId}
-              onChange={(e) => setPoolId(e.target.value)}
-            >
-              {pools.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                  {Number(p.deposit) > 0 ? ` — ${formatMoney(p.deposit)} each` : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {action !== 'payment' && (
-          <Field
-            label="How many?"
-            optional={action === 'opening'}
-            numeric
-            value={qty}
-            onChange={(e) => setQty(e.target.value)}
-            placeholder="0"
-          />
-        )}
-
-        {action === 'return' &&
-          Number(account.empties.find((e) => e.category_id === poolId)?.held ?? 0) > 0 && (
-            <div className={styles.field}>
-              <label className={styles.label} htmlFor="refund-mode">
-                You are holding a deposit on these — what happens to it?
-              </label>
-              <select
-                id="refund-mode"
-                className={styles.select}
-                value={refundMode}
-                onChange={(e) => setRefundMode(e.target.value as 'credit' | 'cash' | 'none')}
-              >
-                <option value="credit">Take it off what they owe</option>
-                <option value="cash">Give them the cash</option>
-                <option value="none">Leave it on deposit — they are taking more</option>
-              </select>
-              <p className={styles.rowNote}>
-                Whichever you choose is written down with the time and your name, so it can be
-                explained later.
-              </p>
-            </div>
-          )}
-
-        {action === 'deposit' && (
-          <Field
-            label="Deposit for each"
-            optional
-            numeric
-            prefix="₦"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder={formatMoney(pools.find((p) => p.id === poolId)?.deposit ?? 0)}
-            hint="Leave empty to use this shop's usual deposit for that pool."
-          />
-        )}
-
-        {action === 'breakage' && (
-          <Field
-            label="How much are you keeping?"
-            numeric
-            prefix="₦"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="0"
-            hint="The rest of their deposit for these goes back to them."
-          />
-        )}
-
-        {action !== 'payment' && (
-          <Field
-            label="Why / note"
-            optional
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder={action === 'breakage' ? '3 bottles cracked' : 'Anything worth remembering'}
-          />
-        )}
-      </BottomSheet>
     </PageScaffold>
   );
 }
