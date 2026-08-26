@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { StateStack, useDemandState } from '@academix-admin/state-stack';
 import { getSupabase } from '@/lib/supabase/client';
 
@@ -110,26 +110,55 @@ export function accountsChanged() {
  * reason.
  */
 export function useCustomerAccount(customerId: string | null) {
-  const [state, demand, , meta] = useDemandState<{
+  /*
+   * state-stack holds the CACHE; React state holds what is on screen.
+   *
+   * The cache is what makes returning to a customer instant: the last figures for them are
+   * persisted, so the page opens with their balance already drawn and corrects it a moment later
+   * instead of showing a spinner over a number that was very nearly right.
+   *
+   * Driving the fetch through `demand()` was tried and abandoned. It decides for itself when a
+   * loader is stale enough to re-run, and after a write cleared the scope it stopped running the
+   * loader at all — the page sat on "Loading the account" with nothing in flight and no error to
+   * show for it. Asking for the data plainly, and handing the answer to the cache, is predictable:
+   * the load either returns or throws, and both are handled here.
+   */
+  // [value, demand, set, meta] — the SECOND slot is the demand loader, not the setter.
+  const [cached, , setCached] = useDemandState<{
     account: CustomerAccount | null;
     history: HistoryEvent[];
-    error: string | null;
   }>(
-    { account: null, history: [], error: null },
+    { account: null, history: [] },
     {
       key: `account:${customerId ?? 'none'}`,
       scope: ACCOUNT_SCOPE,
       persist: true,
       deps: [customerId ?? ''],
-      // Half a minute. Long enough that flicking between screens does not re-fetch on every step,
-      // short enough that a figure nobody explicitly invalidated still corrects itself.
-      ttl: 30_000,
+      // Working as a cache, not a loader: nothing here re-runs on mount, because the fetch below
+      // is what runs on mount.
+      revalidateOnMount: false,
     },
   );
 
-  const load = useCallback(() => {
+  const [account, setAccount] = useState<CustomerAccount | null>(cached.account);
+  const [history, setHistory] = useState<HistoryEvent[]>(cached.history);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(cached.account === null);
+
+  // Adopt the cached value once it hydrates from storage, so the first paint after a cold start
+  // has something in it rather than a spinner.
+  useEffect(() => {
+    if (cached.account && !account) {
+      setAccount(cached.account);
+      setHistory(cached.history);
+      setLoading(false);
+    }
+  }, [cached, account]);
+
+  const load = useCallback(async () => {
     if (!customerId) return;
-    demand(async ({ set }) => {
+    setError(null);
+    try {
       const supabase = getSupabase();
       // Together: a page that showed the balance and then filled the history in a moment later
       // would jump under someone already reading it.
@@ -137,50 +166,39 @@ export function useCustomerAccount(customerId: string | null) {
         supabase.rpc('customer_account', { p_store_customer_id: customerId }),
         supabase.rpc('customer_history', { p_store_customer_id: customerId, p_limit: 200 }),
       ]);
-      if (a.error || h.error) {
-        /*
-         * `override` on every set.
-         *
-         * state-stack treats an "empty-looking" value as no value and keeps what it already had —
-         * which is right for a loader that came back with nothing, and wrong here. A customer who
-         * has just paid everything off genuinely HAS an empty history and a zero balance, and
-         * without the override the screen would go on showing the figures from before they paid.
-         * A reload replaces; it never blanks and it never quietly declines.
-         */
-        set(
-          {
-            account: null,
-            history: [],
-            error: (a.error ?? h.error)?.message ?? 'Could not load this account.',
-          },
-          { override: true },
-        );
-        return;
-      }
-      set(
-        {
-          account: a.data as CustomerAccount,
-          history: (h.data ?? []) as HistoryEvent[],
-          error: null,
-        },
-        { override: true },
-      );
-    });
-  }, [customerId, demand]);
+      if (a.error) throw a.error;
+      if (h.error) throw h.error;
+
+      const next = {
+        account: a.data as CustomerAccount,
+        history: (h.data ?? []) as HistoryEvent[],
+      };
+      setAccount(next.account);
+      setHistory(next.history);
+      /*
+       * Persisted for the next visit.
+       *
+       * The plain setter takes a value, not options — `override` belongs to the `set` handed to a
+       * demand loader. It is not needed here anyway: this always writes a whole object with an
+       * `account` in it, which state-stack does not mistake for emptiness. The case that WOULD
+       * have needed it — a customer paid off to zero — is a zero balance inside a present object,
+       * not an absent one.
+       */
+      setCached(next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load this account.');
+    } finally {
+      // Always cleared, on both paths. Leaving it set on the error path is how a screen ends up
+      // spinning forever over a request that finished.
+      setLoading(false);
+    }
+  }, [customerId, setCached]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
-  return {
-    account: state.account,
-    history: state.history,
-    error: state.error,
-    // Nothing cached yet AND nothing hydrated is the only true "loading". With a cached value
-    // there is something to show, and showing it beats a spinner.
-    loading: !meta.isHydrated && state.account === null,
-    reload: load,
-  };
+  return { account, history, error, loading: loading && account === null, reload: load };
 }
 
 export interface EmptiesPool {
@@ -198,7 +216,7 @@ export interface EmptiesPool {
  * what it should contain.
  */
 export function useEmptiesPools(storeId: string | null) {
-  const [pools, demand] = useDemandState<EmptiesPool[]>([], {
+  const [pools, , setPools] = useDemandState<EmptiesPool[]>([], {
     key: `pools:${storeId ?? 'none'}`,
     scope: CATALOG_SCOPE,
     persist: true,
@@ -208,15 +226,17 @@ export function useEmptiesPools(storeId: string | null) {
 
   useEffect(() => {
     if (!storeId) return;
-    demand(async ({ set }) => {
+    // Driven here for the same reason as the account above; state-stack keeps the answer so the
+    // picker is populated the moment an action screen opens.
+    void (async () => {
       const { data } = await getSupabase()
         .from('empties_categories')
         .select('id, name, kind, deposit')
         .eq('store_id', storeId)
         .order('name');
-      set((data ?? []) as EmptiesPool[], { override: true });
-    });
-  }, [storeId, demand]);
+      if (data) setPools(data as EmptiesPool[]);
+    })();
+  }, [storeId, setPools]);
 
   return pools;
 }

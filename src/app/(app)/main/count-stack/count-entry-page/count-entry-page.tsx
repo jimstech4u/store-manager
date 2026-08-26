@@ -1,0 +1,351 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import { useLocation, useNav } from '@academix-admin/navigation-stack';
+import { PageScaffold } from '@/components/ui/PageScaffold';
+import { Button } from '@/components/ui/Button';
+import { Field } from '@/components/ui/Field';
+import { Explain, InfoPanel, WorkedExample } from '@/components/ui/Explain';
+import { WarningIcon } from '@/components/ui/Icon';
+import { useStackBack } from '@/hooks/useStackBack';
+import { useAuth } from '@/providers/AuthProvider';
+import { getSupabase } from '@/lib/supabase/client';
+import { fetchProduct, type Product } from '@/lib/stacks/catalog-stack';
+import { describeVariance, formatMoney, formatQty, pluralUnit } from '@/lib/format';
+import styles from '../count-page/count-page.module.css';
+
+/**
+ * Counting one product: a PAGE, not a sheet.
+ *
+ * It is three steps — enter what is on the shelf, see how that compares with the records, explain
+ * any gap and close — with a number field at the start and a reason to pick at the end. A sheet
+ * handled that badly on a phone: the keyboard covered the field being typed into, reaching for it
+ * could dismiss the whole thing, and there was no back button, so leaving meant a gesture people
+ * have to already know.
+ *
+ * Counting is also the one job here nobody does in a hurry. Someone walks the shelf with the phone
+ * in one hand — a screen with a title and a back arrow that survives a rotation suits that far
+ * better than a panel that can be swiped away by accident.
+ */
+
+interface CountState {
+  periodId: string;
+  opening: number;
+  receiving: number;
+  sales: number;
+  damaged: number;
+  other: number;
+  expected: number;
+  actual: number | null;
+  variance: number | null;
+  withinTolerance: boolean;
+}
+
+const REASONS = [
+  { code: 'miscount', label: 'I counted wrong', effect: 'The count is corrected. Nothing is lost.' },
+  { code: 'theft', label: 'Stolen or missing', effect: 'Recorded as a loss at what the stock cost.' },
+  { code: 'unrecorded_sale', label: 'Sold but not entered', effect: 'Recorded as a sale that was missed.' },
+  { code: 'unlogged_damage', label: 'Broken or spoiled', effect: 'Recorded as damage.' },
+  { code: 'unrecorded_receipt', label: 'Came in but not entered', effect: 'Recorded as stock received.' },
+  { code: 'other', label: 'Something else', effect: 'Recorded with your note.' },
+] as const;
+
+export default function CountEntryPage() {
+  const nav = useNav();
+  const goBack = useStackBack();
+  const location = useLocation();
+  const { store } = useAuth();
+
+  const productId = (location?.params?.id as string | undefined) ?? null;
+  const [active, setActive] = useState<Product | null>(null);
+  const [counted, setCounted] = useState('');
+  const [state, setState] = useState<CountState | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [reason, setReason] = useState<string | null>(null);
+  const [note, setNote] = useState('');
+  const [done, setDone] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!productId) return;
+    try {
+      setActive(await fetchProduct(productId));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load that product.');
+    }
+  }, [productId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const variance = state?.variance ?? 0;
+  const hasGap = state !== null && Math.abs(variance) > 0.0001;
+  // What the gap is worth at what the stock cost — the figure that makes a variance mean something
+  // to a shop owner rather than being a count of bottles.
+  const lossValue = active && hasGap ? Math.abs(variance) * Number(active.avgUnitCost) : 0;
+
+  /** Submit the physical count and read back what the records expected. */
+  const submitCount = async () => {
+    if (!active || !store) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const supabase = getSupabase();
+      const { data: periodId, error: pErr } = await supabase.rpc('ensure_open_period', {
+        p_product_id: active.id,
+      });
+      if (pErr) throw pErr;
+
+      const { error: cErr } = await supabase.rpc('enter_stock_count', {
+        p_period_id: periodId,
+        p_counted: Number(counted),
+      });
+      if (cErr) throw cErr;
+
+      const { data: rows, error: rErr } = await supabase
+        .from('stock_periods')
+        .select(
+          'id, opening_qty, receiving_qty, sales_qty, damaged_qty, other_qty,' +
+            ' expected_closing_qty, actual_closing_qty, variance_qty',
+        )
+        .eq('id', periodId)
+        .maybeSingle();
+      if (rErr) throw rErr;
+
+      const { data: within } = await supabase.rpc('variance_within_tolerance', {
+        p_period_id: periodId,
+      });
+
+      const r = rows as unknown as Record<string, string>;
+      setState({
+        periodId: periodId as string,
+        opening: Number(r.opening_qty),
+        receiving: Number(r.receiving_qty),
+        sales: Number(r.sales_qty),
+        damaged: Number(r.damaged_qty),
+        other: Number(r.other_qty),
+        expected: Number(r.expected_closing_qty),
+        actual: Number(r.actual_closing_qty),
+        variance: Number(r.variance_qty),
+        withinTolerance: Boolean(within),
+      });
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Could not save the count');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Explain the gap, then close the period. */
+  const resolveAndClose = async () => {
+    if (!state) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const supabase = getSupabase();
+
+      const needsReason = state.variance !== null && Math.abs(state.variance) > 0.0001;
+      if (needsReason) {
+        if (!reason) throw new Error('Choose what happened before closing');
+        const { error: vErr } = await supabase.rpc('resolve_variance', {
+          p_period_id: state.periodId,
+          p_reason: reason,
+          p_note: note || null,
+        });
+        if (vErr) throw vErr;
+      }
+
+      const { error: cErr } = await supabase.rpc('close_stock_period', {
+        p_period_id: state.periodId,
+      });
+      if (cErr) throw cErr;
+
+      setDone(true);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Could not close this count');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!store || !productId) return null;
+
+  return (
+    <PageScaffold onBack={goBack} title={active?.name ?? 'Count'} subtitle="Check the shelf">
+      {error && (
+        <InfoPanel tone="danger" title="Could not continue">
+          {error}
+        </InfoPanel>
+      )}
+
+      {done ? (
+        <InfoPanel tone="success" title="Counted and closed">
+          Tomorrow starts from what you counted, not from what the records guessed.
+        </InfoPanel>
+      ) : state === null ? (
+        <>
+          {/* Only the input. The expected figure is deliberately not shown yet. */}
+          <Field
+            label="How many are on the shelf?"
+            numeric
+            required
+            autoFocus
+            suffix={active ? pluralUnit(active.baseUnit, Number(counted) || 0) : undefined}
+            value={counted}
+            onChange={(e) => setCounted(e.target.value)}
+            hint="Count it yourself. We will show you what the records expect afterwards."
+            help={
+              <Explain label="Why not show the expected number first?">
+                Because then it stops being a count. Seeing “should be 857” makes it very easy
+                to write 857 and move on — and the whole value of doing this is catching the days
+                when the shelf and the records disagree.
+              </Explain>
+            }
+          />
+        </>
+      ) : (
+        <>
+          <div className={styles.crods}>
+            {[
+              ['O', 'Opening stock', state.opening, ''],
+              ['R', 'Received', state.receiving, ''],
+              ['S', 'Sold', state.sales, '−'],
+              ['D', 'Damaged', state.damaged, '−'],
+            ].map(([letter, label, value, sign]) => (
+              <div className={styles.crodsRow} key={String(label)}>
+                <span>
+                  <span className={styles.letter} aria-hidden="true">
+                    {letter}
+                  </span>
+                  {label}
+                </span>
+                <span className={styles.crodsValue}>
+                  {sign}
+                  {formatQty(value as number)}
+                </span>
+              </div>
+            ))}
+
+            <div className={`${styles.crodsRow} ${styles.expectedRow}`}>
+              <span>
+                <strong>Should be on the shelf</strong>
+              </span>
+              <span className={styles.crodsValue}>
+                <strong>{formatQty(state.expected)}</strong>
+              </span>
+            </div>
+
+            <div className={`${styles.crodsRow} ${styles.countedRow}`}>
+              <span>
+                <strong>You counted</strong>
+              </span>
+              <span className={styles.crodsValue}>
+                <strong>{formatQty(state.actual ?? 0)}</strong>
+              </span>
+            </div>
+          </div>
+
+          {!hasGap ? (
+            <InfoPanel tone="success" title="Everything matches">
+              The shelf agrees with your records.
+            </InfoPanel>
+          ) : (
+            <>
+              <div className={styles.gap} role="alert">
+                <p className={styles.gapHead}>
+                  <WarningIcon />
+                  {variance < 0 ? 'Stock is missing' : 'More than expected'}
+                </p>
+                <p className={styles.gapNumber}>
+                  {describeVariance(variance, active?.baseUnit ?? 'piece')}
+                </p>
+                {lossValue > 0 && (
+                  <p className={styles.gapMeaning}>
+                    That is <strong>{formatMoney(lossValue)}</strong> at what this stock cost
+                    you.
+                  </p>
+                )}
+                {state.withinTolerance && (
+                  <p className={styles.gapMeaning}>
+                    Small enough to be a normal counting difference — you can close without
+                    explaining it.
+                  </p>
+                )}
+              </div>
+
+              <p className={styles.reasonLabel}>What happened?</p>
+              <div className={styles.reasons}>
+                {REASONS.map((r) => (
+                  <button
+                    key={r.code}
+                    type="button"
+                    className={`${styles.reason} ${reason === r.code ? styles.reasonActive : ''}`}
+                    onClick={() => setReason(r.code)}
+                    aria-pressed={reason === r.code}
+                  >
+                    <span className={styles.reasonName}>{r.label}</span>
+                    <span className={styles.reasonEffect}>{r.effect}</span>
+                  </button>
+                ))}
+              </div>
+
+              <Field
+                label="Note"
+                optional
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Anything worth remembering"
+              />
+
+              <WorkedExample
+                label="Why this matters"
+                rows={[
+                  { label: 'Records expected', value: formatQty(state.expected) },
+                  { label: 'Actually there', value: formatQty(state.actual ?? 0) },
+                  {
+                    label: 'Unaccounted for',
+                    value: `${formatQty(Math.abs(variance))} · ${formatMoney(lossValue)}`,
+                    emphasis: true,
+                  },
+                ]}
+                note="Left unexplained, this quietly shows up as profit you never made."
+              />
+            </>
+          )}
+        </>
+      )}
+
+
+      <div className={styles.pageAction}>
+        {done ? (
+          <Button size="large" fullWidth onClick={() => void nav.pop()}>
+            Done
+          </Button>
+        ) : state === null ? (
+          <Button
+            size="large"
+            fullWidth
+            busy={busy}
+            busyLabel="Saving"
+            disabled={counted.trim() === ''}
+            onClick={submitCount}
+          >
+            Save my count
+          </Button>
+        ) : (
+          <Button
+            size="large"
+            fullWidth
+            busy={busy}
+            busyLabel="Closing"
+            disabled={hasGap && !state.withinTolerance && !reason}
+            onClick={resolveAndClose}
+          >
+            {hasGap ? 'Explain and close' : 'Close this count'}
+          </Button>
+        )}
+      </div>
+    </PageScaffold>
+  );
+}

@@ -101,12 +101,30 @@ export function FloatingAmount({
     };
 
     measure();
+
+    /*
+     * Every way the bar can move, and there are three.
+     *
+     * Scrolling is the obvious one. Resizing is the easy one. The third is the one that was
+     * missed: the bar reveals itself on a change of page WITHOUT any scroll — and with nothing
+     * listening for that, the pill kept the offset it had measured while the bar was hidden and
+     * ended up drawn inside the bar, underneath it, unclickable.
+     *
+     * `transitionrun` fires as the bar starts moving whatever caused it, so this follows the bar
+     * rather than trying to enumerate the reasons it might move. Event-driven, not a poll.
+     */
     const unsubscribe = scrollBroadcaster.subscribe(kick);
     window.addEventListener('resize', kick);
+
+    const bar = document.querySelector('nav.navigation-bar');
+    bar?.addEventListener('transitionrun', kick);
+    bar?.addEventListener('transitionend', kick);
 
     return () => {
       unsubscribe?.();
       window.removeEventListener('resize', kick);
+      bar?.removeEventListener('transitionrun', kick);
+      bar?.removeEventListener('transitionend', kick);
       if (frame.current !== null) cancelAnimationFrame(frame.current);
     };
   }, []);

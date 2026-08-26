@@ -12,7 +12,7 @@ import { usePermission } from '@/hooks/usePermission';
 import { ChevronRightIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
-import type { HistoryEvent } from '@/lib/stacks/customer-account';
+import { accountsChanged, type HistoryEvent } from '@/lib/stacks/customer-account';
 import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatDate, formatDateTime, formatMoney } from '@/lib/format';
@@ -229,6 +229,8 @@ export default function StatementPage() {
                   p_bank_account_id: null,
                 });
                 if (e) throw e;
+                // Same announcement every other write makes, so the lists and the account agree.
+                accountsChanged();
                 setPaying(false);
                 await load();
               } catch (e) {

@@ -594,8 +594,17 @@ const run = async () => {
      * intercepting its clicks. Waiting for the row rather than sleeping also removes the guess about
      * how long the lookup takes.
      */
-    const row = dlg.locator('button').filter({ hasText: new RegExp(CUSTOMER) })
-      .filter({ hasNotText: /^Add /i }).first();
+    /*
+     * The result ROW, selected by its own class.
+     *
+     * Excluding the create button by its text was not enough — the run still landed in the "New
+     * customer" form, which then sat open over the sale and covered the payment control, and
+     * Playwright reported only a click timeout on an element that was plainly there. A row and an
+     * offer to create are different things in the markup; matching the row directly says so.
+     */
+    const row = dlg.locator('[class*="CustomerPicker_row__"]')
+      .filter({ hasText: new RegExp(CUSTOMER) })
+      .first();
     await row.waitFor({ timeout: 15000 });
     await row.click();
     await page.waitForTimeout(1600);
@@ -622,14 +631,42 @@ const run = async () => {
    * was reaching through it. Playwright reported a plain click timeout, which says nothing about
    * an element being underneath something else.
    */
-  const sheetUp = await page.evaluate(() =>
-    [...document.querySelectorAll('[role="dialog"]')].some(
-      (d) => d.getBoundingClientRect().height > 0,
-    ),
-  );
-  if (!sheetUp) {
-    await page.locator('button:has-text("Take payment")').first().click();
-  }
+  /*
+   * WAIT for the customer sheet to finish leaving, then tap the pill.
+   *
+   * Measured here: the pill was present and enabled but covered by the closing sheet's own primary
+   * button, so the click timed out with Playwright reporting only "not stable" — which says nothing
+   * about one element being under another. An earlier attempt SKIPPED the click while a sheet was
+   * up, which was worse: the payment sheet then never opened and the rest of the run failed on it.
+   */
+  await page
+    .waitForFunction(
+      () =>
+        ![...document.querySelectorAll('[role="dialog"]')].some(
+          (d) => d.getBoundingClientRect().height > 0,
+        ),
+      undefined,
+      { timeout: 15000 },
+    )
+    .catch(() => {});
+  await page.waitForTimeout(700);
+  console.log('    before pill click: ' + JSON.stringify(await page.evaluate(() => {
+    const pill = [...document.querySelectorAll('button')]
+      .find((b) => /Take payment|Fix the quantity/.test(b.textContent || ''));
+    const dialogs = [...document.querySelectorAll('[role="dialog"]')]
+      .map((d) => Math.round(d.getBoundingClientRect().height));
+    if (!pill) return { pill: false, dialogs };
+    const r = pill.getBoundingClientRect();
+    const mid = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return {
+      pill: true, top: Math.round(r.top), disabled: pill.disabled, dialogs,
+      covering: mid && !pill.contains(mid) ? String(mid.className || mid.tagName).slice(0, 60) : null,
+      dialogText: ([...document.querySelectorAll('[role="dialog"]')]
+        .find((d) => d.getBoundingClientRect().height > 0)?.textContent || '')
+        .replace(/\s+/g, ' ').slice(0, 90),
+    };
+  })));
+  await page.locator('button:has-text("Take payment")').first().click();
   await page.waitForTimeout(1600);
   {
     const dlg = sheet(page);
@@ -671,8 +708,19 @@ const run = async () => {
    * on rather than the list. That is correct — it is what makes tabs feel like places — so the
    * scenario has to cope with either, not assume the list.
    */
-  await pageSearch(page, 'Search customers', CUSTOMER, { pick: CUSTOMER });
-  await page.getByText(/Everything that has happened/i).first().waitFor({ timeout: 25000 });
+  // By phone, like step 2 — exact and unique, where a name shares a prefix with every other
+  // customer this scenario has ever created.
+  await pageSearch(page, 'Search customers', PHONE, { pick: CUSTOMER });
+  await page
+    .getByText(/Everything that has happened/i)
+    .first()
+    .waitFor({ timeout: 25000 })
+    .catch(async () => {
+      const body = await page.locator('body').innerText();
+      console.log('    account did not render. page says: ' +
+        body.replace(/\s+/g, ' ').slice(0, 160));
+      await page.screenshot({ path: 'shots/account-stuck.png' });
+    });
   // Give the page a fair, generous window to refresh ITSELF before touching anything.
   console.log('    waiting 10s for an automatic refresh...');
   await page.waitForTimeout(10000);

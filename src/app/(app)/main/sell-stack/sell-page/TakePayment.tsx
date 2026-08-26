@@ -9,6 +9,7 @@ import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
 import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
 import { getSupabase } from '@/lib/supabase/client';
+import { accountsChanged } from '@/lib/stacks/customer-account';
 import { formatMoney } from '@/lib/format';
 import type { DraftOrder } from '@/lib/stacks/draft-orders';
 
@@ -147,6 +148,16 @@ export function TakePayment({
       });
       if (err) throw err;
 
+      /*
+       * A settled sale moves a customer's balance, their empties and the debtor list — so say so
+       * before handing back.
+       *
+       * Without this the account screens kept whatever they had cached until the TTL expired.
+       * Measured: settle a sale, open the customer, and their balance was the figure from before
+       * it — ₦200,000 where it should have read ₦247,100. The write is the only thing that knows
+       * it happened; every screen guessing on a timer is the arrangement this replaced.
+       */
+      accountsChanged();
       onSettled(data as string);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Could not record this payment');

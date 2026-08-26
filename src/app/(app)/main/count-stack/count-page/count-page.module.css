@@ -181,3 +181,10 @@
   font-size: var(--text-sm);
   color: var(--text-muted);
 }
+
+
+/* The count's action, at the end of the form rather than pinned to the screen. On a page the whole
+   thing scrolls, so it is reached by finishing the form instead of covering it. */
+.pageAction {
+  margin-top: var(--space-5);
+}

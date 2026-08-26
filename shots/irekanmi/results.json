@@ -2,7 +2,7 @@
   {
     "name": "customer exists in the list",
     "ok": true,
-    "detail": "2 matches"
+    "detail": "1 matches"
   },
   {
     "name": "account page opened",
@@ -11,33 +11,33 @@
   },
   {
     "name": "opening money owed is 200,000",
-    "ok": false,
-    "detail": "₦0"
+    "ok": true,
+    "detail": "₦200,000"
   },
   {
     "name": "3 NBL crates out",
-    "ok": false,
-    "detail": ""
+    "ok": true,
+    "detail": "3"
   },
   {
     "name": "4 Guinness bottles out",
-    "ok": false,
-    "detail": ""
+    "ok": true,
+    "detail": "4"
   },
   {
     "name": "3 dispenser bottles out",
-    "ok": false,
-    "detail": ""
+    "ok": true,
+    "detail": "3"
   },
   {
     "name": "shop is holding 20,000",
-    "ok": false,
-    "detail": ""
+    "ok": true,
+    "detail": "₦20,000"
   },
   {
     "name": "history records every step",
-    "ok": false,
-    "detail": "0 events"
+    "ok": true,
+    "detail": "4 events"
   },
   {
     "name": "half crate of Trophy is 4,100",
@@ -92,21 +92,21 @@
   {
     "name": "the account refreshed itself on returning to the tab",
     "ok": false,
-    "detail": "₦0"
+    "detail": "₦200,000"
   },
   {
     "name": "owes 200,000 + 87,100 - 40,000 = 247,100",
     "ok": false,
-    "detail": "₦0"
+    "detail": "₦200,000"
   },
   {
     "name": "NBL crates now 13 + 3.5 out from this sale",
     "ok": false,
-    "detail": ""
+    "detail": "13"
   },
   {
     "name": "history now carries the whole story",
-    "ok": false,
-    "detail": "0 events"
+    "ok": true,
+    "detail": "12 events"
   }
 ]
