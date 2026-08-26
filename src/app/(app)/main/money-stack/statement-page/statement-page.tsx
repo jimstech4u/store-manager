@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useLocation, useNav, usePageState } from '@academix-admin/navigation-stack';
+import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
@@ -11,9 +11,11 @@ import { InfoPanel } from '@/components/ui/Explain';
 import { usePermission } from '@/hooks/usePermission';
 import { ChevronRightIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
+import { useLiveRefresh } from '@/hooks/useLiveRefresh';
+import type { HistoryEvent } from '@/lib/stacks/customer-account';
 import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
-import { formatDate, formatMoney } from '@/lib/format';
+import { formatDate, formatDateTime, formatMoney } from '@/lib/format';
 import styles from '../money-page/money-page.module.css';
 
 /**
@@ -47,6 +49,8 @@ export default function StatementPage() {
   const { can } = usePermission();
 
   const [rows, setRows] = useState<StatementRow[] | null>(null);
+  const [history, setHistory] = useState<HistoryEvent[]>([]);
+  const [balance, setBalance] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [paying, setPaying] = useState(false);
@@ -55,26 +59,46 @@ export default function StatementPage() {
   const [busy, setBusy] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
 
+  /*
+   * Receipts AND everything else that moved the balance.
+   *
+   * `customer_statement` returns sales only, so this page — headed "What makes up this balance" —
+   * showed "Nothing has been sold to this customer" for anyone whose balance came from an opening
+   * figure entered when the shop started using the app, or whose sales had all been paid off and
+   * whose remaining balance was a deposit. A customer plainly owing money, with nothing on screen
+   * to say why.
+   *
+   * `customer_history` already unions sales, payments, refunds, deposits taken and given back, and
+   * breakages kept — the same timeline the account page shows. Both are read here: the receipts
+   * are what a customer asks to see, and the rest is what explains the number.
+   */
   const load = useCallback(async () => {
     if (!customerId) return;
     setError(null);
-    const { data, error: e } = await getSupabase().rpc('customer_statement', {
-      p_store_customer_id: customerId,
-    });
-    if (e) setError(e.message);
-    else setRows((data ?? []) as StatementRow[]);
+    const supabase = getSupabase();
+    const [sales, events, account] = await Promise.all([
+      supabase.rpc('customer_statement', { p_store_customer_id: customerId }),
+      supabase.rpc('customer_history', { p_store_customer_id: customerId, p_limit: 100 }),
+      supabase.rpc('customer_account', { p_store_customer_id: customerId }),
+    ]);
+    if (sales.error) {
+      setError(sales.error.message);
+      return;
+    }
+    setRows((sales.data ?? []) as StatementRow[]);
+    // A history failure must not blank the receipts: the receipts are the part a customer is
+    // standing there asking for.
+    setHistory(events.error ? [] : ((events.data ?? []) as HistoryEvent[]));
+    setBalance(
+      account.error ? null : Number((account.data as { balance: string } | null)?.balance ?? 0),
+    );
   }, [customerId]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  // Re-read on returning, so a payment recorded on the receipt behind this is reflected here
-  // rather than leaving a figure that a moment ago stopped being true.
-  const { isActive } = usePageState(nav);
-  useEffect(() => {
-    if (isActive) void load();
-  }, [isActive, load]);
+  useLiveRefresh(nav, load);
 
   if (!store || !customerId) return null;
 
@@ -121,14 +145,34 @@ export default function StatementPage() {
         ) : undefined
       }
     >
+      {/*
+        The customer's REAL balance, not the receipts' share of it.
+        
+        This card used to total the unpaid amounts on the receipts below. For anyone whose balance
+        came from an opening figure or a charge that showed ₦0 while the card that led here said
+        ₦400,000 — two screens, one customer, two different answers, and the one on this page was
+        the wrong one. The receipts figure is still shown, as the component it is.
+      */}
       <div className={styles.balanceCard}>
-        <span className={styles.summaryLabel}>Still owed across these receipts</span>
-        <span className={styles.summaryValue}>{formatMoney(owed)}</span>
+        <span className={styles.summaryLabel}>
+          {balance !== null && balance < 0 ? 'You owe them' : 'They owe you'}
+        </span>
+        <span className={styles.summaryValue}>
+          {formatMoney(Math.abs(balance ?? owed))}
+        </span>
+        {owed !== Math.abs(balance ?? owed) && (
+          <span className={styles.summaryNote}>
+            {owed > 0
+              ? `${formatMoney(owed)} of it is unpaid on the receipts below`
+              : 'None of it is against a receipt — see below for what it is'}
+          </span>
+        )}
       </div>
 
       {rows.length === 0 ? (
-        <InfoPanel tone="info" title="No receipts yet">
-          Nothing has been sold to this customer.
+        <InfoPanel tone="info" title="No receipts">
+          Nothing has been sold to this customer through the app. If they owe money it came from
+          an opening balance or a charge — those are listed below.
         </InfoPanel>
       ) : (
         <ul className={styles.list}>
@@ -229,6 +273,41 @@ export default function StatementPage() {
           ))}
         </div>
       </BottomSheet>
+
+      {/*
+        Everything else that moved this balance.
+
+        Receipts alone cannot explain a figure that includes an opening balance, a payment on
+        account, a deposit taken or a breakage kept — and this page's whole job is to explain the
+        figure. Sales are shown above as receipts a customer can open; these are the rest.
+      */}
+      {history.filter((h) => h.kind !== 'sale').length > 0 && (
+        <>
+          <h2 className={styles.section}>Everything else on this account</h2>
+          <ul className={styles.list}>
+            {history
+              .filter((h) => h.kind !== 'sale')
+              .map((h, i) => (
+                <li key={`${h.ref_table}-${h.ref_id}-${i}`} className={styles.row}>
+                  <span className={styles.rowMain}>
+                    <span className={styles.rowName}>{h.label}</span>
+                    <span className={styles.rowMeta}>
+                      {formatDateTime(h.occurred_at)}
+                      {h.detail ? ` · ${h.detail}` : ''}
+                      {` · ${h.actor}`}
+                    </span>
+                  </span>
+                  <span className={styles.rowMoney}>
+                    {h.amount !== null && Number(h.amount) !== 0
+                      ? formatMoney(Math.abs(Number(h.amount)))
+                      : ''}
+                  </span>
+                </li>
+              ))}
+          </ul>
+        </>
+      )}
+
     </PageScaffold>
   );
 }

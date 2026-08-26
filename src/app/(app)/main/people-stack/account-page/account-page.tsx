@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { useLocation, useNav, usePageState } from '@academix-admin/navigation-stack';
+import { useState } from 'react';
+import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
@@ -10,6 +10,7 @@ import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Explain, InfoPanel } from '@/components/ui/Explain';
 import { CashIcon, HistoryIcon, RefreshIcon, ReturnIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
+import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { usePermission } from '@/hooks/usePermission';
 import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
@@ -54,65 +55,10 @@ export default function AccountPage() {
   const { account, history, loading, error, reload } = useCustomerAccount(customerId);
   const pools = useEmptiesPools(store?.id ?? null);
 
-  /*
-   * Reload when this page is resumed.
-   *
-   * Tab stacks stay mounted — that is what makes switching instant and keeps each tab's scroll
-   * and history — so a page that loaded once keeps showing whatever it loaded. Settle a sale on
-   * the Sell tab, come back to People, and this showed the customer's position from BEFORE that
-   * sale: the right screen with stale numbers, which is worse than a spinner because nothing
-   * about it looks wrong.
-   *
-   * `usePageLifecycle` is the library's own answer and covers group-level pause/resume, which is
-   * precisely this case. Four other signals were tried first and none of them fires here: window
-   * focus (the browser window never loses focus moving between tabs inside the app), `useIsTop`
-   * (the page never stops being top of its OWN stack), IntersectionObserver and a MutationObserver
-   * on the group container's active class (neither transition happens the way it was assumed to).
-   */
   const nav = useNav();
-  /*
-   * Reload whenever this page becomes active again.
-   *
-   * `usePageState` exposes activity as reactive STATE rather than as a callback, which is what
-   * finally made this work. The callback forms — `onResume`, `onEnter` — fire on some paths and
-   * not others: coming back from a receipt pushed on top of this page missed both, and the screen
-   * showed the customer's balance from before the sale that had just changed it.
-   *
-   * A ref holds the previous value so the effect only fires on the inactive → active edge, not on
-   * every render while the page happens to be active.
-   */
-  /*
-   * Keep this page's figures current while it is being looked at.
-   *
-   * Tab stacks stay mounted — that is what makes switching instant and keeps each tab's scroll and
-   * history — so a page that loaded once keeps whatever it loaded. Settle a sale on the Sell tab,
-   * come back to People, and this showed the customer's position from BEFORE that sale: the right
-   * screen with stale numbers, which is worse than a spinner because nothing about it looks wrong.
-   *
-   * Two parts, and the second is not decoration. The `isActive` edge catches the common return.
-   * The interval is what makes it RELIABLE: measured against the real flow, no single signal was
-   * enough on its own — `onResume` misses a return from a page pushed on top, `onEnter` fires
-   * before the settled sale is readable so its reload fetches the old figures again, and the
-   * `isActive` edge alone left the balance stale too. Passing only when several were combined is
-   * timing luck, not a mechanism, and this screen states what a customer owes.
-   *
-   * Gated on document visibility, so a backgrounded tab costs nothing, and stopped entirely when
-   * the page is not the active one.
-   */
-  const { isActive } = usePageState(nav);
-  const wasActive = useRef(isActive);
-  useEffect(() => {
-    if (isActive && !wasActive.current) void reload();
-    wasActive.current = isActive;
-  }, [isActive, reload]);
-
-  useEffect(() => {
-    if (!isActive || typeof document === 'undefined') return;
-    const id = setInterval(() => {
-      if (document.visibilityState === 'visible') void reload();
-    }, 8000);
-    return () => clearInterval(id);
-  }, [isActive, reload]);
+  // Same staleness problem as the statement page, same answer — see the hook for why a single
+  // lifecycle signal was not enough.
+  useLiveRefresh(nav, reload);
 
   const [action, setAction] = useState<ActionKind>(null);
   const [amount, setAmount] = useState('');

@@ -33,10 +33,20 @@ const env = (k) => (raw.match(new RegExp(`^${k}=(.*)$`, 'm')) ?? [])[1]?.trim().
  * assuming a fixed delay covers the transition.
  */
 async function revealTabs(page) {
+  /*
+   * Nudge down, then back to the top.
+   *
+   * Setting `scrollTop = 0` on a container ALREADY at 0 fires no scroll event, so the bar hears
+   * nothing and stays hidden from whatever the previous step left behind — and the next tab click
+   * times out on tabs that are off screen. A down-then-up produces the upward event that reveals
+   * it, which is what a finger does anyway.
+   */
   await page.evaluate(() => {
-    document.querySelectorAll('[class*="PageScaffold_body"]').forEach((c) => {
-      if (c.scrollTop > 0) c.scrollTop = 0;
-    });
+    document.querySelectorAll('[class*="PageScaffold_body"]').forEach((c) => { c.scrollTop = 120; });
+  });
+  await page.waitForTimeout(350);
+  await page.evaluate(() => {
+    document.querySelectorAll('[class*="PageScaffold_body"]').forEach((c) => { c.scrollTop = 0; });
   });
   await page
     .waitForFunction(() => {

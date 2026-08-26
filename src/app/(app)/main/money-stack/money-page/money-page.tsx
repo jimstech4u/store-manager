@@ -11,6 +11,7 @@ import { InfoPanel } from '@/components/ui/Explain';
 import { ChartIcon, ChevronRightIcon, ReceiptIcon } from '@/components/ui/Icon';
 import { useAuth } from '@/providers/AuthProvider';
 import { useStackBack } from '@/hooks/useStackBack';
+import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { useNav } from '@academix-admin/navigation-stack';
 import { usePaginatedList, useInfiniteScroll } from '@/hooks/usePaginatedList';
 import { getSupabase } from '@/lib/supabase/client';
@@ -65,6 +66,18 @@ export default function MoneyPage() {
     deps: [store?.id],
     enabled: Boolean(store),
   });
+
+  /*
+   * Keep the balances on these cards current.
+   *
+   * They were loaded once and then left, so a card could advertise a figure that a sale or a
+   * payment made untrue minutes earlier — and tapping it opened a statement showing the real
+   * number, which is the worst version: two screens, one customer, two answers, with no way to
+   * tell which to believe.
+   */
+  // Paused while the search sheet is up: re-reading the list under it resets what is being
+  // typed, and the results snap back to everything.
+  useLiveRefresh(nav, list.reload, { enabled: !isSearchOpen });
 
   const sentinelRef = useInfiniteScroll(list.loadMore, {
     enabled: list.hasMore && !list.loading,

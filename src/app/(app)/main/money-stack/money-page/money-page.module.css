@@ -142,3 +142,27 @@
 .rowLink:hover {
   background: var(--surface-sunken);
 }
+
+
+/* Heading for the part of a statement that is not receipts. */
+.section {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  margin: var(--space-5) 0 var(--space-2);
+}
+
+.rowMoney {
+  flex: none;
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+
+/* Says how a headline figure is made up, when it is not simply the sum of what is listed below. */
+.summaryNote {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}

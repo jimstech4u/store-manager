@@ -81,10 +81,20 @@ async function signIn(page) {
  * assuming a fixed delay covers the transition.
  */
 async function revealTabs(page) {
+  /*
+   * Nudge down, then back to the top.
+   *
+   * Setting `scrollTop = 0` on a container ALREADY at 0 fires no scroll event, so the bar hears
+   * nothing and stays hidden from whatever the previous step left behind — and the next tab click
+   * times out on tabs that are off screen. A down-then-up produces the upward event that reveals
+   * it, which is what a finger does anyway.
+   */
   await page.evaluate(() => {
-    document.querySelectorAll('[class*="PageScaffold_body"]').forEach((c) => {
-      if (c.scrollTop > 0) c.scrollTop = 0;
-    });
+    document.querySelectorAll('[class*="PageScaffold_body"]').forEach((c) => { c.scrollTop = 120; });
+  });
+  await page.waitForTimeout(350);
+  await page.evaluate(() => {
+    document.querySelectorAll('[class*="PageScaffold_body"]').forEach((c) => { c.scrollTop = 0; });
   });
   await page
     .waitForFunction(() => {
@@ -296,14 +306,22 @@ const run = async () => {
   }
   await shot(page, 'people-list');
   // Search for them, so the row is on screen regardless of how many customers exist.
-  const found = await pageSearch(page, 'Search customers', CUSTOMER);
+  /*
+   * Search by PHONE, not by name.
+   *
+   * `list_customers` matches names with a trigram similarity, so "Irekanmi 992761" also matches
+   * every other "Irekanmi …" — and with the RPC's limit of 50, ordered by name, a newly created
+   * one falls outside the page entirely. The run then reported "0 matches" for a customer that
+   * had been created correctly. The phone is exact, unique, and what a seller has to hand.
+   */
+  const found = await pageSearch(page, 'Search customers', PHONE);
   check('customer exists in the list', found > 0, `${found} matches`);
 
   // ── 2 · Open the account ────────────────────────────────────────────────────────
   step('2. Open their account');
   // The row BUTTON, not the name span inside it, and scrolled into view first: the People list
   // is its own scroll container and the row can sit below the fold.
-  await pageSearch(page, 'Search customers', CUSTOMER, { pick: CUSTOMER });
+  await pageSearch(page, 'Search customers', PHONE, { pick: CUSTOMER });
 
   /*
    * Wait for the account to actually arrive rather than for a fixed number of milliseconds.
@@ -546,6 +564,17 @@ const run = async () => {
 
   // The floating pill, not `onScreen`: `:visible` excludes position:fixed elements, so the
   // selector that used to find the pinned footer button never matches it.
+  /*
+   * Settle the page before reaching for the pill.
+   *
+   * It animates its `bottom` as the tab bar hides and returns, and Playwright waits for an element
+   * to be STABLE before clicking — mid-animation it never is, so the click timed out on a control
+   * that was plainly on screen. Scrolling to rest first is also what a person does before tapping.
+   */
+  await page.evaluate(() => {
+    document.querySelectorAll('[class*="PageScaffold_body"]').forEach((c) => { c.scrollTop = 0; });
+  });
+  await page.waitForTimeout(1200);
   await page.locator('button:has-text("Take payment")').first().click();
   await page.waitForTimeout(1600);
   {

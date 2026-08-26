@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 import styles from '../../money-stack/money-page/money-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { useStackBack } from '@/hooks/useStackBack';
+import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { useNav } from '@academix-admin/navigation-stack';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
@@ -70,6 +71,18 @@ export default function PeoplePage() {
     deps: [store?.id],
     enabled: Boolean(store),
   });
+
+  /*
+   * Keep the balances on these cards current.
+   *
+   * They were loaded once and then left, so a card could advertise a figure that a sale or a
+   * payment made untrue minutes earlier — and tapping it opened a statement showing the real
+   * number, which is the worst version: two screens, one customer, two answers, with no way to
+   * tell which to believe.
+   */
+  // Paused while the search sheet is up: re-reading the list under it resets what is being
+  // typed, and the results snap back to everything.
+  useLiveRefresh(nav, list.reload, { enabled: !isSearchOpen });
 
   const sentinelRef = useInfiniteScroll(list.loadMore, {
     enabled: list.hasMore && !list.loading,
