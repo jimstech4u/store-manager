@@ -81,7 +81,31 @@ const LAST_STORE_KEY = 'sm.lastStore';
  * the list is declared once, next to the thing that owns the lifecycle, so a new scope has an
  * obvious place to be registered rather than being cleaned up somewhere ad hoc.
  */
-const STORE_SCOPED = ['sell_flow', 'stock_flow', 'customer_flow', 'money_flow', 'catalog_flow'];
+const STORE_SCOPED = [
+  'sell_flow',
+  'stock_flow',
+  'customer_flow',
+  'money_flow',
+  'catalog_flow',
+  /*
+   * Everything below belongs to ONE shop and was missing from this list.
+   *
+   * `settings_flow` is the one that mattered: it caches the bank accounts a seller reads out to a
+   * customer, and the staff list. Switching shop left the previous shop's account NUMBERS on
+   * screen under the new shop's name — the one piece of stale data here that ends with money in
+   * the wrong account.
+   *
+   * `list_flow` is `usePaginatedList`'s default scope, so every list that did not name its own
+   * lands here. `search_flow` and `receipt_flow` are cheaper to get wrong but no more correct.
+   *
+   * `storefront_flow` is deliberately NOT in this list: it is the public marketplace, which does
+   * not belong to whichever shop the member happens to be signed into.
+   */
+  'settings_flow',
+  'search_flow',
+  'receipt_flow',
+  'list_flow',
+];
 
 async function clearStoreScopes() {
   await Promise.all(STORE_SCOPED.map((scope) => StateStack.core.clearScope(scope)));
