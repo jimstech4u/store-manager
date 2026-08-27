@@ -88,6 +88,19 @@ check('the sheet is open', opened !== null, JSON.stringify(opened));
 check('its top is on screen', opened !== null && opened.top >= 0, `top ${opened?.top}`);
 
 /*
+ * IT MUST RESPECT ITS OWN maxHeight.
+ *
+ * This picker asks for 92dvh, so it should stop short of the screen and leave the page visible
+ * behind it. A modal-sheet change once assigned every sheet a maximum equal to the whole viewport
+ * — overwriting what search-viewer and selection-viewer set through `style` rather than the prop —
+ * and both quietly began filling the screen. Nothing in the suite noticed, because nothing was
+ * asserting the one number that changed.
+ */
+check('it respects its declared maxHeight rather than filling the screen',
+  opened !== null && opened.height <= opened.vh * 0.94,
+  `${opened?.height}px of ${opened?.vh}px viewport`);
+
+/*
  * Sample EVERY FRAME, not every keystroke.
  *
  * The first version of this check read the sheet's top edge after each character, 320ms apart, and
