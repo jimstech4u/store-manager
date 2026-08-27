@@ -1,19 +1,17 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { useDemandState } from '@academix-admin/state-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
-import { Field } from '@/components/ui/Field';
-import { BottomSheet } from '@/components/ui/BottomSheet';
 import { InfoPanel } from '@/components/ui/Explain';
 import { usePermission } from '@/hooks/usePermission';
 import { CashIcon, ChevronRightIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
-import { accountsChanged, type HistoryEvent } from '@/lib/stacks/customer-account';
+import { type HistoryEvent } from '@/lib/stacks/customer-account';
 import { useCustomerFromList } from '@/lib/stacks/customer-directory';
 import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
@@ -96,12 +94,6 @@ export default function StatementPage() {
    */
   const fromList = useCustomerFromList(customerId);
   const name = fromList?.display_name ?? snapshot.name ?? 'Customer';
-
-  const [paying, setPaying] = useState(false);
-  const [amount, setAmount] = useState('');
-  const [method, setMethod] = useState('cash');
-  const [busy, setBusy] = useState(false);
-  const [payError, setPayError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     if (!customerId) return;
@@ -198,17 +190,23 @@ export default function StatementPage() {
        * made of. It still belongs on this screen rather than on the money list, because it settles
        * the figure shown here; it just does not need to cover it.
        */
+      /*
+       * Gated on the REAL balance, not on the receipts' share of it.
+       *
+       * `owed` totals the unpaid amounts on the receipts below, and a customer can owe a great deal
+       * with no receipts at all — an opening balance, a charge, a deposit. One of them owed
+       * ₦600,000 and this page offered no way to record a payment against it, because the receipts
+       * summed to zero. The balance card two lines down already draws this distinction; the action
+       * had not been told.
+       */
       actions={
-        can('payments.record') && owed > 0
+        can('payments.record') && Math.abs(balance ?? owed) > 0
           ? [
               {
                 key: 'pay',
                 icon: <CashIcon />,
-                onClick: () => {
-                  setPayError(null);
-                  setAmount('');
-                  setPaying(true);
-                },
+                onClick: () =>
+                  void nav.push('account_action_page', { id: customerId, kind: 'payment' }),
                 ariaLabel: 'Record a payment',
               },
             ]
@@ -273,78 +271,6 @@ export default function StatementPage() {
           ))}
         </ul>
       )}
-      <BottomSheet
-        open={paying}
-        onClose={() => setPaying(false)}
-        title="Record a payment"
-        footer={
-          <Button
-            size="large"
-            fullWidth
-            busy={busy}
-            busyLabel="Recording"
-            disabled={!amount || Number(amount) <= 0}
-            onClick={async () => {
-              setBusy(true);
-              setPayError(null);
-              try {
-                const { error: e } = await getSupabase().rpc('record_payment', {
-                  p_store_id: store.id,
-                  p_customer_id: customerId,
-                  p_amount: Number(amount),
-                  p_method: method,
-                  p_reference: null,
-                  p_occurred_at: new Date().toISOString(),
-                  p_client_uuid: crypto.randomUUID(),
-                  p_bank_account_id: null,
-                });
-                if (e) throw e;
-                // Same announcement every other write makes, so the lists and the account agree.
-                accountsChanged();
-                setPaying(false);
-                await load();
-              } catch (e) {
-                setPayError(e instanceof Error ? e.message : 'Could not record this payment.');
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            Record {amount ? formatMoney(amount) : 'payment'}
-          </Button>
-        }
-      >
-        {payError && (
-          <InfoPanel tone="danger" title="Not recorded">
-            {payError}
-          </InfoPanel>
-        )}
-
-        <Field
-          label="How much are they paying?"
-          numeric
-          prefix="₦"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          placeholder="0"
-          hint={`${formatMoney(owed)} is still owed across these receipts.`}
-          autoFocus
-        />
-
-        <div className={styles.methods} role="group" aria-label="How the money came in">
-          {(['cash', 'transfer', 'pos'] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              className={`${styles.method} ${method === m ? styles.methodActive : ''}`}
-              aria-pressed={method === m}
-              onClick={() => setMethod(m)}
-            >
-              {m === 'pos' ? 'Card / POS' : m === 'cash' ? 'Cash' : 'Transfer'}
-            </button>
-          ))}
-        </div>
-      </BottomSheet>
 
       {/*
         Everything else that moved this balance.

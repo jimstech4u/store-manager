@@ -8,6 +8,14 @@ import ReportsPage from './reports-page/reports-page';
 // The same receipt screen the sell stack pushes. Registered here too so a past receipt opens
 // inside Money's own stack, keeping its back button pointing at the sales list.
 import ReceiptPage from '../sell-stack/receipt-page/receipt-page';
+/*
+ * The same "record a payment" form the People tab pushes.
+ *
+ * Recording a payment against a statement was a second implementation of this — its own sheet, its
+ * own amount field, its own method buttons, its own call to `record_payment`. Two forms for one
+ * job drift: this one never grew the reference field or the bank-account choice the other has.
+ */
+import AccountActionPage from '../people-stack/account-action-page/account-action-page';
 
 const navLink = {
   money_page: MoneyPage,
@@ -15,6 +23,7 @@ const navLink = {
   statement_page: StatementPage,
   receipt_page: ReceiptPage,
   reports_page: ReportsPage,
+  account_action_page: AccountActionPage,
 };
 
 export const MoneyStack = () => (
