@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { Button } from '@/components/ui/Button';
@@ -10,7 +10,7 @@ import { WarningIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
-import { fetchProduct, type Product } from '@/lib/stacks/catalog-stack';
+import { useProduct } from '@/lib/stacks/catalog-stack';
 import { describeVariance, formatMoney, formatQty, pluralUnit } from '@/lib/format';
 import styles from '../count-page/count-page.module.css';
 
@@ -57,23 +57,29 @@ export default function CountEntryPage() {
   const { store } = useAuth();
 
   const productId = (location?.params?.id as string | undefined) ?? null;
-  const [active, setActive] = useState<Product | null>(null);
+  /*
+   * The product being counted, from the same hook the product page uses.
+   *
+   * Counting is reached from a list of products, so by the time someone opens a count the product
+   * has usually already been read — sharing the hook means the name, unit and average cost are on
+   * screen at once instead of after another round trip.
+   *
+   * The count itself below stays local. It is the result of an action taken during THIS visit, not
+   * something fetched about the product, and caching it would be caching a keystroke.
+   */
+  const { product: active, error: loadError, reload: load } = useProduct(productId);
+
   const [counted, setCounted] = useState('');
   const [state, setState] = useState<CountState | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  // A product that would not load and a count that would not submit are different failures with
+  // different lifetimes — the first belongs to the cached product, the second to this visit.
+  const error = submitError ?? loadError;
   const [reason, setReason] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [done, setDone] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!productId) return;
-    try {
-      setActive(await fetchProduct(productId));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load that product.');
-    }
-  }, [productId]);
 
   useEffect(() => {
     void load();
@@ -89,7 +95,7 @@ export default function CountEntryPage() {
   const submitCount = async () => {
     if (!active || !store) return;
     setBusy(true);
-    setError(null);
+    setSubmitError(null);
     try {
       const supabase = getSupabase();
       const { data: periodId, error: pErr } = await supabase.rpc('ensure_open_period', {
@@ -131,7 +137,7 @@ export default function CountEntryPage() {
         withinTolerance: Boolean(within),
       });
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Could not save the count');
+      setSubmitError(e instanceof Error ? e.message : 'Could not save the count');
     } finally {
       setBusy(false);
     }
@@ -141,7 +147,7 @@ export default function CountEntryPage() {
   const resolveAndClose = async () => {
     if (!state) return;
     setBusy(true);
-    setError(null);
+    setSubmitError(null);
     try {
       const supabase = getSupabase();
 
@@ -163,7 +169,7 @@ export default function CountEntryPage() {
 
       setDone(true);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Could not close this count');
+      setSubmitError(e instanceof Error ? e.message : 'Could not close this count');
     } finally {
       setBusy(false);
     }

@@ -15,6 +15,7 @@ import { ChevronRightIcon, PlusIcon } from '@/components/ui/Icon';
 import { CustomerPicker } from '@/components/customers/CustomerPicker';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePaginatedList, useInfiniteScroll } from '@/hooks/usePaginatedList';
+import { useProvideCustomers } from '@/lib/stacks/customer-directory';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatMoney } from '@/lib/format';
 
@@ -68,9 +69,19 @@ export default function PeoplePage() {
   const list = usePaginatedList<CustomerRow>({
     fetchPage,
     getId: (r) => r.id,
+    key: 'customers',
+    scope: 'customer_flow',
     deps: [store?.id],
     enabled: Boolean(store),
   });
+
+  /*
+   * Publish these rows so a pushed page can ask for one by id.
+   *
+   * The statement page used to be handed `{ id, name }`; it now gets `{ id }` and looks the rest
+   * up here. See `customer-directory` for why a record has no business being in a URL.
+   */
+  useProvideCustomers(list.items);
 
   /*
    * Keep the balances on these cards current.

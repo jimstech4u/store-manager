@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
@@ -10,6 +10,8 @@ import { Explain, InfoPanel } from '@/components/ui/Explain';
 import { PlusIcon, TrashIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
 import { usePermission } from '@/hooks/usePermission';
+import { useDemandState } from '@academix-admin/state-stack';
+import { settingsChanged, SETTINGS_SCOPE } from '@/lib/stacks/bank-accounts';
 import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
 import styles from './staff-page.module.css';
@@ -65,11 +67,42 @@ export default function StaffPage() {
   const { store } = useAuth();
   const { can } = usePermission();
 
-  const [members, setMembers] = useState<Member[]>([]);
-  const [invites, setInvites] = useState<Invitation[]>([]);
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  /*
+   * The team, its outstanding invitations and the roles that may be handed out — one entry.
+   *
+   * Read together, shown together, and pushed off constantly: every member on this page opens
+   * their own permissions screen. Three `useState`s meant coming back from that screen re-ran all
+   * three calls behind a full-page "Loading your team", over a team that had not changed.
+   */
+  const [snapshot, demand] = useDemandState<{
+    members: Member[];
+    invites: Invitation[];
+    roles: Role[];
+    error: string | null;
+    settled: boolean;
+  }>(
+    { members: [], invites: [], roles: [], error: null, settled: false },
+    {
+      key: `staff:${store?.id ?? 'none'}`,
+      scope: SETTINGS_SCOPE,
+      persist: true,
+      deps: [store?.id ?? ''],
+      revalidateOnMount: false,
+    },
+  );
+
+  /*
+   * Readable from the loader without becoming a dependency of it, so a refresh that fails can
+   * keep what was already there instead of emptying the team.
+   */
+  const snapshotRef = useRef(snapshot);
+  snapshotRef.current = snapshot;
+
+  const members = snapshot.members;
+  const invites = snapshot.invites;
+  const roles = snapshot.roles;
+  const error = snapshot.error;
+  const loading = !snapshot.settled;
 
   const [inviting, setInviting] = useState(false);
   const [email, setEmail] = useState('');
@@ -82,27 +115,43 @@ export default function StaffPage() {
 
   const load = useCallback(async () => {
     if (!store) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const supabase = getSupabase();
-      const [m, i, r] = await Promise.all([
-        supabase.rpc('list_staff', { p_store_id: store.id, p_include_removed: true }),
-        supabase.rpc('list_invitations', { p_store_id: store.id }),
-        supabase.rpc('assignable_roles', { p_store_id: store.id }),
-      ]);
-      if (m.error) throw m.error;
-      setMembers((m.data ?? []) as Member[]);
-      setInvites((i.data ?? []) as Invitation[]);
-      const assignable = (r.data ?? []) as Role[];
-      setRoles(assignable);
-      if (assignable.length > 0) setRoleCode(assignable[0].code);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load your team.');
-    } finally {
-      setLoading(false);
-    }
-  }, [store]);
+    // A real read, not a re-serve: `load` is called after inviting, removing and role changes.
+    settingsChanged();
+    await demand(async ({ set }) => {
+      try {
+        const supabase = getSupabase();
+        const [m, i, r] = await Promise.all([
+          supabase.rpc('list_staff', { p_store_id: store.id, p_include_removed: true }),
+          supabase.rpc('list_invitations', { p_store_id: store.id }),
+          supabase.rpc('assignable_roles', { p_store_id: store.id }),
+        ]);
+        if (m.error) throw m.error;
+        const assignable = (r.data ?? []) as Role[];
+        set(
+          {
+            members: (m.data ?? []) as Member[],
+            invites: (i.data ?? []) as Invitation[],
+            roles: assignable,
+            error: null,
+            settled: true,
+          },
+          { override: true },
+        );
+        if (assignable.length > 0) setRoleCode(assignable[0].code);
+      } catch (e) {
+        // Keep the team and say why it did not refresh. Emptying it would read as "you have no
+        // staff" — and this page is where somebody goes to check exactly that.
+        set(
+          {
+            ...snapshotRef.current,
+            error: e instanceof Error ? e.message : 'Could not load your team.',
+            settled: true,
+          },
+          { override: true },
+        );
+      }
+    });
+  }, [store, demand]);
 
   useEffect(() => {
     void load();

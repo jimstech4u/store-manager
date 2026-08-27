@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import styles from './Receipt.module.css';
 import { Button } from '@/components/ui/Button';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
+import { useDemandState } from '@academix-admin/state-stack';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatDateTime, formatMoney, formatQty, pluralUnit } from '@/lib/format';
 import { renderReceiptCanvas, renderReceiptImage, shareImage, shareLink } from '@/lib/share';
@@ -49,23 +50,50 @@ interface SaleDetail {
  * gets its real width rather than the nearest preset.
  */
 export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }) {
-  const [detail, setDetail] = useState<SaleDetail | null>(null);
-  const [shopName, setShopName] = useState('');
-  const [settings, setSettings] = useState<{
-    width: number;
-    header: string | null;
-    footer: string | null;
-  } | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  /*
+   * A settled receipt in state-stack, keyed by sale.
+   *
+   * A receipt is the most re-opened screen in the app and the most fixed: once a sale is settled
+   * its lines, its total and the shop's own header can no longer change. Refetching all three from
+   * scratch every time somebody taps back into it — from the statement, from the day's takings,
+   * from a customer's history — put a blank rectangle in front of a customer who was handed a
+   * phone to look at their receipt.
+   *
+   * Nothing invalidates this deliberately, and nothing needs to: the key is the sale id, and a
+   * sale that gets voided is a different screen.
+   */
+  const [snapshot, demand] = useDemandState<{
+    detail: SaleDetail | null;
+    shopName: string;
+    settings: { width: number; header: string | null; footer: string | null } | null;
+    error: string | null;
+  }>(
+    { detail: null, shopName: '', settings: null, error: null },
+    {
+      key: `receipt:${saleId}`,
+      scope: 'receipt_flow',
+      persist: true,
+      deps: [saleId, storeId],
+      revalidateOnMount: false,
+    },
+  );
+
+  // Readable from the loader without becoming a dependency of it.
+  const snapshotRef = useRef(snapshot);
+  snapshotRef.current = snapshot;
+
+  const detail = snapshot.detail;
+  const shopName = snapshot.shopName;
+  const settings = snapshot.settings;
+  const error = snapshot.error;
+
   const [sharing, setSharing] = useState(false);
   const [shareNote, setShareNote] = useState<string | null>(null);
   const [makingPdf, setMakingPdf] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
-    const supabase = getSupabase();
-
-    void (async () => {
+    demand(async ({ set }) => {
+      const supabase = getSupabase();
       try {
         const [{ data: d, error: dErr }, { data: s }, { data: store }] = await Promise.all([
           supabase.rpc('sale_detail', { p_sale_id: saleId }),
@@ -73,29 +101,42 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
           supabase.from('stores').select('name').eq('id', storeId).maybeSingle(),
         ]);
         if (dErr) throw dErr;
-        if (cancelled) return;
-
-        setDetail(d as unknown as SaleDetail);
-        setShopName((store as { name: string } | null)?.name ?? '');
 
         const row = (Array.isArray(s) ? s[0] : s) as
           | { printer_width_mm: string; receipt_header: string | null; receipt_footer: string | null }
           | null;
-        setSettings({
-          width: Number(row?.printer_width_mm ?? 80),
-          header: row?.receipt_header ?? null,
-          footer: row?.receipt_footer ?? null,
-        });
-      } catch (e: unknown) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load the receipt');
-      }
-    })();
 
-  
-  return () => {
-      cancelled = true;
-    };
-  }, [saleId, storeId]);
+        set(
+          {
+            detail: d as unknown as SaleDetail,
+            shopName: (store as { name: string } | null)?.name ?? '',
+            settings: {
+              width: Number(row?.printer_width_mm ?? 80),
+              header: row?.receipt_header ?? null,
+              footer: row?.receipt_footer ?? null,
+            },
+            error: null,
+          },
+          { override: true },
+        );
+      } catch (e: unknown) {
+        // A receipt that has already been read once stays readable. It cannot have changed —
+        // it is a settled sale — so a failed re-read is a network problem, not a reason to take
+        // the receipt off the screen of whoever is looking at it.
+        set(
+          {
+            ...snapshotRef.current,
+            error: snapshotRef.current.detail
+              ? null
+              : e instanceof Error
+                ? e.message
+                : 'Could not load the receipt',
+          },
+          { override: true },
+        );
+      }
+    });
+  }, [saleId, storeId, demand]);
 
   if (error) {
     return <FullPageMessage title="Could not load the receipt" tone="error">{error}</FullPageMessage>;

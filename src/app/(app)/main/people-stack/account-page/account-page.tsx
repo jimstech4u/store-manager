@@ -192,7 +192,6 @@ export default function AccountPage() {
               void nav.push('account_action_page', {
                 id: customerId,
                 kind: 'payment',
-                owed,
               })
             }>
             <CashIcon /> Record a payment
@@ -201,7 +200,6 @@ export default function AccountPage() {
               void nav.push('account_action_page', {
                 id: customerId,
                 kind: 'return',
-                owed,
               })
             }>
             <ReturnIcon /> They brought empties back
@@ -210,7 +208,6 @@ export default function AccountPage() {
               void nav.push('account_action_page', {
                 id: customerId,
                 kind: 'deposit',
-                owed,
               })
             }>
             Take a deposit instead
@@ -220,7 +217,6 @@ export default function AccountPage() {
               void nav.push('account_action_page', {
                 id: customerId,
                 kind: 'opening',
-                owed,
               })
             }>
               Enter what they already owed
@@ -232,7 +228,6 @@ export default function AccountPage() {
               void nav.push('account_action_page', {
                 id: customerId,
                 kind: 'refund',
-                owed,
               })
             }>
                 Give a deposit back
@@ -241,7 +236,6 @@ export default function AccountPage() {
               void nav.push('account_action_page', {
                 id: customerId,
                 kind: 'breakage',
-                owed,
               })
             }>
                 Keep some for breakage

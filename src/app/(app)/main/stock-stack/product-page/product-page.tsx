@@ -1,20 +1,19 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { InfoPanel } from '@/components/ui/Explain';
 import { Button } from '@/components/ui/Button';
 import { PhotoUpload } from '@/components/ui/PhotoUpload';
-import { ProductForm } from '@/components/catalog/ProductForm';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { EditIcon, TrashIcon } from '@/components/ui/Icon';
 import { getSupabase } from '@/lib/supabase/client';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
 import { useStackBack } from '@/hooks/useStackBack';
-import { fetchProduct, type Product } from '@/lib/stacks/catalog-stack';
+import { useProduct } from '@/lib/stacks/catalog-stack';
 import { formatMoney, formatQty, pluralUnit } from '@/lib/format';
 import styles from './product-page.module.css';
 
@@ -34,30 +33,19 @@ export default function ProductPage() {
 
   const productId = (location?.params?.id as string | undefined) ?? null;
 
-  const [product, setProduct] = useState<Product | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(false);
+  /*
+   * The product from the shared hook.
+   *
+   * This page pushes: an edit form, a photo editor, a price history. Held in a `useState` each of
+   * those returned to a full-page "Loading" over a product that had not changed.
+   */
+  const { product, error, settled, reload: load } = useProduct(productId);
+  const loading = !settled;
+
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    if (!productId) return;
-    setLoading(true);
-    setError(null);
-    try {
-      setProduct(await fetchProduct(productId));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load this product.');
-    } finally {
-      setLoading(false);
-    }
-  }, [productId]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
 
   if (!store) return null;
 
@@ -102,7 +90,7 @@ export default function ProductPage() {
       actions={
         can('products.manage')
           ? [
-              { key: 'edit', icon: <EditIcon />, onClick: () => setEditing(true),
+              { key: 'edit', icon: <EditIcon />, onClick: () => void nav.push('product_form_page', { id: productId }),
                 ariaLabel: 'Edit this item' },
               { key: 'remove', icon: <TrashIcon />, onClick: () => { setRemoveError(null); setRemoving(true); },
                 ariaLabel: 'Remove this item' },
@@ -110,14 +98,6 @@ export default function ProductPage() {
           : undefined
       }
     >
-      <ProductForm
-        open={editing}
-        onClose={() => setEditing(false)}
-        storeId={store.id}
-        product={product}
-        onSaved={() => void load()}
-      />
-
       {/*
         Removing asks for a reason and warns about stock still on the shelf.
         The server refuses outright while stock remains unless it is told to go ahead, so the

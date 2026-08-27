@@ -1,12 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import styles from './review-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
 import { Explain, InfoPanel, WorkedExample } from '@/components/ui/Explain';
 import { BoxIcon, CheckIcon, CloseIcon, PeopleIcon } from '@/components/ui/Icon';
+import { useDemandState } from '@academix-admin/state-stack';
+import { SETTINGS_SCOPE } from '@/lib/stacks/bank-accounts';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -67,21 +69,57 @@ export default function ReviewPage() {
   const { store } = useAuth();
   const { can } = usePermission();
 
-  const [queue, setQueue] = useState<Queue | null>(null);
+  /*
+   * The review queue in state-stack.
+   *
+   * Each item here opens the thing it is about — a sale, a count, a customer — so this page spends
+   * its life being pushed off and returned to. `!queue` renders a full-page "Loading", which meant
+   * every single trip back through the queue put a spinner over a list that was already correct.
+   */
+  const [snapshot, demand] = useDemandState<{ queue: Queue | null; error: string | null }>(
+    { queue: null, error: null },
+    {
+      key: `review:${store?.id ?? 'none'}`,
+      scope: SETTINGS_SCOPE,
+      persist: true,
+      deps: [store?.id ?? ''],
+      revalidateOnMount: false,
+    },
+  );
+
+  const queue = snapshot.queue;
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Readable from the loader without becoming a dependency of it — the loader writes the snapshot,
+  // so depending on it would make this page refetch itself forever.
+  const queueRef = useRef(snapshot.queue);
+  queueRef.current = snapshot.queue;
+  /*
+   * An approval that failed, kept apart from a load that failed.
+   *
+   * Different lifetimes: a failed load belongs to the cached queue and is cleared by the next
+   * successful read, while a failed approval belongs to the tap that caused it and should not
+   * outlive this visit. Sharing one slot meant a stale "could not approve" reappeared, from cache,
+   * over a queue that had since loaded perfectly.
+   */
+  const [actionError, setActionError] = useState<string | null>(null);
+  const error = actionError ?? snapshot.error;
 
   const load = useCallback(async () => {
     if (!store) return;
-    const { data, error: err } = await getSupabase().rpc('pending_review', {
-      p_store_id: store.id,
+    await demand(async ({ set }) => {
+      const { data, error: err } = await getSupabase().rpc('pending_review', {
+        p_store_id: store.id,
+      });
+      set(
+        err
+          // The queue survives a failed refresh. It is a list of things awaiting a decision, and
+          // clearing it would read as "nothing left to review" — the opposite of the truth.
+          ? { queue: queueRef.current, error: err.message }
+          : { queue: data as unknown as Queue, error: null },
+        { override: true },
+      );
     });
-    if (err) {
-      setError(err.message);
-      return;
-    }
-    setQueue(data as unknown as Queue);
-  }, [store]);
+  }, [store, demand]);
 
   useEffect(() => {
     void load();
@@ -89,12 +127,12 @@ export default function ReviewPage() {
 
   const run = async (key: string, fn: () => Promise<void>) => {
     setBusy(key);
-    setError(null);
+    setActionError(null);
     try {
       await fn();
       await load();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Could not do that');
+      setActionError(e instanceof Error ? e.message : 'Could not do that');
     } finally {
       setBusy(null);
     }

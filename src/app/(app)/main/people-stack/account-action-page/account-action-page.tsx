@@ -11,6 +11,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
 import {
   accountsChanged,
+  useCustomerAccount,
   useEmptiesPools,
   type EmptiesPool,
 } from '@/lib/stacks/customer-account';
@@ -53,7 +54,17 @@ export default function AccountActionPage() {
 
   const customerId = (location?.params?.id as string | undefined) ?? null;
   const kind = (location?.params?.kind as ActionKind | undefined) ?? 'payment';
-  const owed = Number(location?.params?.owed ?? 0);
+  /*
+   * What they owe, read live — NOT carried in the URL.
+   *
+   * It used to arrive as a `owed` param: a money figure frozen at the moment of the tap. Record a
+   * payment, go back, tap through again from a card that had not refreshed, and this form said
+   * "They owe ₦40,000" over an account that no longer did — while sitting directly above the box
+   * where somebody types how much is being paid. `useCustomerAccount` is the same cache the
+   * account page behind this one reads, so the two cannot disagree.
+   */
+  const { account } = useCustomerAccount(customerId);
+  const owed = Number(account?.balance ?? 0);
 
   const pools = useEmptiesPools(store?.id ?? null);
 

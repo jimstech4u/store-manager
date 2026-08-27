@@ -7,12 +7,11 @@ import { PageScaffold } from '@/components/ui/PageScaffold';
 import { useStackBack } from '@/hooks/useStackBack';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
-import { BottomSheet } from '@/components/ui/BottomSheet';
-import { SearchField, useDebounced } from '@/components/ui/SearchField';
+import { ProductPicker } from '@/components/catalog/ProductPicker';
 import { Explain, InfoPanel, WorkedExample } from '@/components/ui/Explain';
 import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
 import { useAuth } from '@/providers/AuthProvider';
-import { useProductSearch, type Product } from '@/lib/stacks/catalog-stack';
+import { type Product } from '@/lib/stacks/catalog-stack';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatMoney, formatQty, pluralUnit } from '@/lib/format';
 
@@ -53,13 +52,9 @@ export default function ReceivePage() {
   const [delivery, setDelivery] = useState('');
   const [distribution, setDistribution] = useState('');
   const [picking, setPicking] = useState(false);
-  const [query, setQuery] = useState('');
-  const debounced = useDebounced(query);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
-
-  const { products } = useProductSearch(store?.id ?? null, picking ? debounced : null);
 
   const patch = (key: string, next: Partial<ReceiveLine>) =>
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...next } : l)));
@@ -80,7 +75,6 @@ export default function ReceivePage() {
       },
     ]);
     setPicking(false);
-    setQuery('');
   };
 
   const baseQtyOf = (l: ReceiveLine) => {
@@ -345,38 +339,27 @@ export default function ReceivePage() {
         </>
       )}
 
-      <BottomSheet open={picking} onClose={() => setPicking(false)} title="What came in?">
-        <SearchField
-          value={query}
-          onChange={setQuery}
-          placeholder="Search products or a category"
-          label="Search products"
-          resultCount={products.length}
-          autoFocus
-        />
-        {products.length === 0 ? (
-          <InfoPanel tone="info" title="Nothing found">
-            Only products you already sell can be received. Add it under Stock first.
-          </InfoPanel>
-        ) : (
-          <div className={styles.lines}>
-            {products.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                className={styles.pickItem}
-                onClick={() => addProduct(p)}
-              >
-                <span className={styles.lineName}>{p.name}</span>
-                <span className={styles.lineFootMeta}>
-                  {formatQty(p.onHand)} {pluralUnit(p.baseUnit, Number(p.onHand))} in stock
-                  {p.categoryName ? ` · ${p.categoryName}` : ''}
-                </span>
-              </button>
-            ))}
-          </div>
+      {/*
+        The same picker the sell screen uses, not a second one.
+
+        This was a `BottomSheet` wrapped round a `SearchField`, and it had every problem the sell
+        screen's picker had already solved: it sat under the keyboard, a touch while typing closed
+        it, and it had no loading state — a slow search looked like a shop with no products at all.
+      */}
+      <ProductPicker
+        open={picking}
+        onClose={() => setPicking(false)}
+        storeId={store.id}
+        title="What came in?"
+        onPick={addProduct}
+        emptyHint="Only products you already sell can be received. Add it under Stock first."
+        renderMeta={(p) => (
+          <>
+            {formatQty(p.onHand)} {pluralUnit(p.baseUnit, Number(p.onHand))} in stock
+            {p.categoryName ? ` · ${p.categoryName}` : ''}
+          </>
         )}
-      </BottomSheet>
+      />
     </PageScaffold>
   );
 }

@@ -109,6 +109,11 @@ export function usePublicStores(query: string, coords?: { lat: number; lon: numb
   return usePaginatedList<PublicStore>({
     fetchPage,
     getId: (s) => s.id,
+    key: 'public-stores',
+    scope: 'storefront_flow',
+    // Query-driven: the search term lives in `deps`, not in the key, so restoring these would
+    // answer one search with another's results.
+    persist: false,
     // Matches the server cap, so a full page is never mistaken for "there is more".
     pageSize: 60,
     deps: [query, coords?.lat, coords?.lon],
@@ -146,6 +151,11 @@ export function usePublicProducts({
   return usePaginatedList<PublicProduct>({
     fetchPage,
     getId: (p) => p.id,
+    key: 'public-products',
+    scope: 'storefront_flow',
+    // Query-driven: the search term lives in `deps`, not in the key, so restoring these would
+    // answer one search with another's results.
+    persist: false,
     pageSize: 24,
     deps: [query, storeId, category],
   });

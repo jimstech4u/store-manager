@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { Explain, InfoPanel, InlineHint } from '@/components/ui/Explain';
@@ -10,7 +9,7 @@ import type { Product } from '@/lib/stacks/catalog-stack';
 import styles from './ProductForm.module.css';
 
 /**
- * Add a product, or change one.
+ * Add a product, or change one. The BODY of a page — see `product-form-page`.
  *
  * One component for both, because they are the same eight questions and a shop that learns the
  * add form should not have to learn a second, differently-arranged edit form. What changes
@@ -20,6 +19,12 @@ import styles from './ProductForm.module.css';
  * in the middle of a sale. The last one matters most: a customer asks for something the shop
  * sells but has never entered, and the alternatives are abandoning the receipt or writing the
  * sale down on paper. Both happen, and both end with the ledger being wrong.
+ *
+ * IT WAS A BOTTOM SHEET AND IS NOW A PAGE. Eight fields, three of them numeric, one conditional
+ * on another — on a 390px phone the keyboard covers the half you are typing into, dragging up to
+ * reach "Barcode" reads as a dismiss gesture, and there is no back button, so the way out is a
+ * gesture you have to already know. A page gets a title, a back arrow, the whole screen, and a
+ * URL; it also survives a rotation and a reload, which a sheet's local state does not.
  */
 
 const UNITS = [
@@ -38,18 +43,16 @@ export interface ProductFormResult {
 }
 
 export function ProductForm({
-  open,
-  onClose,
   onSaved,
+  onCancel,
   storeId,
   /** Editing when given; creating when not. */
   product,
   /** Prefills the name when opened from a search that found nothing. */
   initialName = '',
 }: {
-  open: boolean;
-  onClose: () => void;
   onSaved: (result: ProductFormResult) => void;
+  onCancel: () => void;
   storeId: string;
   product?: Product | null;
   initialName?: string;
@@ -67,10 +70,15 @@ export function ProductForm({
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
 
-  // Reset from props each time the sheet opens. Without this, opening the form for a second
-  // product shows the first one's details, and the seller edits the wrong record.
+  /*
+   * Fill from props once the product arrives.
+   *
+   * As a page this mounts before `useProduct` has resolved an edit target, so the fields start
+   * empty and fill in when it does. Keyed on the product itself rather than on a visibility flag,
+   * which is what the sheet used — and what made it show the PREVIOUS product's details when
+   * opened a second time, so the seller edited the wrong record.
+   */
   useEffect(() => {
-    if (!open) return;
     setProblem(null);
     setName(product?.name ?? initialName);
     setBaseUnit(product?.baseUnit ?? 'piece');
@@ -79,7 +87,7 @@ export function ProductForm({
     setPrice(product?.listPrice ?? '');
     setSku(product?.sku ?? '');
     setBarcode(product?.barcode ?? '');
-  }, [open, product, initialName]);
+  }, [product, initialName]);
 
   const save = async () => {
     const trimmed = name.trim();
@@ -134,7 +142,6 @@ export function ProductForm({
         }
         onSaved({ id, name: trimmed });
       }
-      onClose();
     } catch (e) {
       setProblem(e instanceof Error ? e.message : 'That could not be saved.');
     } finally {
@@ -143,21 +150,7 @@ export function ProductForm({
   };
 
   return (
-    <BottomSheet
-      open={open}
-      onClose={onClose}
-      title={editing ? 'Edit this item' : 'Add an item you sell'}
-      footer={
-        <div className={styles.actions}>
-          <Button variant="secondary" onClick={onClose} disabled={saving}>
-            Cancel
-          </Button>
-          <Button busy={saving} onClick={() => void save()}>
-            {editing ? 'Save changes' : 'Add it'}
-          </Button>
-        </div>
-      }
-    >
+    <>
       {problem && (
         <InfoPanel tone="danger" title="Not saved">
           {problem}
@@ -265,6 +258,23 @@ export function ProductForm({
           paid.
         </InfoPanel>
       )}
-    </BottomSheet>
+
+      {/*
+        The actions sit at the end of the page, not pinned to its foot.
+
+        A pinned bar costs a row of the form on every phone this runs on, and this form is already
+        eight fields long. Scrolling to the bottom to commit is also the honest gesture: you have
+        just been asked eight questions, and the last thing you should see before saving is your
+        answer to the eighth.
+      */}
+      <div className={styles.actions}>
+        <Button variant="secondary" onClick={onCancel} disabled={saving}>
+          Cancel
+        </Button>
+        <Button busy={saving} onClick={() => void save()}>
+          {editing ? 'Save changes' : 'Add it'}
+        </Button>
+      </div>
+    </>
   );
 }

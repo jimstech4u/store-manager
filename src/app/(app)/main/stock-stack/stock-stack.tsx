@@ -4,11 +4,13 @@ import NavigationStack from '@academix-admin/navigation-stack';
 import StockPage from './stock-page/stock-page';
 import ReceivePage from './receive-page/receive-page';
 import ProductPage from './product-page/product-page';
+import ProductFormPage from './product-form-page/product-form-page';
 
 const navLink = {
   stock_page: StockPage,
   receive_page: ReceivePage,
   product_page: ProductPage,
+  product_form_page: ProductFormPage,
 };
 
 export const StockStack = () => (

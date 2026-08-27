@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
+import { useDemandState } from '@academix-admin/state-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
@@ -13,6 +14,7 @@ import { CashIcon, ChevronRightIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { accountsChanged, type HistoryEvent } from '@/lib/stacks/customer-account';
+import { useCustomerFromList } from '@/lib/stacks/customer-directory';
 import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatDate, formatDateTime, formatMoney } from '@/lib/format';
@@ -44,14 +46,56 @@ export default function StatementPage() {
   const { store } = useAuth();
 
   const customerId = (location?.params?.id as string | undefined) ?? null;
-  const name = (location?.params?.name as string | undefined) ?? 'Customer';
 
   const { can } = usePermission();
 
-  const [rows, setRows] = useState<StatementRow[] | null>(null);
-  const [history, setHistory] = useState<HistoryEvent[]>([]);
-  const [balance, setBalance] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  /*
+   * Everything this page shows lives in state-stack, keyed by customer.
+   *
+   * A stack page unmounts when another is pushed on top of it. Held in `useState`, this page came
+   * back EMPTY from a receipt: the balance flashed ₦0, the timeline flashed nothing, and both then
+   * refilled a moment later. On a screen whose entire job is to state what someone owes, a
+   * momentary ₦0 is not a loading state — it is a wrong number, shown confidently.
+   *
+   * `revalidateOnMount: false` because the loader below runs on mount anyway; leaving it true made
+   * the demand fire twice on the same arrival.
+   */
+  const [snapshot, demand] = useDemandState<{
+    rows: StatementRow[];
+    history: HistoryEvent[];
+    balance: number | null;
+    /** From this page's own read — the fallback when no list has published these customers. */
+    name: string | null;
+    error: string | null;
+    settled: boolean;
+  }>(
+    { rows: [], history: [], balance: null, name: null, error: null, settled: false },
+    {
+      key: `statement:${customerId ?? 'none'}`,
+      scope: 'money_flow',
+      persist: true,
+      deps: [customerId ?? ''],
+      ttl: 30_000,
+      revalidateOnMount: false,
+    },
+  );
+
+  const rows = snapshot.rows;
+  const history = snapshot.history;
+  const balance = snapshot.balance;
+  const error = snapshot.error;
+
+  /*
+   * The customer's name — from the list that has them, then from this page's own read.
+   *
+   * It used to arrive in the URL beside the id. That made the page title a string anybody could
+   * type, and it meant a rename showed the old name until the link was rebuilt. Now the id is the
+   * only thing that travels: `useCustomerFromList` covers the ordinary case where the Money or
+   * People list published these rows a moment ago, and `customer_account` covers the cold start,
+   * the deep link and the hard refresh, where nothing has published anything at all.
+   */
+  const fromList = useCustomerFromList(customerId);
+  const name = fromList?.display_name ?? snapshot.name ?? 'Customer';
 
   const [paying, setPaying] = useState(false);
   const [amount, setAmount] = useState('');
@@ -59,43 +103,62 @@ export default function StatementPage() {
   const [busy, setBusy] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
 
-  /*
-   * Receipts AND everything else that moved the balance.
-   *
-   * `customer_statement` returns sales only, so this page — headed "What makes up this balance" —
-   * showed "Nothing has been sold to this customer" for anyone whose balance came from an opening
-   * figure entered when the shop started using the app, or whose sales had all been paid off and
-   * whose remaining balance was a deposit. A customer plainly owing money, with nothing on screen
-   * to say why.
-   *
-   * `customer_history` already unions sales, payments, refunds, deposits taken and given back, and
-   * breakages kept — the same timeline the account page shows. Both are read here: the receipts
-   * are what a customer asks to see, and the rest is what explains the number.
-   */
-  const load = useCallback(async () => {
+  const load = useCallback(() => {
     if (!customerId) return;
-    setError(null);
-    const supabase = getSupabase();
-    const [sales, events, account] = await Promise.all([
-      supabase.rpc('customer_statement', { p_store_customer_id: customerId }),
-      supabase.rpc('customer_history', { p_store_customer_id: customerId, p_limit: 100 }),
-      supabase.rpc('customer_account', { p_store_customer_id: customerId }),
-    ]);
-    if (sales.error) {
-      setError(sales.error.message);
-      return;
-    }
-    setRows((sales.data ?? []) as StatementRow[]);
-    // A history failure must not blank the receipts: the receipts are the part a customer is
-    // standing there asking for.
-    setHistory(events.error ? [] : ((events.data ?? []) as HistoryEvent[]));
-    setBalance(
-      account.error ? null : Number((account.data as { balance: string } | null)?.balance ?? 0),
-    );
-  }, [customerId]);
+    demand(async ({ set }) => {
+      try {
+        const supabase = getSupabase();
+        /*
+         * Receipts AND everything else that moved the balance.
+         *
+         * `customer_statement` returns sales only, so this page — headed "What makes up this
+         * balance" — showed "nothing has been sold" for anyone whose balance came from an opening
+         * figure or a deposit. `customer_history` already unions the rest.
+         */
+        const [sales, events, account] = await Promise.all([
+          supabase.rpc('customer_statement', { p_store_customer_id: customerId }),
+          supabase.rpc('customer_history', { p_store_customer_id: customerId, p_limit: 100 }),
+          supabase.rpc('customer_account', { p_store_customer_id: customerId }),
+        ]);
+        if (sales.error) throw sales.error;
+        set(
+          {
+            rows: (sales.data ?? []) as StatementRow[],
+            // A history failure must not blank the receipts: those are the part a customer is
+            // standing there asking for.
+            history: events.error ? [] : ((events.data ?? []) as HistoryEvent[]),
+            balance: account.error
+              ? null
+              : Number(
+                  (account.data as { balance: string } | null)?.balance ?? 0,
+                ),
+            name: account.error
+              ? null
+              : ((account.data as { customer?: { name?: string } } | null)?.customer?.name ??
+                null),
+            error: null,
+            settled: true,
+          },
+          { override: true },
+        );
+      } catch (e) {
+        set(
+          {
+            rows: [],
+            history: [],
+            balance: null,
+            name: null,
+            error: e instanceof Error ? e.message : 'Could not load this statement.',
+            settled: true,
+          },
+          { override: true },
+        );
+      }
+    });
+  }, [customerId, demand]);
 
   useEffect(() => {
-    void load();
+    load();
   }, [load]);
 
   useLiveRefresh(nav, load);

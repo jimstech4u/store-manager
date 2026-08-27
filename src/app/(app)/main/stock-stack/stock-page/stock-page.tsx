@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { InfoPanel } from '@/components/ui/Explain';
@@ -16,7 +16,6 @@ import { useStackBack } from '@/hooks/useStackBack';
 import { searchProducts, useProductList, type Product } from '@/lib/stacks/catalog-stack';
 import { useInfiniteScroll } from '@/hooks/usePaginatedList';
 import { formatMoney, formatQty, pluralUnit } from '@/lib/format';
-import { ProductForm } from '@/components/catalog/ProductForm';
 import styles from './stock-page.module.css';
 
 /**
@@ -31,7 +30,6 @@ export default function StockPage() {
   const goBack = useStackBack();
   const { store } = useAuth();
   const { can } = usePermission();
-  const [adding, setAdding] = useState(false);
 
   /*
    * The list browses; searching happens in the SearchViewer sheet.
@@ -109,7 +107,7 @@ export default function StockPage() {
               {
                 key: 'add',
                 icon: <PlusIcon />,
-                onClick: () => setAdding(true),
+                onClick: () => void nav.push('product_form_page'),
                 ariaLabel: 'Add an item you sell',
               },
             ]
@@ -165,13 +163,6 @@ export default function StockPage() {
             </div>
           </button>
         )}
-      />
-
-      <ProductForm
-        open={adding}
-        onClose={() => setAdding(false)}
-        storeId={store.id}
-        onSaved={() => void browse.reload()}
       />
 
       {products.length === 0 ? (

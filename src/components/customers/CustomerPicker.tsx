@@ -87,6 +87,13 @@ export function CustomerPicker({
   const list = usePaginatedList<CustomerRow>({
     fetchPage,
     getId: (r) => r.id,
+    // The picker's own list, kept apart from the People page's so the two cannot overwrite
+    // each other's rows while both are mounted.
+    key: 'customer-picker',
+    scope: 'customer_flow',
+    // A search, not a list — the term is in `deps` but not in the key, so these must not be
+    // restored under a different term. Same reason as the product search.
+    persist: false,
     deps: [storeId, debounced],
     enabled: open && !creating,
   });

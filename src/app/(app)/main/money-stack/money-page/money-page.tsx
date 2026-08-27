@@ -14,6 +14,7 @@ import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { useNav } from '@academix-admin/navigation-stack';
 import { usePaginatedList, useInfiniteScroll } from '@/hooks/usePaginatedList';
+import { useProvideCustomers } from '@/lib/stacks/customer-directory';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatMoney } from '@/lib/format';
 
@@ -63,9 +64,20 @@ export default function MoneyPage() {
   const list = usePaginatedList<CustomerRow>({
     fetchPage,
     getId: (r) => r.id,
+    // Persisted, so returning from a statement or a receipt keeps the list and its cursor.
+    key: 'debtors',
+    scope: 'money_flow',
     deps: [store?.id],
     enabled: Boolean(store),
   });
+
+  /*
+   * Publish these rows so a pushed page can ask for one by id.
+   *
+   * The statement page used to be handed `{ id, name }`; it now gets `{ id }` and looks the rest
+   * up here. See `customer-directory` for why a record has no business being in a URL.
+   */
+  useProvideCustomers(list.items);
 
   /*
    * Keep the balances on these cards current.
@@ -166,7 +178,7 @@ export default function MoneyPage() {
               // Navigate FIRST, then close. The overlay's history entry is removed on close,
               // and doing that before the push has landed queues a step back that discards the
               // page just pushed — tapping a result dismissed the search and went nowhere.
-              await nav.push('statement_page', { id: c.id, name: c.display_name });
+              await nav.push('statement_page', { id: c.id });
               searchOps.close();
             }}
           >
@@ -200,7 +212,7 @@ export default function MoneyPage() {
                     type="button"
                     className={`${styles.row} ${styles.rowLink}`}
                     onClick={() =>
-                      void nav.push('statement_page', { id: c.id, name: c.display_name })
+                      void nav.push('statement_page', { id: c.id })
                     }
                   >
                     <span className={styles.rowMain}>

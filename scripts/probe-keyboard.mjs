@@ -35,13 +35,22 @@ const sheetBox = () => p.evaluate(() => {
   return { top: Math.round(r.top), bottom: Math.round(r.bottom), h: Math.round(r.height), vh: window.innerHeight };
 });
 
-// ── A sheet that keeps its field: adding a product from Stock ────────────────────
-console.log('\nProduct form (a sheet that should stay a sheet)');
+/*
+ * A sheet that keeps its field: choosing what came in on a delivery.
+ *
+ * This section used to open "Add an item you sell", which is a PAGE now — eight fields is a form,
+ * and a form belongs on a page. The delivery picker is the right subject: it is a sheet on
+ * purpose (a choice, not a form, opened from the middle of a half-entered delivery that must stay
+ * exactly as it is) and it holds a search field, so it is precisely the case this probe is for.
+ */
+console.log('\nDelivery picker (a sheet that should stay a sheet)');
 await reveal();
 await p.getByRole('button',{name:'Stock',exact:true}).first().click();
 await p.waitForTimeout(2400);
-await p.locator('button[aria-label="Add an item you sell"]:visible').first().click();
-await p.waitForTimeout(1200);
+await p.getByRole('button',{name:'Record a delivery'}).first().click();
+await p.waitForTimeout(2400);
+await p.locator('button:visible').filter({ hasText: /add an item|what came in/i }).first().click();
+await p.waitForTimeout(1400);
 
 const opened = await sheetBox();
 check('sheet opened', opened !== null, JSON.stringify(opened));
@@ -55,11 +64,16 @@ if (opened) {
 const field = p.locator('[role="dialog"] input').first();
 await field.click();
 await p.waitForTimeout(400);
-await field.fill('Keyboard test item');
-await p.waitForTimeout(900);
+await field.fill('cola');
+await p.waitForTimeout(1400);
 const afterTyping = await sheetBox();
 check('typing leaves the sheet open', afterTyping !== null);
-check('the text is still there', (await field.inputValue()) === 'Keyboard test item');
+check('the text is still there', (await field.inputValue()) === 'cola');
+
+// And it must have actually searched, not just stayed open holding the last answer.
+const names = await p.locator('[class*="ProductPicker_name"]:visible').allInnerTexts();
+check('typing produced matching results', names.length > 0 && names.every(n => /cola/i.test(n)),
+  names.slice(0, 4).join(' | ') || 'no rows');
 
 // Focus must turn dragging off, so a touch on a field cannot dismiss.
 const dragOff = await p.evaluate(() => {
@@ -71,6 +85,23 @@ await p.screenshot({path:'shots/keyboard-sheet.png'});
 await p.keyboard.press('Escape');
 await p.waitForTimeout(900);
 check('escape closes it', (await sheetBox()) === null);
+
+/*
+ * And the form that MOVED: adding a product is a page now.
+ *
+ * Worth asserting rather than assuming — the whole point of the move is that this is no longer a
+ * dialog, and nothing else in the suite would notice it quietly becoming one again.
+ */
+console.log('\nProduct form (was a sheet, now a page)');
+await p.goBack();
+await p.waitForTimeout(2000);
+await p.locator('button[aria-label="Add an item you sell"]:visible').first().click();
+await p.waitForTimeout(2000);
+check('the add-product form is a page, not a dialog', (await sheetBox()) === null);
+check('its fields are on the page', /What is it called/i.test(await p.locator('body').innerText()));
+await p.screenshot({path:'shots/keyboard-product-page.png'});
+await p.goBack();
+await p.waitForTimeout(1800);
 
 // ── Counting is a page now, not a sheet ─────────────────────────────────────────
 console.log('\nCount (was a sheet, now a page)');

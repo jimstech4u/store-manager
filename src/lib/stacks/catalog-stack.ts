@@ -1,6 +1,9 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
+import { useDemandState } from '@academix-admin/state-stack';
+import { StateStack } from '@academix-admin/state-stack';
+import { CATALOG_SCOPE } from '@/lib/stacks/customer-account';
 import { getSupabase } from '@/lib/supabase/client';
 import { usePaginatedList } from '@/hooks/usePaginatedList';
 
@@ -103,6 +106,18 @@ export function useProductSearch(storeId: string | null, query: string | null) {
   const list = usePaginatedList<Product>({
     fetchPage,
     getId: (p) => p.id,
+    /*
+     * Search results, in their own scope.
+     *
+     * Kept apart from the browse list because they answer a different question and have a
+     * different lifetime: a browse list is worth restoring when someone comes back, a set of
+     * results for a term they have since cleared is not.
+     */
+    key: 'product-search',
+    scope: 'search_flow',
+    // Not persisted: the search TERM is not part of the key, so restoring these rows would show
+    // one query's results under another query's heading. Browse lists persist; questions do not.
+    persist: false,
     // 50 in one page and no cursor: a short page would otherwise be read as "the end", which is
     // correct here — search does not paginate.
     pageSize: 50,
@@ -143,6 +158,8 @@ export function useProductList(storeId: string | null) {
   const list = usePaginatedList<Product>({
     fetchPage,
     getId: (p) => p.id,
+    key: 'products',
+    scope: 'catalog_flow',
     deps: [storeId],
     enabled: Boolean(storeId),
   });
@@ -174,6 +191,81 @@ export async function fetchProduct(productId: string): Promise<Product | null> {
    the money, and deriving it would silently overwrite a deliberate pricing decision every time
    the pack price changed.
    ===================================================================================== */
+
+/**
+ * One product, cached under `product:<id>` — THE reader of that key.
+ *
+ * Both the product page and the stock-count page want the same product, and both briefly opened
+ * their own `useDemandState` on this key with slightly different shapes. A key does not care which
+ * of its writers ran last: the count page wrote a value with no `settled`, the product page read
+ * `settled` back as undefined, and its "Loading" never cleared. The identical mistake made the
+ * bank page throw. One key, one hook, one shape.
+ *
+ * Cached in the catalogue scope rather than a per-screen one: a product's name, unit and average
+ * cost belong to the shop, not to whichever screen happened to ask for them first.
+ */
+export function useProduct(productId: string | null) {
+  const [state, demand] = useDemandState<{
+    product: Product | null;
+    error: string | null;
+    settled: boolean;
+  }>(
+    { product: null, error: null, settled: false },
+    {
+      key: `product:${productId ?? 'none'}`,
+      scope: CATALOG_SCOPE,
+      persist: true,
+      deps: [productId ?? ''],
+      revalidateOnMount: false,
+    },
+  );
+
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  const reload = useCallback(async () => {
+    if (!productId) return;
+    await demand(async ({ set }) => {
+      try {
+        set({ product: await fetchProduct(productId), error: null, settled: true }, {
+          override: true,
+        });
+      } catch (e) {
+        /*
+         * Keep the last good product and say the refresh failed.
+         *
+         * Never a HALF product though — cost, price and stock on hand only mean anything as a set
+         * from one read, so the previous set is kept intact rather than merged with a partial one.
+         */
+        set(
+          {
+            ...stateRef.current,
+            error: e instanceof Error ? e.message : 'Could not load this product.',
+            settled: true,
+          },
+          { override: true },
+        );
+      }
+    });
+  }, [productId, demand]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  return { ...state, reload };
+}
+
+/**
+ * Say the catalogue moved.
+ *
+ * Called after adding, editing or removing a product. Every screen holding a cached product or
+ * product list re-reads on its next look, without any of them polling and without the writer
+ * needing to know which screens exist — the same shape as `accountsChanged()` for money.
+ */
+export function catalogChanged() {
+  void StateStack.core.clearScope(CATALOG_SCOPE);
+}
 
 export interface SaleUnit {
   id: string;

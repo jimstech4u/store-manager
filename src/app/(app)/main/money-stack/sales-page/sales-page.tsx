@@ -73,6 +73,8 @@ export default function SalesPage() {
   const list = usePaginatedList<SaleRow>({
     fetchPage,
     getId: (s) => s.id,
+    key: 'sales',
+    scope: 'money_flow',
     deps: [store?.id ?? ''],
     enabled: Boolean(store),
   });

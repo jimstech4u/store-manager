@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import styles from './sell-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -8,20 +8,22 @@ import { useOverlayRoute } from '@/hooks/useOverlayRoute';
 import { useNav } from '@academix-admin/navigation-stack';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
-import { useDebounced } from '@/components/ui/SearchField';
-import { SelectionViewer, useSelectionController } from '@academix-admin/selection-viewer';
-import { useTheme } from '@/context/ThemeContext';
 import { InfoPanel } from '@/components/ui/Explain';
 import { Collapsible } from '@/components/ui/Collapsible';
-import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { CloseIcon, MinusIcon, PlusIcon, ReceiptIcon, ReturnIcon } from '@/components/ui/Icon';
 import { TakePayment } from './TakePayment';
 import { CustomerPicker } from '@/components/customers/CustomerPicker';
-import { ProductForm } from '@/components/catalog/ProductForm';
+import { ProductPicker } from '@/components/catalog/ProductPicker';
+import type { ProductFormResult } from '@/components/catalog/ProductForm';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
 import { FloatingAmount } from '@/components/ui/FloatingAmount';
-import { fetchSaleUnits, useProductSearch, type SaleUnit } from '@/lib/stacks/catalog-stack';
+import {
+  fetchProduct,
+  fetchSaleUnits,
+  type Product,
+  type SaleUnit,
+} from '@/lib/stacks/catalog-stack';
 import {
   chargesTotal,
   draftSubtotal,
@@ -32,7 +34,7 @@ import {
   useDraftOrders,
   type DraftLine,
 } from '@/lib/stacks/draft-orders';
-import { formatMoney, formatQty, pluralUnit } from '@/lib/format';
+import { formatMoney, formatQty } from '@/lib/format';
 import { getSupabase } from '@/lib/supabase/client';
 
 /**
@@ -90,16 +92,57 @@ export default function SellPage() {
     syncing,
   } = useDraftOrders(store?.id ?? null);
 
-  const [pickerId, pickerOps, isPickerOpen] = useSelectionController();
-  const { theme } = useTheme();
-  const dark = theme === 'dark';
+  /*
+   * "When a product gets created, put it straight on this receipt."
+   *
+   * The add-a-product form is a PAGE now, in the stock stack, and a pushed page has no return
+   * value — `nav.push` resolves when the page appears, not when it is done. So the wanted result
+   * is published as a callback under a global key and the form page picks it up with `useObject`.
+   *
+   * Straight onto the receipt is the whole point. A customer has just asked for something the shop
+   * has never entered; adding it and then making the seller search for it again is the same
+   * interruption in two steps instead of one.
+   *
+   * Global rather than page-scoped because the form lives in a different stack, and a page-scoped
+   * object is addressed by its provider's uid — unfindable from there.
+   */
+  useEffect(() => {
+    const cleanup = nav.provideObject(
+      'onProductSaved',
+      () => async (created: ProductFormResult) => {
+        /*
+         * Read the product back before putting it on the receipt.
+         *
+         * The form hands over an id and a name, and a line needs more than that — the base unit,
+         * the pack, the average cost the below-cost warning compares against. Fetching it here is
+         * also what makes this work at all: a product created seconds ago is in no list this page
+         * is holding.
+         */
+        const product = await fetchProduct(created.id);
+        if (product) await addProductRef.current?.(product);
+      },
+      { global: true, scope: 'catalog' },
+    );
+    return cleanup;
+  }, [nav]);
+
+  /*
+   * Whether the item picker is up — a plain flag, not a second SelectionViewer controller.
+   *
+   * `ProductPicker` owns the viewer and its controller. This page held one too, so the same sheet
+   * had two things claiming to control it; the picker's own theme, search and snap state are its
+   * business now, and all this screen has to say is whether it is asking.
+   */
+  const [isPickerOpen, setPickerOpen] = useState(false);
+  const pickerOps = useMemo(
+    () => ({ open: () => setPickerOpen(true), close: () => setPickerOpen(false) }),
+    [],
+  );
 
   // Back dismisses the picker rather than leaving the app mid-sale.
   useOverlayRoute('sell:picker', isPickerOpen, () => {
     pickerOps.close();
-    setQuery('');
   });
-  const [addingProduct, setAddingProduct] = useState(false);
 
   /** Which empties pools each product on the receipt belongs to, keyed by product id. */
   const [returnables, setReturnables] = useState<
@@ -114,12 +157,31 @@ export default function SellPage() {
   const [code, setCode] = useState('');
   // Sale units per product, fetched once when a product is first added to any order.
   const [saleUnits, setSaleUnits] = useState<Record<string, SaleUnit[]>>({});
-  const [query, setQuery] = useState('');
-  const debouncedQuery = useDebounced(query);
+  /*
+   * The products this receipt has actually touched — NOT whatever the search is showing.
+   *
+   * This was `new Map(searchResults)`, and that was wrong in two ways that both failed silently:
+   *
+   *   Adding a product created mid-sale did nothing at all. The new item was by definition not in
+   *   the search results, so the lookup missed and `addProduct` returned without a word — despite
+   *   the flow being built specifically so a seller could add an unknown item without abandoning
+   *   the receipt.
+   *
+   *   The below-cost warning came and went. Type a new search and the earlier lines' products fell
+   *   out of the map, so a line priced under cost quietly stopped being flagged.
+   *
+   * A receipt's lines outlive any one search. What the receipt needs is what it has been given.
+   */
+  const [productById, setProductById] = useState<Map<string, Product>>(new Map());
 
-  const { products, status } = useProductSearch(store?.id ?? null, isPickerOpen ? debouncedQuery : null);
-
-  const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
+  const rememberProduct = useCallback((product: Product) => {
+    setProductById((prev) => {
+      if (prev.get(product.id) === product) return prev;
+      const next = new Map(prev);
+      next.set(product.id, product);
+      return next;
+    });
+  }, []);
 
   // Nothing open on this device: start one, so the screen is ready to sell rather than empty.
   useEffect(() => {
@@ -142,9 +204,21 @@ export default function SellPage() {
    */
   const emptyLines = (activeOrder?.lines ?? []).filter((l) => !(Number(l.qty) > 0));
 
-  const addProduct = async (productId: string) => {
-    const product = productById.get(productId);
-    if (!product || !activeOrder) return;
+  /*
+   * The live `addProduct`, for the callback published above.
+   *
+   * That callback is provided once, on mount, and must not be re-provided on every render — so it
+   * cannot close over `addProduct` directly without capturing the first render's copy of every
+   * order and line it touches.
+   */
+  const addProductRef = useRef<((product: Product) => Promise<void>) | null>(null);
+
+  const addProduct = async (product: Product) => {
+    if (!activeOrder) return;
+    const productId = product.id;
+    // Keep it for as long as the receipt does — the line will need its cost and unit long after
+    // whatever search found it has been typed over.
+    rememberProduct(product);
 
     // Fetch the shapes this product is sold in, so the line can offer "Half pack" rather than
     // making the seller work out that it means 6.
@@ -198,7 +272,6 @@ export default function SellPage() {
         qty: String((Number.isFinite(current) ? current : 0) + 1),
       });
       pickerOps.close();
-      setQuery('');
       return;
     }
 
@@ -221,8 +294,11 @@ export default function SellPage() {
       }),
     );
     pickerOps.close();
-    setQuery('');
   };
+
+  // Point the published callback at THIS render's `addProduct`, every render. Without this the
+  // callback holds null and adding a product mid-sale does nothing at all — silently.
+  addProductRef.current = addProduct;
 
   /**
    * Ask the server what this line should cost at its current quantity and shape.
@@ -831,101 +907,20 @@ export default function SellPage() {
         tabs punch through.
       */}
       {activeOrder && (
-        <SelectionViewer
-          id={pickerId}
-          isOpen={isPickerOpen}
-          onClose={() => {
-            pickerOps.close();
-            setQuery('');
-          }}
-          titleProp={{ text: 'Add an item', textColor: dark ? '#f2f5f4' : '#12201d' }}
-          cancelButton={{
-            position: 'right',
-            onClick: () => {
-              pickerOps.close();
-              setQuery('');
-            },
-            view: <CloseIcon size="1.3em" />,
-          }}
-          searchProp={{
-            text: 'Search products or a category',
-            onChange: setQuery,
-            autoFocus: false,
-            textColor: dark ? '#f2f5f4' : '#12201d',
-            background: dark ? '#1b2322' : '#eef2f1',
-            padding: { l: '4px', r: '4px', t: '0px', b: '0px' },
-          }}
-          loadingProp={{ view: <FullPageMessage title="Searching" tone="loading" /> }}
-          noResultProp={{
-            view: (
-              <div className={styles.pickEmpty}>
-                <InfoPanel tone="info" title="Nothing found">
-                  Try part of the name, or a category like &ldquo;water&rdquo;.
-                </InfoPanel>
-                {/*
-                  The most useful moment to add a product is the one where the shop is being asked
-                  for something it has never entered. Sending the seller elsewhere here means
-                  abandoning a half-built receipt, so the form comes to them.
-                */}
-                {can('products.manage') && (
-                  <Button
-                    variant="secondary"
-                    size="large"
-                    fullWidth
-                    onClick={() => setAddingProduct(true)}
-                  >
-                    <PlusIcon /> Add &ldquo;{query.trim() || 'a new item'}&rdquo; to your shop
-                  </Button>
-                )}
-              </div>
-            ),
-          }}
-          layoutProp={{
-            backgroundColor: dark ? '#121817' : '#ffffff',
-            handleColor: dark ? '#3a4443' : '#c8d2d0',
-            handleWidth: '48px',
-            gapBetweenHandleAndTitle: '12px',
-            gapBetweenTitleAndSearch: '8px',
-            gapBetweenSearchAndContent: '12px',
-          }}
-          childrenDirection="vertical"
-          snapPoints={[0, 1]}
-          initialSnap={1}
-          minHeight="60dvh"
-          maxHeight="92dvh"
-          closeThreshold={0.2}
-          selectionState={
-            status === 'loading' && products.length === 0
-              ? 'loading'
-              : status === 'error'
-                ? 'error'
-                : products.length === 0
-                  ? 'empty'
-                  : 'data'
-          }
-          zIndex={1000}
-        >
-          <div className={styles.pickList}>
-            {products.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                className={styles.pickItem}
-                onClick={() => {
+        <ProductPicker
+          open={isPickerOpen}
+          onClose={pickerOps.close}
+          storeId={store.id}
+          onPick={(p) => void addProduct(p)}
+          onAddNew={
+            can('products.manage')
+              ? (typed) => {
                   pickerOps.close();
-                  void addProduct(p.id);
-                }}
-              >
-                <span className={styles.lineName}>{p.name}</span>
-                <span className={styles.lineMeta}>
-                  {formatQty(p.onHand)} {pluralUnit(p.baseUnit, Number(p.onHand))} left
-                  {p.categoryName ? ` · ${p.categoryName}` : ''}
-                  {p.listPrice ? ` · ${formatMoney(p.listPrice)}` : ''}
-                </span>
-              </button>
-            ))}
-          </div>
-        </SelectionViewer>
+                  void nav.push('product_form_page', typed ? { name: typed } : undefined);
+                }
+              : undefined
+          }
+        />
       )}
 
       {/*
@@ -937,22 +932,6 @@ export default function SellPage() {
         with nothing to pay for does not carry a blank gap.
       */}
       {activeOrder && activeOrder.lines.length > 0 && <div className={styles.floatSpacer} />}
-
-      {activeOrder && (
-        <ProductForm
-          open={addingProduct}
-          onClose={() => setAddingProduct(false)}
-          storeId={store.id}
-          initialName={query.trim()}
-          onSaved={(created) => {
-            // Straight onto the receipt. Adding it and then making the seller search for it
-            // again would be the same interruption in two steps instead of one.
-            setAddingProduct(false);
-            pickerOps.close();
-            void addProduct(created.id);
-          }}
-        />
-      )}
 
       {activeOrder && (
         <CustomerPicker

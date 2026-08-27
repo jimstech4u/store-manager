@@ -115,7 +115,7 @@ async function addProduct(page, term, name) {
    * 60cl" button too, and that button comes FIRST in the DOM — so `.first()` was deleting the
    * line it was supposed to be adding to, and the scenario blamed the app for it.
    */
-  await page.locator('[class*="pickItem"]').filter({ hasText: new RegExp(name) }).first().click();
+  await page.locator('[class*="ProductPicker_item"]').filter({ hasText: new RegExp(name) }).first().click();
   await page.waitForTimeout(1200);
 }
 

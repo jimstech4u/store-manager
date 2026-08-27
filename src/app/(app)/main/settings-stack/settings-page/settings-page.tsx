@@ -11,6 +11,8 @@ import { Field } from '@/components/ui/Field';
 import { Explain, InfoPanel } from '@/components/ui/Explain';
 import { CheckIcon, RefreshIcon } from '@/components/ui/Icon';
 import { useNav } from '@academix-admin/navigation-stack';
+import { useDemandState } from '@academix-admin/state-stack';
+import { SETTINGS_SCOPE } from '@/lib/stacks/bank-accounts';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -62,67 +64,113 @@ export default function SettingsPage() {
   const [logoBusy, setLogoBusy] = useState(false);
   const [logoError, setLogoError] = useState<string | null>(null);
 
-  const [settings, setSettings] = useState<Settings | null>(null);
+  /*
+   * All three of this page's reads in one state-stack entry.
+   *
+   * This is the settings tab's ROOT, and every row on it pushes: bank accounts, staff, the review
+   * queue, the storefront. Each of the three used to be its own `useState` filled by its own
+   * effect, which meant every trip back rebuilt the whole screen from nothing — the printer width
+   * reverted to its placeholder, the "waiting for you" count blanked, and the public-shop toggle
+   * flicked off and back on. A settings screen whose switches move by themselves is one nobody
+   * trusts to have saved anything.
+   *
+   * One entry rather than three because they are read together and shown together; three keys
+   * would just be three chances to draw a half-built page.
+   */
+  const [snapshot, demand, setSnapshot] = useDemandState<{
+    settings: Settings | null;
+    shop: StoreRow | null;
+    pending: number;
+    error: string | null;
+  }>(
+    { settings: null, shop: null, pending: 0, error: null },
+    {
+      key: `settings:${store?.id ?? 'none'}`,
+      scope: SETTINGS_SCOPE,
+      persist: true,
+      deps: [store?.id ?? ''],
+      revalidateOnMount: false,
+    },
+  );
+
+  const settings = snapshot.settings;
+  const shop = snapshot.shop;
+  const pending = snapshot.pending;
+  const error = snapshot.error;
+
+  const setSettings = (next: Settings | null | ((prev: Settings | null) => Settings | null)) => {
+    setSnapshot((prev) => ({
+      ...prev,
+      settings: typeof next === 'function' ? next(prev.settings) : next,
+    }));
+  };
+  const setShop = (next: StoreRow | null) => {
+    setSnapshot((prev) => ({ ...prev, shop: next }));
+  };
+  const setError = (next: string | null) => {
+    setSnapshot((prev) => ({ ...prev, error: next }));
+  };
+
+  /*
+   * The latest snapshot, readable from the loader without becoming a dependency of it.
+   *
+   * The loader's failure path wants to keep what was already cached. Reading `snapshot` directly
+   * would put it in the effect's deps, and since the loader writes the snapshot, that is a loop
+   * that refetches the settings page forever.
+   */
+  const snapshotRef = useRef(snapshot);
+  snapshotRef.current = snapshot;
+
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(0);
-  const [shop, setShop] = useState<StoreRow | null>(null);
+
+  const canConfirm = can('records.confirm');
 
   useEffect(() => {
     if (!store) return;
-    let cancelled = false;
-    void (async () => {
-      const { data, error: err } = await getSupabase().rpc('ensure_store_settings', {
-        p_store_id: store.id,
-      });
-      if (cancelled) return;
-      if (err) {
-        setError(err.message);
+    demand(async ({ set }) => {
+      const supabase = getSupabase();
+      const [own, review, shopRow] = await Promise.all([
+        supabase.rpc('ensure_store_settings', { p_store_id: store.id }),
+        // A count on the button, not just a label. "Waiting for you" with no number gives no
+        // reason to tap it; "3 waiting" does. Skipped entirely for a member who cannot approve.
+        canConfirm
+          ? supabase.rpc('pending_review', { p_store_id: store.id })
+          : Promise.resolve({ data: null }),
+        // The public storefront row lives on `stores`, not `store_settings`.
+        supabase
+          .from('stores')
+          .select('is_public, public_description, code')
+          .eq('id', store.id)
+          .maybeSingle(),
+      ]);
+
+      if (own.error) {
+        // Keep whatever was cached and say why it did not refresh. A settings screen that
+        // empties itself on a failed read looks like a shop with no settings.
+        set({ ...snapshotRef.current, error: own.error.message }, { override: true });
         return;
       }
-      const row = (Array.isArray(data) ? data[0] : data) as Settings;
-      // Defaulted here as well as in the column: a settings row written before 0046 comes back
-      // with null, and a null width would render the logo at zero and look like a broken upload.
-      setSettings({ ...row, receipt_logo_width_pct: row.receipt_logo_width_pct ?? 60 });
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [store]);
 
-  // A count on the button, not just a label. "Waiting for you" with no number gives no reason
-  // to tap it; "3 waiting" does.
-  useEffect(() => {
-    if (!store || !can('records.confirm')) return;
-    let cancelled = false;
-    void (async () => {
-      const { data } = await getSupabase().rpc('pending_review', { p_store_id: store.id });
-      if (cancelled || !data) return;
-      const q = data as { products: unknown[]; customers: unknown[]; stock_entries: unknown[] };
-      setPending(q.products.length + q.customers.length + q.stock_entries.length);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [store, can]);
+      const row = (Array.isArray(own.data) ? own.data[0] : own.data) as Settings;
+      const q = review.data as
+        | { products: unknown[]; customers: unknown[]; stock_entries: unknown[] }
+        | null;
 
-  // The public storefront row lives on `stores`, not `store_settings`.
-  useEffect(() => {
-    if (!store) return;
-    let cancelled = false;
-    void (async () => {
-      const { data } = await getSupabase()
-        .from('stores')
-        .select('is_public, public_description, code')
-        .eq('id', store.id)
-        .maybeSingle();
-      if (!cancelled && data) setShop(data as StoreRow);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [store]);
+      set(
+        {
+          // Defaulted here as well as in the column: a settings row written before 0046 comes back
+          // with null, and a null width would render the logo at zero and look like a broken
+          // upload.
+          settings: { ...row, receipt_logo_width_pct: row.receipt_logo_width_pct ?? 60 },
+          shop: (shopRow.data as StoreRow | null) ?? null,
+          pending: q ? q.products.length + q.customers.length + q.stock_entries.length : 0,
+          error: null,
+        },
+        { override: true },
+      );
+    });
+  }, [store, canConfirm, demand]);
 
   const saveShop = async (next: Partial<StoreRow>) => {
     if (!store || !shop) return;

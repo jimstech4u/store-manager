@@ -1,6 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect } from 'react';
+import { useDemandState } from '@academix-admin/state-stack';
+import { CATALOG_SCOPE } from '@/lib/stacks/customer-account';
 import { getSupabase } from '@/lib/supabase/client';
 
 /**
@@ -27,44 +29,85 @@ interface Row {
   sort_order: number;
 }
 
+/**
+ * A product's pictures, cached per product.
+ *
+ * In state-stack because of where this is read from: the product page, which pushes an image
+ * editor on top of itself. Held in `useState` the gallery came back blank from that editor and
+ * refilled a beat later — so the picture you had just cropped appeared to have been lost, which is
+ * the one thing an image editor must never look like it did.
+ *
+ * `setImages` is still returned and still writes through: reordering is an optimistic move (drag a
+ * photo to the front, it goes to the front) and the row updates follow. It writes to the cache
+ * rather than to a local copy, so the optimistic order is what the next mount hydrates.
+ */
 export function useProductImages(productId: string | null) {
-  const [images, setImages] = useState<ProductImage[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [state, demand, setState] = useDemandState<{
+    images: ProductImage[];
+    loading: boolean;
+    error: string | null;
+  }>(
+    { images: [], loading: false, error: null },
+    {
+      key: `product-images:${productId ?? 'none'}`,
+      // A shop's own catalogue, alongside the empties pools — it changes when someone changes it,
+      // not on its own.
+      scope: CATALOG_SCOPE,
+      persist: true,
+      deps: [productId ?? ''],
+      revalidateOnMount: false,
+    },
+  );
 
   const reload = useCallback(async () => {
     if (!productId) {
-      setImages([]);
+      setState({ images: [], loading: false, error: null });
       return;
     }
-    setLoading(true);
-    setError(null);
-    const { data, error: e } = await getSupabase()
-      .from('product_media')
-      .select('id, path, alt, sort_order')
-      .eq('product_id', productId)
-      .eq('kind', 'image')
-      .order('sort_order', { ascending: true });
+    await demand(async ({ set }) => {
+      const { data, error: e } = await getSupabase()
+        .from('product_media')
+        .select('id, path, alt, sort_order')
+        .eq('product_id', productId)
+        .eq('kind', 'image')
+        .order('sort_order', { ascending: true });
 
-    if (e) setError(e.message);
-    else {
-      setImages(
-        (data as Row[] | null)?.map((r) => ({
-          id: r.id,
-          path: r.path,
-          alt: r.alt,
-          sortOrder: r.sort_order,
-        })) ?? [],
+      set(
+        {
+          images: e
+            ? []
+            : ((data as Row[] | null)?.map((r) => ({
+                id: r.id,
+                path: r.path,
+                alt: r.alt,
+                sortOrder: r.sort_order,
+              })) ?? []),
+          loading: false,
+          error: e ? e.message : null,
+        },
+        { override: true },
       );
-    }
-    setLoading(false);
-  }, [productId]);
+    });
+  }, [productId, demand, setState]);
 
   useEffect(() => {
     void reload();
   }, [reload]);
 
-  return { images, loading, error, reload, setImages };
+  const setImages = useCallback(
+    (images: ProductImage[]) => {
+      setState((prev) => ({ ...prev, images }));
+    },
+    [setState],
+  );
+
+  return {
+    images: state.images,
+    loading: state.loading,
+    error: state.error,
+    reload,
+    setImages,
+  };
 }
 
 /**

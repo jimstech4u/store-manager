@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
@@ -11,6 +11,7 @@ import { EditIcon, PlusIcon, StarIcon, TrashIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
 import { usePermission } from '@/hooks/usePermission';
 import { useAuth } from '@/providers/AuthProvider';
+import { settingsChanged, useBankAccountsState } from '@/lib/stacks/bank-accounts';
 import { getSupabase } from '@/lib/supabase/client';
 import styles from './bank-page.module.css';
 
@@ -41,9 +42,15 @@ export default function BankPage() {
   const { store } = useAuth();
   const { can } = usePermission();
 
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  /*
+   * The accounts come from the shared hook, not from a second copy here.
+   *
+   * This page used to open its own `useDemandState` on the same key `useBankAccounts` uses, with a
+   * different shape — a race whichever way round it ran, and it crashed the page outright. There
+   * is one reader of that key now, and both this screen and the payment screens go through it.
+   */
+  const { accounts, error, settled, reload } = useBankAccountsState(store?.id ?? null);
+  const loading = !settled;
 
   const [editing, setEditing] = useState<Account | null>(null);
   const [form, setForm] = useState(BLANK);
@@ -52,21 +59,16 @@ export default function BankPage() {
   const [problem, setProblem] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<Account | null>(null);
 
+  /*
+   * Reload after a write.
+   *
+   * `settingsChanged()` first, so this is a real read rather than a re-serve of the value that was
+   * cached before whatever write called us.
+   */
   const load = useCallback(async () => {
-    if (!store) return;
-    setLoading(true);
-    setError(null);
-    const { data, error: e } = await getSupabase().rpc('list_bank_accounts', {
-      p_store_id: store.id,
-    });
-    if (e) setError(e.message);
-    else setAccounts((data ?? []) as Account[]);
-    setLoading(false);
-  }, [store]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+    settingsChanged();
+    await reload();
+  }, [reload]);
 
   if (!store) return null;
   const editable = can('store.settings');
