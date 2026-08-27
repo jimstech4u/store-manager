@@ -11,7 +11,7 @@
   "dependencies": {
     "@academix-admin/bottom-viewer": "^0.3.4",
     "@academix-admin/header": "^0.2.4",
-    "@academix-admin/modal-sheet": "^0.1.5",
+    "@academix-admin/modal-sheet": "^0.1.6",
     "@academix-admin/navigation-bar": "^0.1.5",
     "@academix-admin/navigation-stack": "^0.13.2",
     "@academix-admin/search-viewer": "^0.3.0",
