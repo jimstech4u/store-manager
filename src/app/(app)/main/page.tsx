@@ -9,6 +9,7 @@ import {
 } from '@academix-admin/navigation-stack';
 import NavigationBar from '@academix-admin/navigation-bar';
 import { useTheme } from '@/context/ThemeContext';
+import { reportNavBarState } from '@/providers/NavBarState';
 import { usePermission } from '@/hooks/usePermission';
 import { TABS, defaultTabFor } from './nav-config';
 import { SellStack } from './sell-stack/sell-stack';
@@ -85,6 +86,15 @@ export default function MainShell() {
           // every native tab bar has, and the fastest way out of a stack several pages deep.
           onReselect={(id) => popStackToRoot(id)}
           onScroll={(callback) => scrollBroadcaster.subscribe(callback)}
+          /*
+           * The bar reports its own state, and the shell publishes it.
+           *
+           * The sell screen's running total sits at the other end of the bar's line and has to
+           * follow it. It used to work that out for itself, which drifted, and then by sniffing
+           * the bar's CSS transition, which reached into the library's internals. The bar knows;
+           * this asks it.
+           */
+          onVisibilityChange={reportNavBarState}
           /*
            * `autohide`, the same configuration academix-web uses, colours aside.
            *

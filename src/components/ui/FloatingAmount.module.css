@@ -24,14 +24,13 @@
   cursor: pointer;
 
   /*
-   * NO transition on `bottom`.
+   * Matches the bar's own 0.3s slide.
    *
-   * The position is measured from the bar every frame while the bar is moving, so the pill is
-   * already following the bar's own easing. A transition on top of that would animate towards a
-   * target that is itself animating — the pill would lag a few frames behind the FAB it shares a
-   * line with, which is the very thing this component exists to avoid.
+   * The position is now a single change announced by the bar rather than a value measured every
+   * frame, so the pill needs its own easing to travel rather than jump — and matching the bar's
+   * duration is what keeps the two ends of the line moving as one line.
    */
-  transition: background-color 120ms ease;
+  transition: bottom 0.3s ease, background-color 120ms ease;
 }
 
 .pill:hover:not(:disabled) {

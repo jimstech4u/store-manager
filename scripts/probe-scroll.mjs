@@ -89,4 +89,25 @@ await p.screenshot({path:'shots/scroll-bottom.png'});
 console.log('\n  FAB appears while the bar is hidden:', mid.navHidden ? (mid.fab !== null) : 'bar never hid');
 console.log('  pill stays down at the bottom:', bottom.pillTop !== null && mid.pillTop !== null
   ? bottom.pillTop >= mid.pillTop : 'no pill');
+
+/*
+ * The case that was broken: tap the floating button to bring the bar BACK.
+ *
+ * The bar reveals with no scroll event at all, so anything watching scrolling kept a stale
+ * position — the total stayed at the bottom and the returning bar was drawn straight over it.
+ */
+const fab = p.locator('.fab');
+if (await fab.count()) {
+  await fab.click();
+  await p.waitForTimeout(1200);
+  const revealed = await read('after tapping the FAB');
+  await p.screenshot({ path: 'shots/scroll-fab-revealed.png' });
+  const clear = revealed.navTop !== null && revealed.pillTop !== null
+    && revealed.pillTop + 56 <= revealed.navTop + 4;
+  console.log('  bar came back:', revealed.navHidden === false);
+  console.log('  total sits ABOVE the returned bar:', clear
+    ? 'yes' : `NO (pill ${revealed.pillTop}, bar ${revealed.navTop})`);
+} else {
+  console.log('  FAB not present to tap');
+}
 await b.close();

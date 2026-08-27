@@ -9,7 +9,7 @@ import { Field } from '@/components/ui/Field';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { InfoPanel } from '@/components/ui/Explain';
 import { usePermission } from '@/hooks/usePermission';
-import { ChevronRightIcon } from '@/components/ui/Icon';
+import { CashIcon, ChevronRightIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { accountsChanged, type HistoryEvent } from '@/lib/stacks/customer-account';
@@ -127,22 +127,29 @@ export default function StatementPage() {
       onBack={goBack}
       title={name}
       subtitle="What makes up this balance"
-      footer={
-        // Recording a payment belongs with the balance it settles, which is this screen. It used
-        // to sit in a dialog on the money list, one level away from the figure it changed.
-        can('payments.record') && owed > 0 ? (
-          <Button
-            size="large"
-            fullWidth
-            onClick={() => {
-              setPayError(null);
-              setAmount('');
-              setPaying(true);
-            }}
-          >
-            Record a payment
-          </Button>
-        ) : undefined
+      /*
+       * Recording a payment is a header action, like every other page's primary action.
+       *
+       * It was a bar pinned to the foot of this page, which on a phone sat on top of the last few
+       * entries in the very list it was explaining — the timeline that says what the balance is
+       * made of. It still belongs on this screen rather than on the money list, because it settles
+       * the figure shown here; it just does not need to cover it.
+       */
+      actions={
+        can('payments.record') && owed > 0
+          ? [
+              {
+                key: 'pay',
+                icon: <CashIcon />,
+                onClick: () => {
+                  setPayError(null);
+                  setAmount('');
+                  setPaying(true);
+                },
+                ariaLabel: 'Record a payment',
+              },
+            ]
+          : undefined
       }
     >
       {/*
