@@ -1,6 +1,7 @@
 'use client';
 
-import { useId, type InputHTMLAttributes, type ReactNode } from 'react';
+import { useId, useState, type InputHTMLAttributes, type ReactNode } from 'react';
+import { EyeIcon, EyeOffIcon } from './Icon';
 import styles from './Field.module.css';
 import { InlineHint } from './Explain';
 import { AlertIcon } from './Icon';
@@ -48,10 +49,20 @@ export function Field({
     error ? styles.inputError : '',
     prefix ? styles.hasPrefix : '',
     suffix ? styles.hasSuffix : '',
+    rest.type === 'password' ? styles.hasReveal : '',
     className ?? '',
   ]
     .filter(Boolean)
     .join(' ');
+
+  /*
+   * A password field reveals itself; everything else is untouched.
+   *
+   * Detected from `type` rather than added as a prop, so every password field in the product gets
+   * it without each one remembering to ask.
+   */
+  const isPassword = rest.type === 'password';
+  const [revealed, setRevealed] = useState(false);
 
   return (
     <div className={styles.field}>
@@ -81,7 +92,34 @@ export function Field({
           aria-invalid={error ? true : undefined}
           aria-describedby={[hintId, errorId].filter(Boolean).join(' ') || undefined}
           {...rest}
+          // After the spread, so a caller cannot accidentally pin the type and defeat the reveal.
+          type={isPassword ? (revealed ? 'text' : 'password') : rest.type}
         />
+
+        {/*
+          Show the password.
+
+          A password typed blind on a phone keyboard is guesswork, and the alternative people reach
+          for is a shorter, simpler password. Being able to check what was typed is a security
+          feature, not a convenience.
+
+          `type="button"` matters: inside a form, a button with no type submits it — so tapping the
+          eye would try to sign you in with a half-typed password.
+        */}
+        {isPassword && (
+          <button
+            type="button"
+            className={styles.reveal}
+            onClick={() => setRevealed((v) => !v)}
+            aria-label={revealed ? 'Hide password' : 'Show password'}
+            aria-pressed={revealed}
+            // Never a tab stop between the field and the submit button — somebody using a keyboard
+            // is typing a password, not looking for this.
+            tabIndex={-1}
+          >
+            {revealed ? <EyeOffIcon /> : <EyeIcon />}
+          </button>
+        )}
 
         {suffix && (
           <span className={`${styles.affix} ${styles.suffix}`} aria-hidden="true">

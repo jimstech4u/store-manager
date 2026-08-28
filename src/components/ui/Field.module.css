@@ -171,3 +171,35 @@
   display: inline-flex;
   padding-top: 1px;
 }
+
+/*
+ * The show/hide control, inside the field's box.
+ *
+ * A full touch target, because it sits next to a text field somebody is typing into with a thumb
+ * and a near-miss must not put the caret in the middle of their password.
+ */
+.reveal {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--touch-min, 44px);
+  height: var(--touch-min, 44px);
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.reveal:hover {
+  color: var(--text);
+}
+
+/* Room for the control, so a long password does not run underneath it. */
+.hasReveal {
+  padding-right: calc(var(--touch-min, 44px) + 4px);
+}
+
