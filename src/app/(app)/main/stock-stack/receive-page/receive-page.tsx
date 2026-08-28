@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import styles from './receive-page.module.css';
 import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
+import { BottomSheet } from '@/components/ui/BottomSheet';
 import { useStackBack } from '@/hooks/useStackBack';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
@@ -145,20 +146,6 @@ export default function ReceivePage() {
   };
 
   if (!store) return null;
-
-  if (done) {
-    return (
-      <PageScaffold onBack={goBack} title="Delivery recorded">
-        <InfoPanel tone="success" title="Stock is in">
-          Your stock has gone up and the cost of each item now includes the delivery and
-          distribution fees.
-        </InfoPanel>
-        <Button size="large" fullWidth onClick={() => nav.pop()}>
-          Done
-        </Button>
-      </PageScaffold>
-    );
-  }
 
   return (
     <PageScaffold
@@ -360,6 +347,34 @@ export default function ReceivePage() {
           </>
         )}
       />
+
+      {/*
+        The outcome is a SHEET, not a replacement screen.
+
+        It has nothing to type and one way on, so it does not need the keyboard room a page exists
+        to provide — and replacing the whole screen to say two sentences threw away the delivery
+        that was just entered, which is the thing somebody double-checking would want to see behind
+        the confirmation.
+
+        Not dismissible by a stray swipe: it is the only confirmation that the stock actually went
+        in, and a delivery is the sort of thing people re-enter if they are unsure it saved.
+      */}
+      <BottomSheet
+        open={done}
+        onClose={() => nav.pop()}
+        title="Delivery recorded"
+        dismissible={false}
+        footer={
+          <Button size="large" fullWidth onClick={() => nav.pop()}>
+            Done
+          </Button>
+        }
+      >
+        <InfoPanel tone="success" title="Stock is in">
+          Your stock has gone up and the cost of each item now includes the delivery and
+          distribution fees.
+        </InfoPanel>
+      </BottomSheet>
     </PageScaffold>
   );
 }
