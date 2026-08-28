@@ -94,7 +94,14 @@ export default function MoneyPage() {
    * it is looked at, with no polling in between and no interruption while a search sheet is open
    * (the sheet is not a resume; nothing fires).
    */
-  useLiveRefresh(nav, list.reload);
+  /*
+   * `refresh`, not `reload`.
+   *
+   * `reload` starts again from page one. On a list somebody has paged through, returning to it
+   * would collapse a hundred rows back to twenty — losing the row they tapped and the scroll that
+   * led to it. `refresh` re-reads the span that is already on screen and keeps its length.
+   */
+  useLiveRefresh(nav, list.refresh);
 
   const sentinelRef = useInfiniteScroll(list.loadMore, {
     enabled: list.hasMore && !list.loading,

@@ -35,6 +35,15 @@ import { useDemandState } from '@academix-admin/state-stack';
  * pushed page is not a reason to throw away what someone was looking at.
  */
 
+/**
+ * The most rows one refresh will ask for.
+ *
+ * "However many are loaded" has no ceiling, and a list somebody scrolled a long way through is
+ * not worth a thousand-row query every time they come back to it. Past this the tail is dropped
+ * and re-paginated, which is the honest trade: the alternative is a slow screen.
+ */
+const REFRESH_LIMIT = 200;
+
 export interface PageResult<T> {
   rows: T[];
   /** Cursor for the next page, taken from the last row. */
@@ -48,7 +57,16 @@ export interface PaginatedList<T> {
   error: string | null;
   hasMore: boolean;
   loadMore: () => void;
+  /** Start again from page one. Use when the QUESTION changed — a new search, a new store. */
   reload: () => void;
+  /**
+   * Re-read what is already on screen, without shortening the list.
+   *
+   * This is what a screen should do when it is returned to. `reload` throws away everything past
+   * page one, which on a list somebody has scrolled through is destructive: see the note on
+   * `refresh` in the implementation.
+   */
+  refresh: () => void;
 }
 
 export function usePaginatedList<T>({
@@ -134,6 +152,10 @@ export function usePaginatedList<T>({
     }
   }
 
+  // The current rows, readable from `refresh` without making it depend on them — it writes them.
+  const itemsRef = useRef<T[]>(items);
+  itemsRef.current = items;
+
   const fetchRef = useRef(fetchPage);
   fetchRef.current = fetchPage;
   const idRef = useRef(getId);
@@ -185,10 +207,22 @@ export function usePaginatedList<T>({
         setError(e instanceof Error ? e.message : 'Could not load this list');
         setSnapshot((prev) => ({ ...prev, hasMore: false }));
       } finally {
-        if (gen === genRef.current) {
-          setLoading(false);
-          setLoadingMore(false);
-        }
+        /*
+         * ALWAYS clear the flags, superseded or not.
+         *
+         * Guarded by `gen === genRef.current`, a superseded request left `loading` true forever —
+         * and `useInfiniteScroll` is enabled on `hasMore && !loading`, so the observer was never
+         * attached and the list silently stopped paginating. The sentinel sat on screen doing
+         * nothing, which looks exactly like a list that has reached its end.
+         *
+         * Superseding happens on any generation bump, and `refresh()` bumps on every resume — so
+         * one visit to a list was enough to kill scrolling on it for the rest of the session.
+         *
+         * Clearing unconditionally is safe: a newer request sets these true synchronously before it
+         * awaits anything, so an older one finishing cannot leave a live request looking idle.
+         */
+        setLoading(false);
+        setLoadingMore(false);
         inFlight.current = false;
       }
     },
@@ -235,7 +269,74 @@ export function usePaginatedList<T>({
 
   const reload = useCallback(() => void load(true), [load]);
 
-  return { items, loading, loadingMore, error, hasMore, loadMore, reload };
+  /*
+   * Re-read the span already on screen, in one request, keeping its length.
+   *
+   * `reload` resets to page one, and every list screen was calling it from `onResume`. On a list
+   * somebody had paged through — a hundred customers, say — tapping the hundredth, coming back,
+   * and finding twenty is not a refresh, it is the screen throwing away their place. The row they
+   * were looking at is gone and so is the scroll position that led to it.
+   *
+   * So the refresh asks for as many rows as are already loaded rather than one page of them. One
+   * request, because the fetcher takes a limit and the server is better at "give me 100" than this
+   * is at asking five times.
+   *
+   * NO LOADING FLAG. What is on screen is still correct; it is being corrected, not replaced, and
+   * a spinner over correct data is the flash this whole migration was about.
+   *
+   * Capped, because "as many as are loaded" is unbounded and a list nobody has scrolled is not
+   * worth a 5,000-row query on the way back to it.
+   */
+  const refresh = useCallback(() => {
+    const loaded = itemsRef.current.length;
+    if (loaded === 0) {
+      void load(true);
+      return;
+    }
+    if (!enabled || inFlight.current) return;
+
+    const span = Math.min(Math.max(loaded, pageSize), REFRESH_LIMIT);
+    const gen = ++genRef.current;
+    inFlight.current = true;
+    setError(null);
+
+    void (async () => {
+      try {
+        const { rows, cursor } = await fetchRef.current(null, span);
+        if (gen !== genRef.current) return;
+
+        const seen = new Set<string>();
+        const fresh: T[] = [];
+        for (const row of rows) {
+          const id = idRef.current(row);
+          if (seen.has(id)) continue;
+          seen.add(id);
+          fresh.push(row);
+        }
+
+        seenRef.current = seen;
+        cursorRef.current = cursor;
+        setSnapshot({ items: fresh, cursor, hasMore: rows.length >= span });
+      } catch (e: unknown) {
+        if (gen !== genRef.current) return;
+        // Keep the rows. A failed refresh is a network problem, not a reason to empty a list
+        // somebody is looking at.
+        setError(e instanceof Error ? e.message : 'Could not refresh this list');
+      } finally {
+        /*
+         * ALWAYS release the flag, superseded or not.
+         *
+         * Guarding this with `gen === genRef.current` leaks it: a refresh that is superseded never
+         * clears `inFlight`, and `load(false)` bails on that flag — so pagination dies silently and
+         * permanently. It looked exactly like a list that had reached its end, sentinel on screen
+         * and all. `load` has always released it unconditionally; this now matches.
+         */
+        inFlight.current = false;
+      }
+    })();
+  }, [enabled, pageSize, setSnapshot, load]);
+
+  return { items, loading, loadingMore, error, hasMore, loadMore, reload, refresh };
 }
 
 /**
