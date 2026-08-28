@@ -161,33 +161,28 @@ export default function SellPage() {
   /*
    * Put the order's first row back under the bar.
    *
-   * MEASURED AFTER THE RE-RENDER, which is the whole difficulty. Switching customers swaps the
-   * entire receipt, so measuring in the click handler reads the tab you just left — its box is
-   * still where it was, the sums come out to "already in place", and nothing moves. That is
-   * exactly what tapping a tab looked like: the four actions settled the page and the tabs did
-   * not, because only the tabs change what is being measured.
+   * THE BROWSER DOES THE ARITHMETIC. `scroll-margin-top` exists for exactly this — an element
+   * being scrolled to that must clear a sticky thing above it — and `scrollIntoView` then honours
+   * it, clamps at the ends of the range, and copes with a smooth scroll that is still in flight.
    *
-   * Two frames: the first lets React commit the new order, the second lets layout settle before
-   * anything is read from it.
+   * Computing a target by hand did not. It read the box, the bar and the scroller in one go, and
+   * every one of those is a moving part while React is swapping a receipt: the numbers came from a
+   * layout that had already been replaced. The symptom was an alternating one — the first tap
+   * worked, the second did nothing, the third worked — because each measurement was really
+   * describing the tab BEFORE it. Frame counting only moves that boundary around; asking the
+   * browser removes it.
    */
   const settlePage = useCallback(() => {
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const box = orderTopRef.current;
-        const body = box?.closest<HTMLElement>('.navstack-column-body');
-        if (!box || !body) return;
+      const box = orderTopRef.current;
+      const body = box?.closest<HTMLElement>('.navstack-column-body');
+      if (!box || !body) return;
 
-        // Against the bar's own height rather than a guessed number, so it stays right when the
-        // bar changes — it grows a row when the four actions collapse.
-        const bar = body.querySelector<HTMLElement>('[class*="CustomerTabs_bar"]');
-        const clearance = bar ? bar.getBoundingClientRect().height : 0;
-        const top = box.getBoundingClientRect().top - body.getBoundingClientRect().top;
-        const target = body.scrollTop + top - clearance;
-
-        // Nothing to do when it is already there — a smooth scroll of two pixels reads as a twitch.
-        if (Math.abs(target - body.scrollTop) < 4) return;
-        body.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
-      });
+      // Against the bar's own height rather than a guessed number, so it stays right when the bar
+      // changes — it grows a row when the four actions collapse.
+      const bar = body.querySelector<HTMLElement>('[class*="CustomerTabs_bar"]');
+      box.style.scrollMarginTop = `${Math.round(bar?.getBoundingClientRect().height ?? 0)}px`;
+      box.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
   }, []);
 
@@ -624,7 +619,7 @@ export default function SellPage() {
          * the items AND the button that adds to them, not the first row of a list whose top is
          * under the sticky bar.
          */
-        <div ref={orderTopRef}>
+        <div ref={orderTopRef} className={styles.orderBox}>
           {/* ── Lines ─────────────────────────────────────────────────────────── */}
           {activeOrder.lines.length > 0 && (
             <div className={styles.lines}>

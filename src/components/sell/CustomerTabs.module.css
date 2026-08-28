@@ -116,6 +116,20 @@
 
 /* ── The four ─────────────────────────────────────────────────────────────────────── */
 
+/*
+ * The two states of this row are the SAME HEIGHT.
+ *
+ * They swap as the tabs scroll — four actions when the active customer is in view, one control
+ * when it is not — and a bar that changes height as you scroll is a bar that shoves the receipt
+ * up and down under it. It also broke the settle: the page measures this bar to know how far to
+ * scroll, and measuring the short version a moment before the tall one rendered left every tap
+ * overshooting by exactly the difference.
+ */
+.actions,
+.jumpRow {
+  min-height: 56px;
+}
+
 .actions {
   display: flex;
   align-items: stretch;

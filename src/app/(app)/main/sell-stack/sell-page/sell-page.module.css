@@ -475,3 +475,19 @@
 .floatSpacer {
   height: calc(var(--touch-comfortable) + var(--space-5));
 }
+
+/*
+ * Room for a short order to be scrolled under the bar.
+ *
+ * The bar is pinned, and tapping a customer puts that customer's first row directly beneath it —
+ * which a long receipt can do and a two-line one cannot: the page bottoms out with the row still
+ * halfway down the screen. It looked like the scroll had failed on every other tap, and it had
+ * not; there was simply nothing left to scroll.
+ *
+ * Tall enough that any order can reach the top. The subtraction is the bar, the tab bar and the
+ * page's own bottom padding — approximate on purpose, because being a little generous costs a
+ * short scroll and being exact would mean measuring three moving things on every render.
+ */
+.orderBox {
+  min-height: calc(100dvh - 240px - var(--nav-height));
+}

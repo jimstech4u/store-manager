@@ -117,9 +117,20 @@ export function CustomerTabs({
     };
   }, [check, tabs.length, activeId]);
 
-  /** Brings the active tab back into the row, which is what the collapsed button is for. */
+  /*
+   * Brings the active tab back into the row — SIDEWAYS ONLY.
+   *
+   * `scrollIntoView` was used here and it scrolls every scrollable ancestor, not just this row. So
+   * centring a tab also nudged the page, and because both run on the same change it cancelled the
+   * vertical settle that was starting at the same moment: the first tap worked and every one after
+   * it did not. Setting `scrollLeft` touches this row and nothing else.
+   */
   const showActiveTab = useCallback(() => {
-    activeTabRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    const row = rowRef.current;
+    const tab = activeTabRef.current;
+    if (!row || !tab) return;
+    const target = tab.offsetLeft - (row.clientWidth - tab.offsetWidth) / 2;
+    row.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
   }, []);
 
   /** The first and last tabs, for the controls either side of "Active order". */
