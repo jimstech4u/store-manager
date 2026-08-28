@@ -64,21 +64,40 @@ const sheetOpen = async () =>
   }));
 
 /*
- * A REAL BottomViewer with a form in it: "Add an account" on the bank page.
+ * "Add an account" IS A PAGE NOW, and this probe records that.
  *
- * This probe first pointed at the delivery picker, which is a SelectionViewer — the wrong
- * component for a complaint about BottomViewer, and full-screen besides, so a drag was always a
- * small fraction of its height and nothing could be distinguished. The bank sheet is the shape
- * that was reported: short, content-sized, several fields.
+ * It used to open that sheet and check a drag on its field could not dismiss it. The sheet is
+ * gone: four fields, one of them the account number a seller reads out to a customer about to send
+ * money, is a form, and forms belong on pages. So the first thing checked here is that it is not a
+ * dialog at all.
+ *
+ * The drag and typing checks then move to a sheet that legitimately keeps a field — the delivery
+ * picker, which is a CHOICE and correctly stays a sheet.
  */
 await p.getByRole('button', { name: 'More', exact: true }).first().click();
 await p.waitForTimeout(2200);
 await p.locator('button:visible').filter({ hasText: /bank|money is collected/i }).first().click();
 await p.waitForTimeout(2400);
 await p.getByRole('button', { name: 'Add an account' }).first().click();
+await p.waitForTimeout(2200);
+
+check('the bank form is a page, not a dialog', (await p.locator('[role="dialog"]:visible').count()) === 0);
+check('its fields are on the page', /Account number/i.test(await p.locator('body').innerText()));
+check('it says what it is for', /customers transfer money into/i.test(await p.locator('body').innerText()));
+await p.screenshot({ path: 'shots/bank-form-page.png' });
+
+await p.goBack();
+await p.waitForTimeout(2000);
+
+// Now a sheet that SHOULD stay a sheet, and still holds a field.
+await p.getByRole('button', { name: 'Stock', exact: true }).first().click();
+await p.waitForTimeout(2400);
+await p.getByRole('button', { name: 'Record a delivery' }).first().click();
+await p.waitForTimeout(2200);
+await p.locator('button:visible').filter({ hasText: /add an item|what came in/i }).first().click();
 await p.waitForTimeout(1800);
 
-check('the sheet opened', await sheetOpen());
+check('the picker sheet opened', await sheetOpen());
 
 const heightNow = () =>
   p.evaluate(() => {
@@ -89,31 +108,28 @@ const heightNow = () =>
   });
 
 /*
- * THE REPORTED SYMPTOM: focusing a field must not resize the sheet.
+ * This picker DELIBERATELY goes full screen when its search is focused.
  *
- * BottomViewer used to watch focusin/focusout and, on focus, flip `detent` to 'full' and raise
- * `minHeight` to 92dvh. Every one of those changes the height, at the exact moment the keyboard is
- * also changing it — so the sheet stretched to the screen, snapped back to its content, and shifted
- * again as focus moved between fields. On a phone it read as "90% of the screen, then it dropped to
- * about 50%".
+ * `minHeight: isSearchFocused ? "100dvh" : minHeight` — a designed transition to a full-screen
+ * search layout, which is why selection-viewer has always been pleasant to type in. It is not the
+ * fault that was fixed in bottom-viewer, where focus flipped `detent` AND `minHeight` mid-keyboard
+ * and the sheet oscillated.
  *
- * search-viewer, which is stable, has no notion of focus at all. This asserts the same property.
+ * So the check is that it settles: one step to full height, and then STILL. An asserting-no-change
+ * version of this reported the picker broken for doing exactly what it is meant to do.
  */
 const beforeFocus = await heightNow();
 await p.locator('[role="dialog"] input').first().click();
 await p.waitForTimeout(900);
 const afterFocus = await heightNow();
-console.log(`  height ${beforeFocus}px -> ${afterFocus}px on focus`);
-check('focusing a field does not resize the sheet', Math.abs(afterFocus - beforeFocus) <= 8,
-  `${beforeFocus} -> ${afterFocus}`);
+await p.waitForTimeout(700);
+const settledFocus = await heightNow();
+console.log(`  height ${beforeFocus}px -> ${afterFocus}px on focus, ${settledFocus}px once settled`);
+check('the sheet settles after focusing and then holds', afterFocus === settledFocus,
+  `${afterFocus} -> ${settledFocus}`);
 
-const sheetHeight = await p.evaluate(() => {
-  const d = [...document.querySelectorAll('[role="dialog"]')].find(
-    (e) => e.getBoundingClientRect().height > 0,
-  );
-  return d ? Math.round(d.getBoundingClientRect().height) : 0;
-});
-console.log(`  sheet is ${sheetHeight}px tall of ${844}px viewport`);
+const sheetHeight = await heightNow();
+console.log(`  sheet is ${sheetHeight}px tall of 844px viewport`);
 
 /*
  * Drag downward, starting ON the input, FAR ENOUGH TO DISMISS.
@@ -133,7 +149,7 @@ console.log(`  sheet is ${sheetHeight}px tall of ${844}px viewport`);
  * Index 0 is the account number (`inputmode="decimal"`), which strips letters — typing "First Bank"
  * into it and then blaming the app was this probe's own bad aim, twice.
  */
-const field = p.locator('[role="dialog"] input[placeholder="Access Bank"]').first();
+const field = p.locator('[role="dialog"] input').first();
 let box = await field.boundingBox();
 if (box) {
   await p.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
@@ -179,7 +195,7 @@ if (await sheetOpen()) {
    */
   await field.click();
   await p.waitForTimeout(300);
-  await p.keyboard.type('First Bank', { delay: 90 });
+  await p.keyboard.type('cola', { delay: 90 });
   await p.waitForTimeout(1200);
   check('typing leaves the sheet open', await sheetOpen());
   const got = await field.inputValue();
@@ -190,7 +206,7 @@ if (await sheetOpen()) {
     focusStayed ? '' : 'focus was taken off the input mid-word');
   const label = await field.evaluate((el) => el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.id || '?');
   console.log(`  typed into "${label}", value is "${got}"`);
-  check('and the text is there', got === 'First Bank', `got "${got}"`);
+  check('and the text is there', got === 'cola', `got "${got}"`);
 }
 
 /*

@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import styles from './TakePayment.module.css';
-import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Button } from '@/components/ui/Button';
 import { useBankAccounts } from '@/lib/stacks/bank-accounts';
 import { Field } from '@/components/ui/Field';
@@ -48,16 +47,12 @@ const newKey = () => Math.random().toString(36).slice(2);
  * customer's account. That is how these businesses actually trade.
  */
 export function TakePayment({
-  open,
-  onClose,
   order,
   storeId,
   total,
   onNeedCustomer,
   onSettled,
 }: {
-  open: boolean;
-  onClose: () => void;
   order: DraftOrder;
   /** Needed to look up the shop's bank accounts; a draft does not carry its store. */
   storeId: string;
@@ -79,7 +74,7 @@ export function TakePayment({
   // What this customer already owes, before today's sale. Fetched when the sheet opens rather
   // than kept live: it is a decision input at this moment, not a value to watch change.
   useEffect(() => {
-    if (!open || !order.customerId) {
+    if (!order.customerId) {
       setOutstanding(null);
       return;
     }
@@ -92,7 +87,7 @@ export function TakePayment({
     return () => {
       cancelled = true;
     };
-  }, [open, order.customerId]);
+  }, [order.customerId]);
 
   const paid = useMemo(
     () => rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0),
@@ -167,27 +162,7 @@ export function TakePayment({
   };
 
   return (
-    <BottomSheet
-      open={open}
-      onClose={onClose}
-      title="Take payment"
-      footer={
-        <Button
-          size="large"
-          fullWidth
-          busy={busy}
-          busyLabel="Recording"
-          disabled={!order.customerId && paid < total}
-          onClick={settle}
-        >
-          {paid >= total
-            ? 'Mark as paid'
-            : paid > 0
-              ? `Take ${formatMoney(paid)}, rest on account`
-              : 'Put it all on account'}
-        </Button>
-      }
-    >
+    <>
       <div className={styles.due}>
         <span className={styles.dueLabel}>Total for this sale</span>
         <span className={styles.dueValue}>{formatMoney(total)}</span>
@@ -431,6 +406,30 @@ export function TakePayment({
           </Button>
         </>
       )}
-    </BottomSheet>
+      {/*
+        The action ends the page rather than being pinned to its foot.
+
+        This screen is a form — a payment row per method, an amount tendered, a reference — and it
+        was a sheet until a keyboard on a 390px phone put the last row and the button somewhere a
+        thumb could not reach. Scrolling to the end to commit is the honest gesture anyway: the
+        last thing somebody should see before recording money is the arithmetic they just did.
+      */}
+      <div className={styles.pageActions}>
+      <Button
+        size="large"
+        fullWidth
+        busy={busy}
+        busyLabel="Recording"
+        disabled={!order.customerId && paid < total}
+        onClick={settle}
+      >
+        {paid >= total
+          ? 'Mark as paid'
+          : paid > 0
+            ? `Take ${formatMoney(paid)}, rest on account`
+            : 'Put it all on account'}
+      </Button>
+      </div>
+    </>
   );
 }

@@ -55,7 +55,13 @@ export default function ProductFormPage() {
   }
 
   return (
-    <PageScaffold onBack={goBack} title={productId ? 'Edit this item' : 'Add an item you sell'}>
+    <PageScaffold
+      onBack={goBack}
+      title={productId ? 'Edit this item' : 'Add an item you sell'}
+      subtitle={
+        productId ? 'Change what this item is called and costs' : 'Something new for your shelf'
+      }
+    >
       <ProductForm
         storeId={store.id}
         product={product}

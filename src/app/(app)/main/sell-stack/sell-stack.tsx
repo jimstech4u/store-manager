@@ -3,6 +3,7 @@
 import NavigationStack from '@academix-admin/navigation-stack';
 import SellPage from './sell-page/sell-page';
 import ReceiptPage from './receipt-page/receipt-page';
+import TakePaymentPage from './take-payment-page/take-payment-page';
 /*
  * The catalogue form, registered in this stack too.
  *
@@ -15,6 +16,7 @@ import ProductFormPage from '../stock-stack/product-form-page/product-form-page'
 const navLink = {
   sell_page: SellPage,
   receipt_page: ReceiptPage,
+  take_payment_page: TakePaymentPage,
   product_form_page: ProductFormPage,
 };
 

@@ -37,6 +37,16 @@ import styles from './account-action-page.module.css';
 
 type ActionKind = 'payment' | 'return' | 'deposit' | 'refund' | 'breakage' | 'opening';
 
+/** A line under each title saying what the screen is for, in the words of the counter. */
+const SUBTITLES: Record<ActionKind, string> = {
+  payment: 'Money they have handed over',
+  return: 'Crates or bottles coming back',
+  deposit: 'Money you hold against what they took',
+  refund: 'Give back a deposit you were holding',
+  breakage: 'Keep part of a deposit for what came back broken',
+  opening: 'What they owed before you started here',
+};
+
 const TITLES: Record<ActionKind, string> = {
   payment: 'Record a payment',
   return: 'Empties brought back',
@@ -194,7 +204,7 @@ export default function AccountActionPage() {
   const pool = pools.find((p: EmptiesPool) => p.id === poolId);
 
   return (
-    <PageScaffold onBack={goBack} title={TITLES[kind]}>
+    <PageScaffold onBack={goBack} title={TITLES[kind]} subtitle={SUBTITLES[kind]}>
       {problem && (
         <InfoPanel tone="danger" title="Not recorded">
           {problem}

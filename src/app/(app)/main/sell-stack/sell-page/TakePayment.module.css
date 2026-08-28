@@ -273,3 +273,8 @@
   letter-spacing: normal;
   color: var(--text-muted);
 }
+
+/* The commit button ends the page rather than being pinned to its foot — see TakePayment. */
+.pageActions {
+  margin-top: var(--space-5);
+}

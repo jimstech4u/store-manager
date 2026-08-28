@@ -1,0 +1,39 @@
+/* Lifted from the bank page's sheet, which is where this form came from. */
+
+.toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.toggle input {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  margin-top: 2px;
+  accent-color: var(--primary);
+}
+
+.toggleNote {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+/* The actions end the page. `--nav-height` keeps them clear of the tab bar; every page carries
+   that padding and nothing may cancel it. */
+.actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.actions > * {
+  flex: 1;
+}

@@ -1,10 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
-import { Field } from '@/components/ui/Field';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Explain, InfoPanel } from '@/components/ui/Explain';
 import { PlusIcon, TrashIcon } from '@/components/ui/Icon';
@@ -63,6 +63,7 @@ const ROLE_SUMMARY: Record<string, string> = {
 };
 
 export default function StaffPage() {
+  const nav = useNav();
   const goBack = useStackBack();
   const { store } = useAuth();
   const { can } = usePermission();
@@ -104,12 +105,7 @@ export default function StaffPage() {
   const error = snapshot.error;
   const loading = !snapshot.settled;
 
-  const [inviting, setInviting] = useState(false);
-  const [email, setEmail] = useState('');
-  const [roleCode, setRoleCode] = useState('staff');
-  const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
 
   const [confirmRemove, setConfirmRemove] = useState<Member | null>(null);
 
@@ -137,7 +133,6 @@ export default function StaffPage() {
           },
           { override: true },
         );
-        if (assignable.length > 0) setRoleCode(assignable[0].code);
       } catch (e) {
         // Keep the team and say why it did not refresh. Emptying it would read as "you have no
         // staff" — and this page is where somebody goes to check exactly that.
@@ -174,33 +169,6 @@ export default function StaffPage() {
     return <FullPageMessage title="Loading your team" tone="loading" />;
   }
 
-  const invite = async () => {
-    setBusy(true);
-    setProblem(null);
-    setNote(null);
-    try {
-      const { data, error: e } = await getSupabase().rpc('invite_staff', {
-        p_store_id: store.id,
-        p_email: email.trim(),
-        p_role_code: roleCode,
-      });
-      if (e) throw e;
-      const result = data as { joined: boolean; email: string };
-      setNote(
-        result.joined
-          ? `${result.email} already had an account and now works here.`
-          : `We will let ${result.email} in as soon as they sign up with that address.`,
-      );
-      setEmail('');
-      setInviting(false);
-      await load();
-    } catch (e) {
-      setProblem(e instanceof Error ? e.message : 'That person could not be added.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const changeRole = async (member: Member, code: string) => {
     setProblem(null);
     try {
@@ -230,7 +198,7 @@ export default function StaffPage() {
           icon: <PlusIcon />,
           onClick: () => {
             setProblem(null);
-            setInviting(true);
+            void nav.push('staff_invite_page');
           },
           ariaLabel: 'Add someone to your team',
         },
@@ -261,11 +229,6 @@ export default function StaffPage() {
       {problem && (
         <InfoPanel tone="danger" title="Not changed">
           {problem}
-        </InfoPanel>
-      )}
-      {note && (
-        <InfoPanel tone="success" title="Done">
-          {note}
         </InfoPanel>
       )}
 
@@ -393,57 +356,6 @@ export default function StaffPage() {
           </ul>
         </>
       )}
-
-      <BottomSheet
-        open={inviting}
-        onClose={() => setInviting(false)}
-        title="Add someone to your team"
-        footer={
-          <div className={styles.sheetActions}>
-            <Button variant="secondary" onClick={() => setInviting(false)} disabled={busy}>
-              Cancel
-            </Button>
-            <Button busy={busy} onClick={() => void invite()}>
-              Add them
-            </Button>
-          </div>
-        }
-      >
-        {problem && (
-          <InfoPanel tone="danger" title="Not added">
-            {problem}
-          </InfoPanel>
-        )}
-
-        <Field
-          label="Their email address"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="name@example.com"
-          hint="They sign in with this. If they do not have an account yet, they join as soon as they make one."
-          autoFocus
-        />
-
-        <div className={styles.field}>
-          <label className={styles.label} htmlFor="invite-role">
-            What can they do?
-          </label>
-          <select
-            id="invite-role"
-            className={styles.select}
-            value={roleCode}
-            onChange={(e) => setRoleCode(e.target.value)}
-          >
-            {roles.map((r) => (
-              <option key={r.code} value={r.code}>
-                {r.name}
-              </option>
-            ))}
-          </select>
-          <p className={styles.roleNote}>{ROLE_SUMMARY[roleCode]}</p>
-        </div>
-      </BottomSheet>
 
       <BottomSheet
         open={confirmRemove !== null}

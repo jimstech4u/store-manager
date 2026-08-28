@@ -45,15 +45,22 @@ const revealTabs = async () => {
 };
 
 await revealTabs();
-await p.getByRole('button', { name: 'More', exact: true }).first().click();
-await p.waitForTimeout(1800);
-await p.locator('button:visible').filter({ hasText: /bank|money is collected|account/i }).first().click();
+/*
+ * The DELIVERY PICKER, not the bank form.
+ *
+ * This probe used to open "Add an account", which is a page now — four fields, one of them an
+ * account number, is a form and forms belong on pages. What is left to test here is a sheet that
+ * should stay a sheet: a picker is a CHOICE, opened over a half-entered delivery that must remain
+ * exactly as it was.
+ */
+await p.getByRole('button', { name: 'Stock', exact: true }).first().click();
+await p.waitForTimeout(2400);
+await p.getByRole('button', { name: 'Record a delivery' }).first().click();
 await p.waitForTimeout(2200);
-await p.screenshot({ path: 'shots/sheet-bank-page.png' });
+await p.screenshot({ path: 'shots/sheet-delivery-page.png' });
 
 const openSheet = async () => {
-  // The trigger is the header's "+" — an icon button whose only name is its aria-label.
-  await p.getByRole('button', { name: 'Add an account' }).first().click();
+  await p.locator('button:visible').filter({ hasText: /add an item|what came in/i }).first().click();
   await p.waitForTimeout(1400);
 };
 await openSheet();

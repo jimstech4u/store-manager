@@ -1,10 +1,10 @@
 'use client';
 
 import { useCallback, useState } from 'react';
+import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
-import { Field } from '@/components/ui/Field';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Explain, InfoPanel } from '@/components/ui/Explain';
 import { EditIcon, PlusIcon, StarIcon, TrashIcon } from '@/components/ui/Icon';
@@ -35,9 +35,8 @@ interface Account {
   is_default: boolean;
 }
 
-const BLANK = { bank_name: '', account_name: '', account_number: '', is_default: false };
-
 export default function BankPage() {
+  const nav = useNav();
   const goBack = useStackBack();
   const { store } = useAuth();
   const { can } = usePermission();
@@ -52,11 +51,6 @@ export default function BankPage() {
   const { accounts, error, settled, reload } = useBankAccountsState(store?.id ?? null);
   const loading = !settled;
 
-  const [editing, setEditing] = useState<Account | null>(null);
-  const [form, setForm] = useState(BLANK);
-  const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<Account | null>(null);
 
   /*
@@ -77,48 +71,15 @@ export default function BankPage() {
     return <FullPageMessage title="Loading your accounts" tone="loading" />;
   }
 
-  const startAdd = () => {
-    setEditing(null);
-    // First account is the default automatically — a shop with one account should never have to
-    // be told which one to use.
-    setForm({ ...BLANK, is_default: accounts.length === 0 });
-    setProblem(null);
-    setOpen(true);
-  };
-
-  const startEdit = (a: Account) => {
-    setEditing(a);
-    setForm({
-      bank_name: a.bank_name,
-      account_name: a.account_name,
-      account_number: a.account_number,
-      is_default: a.is_default,
-    });
-    setProblem(null);
-    setOpen(true);
-  };
-
-  const save = async () => {
-    setBusy(true);
-    setProblem(null);
-    try {
-      const { error: e } = await getSupabase().rpc('save_bank_account', {
-        p_store_id: store.id,
-        p_bank_name: form.bank_name.trim(),
-        p_account_name: form.account_name.trim(),
-        p_account_number: form.account_number.trim(),
-        p_is_default: form.is_default,
-        p_id: editing?.id ?? null,
-      });
-      if (e) throw e;
-      setOpen(false);
-      await load();
-    } catch (e) {
-      setProblem(e instanceof Error ? e.message : 'That account could not be saved.');
-    } finally {
-      setBusy(false);
-    }
-  };
+  /*
+   * Adding and editing are a PAGE now, not a sheet on this one.
+   *
+   * Four fields — one of them the account number a seller reads out to a customer about to send
+   * money — is a form, and a form under a keyboard on a phone is not a sheet. Only the id travels;
+   * the form resolves the account from the same cache this list reads.
+   */
+  const startAdd = () => void nav.push('bank_form_page');
+  const startEdit = (a: Account) => void nav.push('bank_form_page', { id: a.id });
 
   return (
     <PageScaffold
@@ -199,68 +160,6 @@ export default function BankPage() {
           Only the owner changes where money is collected.
         </InfoPanel>
       )}
-
-      <BottomSheet
-        open={open}
-        onClose={() => setOpen(false)}
-        title={editing ? 'Edit this account' : 'Add an account'}
-        footer={
-          <div className={styles.sheetActions}>
-            <Button variant="secondary" onClick={() => setOpen(false)} disabled={busy}>
-              Cancel
-            </Button>
-            <Button busy={busy} onClick={() => void save()}>
-              Save
-            </Button>
-          </div>
-        }
-      >
-        {problem && (
-          <InfoPanel tone="danger" title="Not saved">
-            {problem}
-          </InfoPanel>
-        )}
-
-        <Field
-          label="Account number"
-          numeric
-          value={form.account_number}
-          onChange={(e) => setForm({ ...form, account_number: e.target.value })}
-          placeholder="0123456789"
-          hint="Check this against your bank app before saving it."
-          autoFocus
-        />
-
-        <Field
-          label="Bank"
-          value={form.bank_name}
-          onChange={(e) => setForm({ ...form, bank_name: e.target.value })}
-          placeholder="Access Bank"
-        />
-
-        <Field
-          label="Account name"
-          value={form.account_name}
-          onChange={(e) => setForm({ ...form, account_name: e.target.value })}
-          placeholder="The name the bank shows"
-          hint="Customers check this before they send money."
-        />
-
-        <label className={styles.toggle}>
-          <input
-            type="checkbox"
-            checked={form.is_default}
-            onChange={(e) => setForm({ ...form, is_default: e.target.checked })}
-          />
-          <span>
-            <strong>Offer this one first</strong>
-            <span className={styles.toggleNote}>
-              The account the counter reads out unless the seller picks another. Only one account
-              can be the main one.
-            </span>
-          </span>
-        </label>
-      </BottomSheet>
 
       <BottomSheet
         open={confirmRemove !== null}

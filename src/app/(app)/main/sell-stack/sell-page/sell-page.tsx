@@ -11,7 +11,6 @@ import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
 import { Collapsible } from '@/components/ui/Collapsible';
 import { CloseIcon, MinusIcon, PlusIcon, ReceiptIcon, ReturnIcon } from '@/components/ui/Icon';
-import { TakePayment } from './TakePayment';
 import { CustomerPicker } from '@/components/customers/CustomerPicker';
 import { ProductPicker } from '@/components/catalog/ProductPicker';
 import type { ProductFormResult } from '@/components/catalog/ProductForm';
@@ -148,7 +147,6 @@ export default function SellPage() {
   const [returnables, setReturnables] = useState<
     Record<string, { categoryId: string; categoryName: string; kind: string }[]>
   >({});
-  const [paying, setPaying] = useState(false);
   const [claiming, setClaiming] = useState(false);
   const [pickingCustomer, setPickingCustomer] = useState(false);
   // Remembers that the picker was opened mid-payment, so choosing someone returns to the
@@ -211,6 +209,39 @@ export default function SellPage() {
    * cannot close over `addProduct` directly without capturing the first render's copy of every
    * order and line it touches.
    */
+  /*
+   * What the payment page needs back from this screen.
+   *
+   * Taking payment is a page now — the longest form in the product, and it was a sheet until a
+   * keyboard put its last row out of reach. A pushed page has no return value, so the two things
+   * that have to happen HERE are published as callbacks and picked up there with `useObject`:
+   *
+   *   attaching a customer, because the picker belongs over the receipt being built — seeing what
+   *   is being bought is most of how a seller recognises who is buying it;
+   *
+   *   and settling, which pushes the receipt and closes the tab.
+   *
+   * Provided once, through refs, so the callbacks are never a render behind.
+   */
+  const needCustomerRef = useRef<(() => void) | null>(null);
+  const onSettledRef = useRef<((saleId: string) => void) | null>(null);
+
+  useEffect(() => {
+    const a = nav.provideObject('onNeedCustomer', () => () => needCustomerRef.current?.(), {
+      global: true,
+      scope: 'sell',
+    });
+    const b = nav.provideObject(
+      'onSaleSettled',
+      () => (saleId: string) => onSettledRef.current?.(saleId),
+      { global: true, scope: 'sell' },
+    );
+    return () => {
+      a?.();
+      b?.();
+    };
+  }, [nav]);
+
   const addProductRef = useRef<((product: Product) => Promise<void>) | null>(null);
 
   const addProduct = async (product: Product) => {
@@ -296,6 +327,27 @@ export default function SellPage() {
     pickerOps.close();
   };
 
+  needCustomerRef.current = () => {
+    setResumePayment(true);
+    setPickingCustomer(true);
+  };
+
+  onSettledRef.current = (saleId: string) => {
+    if (!activeOrder) return;
+    /*
+     * Navigate FIRST, then close the tab.
+     *
+     * Closing empties the order list, which immediately starts a fresh order, and the churn that
+     * follows was swallowing whatever came after it. The sale is already recorded by this point,
+     * so the order of these two is purely about what the seller ends up looking at.
+     */
+    void nav.push('receipt_page', { id: saleId, fresh: '1' });
+
+    // Only once the sale is recorded. Closing optimistically would lose the order if the write
+    // failed.
+    closeOrder(activeOrder.clientUuid);
+  };
+
   // Point the published callback at THIS render's `addProduct`, every render. Without this the
   // callback holds null and adding a product mid-sale does nothing at all — silently.
   addProductRef.current = addProduct;
@@ -364,15 +416,16 @@ export default function SellPage() {
    *
    * Only pushes the order so it exists server-side (and so a colleague could claim it). No
    * customer is created here: an anonymous cash sale never needs one, and when credit does, the
-   * payment sheet asks — at the point the answer actually matters.
+   * payment page asks — at the point the answer actually matters.
    */
   const openPayment = async () => {
     if (!activeOrder || !store) return;
     // The button is disabled for this, but the check is repeated here because `openPayment` is
-    // also reachable from the payment sheet's resume path after choosing a customer.
+    // also reachable from the payment page's resume path after choosing a customer.
     if (emptyLines.length > 0) return;
     await push(activeOrder);
-    setPaying(true);
+    // Taking payment is a PAGE now — see the callbacks published above for what comes back.
+    await nav.push('take_payment_page');
   };
 
   if (!store) return null;
@@ -947,52 +1000,21 @@ export default function SellPage() {
             setPickingCustomer(false);
             if (resumePayment) {
               setResumePayment(false);
-              setPaying(true);
+              void nav.push('take_payment_page');
             }
           }}
           onClose={() => {
             setPickingCustomer(false);
-            // Backing out must also return to the payment sheet — the seller may simply have
+            // Backing out must also return to the payment page — the seller may simply have
             // decided the sale is anonymous after all, and should not have to start again.
             if (resumePayment) {
               setResumePayment(false);
-              setPaying(true);
+              void nav.push('take_payment_page');
             }
           }}
         />
       )}
 
-      {activeOrder && (
-        <TakePayment
-          open={paying}
-          onClose={() => setPaying(false)}
-          order={activeOrder}
-          storeId={store.id}
-          total={total}
-          onNeedCustomer={() => {
-            setPaying(false);
-            setResumePayment(true);
-            setPickingCustomer(true);
-          }}
-          onSettled={(saleId) => {
-            setPaying(false);
-
-            /*
-             * Navigate FIRST, then close the tab.
-             *
-             * Closing empties the order list, which immediately starts a fresh order, and the
-             * churn that follows was swallowing whatever came after it — first a sheet's state,
-             * then the push itself. The sale is already recorded at this point, so the order of
-             * these two is purely about what the seller ends up looking at.
-             */
-            void nav.push('receipt_page', { id: saleId, fresh: '1' });
-
-            // The tab closes only once the sale is recorded. Closing it optimistically would
-            // lose the order if the write failed.
-            closeOrder(activeOrder.clientUuid);
-          }}
-        />
-      )}
 
     </PageScaffold>
   );

@@ -7,6 +7,7 @@ import { InfoPanel } from '@/components/ui/Explain';
 import { Button } from '@/components/ui/Button';
 import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
 import { useDebounced } from '@/components/ui/SearchField';
+import { useOverlayRoute } from '@/hooks/useOverlayRoute';
 import { useTheme } from '@/context/ThemeContext';
 import { useProductSearch, type Product } from '@/lib/stacks/catalog-stack';
 import { formatMoney, formatQty, pluralUnit } from '@/lib/format';
@@ -58,6 +59,7 @@ export function ProductPicker({
 }) {
   const { theme } = useTheme();
   const dark = theme === 'dark';
+
   const [id, ops, isOpen] = useSelectionController();
   const [query, setQuery] = useState('');
   const debounced = useDebounced(query);
@@ -80,12 +82,28 @@ export function ProductPicker({
     onClose();
   };
 
+  /*
+   * Back closes the PICKER, not the page underneath it.
+   *
+   * This lived on the sell page and did not come along when the picker was extracted, so opening it
+   * from the delivery screen and pressing Back left the delivery entirely — taking a half-entered
+   * delivery with it. It belongs here, so every consumer gets it rather than each remembering to
+   * add it.
+   *
+   * Named per instance: two pickers mounted at once (a sell screen and a delivery behind it) must
+   * not share one history entry.
+   */
+  useOverlayRoute(`picker:${id}`, isOpen, close);
+
   return (
     <SelectionViewer
       id={id}
       isOpen={isOpen}
       onClose={close}
       titleProp={{ text: title, textColor: dark ? '#f2f5f4' : '#12201d' }}
+      // Announced by name. Without it a screen reader says only "dialog", which tells somebody
+      // that the screen has been taken over and nothing about what by.
+      ariaLabel={title}
       cancelButton={{ position: 'right', onClick: close, view: <CloseIcon size="1.3em" /> }}
       searchProp={{
         text: 'Search products or a category',
