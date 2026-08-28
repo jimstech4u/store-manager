@@ -220,3 +220,39 @@
   font-weight: 700;
   cursor: pointer;
 }
+
+/*
+ * Jump to the start, back to the active order, jump to the end — 1 : 2 : 1.
+ *
+ * The middle one is what people reach for, so it is twice the width of either side. The two edges
+ * are for the customer you started first and the one you started last, which between them is most
+ * of what anybody is looking for in a long row.
+ */
+.jumpRow {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.jumpRow > .showActive {
+  flex: 2;
+}
+
+.jump {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--touch-min, 44px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.jump:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+}

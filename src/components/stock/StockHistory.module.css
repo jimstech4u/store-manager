@@ -1,7 +1,14 @@
 /* The ledger, read as a timeline. */
 
+/*
+ * No top margin.
+ *
+ * This used to be a section at the foot of the product screen, where it needed separating from
+ * what came before it. On a page of its own there is nothing above it but the header, and the gap
+ * read as something missing.
+ */
 .section {
-  margin-top: var(--space-6);
+  margin-top: 0;
 }
 
 .title {
@@ -100,12 +107,19 @@
  * Shaped like "On the shelf" and "What it cost you", because it answers the same kind of question
  * at the same glance — those say what is true now, this says when that last became true.
  */
+/*
+ * Spaced from the warning beneath it.
+ *
+ * They are two different kinds of thing — one is a way through to the ledger, the other is a note
+ * about the cost — and flush against each other they read as one control with a caption.
+ */
 .card {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   width: 100%;
   margin-top: var(--space-4);
+  margin-bottom: var(--space-4);
   padding: var(--space-4);
   text-align: left;
   border: 1px solid var(--border);

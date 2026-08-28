@@ -1,7 +1,16 @@
 'use client';
 
-import { PlusIcon, PersonPlusIcon, PersonMinusIcon, CloseIcon, ReturnIcon } from '@/components/ui/Icon';
+import {
+  PlusIcon,
+  PersonPlusIcon,
+  PersonMinusIcon,
+  CloseIcon,
+  ReturnIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+} from '@/components/ui/Icon';
 import { AsyncAction, type AsyncState } from '@/components/ui/AsyncAction';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import styles from './CustomerTabs.module.css';
 
 /**
@@ -31,10 +40,9 @@ export function CustomerTabs({
   onClearCustomer,
   onCloseTab,
   onClaim,
+  onSettlePage,
   hasCustomer,
   orderCode,
-  activeInView = true,
-  onShowActive,
   actionState = 'idle',
   actionProblem,
   onRetryAction,
@@ -49,14 +57,18 @@ export function CustomerTabs({
   onClearCustomer: () => void;
   onCloseTab: () => void;
   onClaim: () => void;
+  /**
+   * Puts the order's first row back under the bar.
+   *
+   * The bar is pinned, so by the time somebody reaches for it the receipt has usually scrolled
+   * beneath — and every control here is about the order, which they then cannot see. Touching any
+   * of them settles the page so the first item sits directly under the bar.
+   */
+  onSettlePage?: () => void;
   /** Drives whether the person action reads as attaching or changing. */
   hasCustomer: boolean;
   /** The active order's handover code, or null while the shop is still assigning one. */
   orderCode?: string | null;
-  /** Whether the active order's own box is on screen. Drives the collapse below. */
-  activeInView?: boolean;
-  /** Scrolls the active order back into view. */
-  onShowActive?: () => void;
   /** The state of whichever action was last pressed — they share one footprint. */
   actionState?: AsyncState;
   actionProblem?: string | null;
@@ -65,6 +77,74 @@ export function CustomerTabs({
   busy?: boolean;
 }) {
   const noTab = activeId === null;
+
+  /*
+   * Has the active tab scrolled out of the row?
+   *
+   * The tabs scroll SIDEWAYS, and with a dozen customers open the one being served can easily be
+   * off the left or right edge — so the four actions would be pointing at a tab nobody can see.
+   * That is the moment to offer a way back to it, and it has nothing to do with how far down the
+   * page has been scrolled, which is what this watched before and was simply the wrong question.
+   */
+  const rowRef = useRef<HTMLDivElement | null>(null);
+  const activeTabRef = useRef<HTMLButtonElement | null>(null);
+  const [activeVisible, setActiveVisible] = useState(true);
+
+  const check = useCallback(() => {
+    const row = rowRef.current;
+    const tab = activeTabRef.current;
+    if (!row || !tab) {
+      setActiveVisible(true);
+      return;
+    }
+    const r = row.getBoundingClientRect();
+    const t = tab.getBoundingClientRect();
+    // Mostly visible counts as visible: a sliver of a pill at the edge is not something to send
+    // somebody chasing.
+    const overlap = Math.min(r.right, t.right) - Math.max(r.left, t.left);
+    setActiveVisible(overlap > t.width * 0.6);
+  }, []);
+
+  useEffect(() => {
+    const row = rowRef.current;
+    if (!row) return;
+    check();
+    row.addEventListener('scroll', check, { passive: true });
+    window.addEventListener('resize', check);
+    return () => {
+      row.removeEventListener('scroll', check);
+      window.removeEventListener('resize', check);
+    };
+  }, [check, tabs.length, activeId]);
+
+  /** Brings the active tab back into the row, which is what the collapsed button is for. */
+  const showActiveTab = useCallback(() => {
+    activeTabRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  }, []);
+
+  /** The first and last tabs, for the controls either side of "Active order". */
+  const scrollToEnd = (edge: 'first' | 'last') => {
+    const row = rowRef.current;
+    if (!row) return;
+    row.scrollTo({ left: edge === 'first' ? 0 : row.scrollWidth, behavior: 'smooth' });
+  };
+
+  /*
+   * Whichever tab becomes active is brought into view.
+   *
+   * Starting a customer used to leave the new tab off the end of a long row — the shop had just
+   * been told to serve somebody and the till showed no sign of it. The same applies to switching:
+   * a tab tapped at the edge should finish the tap fully on screen rather than half under it.
+   *
+   * Keyed on the active id alone, so it never fights somebody scrolling the row by hand — moving
+   * the row does not change which tab is active, so this does not fire.
+   */
+  useEffect(() => {
+    if (!activeId) return;
+    // A frame, so the tab that has only just been added is in the DOM to scroll to.
+    const frame = requestAnimationFrame(showActiveTab);
+    return () => cancelAnimationFrame(frame);
+  }, [activeId, showActiveTab]);
 
   return (
     <div className={styles.bar}>
@@ -93,14 +173,15 @@ export function CustomerTabs({
       </div>
 
       <div className={styles.tabsRow}>
-      <div className={styles.tabs} role="tablist" aria-label="Customers being served">
+      <div ref={rowRef} className={styles.tabs} role="tablist" aria-label="Customers being served">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
             role="tab"
+            ref={tab.id === activeId ? activeTabRef : undefined}
             className={`${styles.tab} ${tab.id === activeId ? styles.tabActive : ''}`}
-            onClick={() => onSelect(tab.id)}
+            onClick={() => { onSelect(tab.id); onSettlePage?.(); }}
             aria-selected={tab.id === activeId}
           >
             <span className={styles.tabName}>{tab.name}</span>
@@ -118,7 +199,7 @@ export function CustomerTabs({
         has time to scroll. It is fixed furniture, like the four actions, and only the tabs
         themselves grow.
       */}
-      <button type="button" className={styles.add} onClick={onAdd} aria-label="Start another customer">
+      <button type="button" className={styles.add} onClick={() => { onAdd(); onSettlePage?.(); }} aria-label="Start another customer">
         <PlusIcon />
       </button>
       </div>
@@ -141,12 +222,12 @@ export function CustomerTabs({
         onDismiss={onDismissAction}
         label="Working on this customer"
       >
-        {activeInView ? (
+        {activeVisible ? (
           <div className={styles.actions} role="group" aria-label="What to do with this customer">
             <button
               type="button"
               className={`${styles.action} ${styles.attach}`}
-              onClick={onSetCustomer}
+              onClick={() => { onSetCustomer(); onSettlePage?.(); }}
               disabled={noTab || busy}
               aria-label={hasCustomer ? 'Change who this sale is for' : 'Say who this sale is for'}
             >
@@ -157,7 +238,7 @@ export function CustomerTabs({
             <button
               type="button"
               className={`${styles.action} ${styles.detach}`}
-              onClick={onClearCustomer}
+              onClick={() => { onClearCustomer(); onSettlePage?.(); }}
               // Nothing to remove when nobody is attached, and a control that does nothing is worse
               // than one that is plainly unavailable.
               disabled={noTab || !hasCustomer || busy}
@@ -170,7 +251,7 @@ export function CustomerTabs({
             <button
               type="button"
               className={`${styles.action} ${styles.discard}`}
-              onClick={onCloseTab}
+              onClick={() => { onCloseTab(); onSettlePage?.(); }}
               disabled={noTab || busy}
               aria-label="Close this tab without selling"
             >
@@ -181,7 +262,7 @@ export function CustomerTabs({
             <button
               type="button"
               className={`${styles.action} ${styles.claim}`}
-              onClick={onClaim}
+              onClick={() => { onClaim(); onSettlePage?.(); }}
               disabled={busy}
               aria-label="Take over an order using its code"
             >
@@ -190,9 +271,37 @@ export function CustomerTabs({
             </button>
           </div>
         ) : (
-          <button type="button" className={styles.showActive} onClick={onShowActive}>
-            Active order
-          </button>
+          /*
+           * Three controls, 1 : 2 : 1.
+           *
+           * With a row of customers long enough to hide the active one, "take me back to it" is
+           * the common need and gets the width to say so. The two beside it go to the ends —
+           * useful when the person wanted is the one started first, or the one started last, which
+           * is most of the time.
+           */
+          <div className={styles.jumpRow}>
+            <button
+              type="button"
+              className={styles.jump}
+              onClick={() => { scrollToEnd('first'); onSettlePage?.(); }}
+              aria-label="Show the first customer"
+            >
+              <ChevronLeftIcon />
+            </button>
+
+            <button type="button" className={styles.showActive} onClick={() => { showActiveTab(); onSettlePage?.(); }}>
+              Active order
+            </button>
+
+            <button
+              type="button"
+              className={styles.jump}
+              onClick={() => { scrollToEnd('last'); onSettlePage?.(); }}
+              aria-label="Show the last customer"
+            >
+              <ChevronRightIcon />
+            </button>
+          </div>
         )}
       </AsyncAction>
     </div>

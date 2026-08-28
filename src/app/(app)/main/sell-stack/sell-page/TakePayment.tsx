@@ -236,13 +236,29 @@ export function TakePayment({
         </span>
       </button>
 
+
+      {error && (
+        <InfoPanel tone="danger" title="Could not record this payment">
+          {error}
+        </InfoPanel>
+      )}
+
+      {outstanding !== null && outstanding > 0 && (
+        <div className={styles.outstanding}>
+          <span>
+            {order.customerName || 'This customer'} already owes
+          </span>
+          <span className={styles.outstandingValue}>{formatMoney(outstanding)}</span>
+        </div>
+      )}
+
       {/*
-        The extra charge, between who is paying and how.
+        The extra charge, immediately before the methods.
 
         It lived on the till, where it sat between the items and the button that acts on them —
-        scrolled past on every sale that does not need it, which is most of them. A delivery fee or
-        a note about the sale is decided while money is changing hands, so it belongs on the screen
-        where that happens, after the customer is settled and before the methods.
+        scrolled past on every sale that does not need it, which is most of them. A delivery fee
+        or a note is decided while money is changing hands, and the last thing settled before
+        "how are they paying" is what the total has become — so it sits directly above it.
       */}
       <Collapsible
         tone="card"
@@ -328,21 +344,6 @@ export function TakePayment({
           placeholder="Anything to remember about this sale"
         />
       </Collapsible>
-
-      {error && (
-        <InfoPanel tone="danger" title="Could not record this payment">
-          {error}
-        </InfoPanel>
-      )}
-
-      {outstanding !== null && outstanding > 0 && (
-        <div className={styles.outstanding}>
-          <span>
-            {order.customerName || 'This customer'} already owes
-          </span>
-          <span className={styles.outstandingValue}>{formatMoney(outstanding)}</span>
-        </div>
-      )}
 
       {/* ── Payment rows ────────────────────────────────────────────────────────── */}
       <div className={styles.payments}>

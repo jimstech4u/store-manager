@@ -201,6 +201,11 @@ export default function ProductPage() {
         )}
       </dl>
 
+      <StockHistoryCard
+        productId={product.id}
+        onOpen={() => void nav.push('stock_history_page', { id: product.id })}
+      />
+
       {product.costIsEstimated && (
         <InfoPanel tone="warning" title="This cost is still an estimate">
           It is the figure entered at setup, not one from a real delivery. The next delivery you
@@ -208,10 +213,6 @@ export default function ProductPage() {
         </InfoPanel>
       )}
 
-      <StockHistoryCard
-        productId={product.id}
-        onOpen={() => void nav.push('stock_history_page', { id: product.id })}
-      />
 
       <PhotoUpload
         storeId={store.id}

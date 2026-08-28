@@ -36,6 +36,7 @@ export function FloatingAmount({
   amount,
   onClick,
   disabled = false,
+  busy = false,
 }: {
   /**
    * Whose money this is, shown above the amount with a rule between them.
@@ -50,6 +51,14 @@ export function FloatingAmount({
   amount: ReactNode;
   onClick: () => void;
   disabled?: boolean;
+  /**
+   * Working, and not listening.
+   *
+   * Taking payment is a round trip to the shop, and without this the pill looked idle while it
+   * ran — so a seller tapped it again, and again, and the sale appeared to need three or four
+   * presses. It shows what it is doing and refuses the extra taps.
+   */
+  busy?: boolean;
 }) {
   const bar = useNavBarState();
 
@@ -71,11 +80,13 @@ export function FloatingAmount({
           ? `calc(16px + ${barHeight} + env(safe-area-inset-bottom, 0px))`
           : 'calc(16px + env(safe-area-inset-bottom, 0px))',
       }}
-      disabled={disabled}
+      disabled={disabled || busy}
+      aria-busy={busy || undefined}
       onClick={onClick}
     >
       {who && <span className={styles.who}>{who}</span>}
       <span className={styles.row}>
+        {busy && <span className={styles.spinner} aria-hidden="true" />}
         <span className={styles.label}>{label}</span>
         <span className={styles.amount}>{amount}</span>
       </span>

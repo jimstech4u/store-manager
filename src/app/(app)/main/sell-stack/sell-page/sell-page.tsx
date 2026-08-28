@@ -155,6 +155,9 @@ export default function SellPage() {
    * One slot, because only one of these can be in flight at a time — they all act on the same
    * order, and the row they share is where the spinner has to appear.
    */
+  /** The top of the active order, so the bar can bring it back under itself. */
+  const orderTopRef = useRef<HTMLDivElement | null>(null);
+
   const customerAction = useAsyncAction();
 
   const clearCustomerDialog = useConfirm();
@@ -167,17 +170,6 @@ export default function SellPage() {
    * the screen loaded — and its overlay swallows every tap behind it, which on a till means the
    * screen simply stops working. `unmountOnClose` did not help. A flag of our own is unambiguous.
    */
-  /*
-   * Whether the active order's box is on screen.
-   *
-   * The customer bar is sticky, so scrolling into a long receipt leaves it at the top with its
-   * buttons still pointing at an order nobody can see. Acting on something out of sight is how the
-   * wrong tab gets closed, so the four actions collapse into one that brings it back.
-   */
-  const activeBoxRef = useRef<HTMLDivElement | null>(null);
-  const activeTopRef = useRef<HTMLDivElement | null>(null);
-  const [activeInView, setActiveInView] = useState(true);
-
   const [askClearCustomer, setAskClearCustomer] = useState(false);
   const [askCloseTab, setAskCloseTab] = useState(false);
 
@@ -213,25 +205,6 @@ export default function SellPage() {
     });
   }, []);
 
-  useEffect(() => {
-    const box = activeTopRef.current;
-    if (!box) return;
-
-    /*
-     * A generous margin at the top.
-     *
-     * The customer bar is sticky and covers the first rows of the receipt, so a box that is
-     * technically "intersecting" can still be entirely hidden behind it. Treating the bar's own
-     * height as out of bounds makes the collapse agree with what a person can actually see.
-     */
-    const observer = new IntersectionObserver(
-      ([entry]) => setActiveInView(entry.isIntersecting),
-      { threshold: 0.08, rootMargin: '-150px 0px 0px 0px' },
-    );
-    observer.observe(box);
-    return () => observer.disconnect();
-    // Re-observed when the order changes: it is a different box.
-  }, [activeOrder?.clientUuid]);
 
   /*
    * Nothing open ANYWHERE: start one, so the screen is ready to sell rather than empty.
@@ -486,6 +459,8 @@ export default function SellPage() {
    * customer is created here: an anonymous cash sale never needs one, and when credit does, the
    * payment page asks — at the point the answer actually matters.
    */
+  const payment = useAsyncAction();
+
   const openPayment = async () => {
     if (!activeOrder || !store) return;
     // The button is disabled for this, but the check is repeated here because `openPayment` is
@@ -558,7 +533,8 @@ export default function SellPage() {
           label={emptyLines.length > 0 ? 'Fix the quantity' : 'Take payment'}
           amount={formatMoney(total)}
           disabled={emptyLines.length > 0}
-          onClick={() => void openPayment()}
+          busy={payment.state === 'busy'}
+          onClick={() => payment.run(openPayment)}
         />
       )}
 
@@ -578,10 +554,25 @@ export default function SellPage() {
         onClaim={() => void nav.push('claim_page')}
         hasCustomer={Boolean(activeOrder?.customerId)}
         orderCode={activeOrder?.code ?? null}
-        activeInView={activeInView}
-        onShowActive={() =>
-          activeBoxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        }
+        /*
+         * Settle the page under the bar.
+         *
+         * The bar is pinned, so by the time somebody reaches for it the receipt has usually
+         * scrolled beneath it — and every control on it is about the order they then cannot see.
+         * This puts the first row back directly under the bar, so acting on a customer always
+         * leaves that customer's order in front of you.
+         */
+        onSettlePage={() => {
+          const box = orderTopRef.current;
+          const body = box?.closest<HTMLElement>('.navstack-column-body');
+          if (!box || !body) return;
+          // Measured against the bar's own height rather than a guessed number, so it stays right
+          // when the bar changes — it grows a row when the four actions collapse.
+          const bar = body.querySelector<HTMLElement>('[class*="CustomerTabs_bar"]');
+          const clearance = bar ? bar.getBoundingClientRect().height : 0;
+          const top = box.getBoundingClientRect().top - body.getBoundingClientRect().top;
+          body.scrollTo({ top: body.scrollTop + top - clearance, behavior: 'smooth' });
+        }}
         actionState={customerAction.state}
         actionProblem={customerAction.problem}
         onRetryAction={customerAction.retry}
@@ -610,16 +601,7 @@ export default function SellPage() {
          * the items AND the button that adds to them, not the first row of a list whose top is
          * under the sticky bar.
          */
-        <div ref={activeBoxRef}>
-          {/*
-            A marker at the very start of this order.
-            *
-            * The observer watches THIS, not the whole box: a receipt several items long is taller
-            * than the screen, so the box itself is almost always "intersecting" and the collapse
-            * never fired. What the seller means by "the active order has scrolled away" is that
-            * its beginning has gone past the top — which is exactly what this marker reports.
-          */}
-          <div ref={activeTopRef} aria-hidden="true" />
+        <div ref={orderTopRef}>
           {/* ── Lines ─────────────────────────────────────────────────────────── */}
           {activeOrder.lines.length > 0 && (
             <div className={styles.lines}>
