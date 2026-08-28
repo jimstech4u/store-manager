@@ -107,16 +107,24 @@ export function useProductSearch(storeId: string | null, query: string | null) {
     fetchPage,
     getId: (p) => p.id,
     /*
-     * Search results, in their own scope.
+     * Search results, in their own scope, UNDER A KEY THAT INCLUDES THE TERM.
      *
      * Kept apart from the browse list because they answer a different question and have a
      * different lifetime: a browse list is worth restoring when someone comes back, a set of
      * results for a term they have since cleared is not.
+     *
+     * The term used to be left out of the key, so every query shared one entry and whichever
+     * response landed last won. Opening the picker searches for '' (everything) and typing
+     * searches for 'co'; when the first response arrived second, it overwrote the filtered rows
+     * and the picker sat there showing the whole catalogue for a term that excluded most of it.
+     * `deps` alone cannot prevent that — it re-runs the fetch, it does not stop an older fetch
+     * writing to the same place.
+     *
+     * One key per question, which is the same rule the rest of the app follows for shapes.
      */
-    key: 'product-search',
+    key: `product-search:${query ?? ''}`,
     scope: 'search_flow',
-    // Not persisted: the search TERM is not part of the key, so restoring these rows would show
-    // one query's results under another query's heading. Browse lists persist; questions do not.
+    // Still not persisted. These are answers to a question somebody has probably stopped asking.
     persist: false,
     // 50 in one page and no cursor: a short page would otherwise be read as "the end", which is
     // correct here — search does not paginate.

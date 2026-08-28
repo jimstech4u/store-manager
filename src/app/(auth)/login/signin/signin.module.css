@@ -1,0 +1,21 @@
+.actions {
+  margin-top: var(--space-5);
+}
+
+.switcher {
+  margin-top: var(--space-5);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border);
+  text-align: center;
+  font-size: var(--text-base);
+  color: var(--text-muted);
+}
+
+.switchButton {
+  min-height: var(--touch-min);
+  padding: 0 var(--space-2);
+  font-weight: 700;
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

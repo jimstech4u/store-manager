@@ -1,0 +1,92 @@
+/*
+ * The auth shell, sharing the login screen's proportions.
+ *
+ * Kept as its own stylesheet rather than reaching into the login page's: every screen in the
+ * stack now renders through this, and a shared file that one page also owns is a file the next
+ * person edits for one screen and changes for four.
+ */
+
+.page {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: calc(var(--space-4) + var(--safe-top)) var(--space-4)
+           calc(var(--space-6) + var(--safe-bottom));
+  background: var(--bg);
+}
+
+.inner {
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+/*
+ * Back on the left, close on the right.
+ *
+ * `space-between` with a spacer holding the left slot: without it, a screen at the root of the
+ * stack would let the close button slide left into the arrow's place, which reads as the same
+ * button having moved.
+ */
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+
+.icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--touch-min, 44px);
+  height: var(--touch-min, 44px);
+  margin: 0 calc(var(--space-2) * -1);
+  color: var(--text);
+  background: none;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.icon:hover {
+  background: var(--surface-sunken);
+}
+
+.iconSpacer {
+  width: var(--touch-min, 44px);
+  height: var(--touch-min, 44px);
+}
+
+.brand {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: var(--space-1);
+}
+
+.tagline {
+  color: var(--text-muted);
+  font-size: var(--text-base);
+  margin-bottom: var(--space-6);
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-sm);
+}
+
+.heading {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  margin-bottom: var(--space-2);
+}
+
+.subheading {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  margin-bottom: var(--space-5);
+}

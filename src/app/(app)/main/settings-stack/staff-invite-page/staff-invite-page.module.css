@@ -46,3 +46,72 @@
 .actions > * {
   flex: 1;
 }
+
+/* ── The login address, shown so it can be read out or written down ────────────────── */
+.credential {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--text-base);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  margin-bottom: var(--space-2);
+}
+
+/* ── The permission checklist ──────────────────────────────────────────────────────── */
+.group {
+  margin-top: var(--space-5);
+}
+
+.groupTitle {
+  font-size: var(--text-base);
+  font-weight: 700;
+}
+
+.groupNote {
+  margin-top: 2px;
+  margin-bottom: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  margin-bottom: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.check input {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  margin-top: 1px;
+  accent-color: var(--primary);
+}
+
+/*
+ * Says where a box came from.
+ *
+ * An admin re-reading this later needs to know which ticks are theirs: those are the ones that
+ * will NOT move if the person's role changes.
+ */
+.changed {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--primary);
+}
+
+/* The sheet's two ways on, side by side in its pinned footer. */
+.sheetActions {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.sheetActions > * {
+  flex: 1;
+}

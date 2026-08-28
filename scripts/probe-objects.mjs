@@ -107,8 +107,28 @@ if (await addItem.count()) {
   check('it is the selection viewer, not the old sheet', isViewer);
 
   // Typing must not close it — the exact failure the old sheet had.
-  const search = p.locator('input:visible').last();
-  await search.fill('co');
+  /*
+   * The picker's OWN search box, addressed inside the dialog.
+   *
+   * `input:visible').last()` sometimes resolved to a field on the delivery page behind the sheet,
+   * so the query never reached the picker and it sat showing the whole catalogue — a probe failure
+   * that looked exactly like a filtering bug in the app.
+   */
+  const search = p.locator('[role="dialog"] input:visible').first();
+  /*
+   * Type, then CONFIRM the field holds it.
+   *
+   * A picker that has only just opened is still settling, and a `fill` landing mid-render is
+   * discarded when React re-renders from its own state — leaving an empty box, no search, and the
+   * unfiltered list still on screen. That looked exactly like a filtering bug in the app, and is
+   * not one: retrying until the value sticks passes every time, and the RPC returns the right two
+   * rows for "co" when it is actually asked.
+   */
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    await search.fill('co');
+    await p.waitForTimeout(500);
+    if ((await search.inputValue()) === 'co') break;
+  }
   await p.waitForTimeout(1800);
   const stillOpen = /what came in|search products/i.test(await p.locator('body').innerText());
   check('typing does not close it', stillOpen);
@@ -121,7 +141,35 @@ if (await addItem.count()) {
    * picker was returning the previous search's rows — "co" listed Eva Water, Goldberg and Trophy.
    * Staying open is worthless if the results are somebody else's answer.
    */
-  const names = await p.locator('[class*="ProductPicker_name"]:visible').allInnerTexts();
+  /*
+   * Wait for the list to STOP CHANGING, rather than sleeping a fixed time.
+   *
+   * The search is debounced, so a fixed wait races it: on a slow run the previous, unfiltered rows
+   * are still on screen and this reported a filtering bug that was not there. Sleeping longer
+   * would hide the real staleness this is here to catch — settling does not, because stale rows
+   * that are about to be replaced are precisely rows that are still changing.
+   */
+  const settledNames = async () => {
+    let previous = null;
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      /*
+       * Names from the OPEN dialog only.
+       *
+       * The sell screen's picker stays mounted behind this one, and an unscoped selector matched
+       * both — so the results of a picker nobody was typing into were counted as this one's, and
+       * the whole catalogue appeared to be the answer to "co".
+       */
+      const now = (
+        await p.locator('[role="dialog"] [class*="ProductPicker_name"]:visible').allInnerTexts()
+      ).join('|');
+      if (now === previous) return now ? now.split('|') : [];
+      previous = now;
+      await p.waitForTimeout(400);
+    }
+    return previous ? previous.split('|') : [];
+  };
+
+  const names = await settledNames();
   const matching = names.filter((n) => n.toLowerCase().includes('co'));
   console.log('   results for "co":', names.slice(0, 6).join(' | '));
   check('the results actually match what was typed', names.length > 0 && matching.length === names.length,

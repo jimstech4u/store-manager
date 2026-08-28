@@ -85,15 +85,16 @@ export function ProductPicker({
   /*
    * Back closes the PICKER, not the page underneath it.
    *
-   * This lived on the sell page and did not come along when the picker was extracted, so opening it
-   * from the delivery screen and pressing Back left the delivery entirely — taking a half-entered
-   * delivery with it. It belongs here, so every consumer gets it rather than each remembering to
-   * add it.
+   * This lived on the sell page and did not come along when the picker was extracted, so opening
+   * it from the delivery screen and pressing Back left the delivery entirely — taking a
+   * half-entered delivery with it. It belongs here, so every consumer gets it rather than each
+   * remembering to add it.
    *
    * Named per instance: two pickers mounted at once (a sell screen and a delivery behind it) must
    * not share one history entry.
    */
   useOverlayRoute(`picker:${id}`, isOpen, close);
+
 
   return (
     <SelectionViewer
