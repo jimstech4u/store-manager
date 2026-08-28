@@ -90,6 +90,7 @@ export default function SellPage() {
     push,
     error: draftError,
     syncing,
+    hydrated,
   } = useDraftOrders(store?.id ?? null);
 
   /*
@@ -158,6 +159,16 @@ export default function SellPage() {
   const clearCustomerDialog = useConfirm();
   const closeTabDialog = useConfirm();
 
+  /*
+   * Whether each dialog is on the page is decided HERE, not read back from the package.
+   *
+   * Its own `isOpen` does not start false, so mounting on it put a dialog over the till the moment
+   * the screen loaded — and its overlay swallows every tap behind it, which on a till means the
+   * screen simply stops working. `unmountOnClose` did not help. A flag of our own is unambiguous.
+   */
+  const [askClearCustomer, setAskClearCustomer] = useState(false);
+  const [askCloseTab, setAskCloseTab] = useState(false);
+
   const [pickingCustomer, setPickingCustomer] = useState(false);
   // Remembers that the picker was opened mid-payment, so choosing someone returns to the
   // sheet instead of dropping the seller back on the order with the payment half-entered.
@@ -190,10 +201,17 @@ export default function SellPage() {
     });
   }, []);
 
-  // Nothing open on this device: start one, so the screen is ready to sell rather than empty.
+  /*
+   * Nothing open ANYWHERE: start one, so the screen is ready to sell rather than empty.
+   *
+   * Waits for `hydrated`. Without it this fired on the first render of a fresh device, created an
+   * empty order, and that order was then the reason hydration decided there was live work here
+   * and left the shop's copy alone — so a seller signing in on another phone got a blank till and
+   * the customers they were serving stayed invisible.
+   */
   useEffect(() => {
-    if (store && orders.length === 0) startOrder();
-  }, [store, orders.length, startOrder]);
+    if (store && hydrated && orders.length === 0) startOrder();
+  }, [store, hydrated, orders.length, startOrder]);
 
   const subtotal = activeOrder ? draftSubtotal(activeOrder) : 0;
   const total = activeOrder ? draftTotal(activeOrder) : 0;
@@ -350,7 +368,17 @@ export default function SellPage() {
      * follows was swallowing whatever came after it. The sale is already recorded by this point,
      * so the order of these two is purely about what the seller ends up looking at.
      */
-    void nav.push('receipt_page', { id: saleId, fresh: '1' });
+    /*
+     * `pushAndPopUntil`, so the payment screen does not stay under the receipt.
+     *
+     * The payment is finished the moment the sale exists. Left on the stack, Back from the
+     * receipt walks into a payment screen for a sale already made — which reads as if it did not
+     * go through. Back now returns to the till, ready for the next customer.
+     */
+    void nav.pushAndPopUntil('receipt_page', (entry) => entry.key === 'sell_page', {
+      id: saleId,
+      fresh: '1',
+    });
 
     // Only once the sale is recorded. Closing optimistically would lose the order if the write
     // failed.
@@ -432,9 +460,16 @@ export default function SellPage() {
     // The button is disabled for this, but the check is repeated here because `openPayment` is
     // also reachable from the payment page's resume path after choosing a customer.
     if (emptyLines.length > 0) return;
-    await push(activeOrder);
-    // Taking payment is a PAGE now — see the callbacks published above for what comes back.
-    await nav.push('take_payment_page');
+    const saved = await push(activeOrder);
+    /*
+     * The order's own id travels, not "whichever tab is active".
+     *
+     * Taking payment is a page, and a page can be refreshed — or reached on another phone after
+     * this one dies. Addressed by id it resolves to the same order every time; relying on the
+     * active tab meant a reload landed on whatever tab happened to be first afterwards, which is
+     * a payment screen for the wrong customer.
+     */
+    await nav.push('take_payment_page', { id: saved?.id ?? activeOrder.id });
   };
 
   if (!store) return null;
@@ -499,8 +534,8 @@ export default function SellPage() {
         onSelect={setActiveId}
         onAdd={() => startOrder()}
         onSetCustomer={() => setPickingCustomer(true)}
-        onClearCustomer={() => clearCustomerDialog.open()}
-        onCloseTab={() => closeTabDialog.open()}
+        onClearCustomer={() => setAskClearCustomer(true)}
+        onCloseTab={() => setAskCloseTab(true)}
         onClaim={() => void nav.push('claim_page')}
         hasCustomer={Boolean(activeOrder?.customerId)}
         orderCode={activeOrder?.code ?? null}
@@ -945,6 +980,15 @@ export default function SellPage() {
 
       {/* ── The three questions the customer bar asks ─────────────────────────────── */}
 
+      {/*
+        Rendered ONLY while open.
+
+        The package leaves its overlay in the page when the dialog is closed, and that overlay
+        swallows taps meant for what is behind it — the sell screen quietly stopped responding to
+        anything, which is the worst failure a till can have. `unmountOnClose` did not remove it,
+        so the mounting is decided here instead.
+      */}
+      {askClearCustomer && (
       <ConfirmDialog
         controller={clearCustomerDialog}
         title="Take the customer off this sale?"
@@ -956,6 +1000,7 @@ export default function SellPage() {
         }
         confirmText="Take them off"
         tone="danger"
+        onDismiss={() => setAskClearCustomer(false)}
         onConfirm={() =>
           activeOrder &&
           updateOrder(activeOrder.clientUuid, {
@@ -965,15 +1010,19 @@ export default function SellPage() {
           })
         }
       />
+      )}
 
+      {askCloseTab && (
       <ConfirmDialog
         controller={closeTabDialog}
         title="Close this tab without selling?"
         message="Everything on it is discarded, and the order code goes back for someone else to use."
         confirmText="Discard it"
         tone="danger"
+        onDismiss={() => setAskCloseTab(false)}
         onConfirm={() => activeOrder && closeOrder(activeOrder.clientUuid)}
       />
+      )}
 
     </PageScaffold>
   );

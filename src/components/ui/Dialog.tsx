@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useDialog } from '@academix-admin/dialog-viewer';
 import { useTheme } from '@/context/ThemeContext';
 
@@ -48,6 +49,7 @@ export function ConfirmDialog({
   onConfirm,
   cancelText = 'Cancel',
   tone = 'danger',
+  onDismiss,
 }: {
   controller: ReturnType<typeof useConfirm>;
   title: string;
@@ -56,8 +58,37 @@ export function ConfirmDialog({
   onConfirm: () => void;
   cancelText?: string;
   tone?: 'danger' | 'primary';
+  /** Called whenever this dialog is finished with — confirmed, cancelled or dismissed. */
+  onDismiss?: () => void;
 }) {
-  const { DialogViewer, close, layoutProp } = controller;
+  const { DialogViewer, close, open, layoutProp } = controller;
+
+  /*
+   * Mounted means asked.
+   *
+   * The caller decides whether this is on the page at all, so opening on mount is what makes the
+   * two agree — without it a dialog could be mounted and invisible, which is a question nobody can
+   * answer and nothing can dismiss.
+   */
+  useEffect(() => {
+    open();
+  }, [open]);
+
+  /*
+   * Unmount when the package closes it, not only when we do.
+   *
+   * Cancel and the backdrop are handled inside the package and report nothing back — the viewer it
+   * hands out has no `onClose`. Left mounted after such a dismissal the overlay stays on the page
+   * and keeps swallowing taps, so the caller's flag has to come down when `isOpen` does.
+   */
+  useEffect(() => {
+    if (!controller.isOpen) onDismiss?.();
+  }, [controller.isOpen, onDismiss]);
+
+  const finish = () => {
+    close();
+    onDismiss?.();
+  };
 
   return (
     <DialogViewer
@@ -68,13 +99,20 @@ export function ConfirmDialog({
           text: confirmText,
           variant: tone,
           onClick: () => {
-            close();
+            finish();
             onConfirm();
           },
         },
       ]}
       showCancel
       cancelText={cancelText}
+      /*
+       * Gone from the page when it is closed, not merely invisible.
+       *
+       * Left mounted, the overlay stays in the DOM and swallows taps meant for what is behind it —
+       * the sell screen quietly stopped responding, which is the worst possible failure on a till.
+       */
+      unmountOnClose
       closeOnBackdrop
       zIndex={1100}
       layoutProp={layoutProp}

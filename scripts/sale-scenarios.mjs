@@ -134,6 +134,17 @@ const run = async () => {
   await signIn(page);
   await openSell(page);
 
+  /*
+   * Start a tab of this scenario's own.
+   *
+   * The till is online-first now: signing in picks up whatever orders the shop already has open,
+   * so the screen no longer begins empty and whichever order happens to be first is somebody
+   * else's, with somebody else's items on it. Every check below is about what THIS scenario put on
+   * a receipt, so it opens its own and works there.
+   */
+  await page.getByRole('button', { name: 'Start another customer' }).click();
+  await page.waitForTimeout(3000);
+
   // ── 1 · A full pack ─────────────────────────────────────────────────────────────
   console.log('\n1. full pack');
   await addProduct(page, 'coca', 'Coca-Cola');
@@ -198,7 +209,16 @@ const run = async () => {
 
   // ── 5 · A dialog must block the page behind it ──────────────────────────────────
   console.log('\n5. dialog blocks the page');
-  await page.locator('[class*="customerChip"]').first().click();
+  /*
+   * The customer bar's Add action, not the old chip.
+   *
+   * Attaching somebody was a chip halfway down the receipt and is now one of the four actions
+   * under the tabs. What is being checked is unchanged: that the picker it opens covers the page
+   * properly rather than letting taps through to the order behind it.
+   */
+  await page.getByRole('button', { name: /Say who this sale is for|Change who this sale is for/i })
+    .first()
+    .click();
   await page.waitForTimeout(1200);
   const dialog = page.locator('[role="dialog"]').first();
   check('customer dialog opened', (await dialog.count()) > 0);
@@ -287,10 +307,22 @@ const run = async () => {
     await remove.click();
     await page.waitForTimeout(900);
   }
-  check('close-this-tab is still offered with no items',
-    (await page.getByRole('button', { name: /Close this tab/i }).count()) > 0);
-  check('order code row is still shown',
-    (await page.getByText('Order code').count()) > 0);
+  /*
+   * Both of these moved into the customer bar.
+   *
+   * Closing a tab was a button at the very bottom of the page and is now one of the four actions
+   * under the tabs; the order code was a row of its own and now sits beside the customer it
+   * identifies. What is being checked is unchanged — that emptying a receipt still leaves a way
+   * out of the tab, and still shows the code somebody may be about to read aloud.
+   */
+  check('closing the tab is still offered with no items',
+    (await page.getByRole('button', { name: /Close this tab without selling/i }).count()) > 0);
+  check('the order code is still shown',
+    (await page.locator('[class*="CustomerTabs_code"]').count()) > 0);
+
+  // Nothing may be left open over the page for the steps that follow.
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(600);
   await shot(page, '06-empty-receipt');
 
   // ── 7 · Nothing hides under the floating tab bar ────────────────────────────────

@@ -181,6 +181,7 @@
 .forRow {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-3);
   width: 100%;
   min-height: var(--touch-comfortable);
@@ -277,4 +278,62 @@
 /* The commit button ends the page rather than being pinned to its foot — see TakePayment. */
 .pageActions {
   margin-top: var(--space-5);
+}
+
+/* ── The items behind the total ─────────────────────────────────────────────────────── */
+
+.items {
+  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.itemsLabel {
+  display: block;
+  margin-bottom: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0 var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border);
+}
+
+.itemName {
+  font-weight: 700;
+}
+
+/*
+ * The quantity and unit price sit UNDER the name, spanning the row.
+ *
+ * On one line with the name they were read as part of it — "Coca-Cola PET 60cl 2 × N500" is one
+ * long string to somebody scanning, and the number that matters is the one on the right.
+ */
+.itemQty {
+  grid-column: 1;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.itemTotal {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The label and the name, stacked, so neither wraps into the other. */
+.forBody {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }

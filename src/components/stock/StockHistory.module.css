@@ -1,0 +1,95 @@
+/* The ledger, read as a timeline. */
+
+.section {
+  margin-top: var(--space-6);
+}
+
+.title {
+  margin-bottom: var(--space-2);
+  font-size: var(--text-base);
+  font-weight: 700;
+}
+
+.list {
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--border);
+}
+
+/*
+ * The movement, in a fixed-width column.
+ *
+ * Aligned so a column of +12 / -2 / -1 can be scanned down. Ragged, they have to be read one at a
+ * time, which is the opposite of what a history is for.
+ */
+.delta {
+  flex: none;
+  min-width: 3.5em;
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.up {
+  color: var(--success, #1a7f5a);
+}
+
+.down {
+  color: var(--danger, #c0392b);
+}
+
+.body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.what {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 700;
+}
+
+/* A reversal is this event being undone, not a separate one — so it is marked, not hidden. */
+.correction {
+  padding: 1px var(--space-2);
+  border-radius: 999px;
+  background: var(--warning-soft, rgba(178, 106, 0, 0.14));
+  color: var(--warning, #b26a00);
+  font-size: var(--text-xs, 12px);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.who {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.note {
+  font-size: var(--text-sm);
+  font-style: italic;
+  color: var(--text-muted);
+}
+
+/* What was left afterwards — the figure being checked against the shelf. */
+.balance {
+  flex: none;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

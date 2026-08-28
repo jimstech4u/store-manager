@@ -197,20 +197,36 @@ export function lineBaseQty(line: DraftLine): number {
 }
 
 export function useDraftOrders(storeId: string | null) {
-  const [orders, , setOrders] = useDemandState<DraftOrder[]>([], {
+  /*
+   * NOT PERSISTED. The shop holds the orders; this device does not keep its own copy.
+   *
+   * It used to, and once orders started being created server-side the two became two sources of
+   * truth for one thing — and they raced. state-stack restores its persisted value on mount, and
+   * on a device that has never been used that value is an empty list; landing after the shop's
+   * answer it erased it, so the till showed a hundred tabs and then dropped to one. Which way it
+   * went depended on how fast the network replied, which is the worst kind of bug to own.
+   *
+   * Online-first is the rule here, and this is what it costs: the orders come from the shop on
+   * every load. What it buys is that they are the same orders on every device, which is the whole
+   * point — and they reach the server the moment the "+" is pressed, so nothing is riding on this
+   * device remembering anything.
+   */
+  const [orders, demandOrders, setOrders] = useDemandState<DraftOrder[]>([], {
     key: 'draftOrders',
     scope: 'sell_flow',
-    persist: true,
+    persist: false,
     deps: [storeId ?? ''],
     // Working state, not fetched data: a remount must restore what was on screen rather than
     // reloading it away mid-sale.
     revalidateOnMount: false,
   });
 
+  // Follows the orders: persisting which tab was active, when the orders themselves are fetched,
+  // would point at a tab that may no longer exist.
   const [activeId, , setActiveId] = useDemandState<string | null>(null, {
     key: 'draftActive',
     scope: 'sell_flow',
-    persist: true,
+    persist: false,
     deps: [storeId ?? ''],
     revalidateOnMount: false,
   });
@@ -287,8 +303,19 @@ export function useDraftOrders(storeId: string | null) {
     const order = makeDraft();
     setOrders((prev) => [...prev, order]);
     setActiveId(order.clientUuid);
+
+    /*
+     * Straight to the shop, before it has anything on it.
+     *
+     * Online-first: an order exists from the moment the "+" is pressed. That is what gives it a
+     * handover code a colleague can be told immediately, and what makes it survive a flat battery
+     * — sign in on another phone and the customers being served are still there. Waiting for the
+     * first item meant a tab that existed only on one device, and a code that could not be read
+     * out until something had been added to it.
+     */
+    void push(order);
     return order.clientUuid;
-  }, [setOrders, setActiveId]);
+  }, [setOrders, setActiveId, push]);
 
   const updateOrder = useCallback(
     (clientUuid: string, patch: Partial<DraftOrder>) => {
@@ -479,11 +506,125 @@ export function useDraftOrders(storeId: string | null) {
     [orders, activeId],
   );
 
+  /*
+   * Pick up whatever this member already has open in the shop.
+   *
+   * The point of an online-first till: a seller whose phone dies signs in on another one and the
+   * customers they were serving are still there. Orders held by nobody come too — an order that
+   * was never claimed is loose in the shop, and whoever opens the till next is who it belongs to.
+   *
+   * THROUGH `demand`, NOT A BARE `set`.
+   *
+   * Written as an effect calling the setter directly, this raced state-stack's own restore: the
+   * shop's orders landed first and the persisted local copy — empty, on a device that has never
+   * been used — arrived a moment later and wiped them. The screen showed a hundred tabs and then
+   * dropped to one. `demand` is the mechanism that owns that sequencing, so hydration goes
+   * through it and the two can no longer arrive in the wrong order.
+   */
+  const [hydrated, setHydrated] = useState(false);
+
+  /*
+   * Retried until it gets a real answer.
+   *
+   * A tick that advances only while hydration has not concluded — enough to re-run the effect
+   * after a session or a connection that was not ready the first time. It stops as soon as
+   * `hydrated` is true, so this is not a poll that runs for the life of the session.
+   */
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    if (!storeId || hydrated) return;
+    const t = setTimeout(() => setAttempt((n) => n + 1), 1500);
+    return () => clearTimeout(t);
+  }, [storeId, hydrated, attempt]);
+
+  useEffect(() => {
+    if (!storeId || hydrated) return;
+
+    let cancelled = false;
+    void demandOrders(async ({ get, set }) => {
+      /*
+       * Live work on this device wins.
+       *
+       * Adopting the shop's copy over a half-typed order would replace what somebody is looking at
+       * with an older version of it — the one failure this must never have. Only an empty till
+       * asks the shop what it should be holding.
+       */
+      if ((get()?.length ?? 0) > 0) {
+        if (!cancelled) setHydrated(true);
+        return;
+      }
+
+      /*
+       * THE SESSION FIRST, or the answer means nothing.
+       *
+       * `my_open_drafts` reads the caller from `auth.uid()`. Asked a moment before the session is
+       * established it returns no rows — not because the shop has no open orders, but because it
+       * does not yet know who is asking. Hydration took that empty answer as final, marked itself
+       * done, and let the till start a fresh empty order: a seller signing in on a slow connection
+       * watched their open customers simply not appear.
+       *
+       * Leaving `hydrated` false is the important half. The effect runs again, so a session that
+       * arrives late is a delay rather than a lost till.
+       */
+      const { data: session } = await getSupabase().auth.getSession();
+      if (cancelled) return;
+      if (!session.session) return;
+
+      const { data, error: err } = await getSupabase().rpc('my_open_drafts', {
+        p_store_id: storeId,
+      });
+      if (cancelled) return;
+
+      // An error is also not an answer. Same reasoning: try again rather than declare the shop
+      // empty on the strength of a failed request.
+      if (err) return;
+
+      setHydrated(true);
+      if (!data) return;
+
+      const rows = data as Record<string, unknown>[];
+      if (rows.length === 0) return;
+
+      const restored: DraftOrder[] = rows.map((row) => ({
+        ...makeDraft(),
+        id: String(row.id),
+        code: (row.code as string | null) ?? null,
+        label: (row.label as string | null) ?? '',
+        customerId: (row.customer_id as string | null) ?? null,
+        customerName: (row.customer_name as string | null) ?? '',
+        note: (row.note as string | null) ?? '',
+        feeAmount: String(row.fee_amount ?? ''),
+        feeLabel: (row.fee_label as string | null) ?? '',
+        // Already the shop's own copy, so nothing to push back.
+        synced: true,
+        lines: ((row.lines ?? []) as Record<string, unknown>[]).map((l) =>
+          makeDraftLine({
+            productId: String(l.product_id),
+            productName: String(l.product_name ?? 'Item'),
+            qty: String(l.qty ?? ''),
+            unitPrice: String(l.unit_price ?? ''),
+            packId: (l.pack_id as string | null) ?? null,
+          }),
+        ),
+      }));
+
+      set(restored, { override: true });
+      setActiveId(restored[0].clientUuid);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [storeId, hydrated, attempt, demandOrders, setActiveId]);
+
   // Push edits shortly after typing stops. Saving on every keystroke would put a request behind
   // each character; saving only on settle would mean a colleague claiming the code receives a
   // stale order.
   useEffect(() => {
-    const unsynced = orders.filter((o) => !o.synced && o.lines.length > 0);
+    // No `lines.length > 0` any more: an empty tab is a real order in the shop, and the whole
+    // point of creating it server-side is that it exists before anything is on it.
+    const unsynced = orders.filter((o) => !o.synced);
     if (unsynced.length === 0) return;
     const t = setTimeout(() => {
       unsynced.forEach((o) => void push(o));
@@ -506,6 +647,7 @@ export function useDraftOrders(storeId: string | null) {
     mergeInto,
     push,
     syncing,
+    hydrated,
     error,
   };
 }

@@ -10,7 +10,7 @@ import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
 import { getSupabase } from '@/lib/supabase/client';
 import { accountsChanged } from '@/lib/stacks/customer-account';
 import { formatMoney } from '@/lib/format';
-import type { DraftOrder } from '@/lib/stacks/draft-orders';
+import { lineTotal, type DraftOrder } from '@/lib/stacks/draft-orders';
 
 type Method = 'cash' | 'transfer' | 'pos';
 
@@ -163,6 +163,28 @@ export function TakePayment({
 
   return (
     <>
+      {/*
+        WHAT IS BEING PAID FOR, before what it comes to.
+        *
+        * This screen used to open on a number with nothing behind it. A seller reading a total
+        * back to a customer who queries it had to leave the payment, go and look at the receipt,
+        * and come back — and the customer is standing there while they do it. The list is short,
+        * it is the thing the total is derived from, and it belongs above it.
+      */}
+      <div className={styles.items}>
+        <span className={styles.itemsLabel}>What they are buying</span>
+        {order.lines.map((line) => (
+          <div className={styles.item} key={line.key}>
+            <span className={styles.itemName}>{line.productName}</span>
+            <span className={styles.itemQty}>
+              {line.qty || 0}
+              {line.saleUnitName ? ` ${line.saleUnitName}` : ''} × {formatMoney(Number(line.unitPrice) || 0)}
+            </span>
+            <span className={styles.itemTotal}>{formatMoney(lineTotal(line))}</span>
+          </div>
+        ))}
+      </div>
+
       <div className={styles.due}>
         <span className={styles.dueLabel}>Total for this sale</span>
         <span className={styles.dueValue}>{formatMoney(total)}</span>
@@ -181,9 +203,19 @@ export function TakePayment({
         decide, and the option is there at the moment of settling where it belongs.
       */}
       <button type="button" className={styles.forRow} onClick={onNeedCustomer}>
-        <span className={styles.forLabel}>Recording for</span>
-        <span className={styles.forValue}>
-          {order.customerId ? order.customerName : 'Anonymous walk-in'}
+        {/*
+          The label over the name, not beside it.
+
+          All three on one line meant a name of any length wrapped between the label and the
+          action — "Recording for / Anonymous walk- / in / Add customer" — which read as three
+          unrelated fragments. Stacked, the row says one thing and the action stays at the end
+          where a thumb expects it.
+        */}
+        <span className={styles.forBody}>
+          <span className={styles.forLabel}>Recording for</span>
+          <span className={styles.forValue}>
+            {order.customerId ? order.customerName : 'Anonymous walk-in'}
+          </span>
         </span>
         <span className={styles.forAction}>
           {order.customerId ? 'Change' : 'Add customer'}
