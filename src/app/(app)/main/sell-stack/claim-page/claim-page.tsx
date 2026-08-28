@@ -43,6 +43,9 @@ interface FoundOrder {
   customerId: string | null;
   customerName: string | null;
   lines: DraftLine[];
+  /** Carried so a handover moves the whole order, not just its items. */
+  charges: { key: string; label: string; amount: string }[];
+  note: string;
 }
 
 export default function ClaimPage() {
@@ -117,6 +120,12 @@ export default function ClaimPage() {
         label: (row.label as string | null) ?? null,
         customerId: (row.customer_id as string | null) ?? null,
         customerName: (row.customer_name as string | null) ?? null,
+        note: (row.note as string | null) ?? '',
+        charges: ((row.charges ?? []) as Record<string, unknown>[]).map((c) => ({
+          key: makeDraftLine().key,
+          label: String(c.label ?? ''),
+          amount: String(c.amount ?? ''),
+        })),
         lines: rawLines.map((l) =>
           makeDraftLine({
             productId: String(l.product_id),
@@ -165,6 +174,21 @@ export default function ClaimPage() {
       }
 
       /*
+       * Their charges and note come across as well.
+       *
+       * A handover moves the whole order or it moves nothing useful: a delivery fee agreed at the
+       * counter is part of what the customer owes, and arriving without it means the next person
+       * settles a different sale from the one that was agreed. Appended rather than replacing, for
+       * the same reason the items are — this tab's own charges were somebody's work too.
+       */
+      if (found.charges.length > 0 || found.note) {
+        updateOrder(activeOrder.clientUuid, {
+          charges: [...(activeOrder.charges ?? []), ...found.charges],
+          note: [activeOrder.note, found.note].filter(Boolean).join(' · '),
+        });
+      }
+
+      /*
        * Close THEIRS, so one order and one code survive.
        *
        * Cancelling releases the code back to the shop's pool — the partial unique index only holds
@@ -173,12 +197,26 @@ export default function ClaimPage() {
       const { error } = await getSupabase().rpc('cancel_draft_order', { p_draft_id: found.id });
       if (error) throw error;
 
+      /*
+       * Pushed with the merged charges and note, not just the lines.
+       *
+       * `updateOrder` above writes to local state and the debounce would carry it eventually, but
+       * this page closes immediately afterwards — so the write that matters is this one, and it has
+       * to describe the whole order or the fee agreed at the counter is lost on the way.
+       */
       await push({
         ...activeOrder,
         lines: [
           ...mine.filter((l) => isKept(l.key)),
           ...theirs.filter((l) => isKept(l.key)),
         ],
+        charges: [...(activeOrder.charges ?? []), ...found.charges],
+        note: [activeOrder.note, found.note].filter(Boolean).join(' · '),
+        customerId: found.customerId && !activeOrder.customerId ? found.customerId : activeOrder.customerId,
+        customerName:
+          found.customerId && !activeOrder.customerId
+            ? (found.customerName ?? '')
+            : activeOrder.customerName,
       });
 
       await nav.pop();

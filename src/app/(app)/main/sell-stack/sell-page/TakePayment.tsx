@@ -6,11 +6,12 @@ import { Button } from '@/components/ui/Button';
 import { useBankAccounts } from '@/lib/stacks/bank-accounts';
 import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
+import { Collapsible } from '@/components/ui/Collapsible';
 import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
 import { getSupabase } from '@/lib/supabase/client';
 import { accountsChanged } from '@/lib/stacks/customer-account';
 import { formatMoney } from '@/lib/format';
-import { lineTotal, type DraftOrder } from '@/lib/stacks/draft-orders';
+import { chargesTotal, lineTotal, type DraftOrder } from '@/lib/stacks/draft-orders';
 
 type Method = 'cash' | 'transfer' | 'pos';
 
@@ -46,12 +47,16 @@ const newKey = () => Math.random().toString(36).slice(2);
  * Paying less than the total is a normal outcome, not an error: the remainder goes on the
  * customer's account. That is how these businesses actually trade.
  */
+/** A charge line's key, generated where one is added. */
+const newChargeKey = () => Math.random().toString(36).slice(2, 10);
+
 export function TakePayment({
   order,
   storeId,
   total,
   onNeedCustomer,
   onSettled,
+  onUpdateOrder,
 }: {
   order: DraftOrder;
   /** Needed to look up the shop's bank accounts; a draft does not carry its store. */
@@ -60,6 +65,15 @@ export function TakePayment({
   /** Asked for only when part of the money is going on account. */
   onNeedCustomer: () => void;
   onSettled: (saleId: string) => void;
+  /**
+   * Edits the draft this screen is settling.
+   *
+   * The extra charge moved here from the till, and a charge is a change to the order — so this
+   * screen needs a way to write one. Passed in rather than reached for directly: the page above
+   * owns which order is being paid for, and a second component resolving that for itself is how
+   * two screens end up editing different orders.
+   */
+  onUpdateOrder: (patch: Partial<DraftOrder>) => void;
 }) {
   const accounts = useBankAccounts(storeId);
 
@@ -221,6 +235,99 @@ export function TakePayment({
           {order.customerId ? 'Change' : 'Add customer'}
         </span>
       </button>
+
+      {/*
+        The extra charge, between who is paying and how.
+
+        It lived on the till, where it sat between the items and the button that acts on them —
+        scrolled past on every sale that does not need it, which is most of them. A delivery fee or
+        a note about the sale is decided while money is changing hands, so it belongs on the screen
+        where that happens, after the customer is settled and before the methods.
+      */}
+      <Collapsible
+        tone="card"
+        title="Extra charge or note"
+        defaultOpen={(order.charges?.length ?? 0) > 0 || order.note !== ''}
+        summary={
+          chargesTotal(order) > 0
+            ? `${order.charges.length} · ${formatMoney(chargesTotal(order))}`
+            : order.note
+              ? 'Note added'
+              : 'None'
+        }
+      >
+        {/*
+          A list, not one box.
+          A distributor's bill routinely carries transport AND loading AND an amount
+          carried over. Added together under one name they become a number the customer
+          cannot check and the shop cannot explain weeks later.
+        */}
+        {(order.charges ?? []).map((c, i) => (
+          <div key={c.key} className={styles.chargeRow}>
+            <Field
+              label={`Charge ${i + 1}`}
+              value={c.label}
+              onChange={(e) =>
+                onUpdateOrder({
+                  charges: order.charges.map((x) =>
+                    x.key === c.key ? { ...x, label: e.target.value } : x,
+                  ),
+                })
+              }
+              placeholder="Transport"
+            />
+            <Field
+              label="Amount"
+              numeric
+              prefix="₦"
+              value={c.amount}
+              onChange={(e) =>
+                onUpdateOrder({
+                  charges: order.charges.map((x) =>
+                    x.key === c.key ? { ...x, amount: e.target.value } : x,
+                  ),
+                })
+              }
+              placeholder="0"
+            />
+            <button
+              type="button"
+              className={styles.chargeRemove}
+              onClick={() =>
+                onUpdateOrder({
+                  charges: order.charges.filter((x) => x.key !== c.key),
+                })
+              }
+              aria-label={`Remove ${c.label.trim() || `charge ${i + 1}`}`}
+            >
+              <CloseIcon />
+            </button>
+          </div>
+        ))}
+
+        <Button
+          variant="secondary"
+          fullWidth
+          onClick={() =>
+            onUpdateOrder({
+              charges: [
+                ...(order.charges ?? []),
+                { key: newChargeKey(), label: '', amount: '' },
+              ],
+            })
+          }
+        >
+          <PlusIcon /> Add a charge
+        </Button>
+
+        <Field
+          label="Note"
+          optional
+          value={order.note}
+          onChange={(e) => onUpdateOrder({ note: e.target.value })}
+          placeholder="Anything to remember about this sale"
+        />
+      </Collapsible>
 
       {error && (
         <InfoPanel tone="danger" title="Could not record this payment">

@@ -9,11 +9,11 @@ import { useNav } from '@academix-admin/navigation-stack';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
-import { Collapsible } from '@/components/ui/Collapsible';
 import { CloseIcon, MinusIcon, PlusIcon, ReceiptIcon } from '@/components/ui/Icon';
 import { CustomerPicker } from '@/components/customers/CustomerPicker';
 import { CustomerTabs } from '@/components/sell/CustomerTabs';
 import { ConfirmDialog, useConfirm } from '@/components/ui/Dialog';
+import { useAsyncAction } from '@/components/ui/AsyncAction';
 import { ProductPicker } from '@/components/catalog/ProductPicker';
 import type { ProductFormResult } from '@/components/catalog/ProductForm';
 import { useAuth } from '@/providers/AuthProvider';
@@ -26,8 +26,6 @@ import {
   type SaleUnit,
 } from '@/lib/stacks/catalog-stack';
 import {
-  chargesTotal,
-  draftSubtotal,
   draftTotal,
   baseUnitsPerSaleUnit,
   lineTotal,
@@ -59,8 +57,6 @@ import { getSupabase } from '@/lib/supabase/client';
  * A fixed list rather than a setting: these are the parts a pack is physically broken into.
  * Which of them appear is decided per line by whether they land on whole base units.
  */
-/** Stable keys for charge rows, so editing one does not re-key the others and lose focus. */
-const newChargeKey = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -89,7 +85,6 @@ export default function SellPage() {
     removeLine,
     push,
     error: draftError,
-    syncing,
     hydrated,
   } = useDraftOrders(store?.id ?? null);
 
@@ -156,6 +151,12 @@ export default function SellPage() {
    * answered before anything else continues, which is exactly the distinction the two surfaces
    * carry everywhere else in the app.
    */
+  /*
+   * One slot, because only one of these can be in flight at a time — they all act on the same
+   * order, and the row they share is where the spinner has to appear.
+   */
+  const customerAction = useAsyncAction();
+
   const clearCustomerDialog = useConfirm();
   const closeTabDialog = useConfirm();
 
@@ -166,6 +167,17 @@ export default function SellPage() {
    * the screen loaded — and its overlay swallows every tap behind it, which on a till means the
    * screen simply stops working. `unmountOnClose` did not help. A flag of our own is unambiguous.
    */
+  /*
+   * Whether the active order's box is on screen.
+   *
+   * The customer bar is sticky, so scrolling into a long receipt leaves it at the top with its
+   * buttons still pointing at an order nobody can see. Acting on something out of sight is how the
+   * wrong tab gets closed, so the four actions collapse into one that brings it back.
+   */
+  const activeBoxRef = useRef<HTMLDivElement | null>(null);
+  const activeTopRef = useRef<HTMLDivElement | null>(null);
+  const [activeInView, setActiveInView] = useState(true);
+
   const [askClearCustomer, setAskClearCustomer] = useState(false);
   const [askCloseTab, setAskCloseTab] = useState(false);
 
@@ -201,6 +213,26 @@ export default function SellPage() {
     });
   }, []);
 
+  useEffect(() => {
+    const box = activeTopRef.current;
+    if (!box) return;
+
+    /*
+     * A generous margin at the top.
+     *
+     * The customer bar is sticky and covers the first rows of the receipt, so a box that is
+     * technically "intersecting" can still be entirely hidden behind it. Treating the bar's own
+     * height as out of bounds makes the collapse agree with what a person can actually see.
+     */
+    const observer = new IntersectionObserver(
+      ([entry]) => setActiveInView(entry.isIntersecting),
+      { threshold: 0.08, rootMargin: '-150px 0px 0px 0px' },
+    );
+    observer.observe(box);
+    return () => observer.disconnect();
+    // Re-observed when the order changes: it is a different box.
+  }, [activeOrder?.clientUuid]);
+
   /*
    * Nothing open ANYWHERE: start one, so the screen is ready to sell rather than empty.
    *
@@ -213,7 +245,6 @@ export default function SellPage() {
     if (store && hydrated && orders.length === 0) startOrder();
   }, [store, hydrated, orders.length, startOrder]);
 
-  const subtotal = activeOrder ? draftSubtotal(activeOrder) : 0;
   const total = activeOrder ? draftTotal(activeOrder) : 0;
 
   /*
@@ -480,6 +511,14 @@ export default function SellPage() {
       title="Sell"
       subtitle={store.name}
       /*
+       * The header travels with the receipt.
+       *
+       * The customer bar below it is sticky, and two things cannot both own the top of the screen.
+       * Scrolling into a long order takes the title away and leaves the bar in its place; scrolling
+       * back brings it down again with the page.
+       */
+      headerScrolls
+      /*
        * The header action is SALES, the same one the money screen carries.
        *
        * Taking over a colleague's order used to live here, opening a panel over the order being
@@ -539,7 +578,14 @@ export default function SellPage() {
         onClaim={() => void nav.push('claim_page')}
         hasCustomer={Boolean(activeOrder?.customerId)}
         orderCode={activeOrder?.code ?? null}
-        busy={syncing}
+        activeInView={activeInView}
+        onShowActive={() =>
+          activeBoxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
+        actionState={customerAction.state}
+        actionProblem={customerAction.problem}
+        onRetryAction={customerAction.retry}
+        onDismissAction={customerAction.dismiss}
       />
 
       {draftError && (
@@ -557,7 +603,23 @@ export default function SellPage() {
           </Button>
         </div>
       ) : (
-        <>
+        /*
+         * The active order's own box, watched so the customer bar knows when it has scrolled away.
+         *
+         * Wraps the whole receipt rather than just the line list: "show me the active order" means
+         * the items AND the button that adds to them, not the first row of a list whose top is
+         * under the sticky bar.
+         */
+        <div ref={activeBoxRef}>
+          {/*
+            A marker at the very start of this order.
+            *
+            * The observer watches THIS, not the whole box: a receipt several items long is taller
+            * than the screen, so the box itself is almost always "intersecting" and the collapse
+            * never fired. What the seller means by "the active order has scrolled away" is that
+            * its beginning has gone past the top — which is exactly what this marker reports.
+          */}
+          <div ref={activeTopRef} aria-hidden="true" />
           {/* ── Lines ─────────────────────────────────────────────────────────── */}
           {activeOrder.lines.length > 0 && (
             <div className={styles.lines}>
@@ -793,120 +855,16 @@ export default function SellPage() {
             </Button>
           </div>
 
-          {/* ── Totals ────────────────────────────────────────────────────────── */}
-          {activeOrder.lines.length > 0 && (
-            <>
-              <div className={styles.totals}>
-                <div className={styles.totalRow}>
-                  <span>Items</span>
-                  <span className={styles.totalValue}>{formatMoney(subtotal)}</span>
-                </div>
-                {(activeOrder.charges ?? [])
-                  .filter((c) => Number(c.amount) > 0)
-                  .map((c) => (
-                    <div className={styles.totalRow} key={c.key}>
-                      <span>{c.label.trim() || 'Charge'}</span>
-                      <span className={styles.totalValue}>{formatMoney(c.amount)}</span>
-                    </div>
-                  ))}
-                <div className={`${styles.totalRow} ${styles.grandRow}`}>
-                  <span className={styles.grandLabel}>Total</span>
-                  <span className={styles.grandValue}>{formatMoney(total)}</span>
-                </div>
-              </div>
+          {/*
+            The running total and the extra charge have moved to the payment screen.
 
-              {/* Needed on some sales, not most. Collapsed by default so the items and the
-                  total own the screen — but the summary states the charge, so folding it away
-                  never folds away money. */}
-              <Collapsible
-                tone="card"
-                title="Extra charge or note"
-                defaultOpen={(activeOrder.charges?.length ?? 0) > 0 || activeOrder.note !== ''}
-                summary={
-                  chargesTotal(activeOrder) > 0
-                    ? `${activeOrder.charges.length} · ${formatMoney(chargesTotal(activeOrder))}`
-                    : activeOrder.note
-                      ? 'Note added'
-                      : 'None'
-                }
-              >
-                {/*
-                  A list, not one box.
-                  A distributor's bill routinely carries transport AND loading AND an amount
-                  carried over. Added together under one name they become a number the customer
-                  cannot check and the shop cannot explain weeks later.
-                */}
-                {(activeOrder.charges ?? []).map((c, i) => (
-                  <div key={c.key} className={styles.chargeRow}>
-                    <Field
-                      label={`Charge ${i + 1}`}
-                      value={c.label}
-                      onChange={(e) =>
-                        updateOrder(activeOrder.clientUuid, {
-                          charges: activeOrder.charges.map((x) =>
-                            x.key === c.key ? { ...x, label: e.target.value } : x,
-                          ),
-                        })
-                      }
-                      placeholder="Transport"
-                    />
-                    <Field
-                      label="Amount"
-                      numeric
-                      prefix="₦"
-                      value={c.amount}
-                      onChange={(e) =>
-                        updateOrder(activeOrder.clientUuid, {
-                          charges: activeOrder.charges.map((x) =>
-                            x.key === c.key ? { ...x, amount: e.target.value } : x,
-                          ),
-                        })
-                      }
-                      placeholder="0"
-                    />
-                    <button
-                      type="button"
-                      className={styles.chargeRemove}
-                      onClick={() =>
-                        updateOrder(activeOrder.clientUuid, {
-                          charges: activeOrder.charges.filter((x) => x.key !== c.key),
-                        })
-                      }
-                      aria-label={`Remove ${c.label.trim() || `charge ${i + 1}`}`}
-                    >
-                      <CloseIcon />
-                    </button>
-                  </div>
-                ))}
+            Both are about what is OWED, and the till is about what is being bought. A seller
+            adding items reads the list and the floating button; the breakdown only matters at
+            the moment somebody is handing money over, which is a different screen. Leaving
+            them here meant scrolling past a total to reach the button that acts on it.
+          */}
 
-                <Button
-                  variant="secondary"
-                  fullWidth
-                  onClick={() =>
-                    updateOrder(activeOrder.clientUuid, {
-                      charges: [
-                        ...(activeOrder.charges ?? []),
-                        { key: newChargeKey(), label: '', amount: '' },
-                      ],
-                    })
-                  }
-                >
-                  <PlusIcon /> Add a charge
-                </Button>
-
-                <Field
-                  label="Note"
-                  optional
-                  value={activeOrder.note}
-                  onChange={(e) => updateOrder(activeOrder.clientUuid, { note: e.target.value })}
-                  placeholder="Anything to remember about this sale"
-                />
-              </Collapsible>
-
-            </>
-          )}
-
-        </>
+        </div>
       )}
       {/*
         Choosing a product is a SELECTION, so it uses the selection viewer.
@@ -1003,10 +961,20 @@ export default function SellPage() {
         onDismiss={() => setAskClearCustomer(false)}
         onConfirm={() =>
           activeOrder &&
-          updateOrder(activeOrder.clientUuid, {
-            customerId: null,
-            customerName: '',
-            customerPhone: '',
+          customerAction.run(async () => {
+            updateOrder(activeOrder.clientUuid, {
+              customerId: null,
+              customerName: '',
+              customerPhone: '',
+            });
+            // Pushed rather than left to the debounce, so the spinner covers the real write and a
+            // failure is reported where it was caused.
+            await push({
+              ...activeOrder,
+              customerId: null,
+              customerName: '',
+              customerPhone: '',
+            });
           })
         }
       />
@@ -1020,7 +988,7 @@ export default function SellPage() {
         confirmText="Discard it"
         tone="danger"
         onDismiss={() => setAskCloseTab(false)}
-        onConfirm={() => activeOrder && closeOrder(activeOrder.clientUuid)}
+        onConfirm={() => activeOrder && customerAction.run(() => closeOrder(activeOrder.clientUuid))}
       />
       )}
 

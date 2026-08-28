@@ -1,6 +1,7 @@
 'use client';
 
 import { PlusIcon, PersonPlusIcon, PersonMinusIcon, CloseIcon, ReturnIcon } from '@/components/ui/Icon';
+import { AsyncAction, type AsyncState } from '@/components/ui/AsyncAction';
 import styles from './CustomerTabs.module.css';
 
 /**
@@ -32,6 +33,12 @@ export function CustomerTabs({
   onClaim,
   hasCustomer,
   orderCode,
+  activeInView = true,
+  onShowActive,
+  actionState = 'idle',
+  actionProblem,
+  onRetryAction,
+  onDismissAction,
   busy = false,
 }: {
   tabs: { id: string; name: string; amount: string }[];
@@ -46,6 +53,15 @@ export function CustomerTabs({
   hasCustomer: boolean;
   /** The active order's handover code, or null while the shop is still assigning one. */
   orderCode?: string | null;
+  /** Whether the active order's own box is on screen. Drives the collapse below. */
+  activeInView?: boolean;
+  /** Scrolls the active order back into view. */
+  onShowActive?: () => void;
+  /** The state of whichever action was last pressed — they share one footprint. */
+  actionState?: AsyncState;
+  actionProblem?: string | null;
+  onRetryAction?: (() => void) | null;
+  onDismissAction?: () => void;
   busy?: boolean;
 }) {
   const noTab = activeId === null;
@@ -76,6 +92,7 @@ export function CustomerTabs({
         </span>
       </div>
 
+      <div className={styles.tabsRow}>
       <div className={styles.tabs} role="tablist" aria-label="Customers being served">
         {tabs.map((tab) => (
           <button
@@ -91,65 +108,93 @@ export function CustomerTabs({
           </button>
         ))}
 
-        <button type="button" className={styles.add} onClick={onAdd} aria-label="Start another customer">
-          <PlusIcon />
-        </button>
       </div>
 
       {/*
-        Four actions, each its own colour, under the tabs they act on.
+        The "+" sits OUTSIDE the scrolling tabs.
 
-        Colour is doing real work here rather than decoration: these are icon-only controls sitting
-        shoulder to shoulder, and the one that discards a sale must not look like the one that
-        attaches a name to it. Green adds, amber takes away, red discards, blue brings something in.
+        Inside, it was pinned to the end of the row — so a shop with a dozen open orders had to
+        scroll to the far end of them to start the next customer, which is the one moment nobody
+        has time to scroll. It is fixed furniture, like the four actions, and only the tabs
+        themselves grow.
       */}
-      <div className={styles.actions} role="group" aria-label="What to do with this customer">
-        <button
-          type="button"
-          className={`${styles.action} ${styles.attach}`}
-          onClick={onSetCustomer}
-          disabled={noTab || busy}
-          aria-label={hasCustomer ? 'Change who this sale is for' : 'Say who this sale is for'}
-        >
-          <PersonPlusIcon />
-          <span>{hasCustomer ? 'Change' : 'Add'}</span>
-        </button>
-
-        <button
-          type="button"
-          className={`${styles.action} ${styles.detach}`}
-          onClick={onClearCustomer}
-          // Nothing to remove when nobody is attached, and a control that does nothing is worse
-          // than one that is plainly unavailable.
-          disabled={noTab || !hasCustomer || busy}
-          aria-label="Take the customer off this sale"
-        >
-          <PersonMinusIcon />
-          <span>Remove</span>
-        </button>
-
-        <button
-          type="button"
-          className={`${styles.action} ${styles.discard}`}
-          onClick={onCloseTab}
-          disabled={noTab || busy}
-          aria-label="Close this tab without selling"
-        >
-          <CloseIcon />
-          <span>Close</span>
-        </button>
-
-        <button
-          type="button"
-          className={`${styles.action} ${styles.claim}`}
-          onClick={onClaim}
-          disabled={busy}
-          aria-label="Take over an order using its code"
-        >
-          <ReturnIcon />
-          <span>Take over</span>
-        </button>
+      <button type="button" className={styles.add} onClick={onAdd} aria-label="Start another customer">
+        <PlusIcon />
+      </button>
       </div>
+
+      {/*
+        Four actions when the order is on screen — one when it is not.
+
+        The bar is sticky, so scrolling into a long receipt leaves it at the top of the screen with
+        its buttons still pointing at an order nobody can see any more. Acting on something out of
+        sight is how the wrong tab gets closed, so once the order scrolls away the four collapse
+        into a single control whose only job is to bring it back.
+
+        The four states share ONE footprint. A spinner that pushes the tabs down, or an error
+        message that appears underneath, moves the row at the moment somebody is tapping it.
+      */}
+      <AsyncAction
+        state={actionState}
+        problem={actionProblem}
+        onRetry={onRetryAction}
+        onDismiss={onDismissAction}
+        label="Working on this customer"
+      >
+        {activeInView ? (
+          <div className={styles.actions} role="group" aria-label="What to do with this customer">
+            <button
+              type="button"
+              className={`${styles.action} ${styles.attach}`}
+              onClick={onSetCustomer}
+              disabled={noTab || busy}
+              aria-label={hasCustomer ? 'Change who this sale is for' : 'Say who this sale is for'}
+            >
+              <PersonPlusIcon />
+              <span>{hasCustomer ? 'Change' : 'Add'}</span>
+            </button>
+
+            <button
+              type="button"
+              className={`${styles.action} ${styles.detach}`}
+              onClick={onClearCustomer}
+              // Nothing to remove when nobody is attached, and a control that does nothing is worse
+              // than one that is plainly unavailable.
+              disabled={noTab || !hasCustomer || busy}
+              aria-label="Take the customer off this sale"
+            >
+              <PersonMinusIcon />
+              <span>Remove</span>
+            </button>
+
+            <button
+              type="button"
+              className={`${styles.action} ${styles.discard}`}
+              onClick={onCloseTab}
+              disabled={noTab || busy}
+              aria-label="Close this tab without selling"
+            >
+              <CloseIcon />
+              <span>Close</span>
+            </button>
+
+            <button
+              type="button"
+              className={`${styles.action} ${styles.claim}`}
+              onClick={onClaim}
+              disabled={busy}
+              aria-label="Take over an order using its code"
+            >
+              <ReturnIcon />
+              <span>Take over</span>
+            </button>
+          </div>
+        ) : (
+          <button type="button" className={styles.showActive} onClick={onShowActive}>
+            Active order
+          </button>
+        )}
+      </AsyncAction>
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useDemandState } from '@academix-admin/state-stack';
 import { Explain } from '@/components/ui/Explain';
+import { ChevronRightIcon } from '@/components/ui/Icon';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatQty } from '@/lib/format';
 import styles from './StockHistory.module.css';
@@ -80,8 +81,6 @@ export function StockHistory({ productId, unit }: { productId: string; unit: str
 
   return (
     <section className={styles.section}>
-      <h2 className={styles.title}>What has happened to this stock</h2>
-
       <Explain label="Why does this matter?">
         Every change to this item is written down and never edited — a correction is added as its
         own line, so nothing quietly disappears. If the shelf disagrees with the records, this is
@@ -119,5 +118,60 @@ export function StockHistory({ productId, unit }: { productId: string; unit: str
         })}
       </ol>
     </section>
+  );
+}
+
+/**
+ * When this item's stock last changed, as a row that opens the full history.
+ *
+ * Sits with "On the shelf" and "What it cost you", because it answers the same kind of question at
+ * the same glance — those say what is true now, this says when that last became true. The history
+ * itself is a page: hundreds of rows under three facts buries the facts.
+ */
+export function StockHistoryCard({
+  productId,
+  onOpen,
+}: {
+  productId: string;
+  onOpen: () => void;
+}) {
+  const [history, demandHistory] = useDemandState<Movement[]>([], {
+    // One row is all this needs, but it shares the history's key so opening the page is instant
+    // rather than fetching the same thing twice.
+    key: `product-history:${productId}`,
+    scope: 'catalog_flow',
+    persist: false,
+    deps: [productId],
+    revalidateOnMount: false,
+  });
+
+  useEffect(() => {
+    if (!productId) return;
+    demandHistory(async ({ set }) => {
+      const { data } = await getSupabase().rpc('product_history', {
+        p_product_id: productId,
+        p_limit: 60,
+      });
+      set((data ?? []) as Movement[], { override: true });
+    });
+  }, [productId, demandHistory]);
+
+  const last = history[0];
+
+  return (
+    <button type="button" className={styles.card} onClick={onOpen}>
+      <span className={styles.cardBody}>
+        <span className={styles.cardLabel}>Stock history</span>
+        <span className={styles.cardValue}>
+          {last ? `Last changed ${when(last.at)}` : 'Nothing recorded yet'}
+        </span>
+        {last && (
+          <span className={styles.cardDetail}>
+            {WHAT_HAPPENED[last.kind] ?? last.kind} · {last.actor_name ?? 'Someone'}
+          </span>
+        )}
+      </span>
+      <ChevronRightIcon />
+    </button>
   );
 }

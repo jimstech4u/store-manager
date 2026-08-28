@@ -95,13 +95,28 @@ async function signIn(page) {
 
 async function openSell(page) {
   await revealTabs(page);
-  await page.getByRole('button', { name: 'Sell' }).first().click();
-  await page.waitForTimeout(1500);
-  const start = page.getByRole('button', { name: 'Start a customer' }).first();
-  if (await start.count()) {
-    await start.click();
-    await page.waitForTimeout(1200);
+
+  /*
+   * Only tap the Sell tab if we are not already on it.
+   *
+   * Tapping the ACTIVE tab is the reselect gesture — it pops that stack to its root — and doing it
+   * on a screen that is already at its root leaves the page in a state Playwright will not act on,
+   * though a person can tap it perfectly well and the layout is provably static. Signing in lands
+   * on Sell anyway, so the tap was never part of what this scenario is testing.
+   */
+  const onSell = await page.getByRole('button', { name: 'Start another customer' }).count();
+  if (!onSell) {
+    await page.getByRole('button', { name: 'Sell' }).first().click();
+    await page.waitForTimeout(1500);
   }
+  /*
+   * The empty-state button is gone.
+   *
+   * "Start a customer" only ever appeared when the till had nothing open, and the till is
+   * online-first now — signing in picks up whatever the shop is holding, so there is always at
+   * least one tab. The scenario opens a tab of its own a few lines below, which is what it
+   * actually needs.
+   */
 }
 
 async function addProduct(page, term, name) {
@@ -142,6 +157,34 @@ const run = async () => {
    * else's, with somebody else's items on it. Every check below is about what THIS scenario put on
    * a receipt, so it opens its own and works there.
    */
+  /*
+   * Let the till settle before touching it.
+   *
+   * Signing in pulls every order the shop has open and draws a tab for each, so the row keeps
+   * changing size for a moment — and Playwright refuses to click a control that is still moving.
+   * Waiting for the count to stop changing is the difference between a real failure and a probe
+   * that raced the page.
+   */
+  let tabs = -1;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const now = await page.getByRole('tab').count();
+    if (now === tabs && now > 0) break;
+    tabs = now;
+    await page.waitForTimeout(700);
+  }
+
+  /*
+   * Back to the top before reaching for the customer bar.
+   *
+   * `openSell` scrolls the body to prove the tab bar reacts, and the header travels with the
+   * content now — so the bar's controls can be left part-way under it. Playwright will not click
+   * something it cannot see, and it is right not to.
+   */
+  await page.evaluate(() => {
+    document.querySelector('.navstack-column-body')?.scrollTo({ top: 0 });
+  });
+  await page.waitForTimeout(1200);
+
   await page.getByRole('button', { name: 'Start another customer' }).click();
   await page.waitForTimeout(3000);
 

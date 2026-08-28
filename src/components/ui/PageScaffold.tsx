@@ -28,6 +28,7 @@ export function PageScaffold({
   action,
   footer,
   flush = false,
+  headerScrolls = false,
   children,
 }: {
   title: string;
@@ -43,6 +44,20 @@ export function PageScaffold({
   footer?: ReactNode;
   /** Removes body side padding for full-bleed lists. */
   flush?: boolean;
+  /**
+   * Lets the header travel with the content instead of staying put.
+   *
+   * Right for a screen with its own sticky furniture underneath: the sell screen's customer bar
+   * has to take the top of the screen as you scroll into a long receipt, and it cannot while a
+   * pinned header is already standing there.
+   *
+   * The behaviour itself belongs to navigation-stack, not here — an app-level version of this was
+   * tried first, rendering the header inside the body, and it read as the header being deleted
+   * rather than moving. `appBarBehavior="scroll"` lays the bar over a body padded by its height
+   * and moves it one-to-one with the scroll, so it follows the finger and comes back with the
+   * page.
+   */
+  headerScrolls?: boolean;
   children: ReactNode;
 }) {
   const { theme } = useTheme();
@@ -60,24 +75,27 @@ export function PageScaffold({
    * both of which were on the list to build. Same lesson as the header: the package already does
    * this, and a second implementation is a second thing to keep correct.
    */
+  const header = (
+    <Header
+      // 'title' rather than 'bar': the bar variant positions itself fixed, which would take it
+      // out of this flex column and let the body scroll underneath it.
+      variant="title"
+      position="static"
+      theme={theme}
+      title={title}
+      description={subtitle}
+      onBack={onBack}
+      backAriaLabel={backLabel}
+      actions={actions}
+      rightContent={action}
+      className={styles.header}
+    />
+  );
+
   return (
     <Scaffold
-      appBar={
-        <Header
-          // 'title' rather than 'bar': the bar variant positions itself fixed, which would take it
-          // out of this flex column and let the body scroll underneath it.
-          variant="title"
-          position="static"
-          theme={theme}
-          title={title}
-          description={subtitle}
-          onBack={onBack}
-          backAriaLabel={backLabel}
-          actions={actions}
-          rightContent={action}
-          className={styles.header}
-        />
-      }
+      appBar={header}
+      appBarBehavior={headerScrolls ? 'scroll' : 'pinned'}
       bodyClassName={`${styles.body} ${flush ? styles.bodyFlush : ''}`}
       bottomBar={
         footer ? (

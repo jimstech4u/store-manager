@@ -22,8 +22,16 @@
  * what restores position when a page is returned to. Re-declaring `overflow` here would create a
  * second scroller inside it and break both.
  */
+/*
+ * No top padding on the SCROLLPORT itself.
+ *
+ * `position: sticky; top: 0` measures from the scroll container's padding edge, so a top padding
+ * here parked every sticky child that far down the screen — the sell screen's customer bar stopped
+ * 24px short of the top and never took the place the travelling header had left. The space is the
+ * same; it is applied to the content instead, where it scrolls away like any other content.
+ */
 .body {
-  padding: var(--space-5) var(--space-4);
+  padding: 0 var(--space-4);
   /* Clears the floating tab bar as well as the home indicator. Without the nav height the
      last item in every list sits under the bar and cannot be tapped. */
   padding-bottom: calc(var(--space-7) + var(--nav-height) + var(--safe-bottom));
@@ -37,6 +45,7 @@
 .inner {
   max-width: 640px;
   margin: 0 auto;
+  padding-top: var(--space-5);
 }
 
 /* A sticky action bar for screens whose primary action must stay reachable while scrolling —

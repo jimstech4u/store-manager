@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useDialog } from '@academix-admin/dialog-viewer';
 import { useTheme } from '@/context/ThemeContext';
 
@@ -75,14 +75,26 @@ export function ConfirmDialog({
   }, [open]);
 
   /*
-   * Unmount when the package closes it, not only when we do.
+   * Unmount when the package closes it — but only once it has actually been open.
    *
-   * Cancel and the backdrop are handled inside the package and report nothing back — the viewer it
-   * hands out has no `onClose`. Left mounted after such a dismissal the overlay stays on the page
+   * Cancel and the backdrop are handled inside the package and report nothing back: the viewer it
+   * hands out has no `onClose`. Left mounted after such a dismissal its overlay stays on the page
    * and keeps swallowing taps, so the caller's flag has to come down when `isOpen` does.
+   *
+   * THE GUARD IS THE WHOLE POINT. `open()` above takes a render to land, so on the first render
+   * `isOpen` is still false — and without `seenOpen` this fired immediately, telling the caller to
+   * unmount a dialog that had not appeared yet. Remove and Close looked broken: three or four taps
+   * before one happened to catch a render where the flag had already flipped. Waiting until it has
+   * genuinely been open makes one tap enough.
    */
+  const seenOpen = useRef(false);
+
   useEffect(() => {
-    if (!controller.isOpen) onDismiss?.();
+    if (controller.isOpen) {
+      seenOpen.current = true;
+      return;
+    }
+    if (seenOpen.current) onDismiss?.();
   }, [controller.isOpen, onDismiss]);
 
   const finish = () => {

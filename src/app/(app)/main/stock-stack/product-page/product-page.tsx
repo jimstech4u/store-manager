@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
-import { StockHistory } from '@/components/stock/StockHistory';
+import { StockHistoryCard } from '@/components/stock/StockHistory';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { InfoPanel } from '@/components/ui/Explain';
 import { Button } from '@/components/ui/Button';
@@ -208,7 +208,10 @@ export default function ProductPage() {
         </InfoPanel>
       )}
 
-      <StockHistory productId={product.id} unit={product.baseUnit} />
+      <StockHistoryCard
+        productId={product.id}
+        onOpen={() => void nav.push('stock_history_page', { id: product.id })}
+      />
 
       <PhotoUpload
         storeId={store.id}

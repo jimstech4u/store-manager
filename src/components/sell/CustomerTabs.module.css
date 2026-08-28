@@ -41,6 +41,14 @@
  * A shop with five people waiting must not push the four actions off the end of the row — those
  * are fixed furniture, the tabs are the part that grows.
  */
+/* The scrolling tabs and the fixed "+" share one line. */
+.tabsRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
 .tabs {
   display: flex;
   align-items: center;
@@ -189,4 +197,26 @@
 .codePending {
   color: var(--text-muted);
   letter-spacing: 0.2em;
+}
+
+/*
+ * The collapsed state: one button, in the shop's own green.
+ *
+ * It takes the whole row the four actions had, so nothing moves when it swaps in — and it is the
+ * primary colour because when it is showing, it is the only thing on this bar worth pressing.
+ */
+.showActive {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: var(--touch-min, 44px);
+  padding: var(--space-2);
+  border: none;
+  border-radius: var(--radius);
+  background: var(--primary);
+  color: #fff;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  cursor: pointer;
 }

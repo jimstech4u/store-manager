@@ -596,6 +596,18 @@ export function useDraftOrders(storeId: string | null) {
         note: (row.note as string | null) ?? '',
         feeAmount: String(row.fee_amount ?? ''),
         feeLabel: (row.fee_label as string | null) ?? '',
+        /*
+         * The charges come back too.
+         *
+         * They were written to the shop and never read, so a delivery fee survived only on the
+         * device that typed it — pick the order up elsewhere and the items looked complete with
+         * the money quietly wrong, which is the worst shape a mistake about money can take.
+         */
+        charges: ((row.charges ?? []) as Record<string, unknown>[]).map((c) => ({
+          key: newId(),
+          label: String(c.label ?? ''),
+          amount: String(c.amount ?? ''),
+        })),
         // Already the shop's own copy, so nothing to push back.
         synced: true,
         lines: ((row.lines ?? []) as Record<string, unknown>[]).map((l) =>

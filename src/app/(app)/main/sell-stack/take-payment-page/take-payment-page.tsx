@@ -41,7 +41,7 @@ export default function TakePaymentPage() {
   const location = useLocation();
   const wantedId = (location?.params?.id as string | undefined) ?? null;
 
-  const { orders, activeOrder: current, syncing } = useDraftOrders(store?.id ?? null);
+  const { orders, activeOrder: current, updateOrder, syncing } = useDraftOrders(store?.id ?? null);
 
   // By id first; the active tab only when no id travelled with the push.
   const activeOrder = wantedId ? (orders.find((o) => o.id === wantedId) ?? null) : current;
@@ -102,6 +102,7 @@ export default function TakePaymentPage() {
       />
       <TakePayment
         order={activeOrder}
+        onUpdateOrder={(patch) => updateOrder(activeOrder.clientUuid, patch)}
         storeId={store.id}
         total={draftTotal(activeOrder)}
         onNeedCustomer={() => {

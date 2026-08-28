@@ -64,9 +64,16 @@
  * A divider rather than only spacing: the two halves answer different questions — who, and how
  * much — and on a pill this small they run together without a line between them.
  */
+/*
+ * The customer's name, above the action, with a rule between them.
+ *
+ * `.pill` is a flex row, so a block child did not stack — the name simply sat to the LEFT of
+ * "Take payment", which reads as two separate labels rather than one saying whose money it is.
+ * The column direction below is what actually puts it on its own line.
+ */
 .who {
   display: block;
-  max-width: 42vw;
+  max-width: 60vw;
   padding-bottom: 4px;
   margin-bottom: 4px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.35);
@@ -83,3 +90,14 @@
   align-items: center;
   gap: var(--space-2);
 }
+
+/* A pill carrying a name is two stacked lines, not one long row. */
+.pill:has(.who) {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.pill:has(.who) .row {
+  justify-content: center;
+}
+
