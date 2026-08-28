@@ -57,3 +57,29 @@
   font-size: var(--text-lg);
   font-weight: 700;
 }
+
+/*
+ * The customer's name, over a rule, over the amount.
+ *
+ * A divider rather than only spacing: the two halves answer different questions — who, and how
+ * much — and on a pill this small they run together without a line between them.
+ */
+.who {
+  display: block;
+  max-width: 42vw;
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.35);
+  font-size: var(--text-xs, 12px);
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}

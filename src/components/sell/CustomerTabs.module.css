@@ -1,0 +1,192 @@
+/*
+ * The customer bar: a label, the tabs, and the four actions.
+ *
+ * It STICKS to the top of the page while the header scrolls away, because it is the one thing on
+ * this screen that must stay reachable — a seller adding a fourth item for one customer needs to
+ * be able to switch to another without scrolling back up to find the tabs.
+ */
+
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) 0;
+  /* Opaque, and it must stay opaque: the order list scrolls underneath this. */
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.label {
+  flex: none;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/*
+ * The tabs scroll on their own.
+ *
+ * A shop with five people waiting must not push the four actions off the end of the row — those
+ * are fixed furniture, the tabs are the part that grows.
+ */
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 2px 0;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  flex: none;
+  gap: 1px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.tabActive {
+  background: var(--primary-soft, var(--primary));
+  border-color: transparent;
+  color: var(--primary-on-soft, #fff);
+}
+
+.tabName {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.tabAmount {
+  font-size: var(--text-xs, 12px);
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+.add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 999px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.add:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+/* ── The four ─────────────────────────────────────────────────────────────────────── */
+
+.actions {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
+}
+
+/*
+ * Each action takes an equal quarter of the row.
+ *
+ * Now that they have their own line there is room for a word under each icon, and four icons on
+ * their own were four guesses — "take over" in particular is not something anybody reads out of an
+ * arrow.
+ */
+.actions > * {
+  flex: 1;
+}
+
+.action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: var(--touch-min, 44px);
+  padding: var(--space-2) 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: var(--text-xs, 12px);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.action:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/*
+ * Each action its own colour, because these are icon-only and sit shoulder to shoulder.
+ *
+ * The one that discards a sale must never be mistaken for the one that attaches a name to it, and
+ * on a crowded row shape alone does not carry that at a glance.
+ */
+.attach {
+  color: var(--success, #1a7f5a);
+}
+
+.detach {
+  color: var(--warning, #b26a00);
+}
+
+.discard {
+  color: var(--danger, #c0392b);
+}
+
+.claim {
+  color: var(--info, #2b6cb0);
+}
+
+.action:not(:disabled):hover {
+  background: var(--surface-sunken);
+}
+
+/*
+ * The handover code, at the far end of the title line.
+ *
+ * Monospaced and letter-spaced because its whole job is to be read aloud accurately over the noise
+ * of a shop — "V8EA4" said once, and typed correctly on somebody else's phone.
+ */
+.code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--primary);
+}
+
+.codePending {
+  color: var(--text-muted);
+  letter-spacing: 0.2em;
+}

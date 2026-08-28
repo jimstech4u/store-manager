@@ -354,6 +354,37 @@ export function useDraftOrders(storeId: string | null) {
   );
 
   /** Take over a colleague's order by its share code. */
+  /*
+   * Move one tab's lines onto another and close the empty one.
+   *
+   * Used when a handover code is claimed onto a tab that already has items and the seller chooses
+   * to keep both sets. One tab and one code survive: leaving two open for the same customer is how
+   * the same goods get read out twice and sold twice.
+   *
+   * Pushed to the server before the source is closed, so a merge that fails halfway leaves the
+   * items somewhere rather than nowhere.
+   */
+  const mergeInto = useCallback(
+    async (fromClientUuid: string, toClientUuid: string) => {
+      let merged: DraftOrder | null = null;
+
+      setOrders((prev) => {
+        const from = prev.find((o) => o.clientUuid === fromClientUuid);
+        const to = prev.find((o) => o.clientUuid === toClientUuid);
+        if (!from || !to) return prev;
+
+        // Fresh keys: two orders built independently can hold the same line key, and React would
+        // then draw one row for two lines.
+        merged = { ...to, lines: [...to.lines, ...from.lines.map((l) => ({ ...l, key: newId() }))] };
+        return prev.map((o) => (o.clientUuid === toClientUuid ? merged! : o));
+      });
+
+      if (merged) await push(merged);
+      closeOrder(fromClientUuid);
+    },
+    [setOrders, push, closeOrder],
+  );
+
   const claimByCode = useCallback(
     async (code: string) => {
       if (!storeId) return null;
@@ -472,6 +503,7 @@ export function useDraftOrders(storeId: string | null) {
     updateLine,
     removeLine,
     claimByCode,
+    mergeInto,
     push,
     syncing,
     error,

@@ -31,11 +31,21 @@ import styles from './FloatingAmount.module.css';
  * disagree with the bar.
  */
 export function FloatingAmount({
+  who,
   label,
   amount,
   onClick,
   disabled = false,
 }: {
+  /**
+   * Whose money this is, shown above the amount with a rule between them.
+   *
+   * The button used to say only "Take payment ₦3,700". With several tabs open that is the one
+   * number on screen that must not be taken on trust — tapping it settles a sale, and WHICH sale
+   * depended on remembering which tab was active. Naming the customer on the button means it says
+   * what it is about to do rather than only how much.
+   */
+  who?: ReactNode;
   label: string;
   amount: ReactNode;
   onClick: () => void;
@@ -64,8 +74,11 @@ export function FloatingAmount({
       disabled={disabled}
       onClick={onClick}
     >
-      <span className={styles.label}>{label}</span>
-      <span className={styles.amount}>{amount}</span>
+      {who && <span className={styles.who}>{who}</span>}
+      <span className={styles.row}>
+        <span className={styles.label}>{label}</span>
+        <span className={styles.amount}>{amount}</span>
+      </span>
     </button>
   );
 }

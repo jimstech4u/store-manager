@@ -10,8 +10,10 @@ import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
 import { Collapsible } from '@/components/ui/Collapsible';
-import { CloseIcon, MinusIcon, PlusIcon, ReceiptIcon, ReturnIcon } from '@/components/ui/Icon';
+import { CloseIcon, MinusIcon, PlusIcon, ReceiptIcon } from '@/components/ui/Icon';
 import { CustomerPicker } from '@/components/customers/CustomerPicker';
+import { CustomerTabs } from '@/components/sell/CustomerTabs';
+import { ConfirmDialog, useConfirm } from '@/components/ui/Dialog';
 import { ProductPicker } from '@/components/catalog/ProductPicker';
 import type { ProductFormResult } from '@/components/catalog/ProductForm';
 import { useAuth } from '@/providers/AuthProvider';
@@ -85,7 +87,6 @@ export default function SellPage() {
     addLine,
     updateLine,
     removeLine,
-    claimByCode,
     push,
     error: draftError,
     syncing,
@@ -147,12 +148,20 @@ export default function SellPage() {
   const [returnables, setReturnables] = useState<
     Record<string, { categoryId: string; categoryName: string; kind: string }[]>
   >({});
-  const [claiming, setClaiming] = useState(false);
+  /*
+   * Three dialogs, because three of the four customer actions ask something first.
+   *
+   * A dialog rather than a sheet for each: these interrupt to ask a question that has to be
+   * answered before anything else continues, which is exactly the distinction the two surfaces
+   * carry everywhere else in the app.
+   */
+  const clearCustomerDialog = useConfirm();
+  const closeTabDialog = useConfirm();
+
   const [pickingCustomer, setPickingCustomer] = useState(false);
   // Remembers that the picker was opened mid-payment, so choosing someone returns to the
   // sheet instead of dropping the seller back on the order with the payment half-entered.
   const [resumePayment, setResumePayment] = useState(false);
-  const [code, setCode] = useState('');
   // Sale units per product, fetched once when a product is first added to any order.
   const [saleUnits, setSaleUnits] = useState<Record<string, SaleUnit[]>>({});
   /*
@@ -435,20 +444,22 @@ export default function SellPage() {
       onBack={goBack}
       title="Sell"
       subtitle={store.name}
-      action={
-        <button
-          type="button"
-          className={styles.claimButton}
-          onClick={() => setClaiming((v) => !v)}
-          // The icon and the label both flip. A control that opens a panel and then looks
-          // identical while the panel is open gives no way to tell that tapping it again is what
-          // closes it — so people hunt for a way out and there isn't one.
-          aria-label={claiming ? 'Close the order code box' : 'Take over an order using its code'}
-          aria-expanded={claiming}
-        >
-          {claiming ? <CloseIcon /> : <ReturnIcon />}
-        </button>
-      }
+      /*
+       * The header action is SALES, the same one the money screen carries.
+       *
+       * Taking over a colleague's order used to live here, opening a panel over the order being
+       * worked on. It has moved to the customer bar, where the rest of the per-customer actions
+       * are. What belongs in a page header is the way OUT to a related page, and from a till the
+       * related page is what has already been sold.
+       */
+      actions={[
+        {
+          key: 'sales',
+          icon: <ReceiptIcon />,
+          onClick: () => void nav.push('sales_page'),
+          ariaLabel: 'All sales and receipts',
+        },
+      ]}
     >
       {/*
         The running total, floating at the right-hand end of the tab bar's line.
@@ -457,6 +468,19 @@ export default function SellPage() {
       */}
       {activeOrder && activeOrder.lines.length > 0 && (
         <FloatingAmount
+          /*
+           * Whose money this is, above the amount.
+           *
+           * The button used to say only "Take payment ₦3,700". With several tabs open that is the
+           * one number on screen that must not be taken on trust — tapping it settles a sale, and
+           * which sale depended on remembering which tab was active. The name and the amount
+           * together mean the button says what it is about to do.
+           */
+          who={
+            activeOrder.customerName.trim() ||
+            activeOrder.label.trim() ||
+            `Customer ${Math.max(1, orders.findIndex((o) => o.clientUuid === activeId) + 1)}`
+          }
           label={emptyLines.length > 0 ? 'Fix the quantity' : 'Take payment'}
           amount={formatMoney(total)}
           disabled={emptyLines.length > 0}
@@ -464,67 +488,24 @@ export default function SellPage() {
         />
       )}
 
-      {/* ── Customer tabs ───────────────────────────────────────────────────────── */}
-      <div className={styles.tabStrip}>
-        {orders.map((order, index) => (
-          <button
-            key={order.clientUuid}
-            type="button"
-            className={`${styles.tab} ${order.clientUuid === activeId ? styles.tabActive : ''}`}
-            onClick={() => setActiveId(order.clientUuid)}
-            aria-current={order.clientUuid === activeId ? 'true' : undefined}
-          >
-            <span>{order.customerName.trim() || order.label.trim() || `Customer ${index + 1}`}</span>
-            <span className={styles.tabAmount}>{formatMoney(draftTotal(order))}</span>
-          </button>
-        ))}
-        <button
-          type="button"
-          className={styles.tabAdd}
-          onClick={() => startOrder()}
-          aria-label="Start another customer"
-        >
-          <PlusIcon />
-        </button>
-      </div>
-
-      {claiming && (
-        <div className={styles.claimPanel}>
-          <Field
-            label="Order code"
-            value={code}
-            onChange={(e) => setCode(e.target.value.toUpperCase())}
-            placeholder="ABCDE"
-            hint="Ask your colleague for the code shown on their order."
-            autoCapitalize="characters"
-            autoCorrect="off"
-          />
-          <div className={styles.claimActions}>
-            {/* Cancel sits beside the action rather than only in the header: this panel covers the
-                order being worked on, and the way out has to be where the eye already is. */}
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setClaiming(false);
-                setCode('');
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={async () => {
-                const claimed = await claimByCode(code);
-                if (claimed) {
-                  setClaiming(false);
-                  setCode('');
-                }
-              }}
-            >
-              Take over this order
-            </Button>
-          </div>
-        </div>
-      )}
+      {/* ── Who is being served ─────────────────────────────────────────────────── */}
+      <CustomerTabs
+        tabs={orders.map((order, index) => ({
+          id: order.clientUuid,
+          name: order.customerName.trim() || order.label.trim() || `Customer ${index + 1}`,
+          amount: formatMoney(draftTotal(order)),
+        }))}
+        activeId={activeId}
+        onSelect={setActiveId}
+        onAdd={() => startOrder()}
+        onSetCustomer={() => setPickingCustomer(true)}
+        onClearCustomer={() => clearCustomerDialog.open()}
+        onCloseTab={() => closeTabDialog.open()}
+        onClaim={() => void nav.push('claim_page')}
+        hasCustomer={Boolean(activeOrder?.customerId)}
+        orderCode={activeOrder?.code ?? null}
+        busy={syncing}
+      />
 
       {draftError && (
         <InfoPanel tone="warning" title="Not saved to the shop yet">
@@ -542,51 +523,6 @@ export default function SellPage() {
         </div>
       ) : (
         <>
-          {/*
-            Customer is an OPTIONAL chip, not a field at the top of the form.
-
-            Most buyers are anonymous walk-ins paying cash, so asking "who is this?" before
-            anything can be added to a receipt is a question the seller usually cannot answer and
-            does not need to. Attaching someone is available here for a regular you already know,
-            and is otherwise asked for at the moment it genuinely matters — when part of the
-            money is going on account.
-          */}
-          <button
-            type="button"
-            className={styles.customerChip}
-            onClick={() => setPickingCustomer(true)}
-          >
-            {activeOrder.customerId ? (
-              <>
-                <span className={styles.customerName}>{activeOrder.customerName}</span>
-                <span className={styles.customerHint}>Tap to change</span>
-              </>
-            ) : (
-              <>
-                <span className={styles.customerName}>Walk-in customer</span>
-                <span className={styles.customerHint}>Tap to attach someone</span>
-              </>
-            )}
-          </button>
-
-          {/* The row is always here once a customer is being served; only the CODE waits on the
-              server. Rendering the whole block conditionally made it appear a second later and
-              push everything below it down — the page visibly jumped while the seller was already
-              reading it. Reserving the space costs one row and removes the jump entirely. */}
-          <div className={styles.codeRow}>
-            <span className={styles.codeLabel}>Order code</span>
-            <span className={`${styles.codeValue} ${activeOrder.code ? '' : styles.codePending}`}>
-              {activeOrder.code ?? '·····'}
-            </span>
-            <span className={styles.codeHint}>
-              {activeOrder.code
-                ? 'Read this out to hand the order over'
-                : syncing
-                  ? 'Getting a code…'
-                  : 'A code appears once this order reaches the shop'}
-            </span>
-          </div>
-
           {/* ── Lines ─────────────────────────────────────────────────────────── */}
           {activeOrder.lines.length > 0 && (
             <div className={styles.lines}>
@@ -935,16 +871,6 @@ export default function SellPage() {
             </>
           )}
 
-          {/* Outside the "has lines" block on purpose. It used to live inside it, so emptying a
-              receipt took away the only way to close the tab — leaving a customer tab that could
-              not be sold and could not be dismissed. Closing is most needed exactly then. */}
-          <Button
-            variant="ghost"
-            fullWidth
-            onClick={() => closeOrder(activeOrder.clientUuid)}
-          >
-            Close this tab without selling
-          </Button>
         </>
       )}
       {/*
@@ -1015,6 +941,39 @@ export default function SellPage() {
         />
       )}
 
+
+
+      {/* ── The three questions the customer bar asks ─────────────────────────────── */}
+
+      <ConfirmDialog
+        controller={clearCustomerDialog}
+        title="Take the customer off this sale?"
+        message={
+          activeOrder
+            ? `${activeOrder.customerName || 'This customer'} will be taken off. The items stay ` +
+              `— it becomes a sale with no name against it.`
+            : undefined
+        }
+        confirmText="Take them off"
+        tone="danger"
+        onConfirm={() =>
+          activeOrder &&
+          updateOrder(activeOrder.clientUuid, {
+            customerId: null,
+            customerName: '',
+            customerPhone: '',
+          })
+        }
+      />
+
+      <ConfirmDialog
+        controller={closeTabDialog}
+        title="Close this tab without selling?"
+        message="Everything on it is discarded, and the order code goes back for someone else to use."
+        confirmText="Discard it"
+        tone="danger"
+        onConfirm={() => activeOrder && closeOrder(activeOrder.clientUuid)}
+      />
 
     </PageScaffold>
   );

@@ -355,3 +355,26 @@ export function EyeOffIcon({ size = '1.25em' }: { size?: string }) {
     </svg>
   );
 }
+
+/**
+ * Attach somebody to a sale, and take them off it again.
+ *
+ * A person with a plus and a person with a minus, rather than a pencil and a bin: the thing being
+ * changed is WHO this sale is for, and a bin next to a customer's name reads as deleting the
+ * customer.
+ */
+export const PersonPlusIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="9" cy="8" r="3.5" />
+    <path d="M2.5 20c0-3.3 2.9-5.5 6.5-5.5 1.2 0 2.3.2 3.2.7" />
+    <path d="M17 14v6M14 17h6" />
+  </Svg>
+);
+
+export const PersonMinusIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="9" cy="8" r="3.5" />
+    <path d="M2.5 20c0-3.3 2.9-5.5 6.5-5.5 1.2 0 2.3.2 3.2.7" />
+    <path d="M14 17h6" />
+  </Svg>
+);

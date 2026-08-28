@@ -1,0 +1,104 @@
+/* The two lists, and the total they add up to. */
+
+.side {
+  margin-top: var(--space-5);
+}
+
+.sideTitle {
+  margin-bottom: var(--space-2);
+  font-size: var(--text-base);
+  font-weight: 700;
+}
+
+.empty {
+  padding: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  margin-bottom: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.row input {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  accent-color: var(--primary);
+}
+
+/*
+ * A dropped line stays visible, struck through.
+ *
+ * Removing it from the list would leave nothing to change your mind with, and the whole point of
+ * this screen is that both sides stay on it while the decision is being made.
+ */
+.dropped {
+  opacity: 0.5;
+}
+
+.dropped .rowName,
+.dropped .rowTotal {
+  text-decoration: line-through;
+}
+
+.rowBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.rowName {
+  display: block;
+  font-weight: 700;
+}
+
+.rowDetail {
+  display: block;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.rowTotal {
+  flex: none;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Which side a line came from, so a combined list stays readable as two. */
+.rowSide {
+  flex: none;
+  padding: 2px var(--space-2);
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  font-size: var(--text-xs, 12px);
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.footerTotal {
+  display: flex;
+  flex-direction: column;
+  font-variant-numeric: tabular-nums;
+}
+
+.footerLabel {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
