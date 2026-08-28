@@ -158,6 +158,39 @@ export default function SellPage() {
   /** The top of the active order, so the bar can bring it back under itself. */
   const orderTopRef = useRef<HTMLDivElement | null>(null);
 
+  /*
+   * Put the order's first row back under the bar.
+   *
+   * MEASURED AFTER THE RE-RENDER, which is the whole difficulty. Switching customers swaps the
+   * entire receipt, so measuring in the click handler reads the tab you just left — its box is
+   * still where it was, the sums come out to "already in place", and nothing moves. That is
+   * exactly what tapping a tab looked like: the four actions settled the page and the tabs did
+   * not, because only the tabs change what is being measured.
+   *
+   * Two frames: the first lets React commit the new order, the second lets layout settle before
+   * anything is read from it.
+   */
+  const settlePage = useCallback(() => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const box = orderTopRef.current;
+        const body = box?.closest<HTMLElement>('.navstack-column-body');
+        if (!box || !body) return;
+
+        // Against the bar's own height rather than a guessed number, so it stays right when the
+        // bar changes — it grows a row when the four actions collapse.
+        const bar = body.querySelector<HTMLElement>('[class*="CustomerTabs_bar"]');
+        const clearance = bar ? bar.getBoundingClientRect().height : 0;
+        const top = box.getBoundingClientRect().top - body.getBoundingClientRect().top;
+        const target = body.scrollTop + top - clearance;
+
+        // Nothing to do when it is already there — a smooth scroll of two pixels reads as a twitch.
+        if (Math.abs(target - body.scrollTop) < 4) return;
+        body.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+      });
+    });
+  }, []);
+
   const customerAction = useAsyncAction();
 
   const clearCustomerDialog = useConfirm();
@@ -562,17 +595,7 @@ export default function SellPage() {
          * This puts the first row back directly under the bar, so acting on a customer always
          * leaves that customer's order in front of you.
          */
-        onSettlePage={() => {
-          const box = orderTopRef.current;
-          const body = box?.closest<HTMLElement>('.navstack-column-body');
-          if (!box || !body) return;
-          // Measured against the bar's own height rather than a guessed number, so it stays right
-          // when the bar changes — it grows a row when the four actions collapse.
-          const bar = body.querySelector<HTMLElement>('[class*="CustomerTabs_bar"]');
-          const clearance = bar ? bar.getBoundingClientRect().height : 0;
-          const top = box.getBoundingClientRect().top - body.getBoundingClientRect().top;
-          body.scrollTo({ top: body.scrollTop + top - clearance, behavior: 'smooth' });
-        }}
+        onSettlePage={settlePage}
         actionState={customerAction.state}
         actionProblem={customerAction.problem}
         onRetryAction={customerAction.retry}
