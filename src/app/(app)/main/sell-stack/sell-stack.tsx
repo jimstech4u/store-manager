@@ -22,6 +22,14 @@ import ProductFormPage from '../stock-stack/product-form-page/product-form-page'
  * back; pushing it onto THIS stack means one tap back is the receipt they were building.
  */
 import SalesPage from '../money-stack/sales-page/sales-page';
+/*
+ * The customer form, registered here as well.
+ *
+ * A seller who needs to put money on account for somebody the shop has never recorded
+ * must be able to add them WITHOUT leaving the receipt they are building. Same component,
+ * same route key, reached from two stacks — the pattern the product form already uses.
+ */
+import CustomerFormPage from '../people-stack/customer-form-page/customer-form-page';
 
 const navLink = {
   sell_page: SellPage,
@@ -31,6 +39,7 @@ const navLink = {
   take_payment_page: TakePaymentPage,
   product_form_page: ProductFormPage,
   sales_page: SalesPage,
+  customer_form_page: CustomerFormPage,
 };
 
 export const SellStack = () => (

@@ -4,6 +4,7 @@ import { useCallback, useMemo } from 'react';
 import styles from './money-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
+import { Button } from '@/components/ui/Button';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
 import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
@@ -122,6 +123,33 @@ export default function MoneyPage() {
 
   if (list.loading && list.items.length === 0) {
     return <FullPageMessage title="Loading balances" tone="loading" />;
+  }
+
+  /*
+   * A failed load says so, and offers a way out.
+   *
+   * Without this the screen showed an empty list: a shop with two hundred debtors, looking for all
+   * the world like a shop with none. Nothing said the request had failed and nothing could be done
+   * about it but leave the page and come back.
+   *
+   * Only when there is nothing to show. A failure while paging further into a list somebody is
+   * already reading must not replace what they can see — they keep the rows they have, and the
+   * next scroll tries again.
+   */
+  if (list.error && list.items.length === 0) {
+    return (
+      <FullPageMessage
+        title="Could not load who owes you"
+        tone="error"
+        action={
+          <Button fullWidth onClick={() => list.reload()}>
+            Try again
+          </Button>
+        }
+      >
+        {list.error}
+      </FullPageMessage>
+    );
   }
 
   return (

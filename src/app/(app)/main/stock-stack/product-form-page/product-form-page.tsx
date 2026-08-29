@@ -6,6 +6,7 @@ import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { ProductForm, type ProductFormResult } from '@/components/catalog/ProductForm';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
+import { useListNotifier } from '@/hooks/useListChannel';
 import { catalogChanged, useProduct } from '@/lib/stacks/catalog-stack';
 
 /**
@@ -28,6 +29,9 @@ export default function ProductFormPage() {
   const goBack = useStackBack();
   const location = useLocation();
   const { store } = useAuth();
+
+  // Told about the one product this form changes.
+  const notifyProducts = useListNotifier<{ id: string; name: string }>('products');
 
   const productId = (location?.params?.id as string | undefined) ?? null;
   const prefillName = (location?.params?.name as string | undefined) ?? '';
@@ -68,8 +72,23 @@ export default function ProductFormPage() {
         initialName={prefillName}
         onCancel={() => void nav.pop()}
         onSaved={(result) => {
-          // Say the catalogue moved, so every list showing this product re-reads it.
-          catalogChanged();
+          /*
+           * A RENAME is patched; a NEW item still asks the catalogue to re-read.
+           *
+           * The form hands back an id and a name, which is genuinely all it knows — so that is
+           * all that is claimed. Renaming patches the one row every list shows, without anybody
+           * re-reading three hundred items to learn one word changed.
+           *
+           * A product that did not exist a moment ago is a different case: there is no row to
+           * patch and no full shape to invent — its cost, its stock, its pack are all computed
+           * elsewhere. Fabricating them to save a request would put wrong numbers on screen, so
+           * the catalogue is re-read, which is the honest thing for something genuinely new.
+           */
+          if (productId) {
+            notifyProducts({ type: 'patch', id: result.id, patch: { name: result.name } });
+          } else {
+            catalogChanged();
+          }
           // `getter()` unwraps to the callback the caller published. It is checked rather than
           // assumed because most callers do not publish one at all.
           if (onSavedObj.isProvided) {

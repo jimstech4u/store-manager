@@ -13,6 +13,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
 import { useStackBack } from '@/hooks/useStackBack';
 import { searchProducts, useProductList, type Product } from '@/lib/stacks/catalog-stack';
+import { useListChannel } from '@/hooks/useListChannel';
 import { formatQty, pluralUnit } from '@/lib/format';
 
 /**
@@ -36,6 +37,16 @@ export default function CountPage() {
   const [searchId, searchOps, isSearchOpen] = useSearchController();
 
   const browse = useProductList(store?.id ?? null);
+
+  /*
+   * A product changed somewhere else lands here as one row.
+   *
+   * Both this screen and the other one that lists the catalogue read the same `products` list, so
+   * a price edited on the product page, or an item added at the till, reaches whichever of them
+   * happens to be mounted — and neither has to re-read a catalogue that may run to hundreds of
+   * items to find out about one of them.
+   */
+  useListChannel<Product>('products', browse.items, browse.setItems);
   const products = browse.products;
 
 

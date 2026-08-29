@@ -1,0 +1,10 @@
+/* The two ways out, side by side at the end of the form. */
+.actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.actions > * {
+  flex: 1;
+}

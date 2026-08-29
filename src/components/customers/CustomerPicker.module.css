@@ -87,3 +87,29 @@
   margin-top: var(--space-5);
   padding-bottom: var(--space-4);
 }
+
+/*
+ * The way to add somebody, at both ends of the list.
+ *
+ * A full-width row rather than a floating button: it belongs to the list it sits in, and reads as
+ * "the option after all these names" rather than something layered on top of them.
+ */
+.addRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: var(--touch-comfortable, 52px);
+  margin-bottom: var(--space-2);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--primary);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.addRow:hover {
+  background: var(--surface-sunken);
+}

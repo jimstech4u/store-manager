@@ -1,18 +1,18 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import styles from '../../money-stack/money-page/money-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { useStackBack } from '@/hooks/useStackBack';
-import { useListChannel, useListNotifier } from '@/hooks/useListChannel';
+import { useListChannel } from '@/hooks/useListChannel';
 import { useNav } from '@academix-admin/navigation-stack';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
+import { Button } from '@/components/ui/Button';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
 import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
 import { InfoPanel } from '@/components/ui/Explain';
 import { ChevronRightIcon, PlusIcon } from '@/components/ui/Icon';
-import { CustomerPicker } from '@/components/customers/CustomerPicker';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePaginatedList, useInfiniteScroll } from '@/hooks/usePaginatedList';
 import { useProvideCustomers } from '@/lib/stacks/customer-directory';
@@ -37,7 +37,6 @@ export default function PeoplePage() {
   const goBack = useStackBack();
   const nav = useNav();
   const { store } = useAuth();
-  const [adding, setAdding] = useState(false);
 
   /*
    * The list browses; searching happens in the SearchViewer sheet.
@@ -112,8 +111,6 @@ export default function PeoplePage() {
    */
   useListChannel<CustomerRow>('customers', list.items, list.setItems);
 
-  // Used by this screen's own picker, which creates people as well as choosing them.
-  const notifyPeople = useListNotifier<CustomerRow>('customers');
 
   const sentinelRef = useInfiniteScroll(list.loadMore, {
     enabled: list.hasMore && !list.loading,
@@ -123,6 +120,33 @@ export default function PeoplePage() {
 
   if (list.loading && list.items.length === 0) {
     return <FullPageMessage title="Loading customers" tone="loading" />;
+  }
+
+  /*
+   * A failed load says so, and offers a way out.
+   *
+   * Without this the screen showed an empty list: a shop with two hundred debtors, looking for all
+   * the world like a shop with none. Nothing said the request had failed and nothing could be done
+   * about it but leave the page and come back.
+   *
+   * Only when there is nothing to show. A failure while paging further into a list somebody is
+   * already reading must not replace what they can see — they keep the rows they have, and the
+   * next scroll tries again.
+   */
+  if (list.error && list.items.length === 0) {
+    return (
+      <FullPageMessage
+        title="Could not load your customers"
+        tone="error"
+        action={
+          <Button fullWidth onClick={() => list.reload()}>
+            Try again
+          </Button>
+        }
+      >
+        {list.error}
+      </FullPageMessage>
+    );
   }
 
   return (
@@ -135,7 +159,14 @@ export default function PeoplePage() {
         {
           key: 'add',
           icon: <PlusIcon />,
-          onClick: () => setAdding(true),
+          /*
+           * Straight to the form, not to the picker.
+           *
+           * "+" on a list of customers means "add one" — it used to open the CHOOSER, which is
+           * for finding somebody who already exists. Being shown a search box after asking to add
+           * a customer is being answered a question you did not ask.
+           */
+          onClick: () => void nav.push('customer_form_page'),
           ariaLabel: 'Add a customer',
         },
       ]}
@@ -249,31 +280,12 @@ export default function PeoplePage() {
         </>
       )}
 
-      <CustomerPicker
-        open={adding}
-        onClose={() => setAdding(false)}
-        storeId={store.id}
-        onPick={(customer) => {
-          setAdding(false);
-          /*
-           * The new person, put straight into the list.
-           *
-           * This used to reload from page one, which threw away every page the reader had scrolled
-           * through to find out this customer was not there — the exact reason they were adding
-           * them. The picker hands back what it created, so the list can show it without asking.
-           */
-          notifyPeople({
-            type: 'upsert',
-            row: {
-              id: customer.id,
-              display_name: customer.name,
-              business_name: null,
-              phone: customer.phone,
-              balance: String(customer.balance ?? 0),
-            },
-          });
-        }}
-      />
+      {/*
+        No picker here.
+        *
+        * This page IS the list of customers — searching it is what the page does. A chooser on top
+        * of it was a second way to search the same people, opened by a button that says "add".
+      */}
     </PageScaffold>
   );
 }

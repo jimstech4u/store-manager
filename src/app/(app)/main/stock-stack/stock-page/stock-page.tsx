@@ -14,8 +14,8 @@ import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
 import { useStackBack } from '@/hooks/useStackBack';
 import { searchProducts, useProductList, type Product } from '@/lib/stacks/catalog-stack';
-import { useInfiniteScroll } from '@/hooks/usePaginatedList';
 import { useListChannel } from '@/hooks/useListChannel';
+import { useInfiniteScroll } from '@/hooks/usePaginatedList';
 import { formatMoney, formatQty, pluralUnit } from '@/lib/format';
 import styles from './stock-page.module.css';
 

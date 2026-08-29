@@ -4,12 +4,9 @@ import { useCallback, useState } from 'react';
 import styles from './CustomerPicker.module.css';
 import { SelectionViewer, useSelectionController } from '@academix-admin/selection-viewer';
 import { useTheme } from '@/context/ThemeContext';
-import { ViewerLoading } from '@/components/ui/ViewerState';
-import { Button } from '@/components/ui/Button';
-import { Field } from '@/components/ui/Field';
-import { SearchField, useDebounced } from '@/components/ui/SearchField';
-import { InfoPanel } from '@/components/ui/Explain';
-import { CloseIcon, PeopleIcon, PlusIcon } from '@/components/ui/Icon';
+import { ViewerError, ViewerLoading, ViewerNoResult } from '@/components/ui/ViewerState';
+import { useDebounced } from '@/components/ui/SearchField';
+import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
 import { getSupabase } from '@/lib/supabase/client';
 import { usePaginatedList } from '@/hooks/usePaginatedList';
 import { formatMoney } from '@/lib/format';
@@ -31,29 +28,44 @@ interface CustomerRow {
 }
 
 /**
- * Choose a customer, or create one — in one place, at the moment it is actually needed.
+ * Choose a customer.
  *
- * Deliberately NOT a step at the start of a sale. Most buyers are anonymous walk-ins paying
- * cash, and asking "who is this?" before anything can be added to a receipt is a question the
- * seller usually cannot answer and does not need to. It becomes necessary only when part of the
- * money is going on account, because credit needs somewhere to sit.
+ * Deliberately NOT a step at the start of a sale. Most buyers are anonymous walk-ins paying cash,
+ * and asking "who is this?" before anything can be added to a receipt is a question the seller
+ * usually cannot answer and does not need to. It becomes necessary only when part of the money is
+ * going on account, because credit needs somewhere to sit.
  *
- * Searching and creating are the same screen rather than two modes. Typing a name that turns out
- * to exist should attach the existing person — otherwise the same customer accumulates two
- * records and their debt splits between them, which is the failure mode that makes a debtor look
- * settled while owing money.
+ * CHOOSING ONLY. Creating somebody used to happen here too, as a form inside the panel — and a
+ * selection viewer is built for a list you scroll and pick from: it brings its own search box, a
+ * drag handle, snap points and a height that assumes rows. A form inherits all of that, needs none
+ * of it, and the two fight over the keyboard on a phone. So this offers a button and the form is a
+ * page of its own.
+ *
+ * Attaching an EXISTING person still matters more than the convenience: the same customer with two
+ * records has their debt split between them, which is what makes a debtor look settled while
+ * owing money. That is why the list is searched first and adding is the second option, not the
+ * first.
  */
 export function CustomerPicker({
   open,
   onClose,
   onPick,
+  onCreate,
   storeId,
-  /** Prefills the create form when the seller has already typed a name on the order. */
+  /** Prefills the name on the create page when the seller has already typed one on the order. */
   initialName = '',
 }: {
   open: boolean;
   onClose: () => void;
   onPick: (customer: PickedCustomer) => void;
+  /**
+   * Hands over to the page that creates one.
+   *
+   * The picker does not push it itself: whoever opened this knows which stack they are in, and a
+   * component reaching for a route by name is a component that breaks when it is reused somewhere
+   * that route does not exist.
+   */
+  onCreate: (name: string) => void;
   storeId: string;
   initialName?: string;
 }) {
@@ -64,11 +76,6 @@ export function CustomerPicker({
 
   const [query, setQuery] = useState(initialName);
   const debounced = useDebounced(query);
-  const [creating, setCreating] = useState(false);
-  const [name, setName] = useState(initialName);
-  const [phone, setPhone] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const fetchPage = useCallback(
     async (cursor: unknown | null, limit: number) => {
@@ -83,10 +90,7 @@ export function CustomerPicker({
       if (err) throw err;
       const rows = (data ?? []) as CustomerRow[];
       const last = rows[rows.length - 1];
-      return {
-        rows,
-        cursor: last ? { name: last.display_name, id: last.id } : null,
-      };
+      return { rows, cursor: last ? { name: last.display_name, id: last.id } : null };
     },
     [storeId, debounced],
   );
@@ -94,85 +98,66 @@ export function CustomerPicker({
   const list = usePaginatedList<CustomerRow>({
     fetchPage,
     getId: (r) => r.id,
-    // The picker's own list, kept apart from the People page's so the two cannot overwrite
-    // each other's rows while both are mounted.
     /*
-     * Kept, so the picker opens on the people it showed last time rather than an empty sheet.
-     * The list is re-read on open regardless; this only decides what is on screen while that
-     * happens.
+     * The picker's own list, kept apart from the People page's so the two cannot overwrite each
+     * other's rows while both are mounted — and persisted, so it opens on the people it showed
+     * last time rather than an empty panel while the read is in flight.
      */
     key: 'customer-picker',
     scope: 'customer_flow',
-    // A search, not a list — the term is in `deps` but not in the key, so these must not be
-    // restored under a different term. Same reason as the product search.
     persist: true,
     deps: [storeId, debounced],
-    enabled: open && !creating,
+    enabled: open,
   });
 
-  const create = async () => {
-    setError(null);
-    if (!name.trim()) {
-      setError('Enter their name');
-      return;
-    }
-
-    setBusy(true);
-    try {
-      // upsert_customer resolves the phone to a shared identity first, so a person already known
-      // to this shop — or recognised from their number — is attached rather than duplicated.
-      const { data, error: err } = await getSupabase().rpc('upsert_customer', {
-        p_store_id: storeId,
-        p_phone: phone.trim(),
-        p_display_name: name.trim(),
-      });
-      if (err) throw err;
-
-      onPick({ id: data as string, name: name.trim(), phone: phone.trim(), balance: 0 });
-      setCreating(false);
-      setName('');
-      setPhone('');
-      setQuery('');
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Could not save this customer');
-    } finally {
-      setBusy(false);
-    }
-  };
+  /** Offered at both ends of a list that runs to hundreds. */
+  const addButton = (
+    <button type="button" className={styles.addRow} onClick={() => onCreate(query.trim())}>
+      <PlusIcon /> {query.trim() ? `Add "${query.trim()}"` : 'Add a new customer'}
+    </button>
+  );
 
   return (
     <SelectionViewer
       id={viewerId}
       isOpen={open}
       onClose={onClose}
-      titleProp={{
-        text: creating ? 'New customer' : 'Who is this for?',
-        textColor: dark ? '#f2f5f4' : '#12201d',
-      }}
-      ariaLabel={creating ? 'New customer' : 'Who is this for?'}
+      titleProp={{ text: 'Who is this for?', textColor: dark ? '#f2f5f4' : '#12201d' }}
+      ariaLabel="Who is this for?"
       cancelButton={{ position: 'right', onClick: onClose, view: <CloseIcon /> }}
       /*
-       * The viewer's OWN search, not a field of ours inside it.
-       *
-       * Choosing a customer is the same act as choosing a product, and the product picker has used
-       * selection-viewer all along — which is where the keyboard handling, the drag behaviour and
-       * the loading and empty states live. A sheet with a search box built on top of it is a
-       * second implementation of all of that, and it drifts.
-       *
-       * Hidden while a customer is being created: there is nothing to search on a form.
+       * The viewer's OWN search. It had a second one of ours inside it for a while, so the panel
+       * opened with two search boxes stacked on top of each other, both searching the same list.
        */
-      searchProp={
-        creating
-          ? undefined
-          : {
-              text: 'Search by name or phone',
-              onChange: (value: string) => setQuery(value),
-              background: dark ? '#1b2422' : '#eef2f1',
-              textColor: dark ? '#f2f5f4' : '#12201d',
-              autoFocus: false,
-            }
-      }
+      searchProp={{
+        text: 'Search by name or phone',
+        onChange: (value: string) => setQuery(value),
+        background: dark ? '#1b2422' : '#eef2f1',
+        textColor: dark ? '#f2f5f4' : '#12201d',
+        autoFocus: false,
+      }}
       loadingProp={{ view: <ViewerLoading text="Looking" /> }}
+      noResultProp={{
+        view: (
+          <ViewerNoResult
+            text="Nobody by that name yet"
+            hint="You only need to save someone when they are buying on credit."
+            actionText={query.trim() ? `Add "${query.trim()}"` : 'Add a new customer'}
+            onAction={() => onCreate(query.trim())}
+          />
+        ),
+      }}
+      errorProp={{
+        view: <ViewerError text="Could not load your customers" onAction={() => list.reload()} />,
+      }}
+      /*
+       * Paging as it is scrolled. Returning `hasMore` is how the viewer knows to stop asking once
+       * the end of the list has been reached.
+       */
+      onPaginate={() => {
+        list.loadMore();
+        return list.hasMore;
+      }}
       layoutProp={{
         backgroundColor: dark ? '#141a19' : '#ffffff',
         handleColor: '#888',
@@ -188,127 +173,51 @@ export function CustomerPicker({
       maxHeight="92dvh"
       closeThreshold={0.2}
       zIndex={1000}
-      /*
-       * Only the states the viewer knows. Creating a customer is a FORM, not a list, so it is
-       * shown as ordinary content rather than any of the list's own conditions.
-       */
-      /*
-       * Creating a customer is a FORM, not a list, so it is shown as ordinary data rather than any
-       * of the list's own conditions — an empty state over a form would hide the form.
-       */
       selectionState={
-        creating ? 'data' : list.loading && list.items.length === 0 ? 'loading' : 'data'
+        list.loading && list.items.length === 0
+          ? 'loading'
+          : list.error && list.items.length === 0
+            ? 'error'
+            : list.items.length === 0
+              ? 'empty'
+              : 'data'
       }
     >
-      {error && (
-        <InfoPanel tone="danger" title="Could not continue">
-          {error}
-        </InfoPanel>
-      )}
+      {addButton}
 
-      {creating ? (
-        <>
-          <Field
-            label="Their name"
-            required
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Mama Blessing"
-            autoFocus
-            hint="However you would say it — you can search for them this way later."
-          />
-          <Field
-            label="Phone number"
-            optional
-            type="tel"
-            inputMode="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="0803 000 0000"
-            hint="The surest way to find them again, and it keeps their balance with them even if the name is spelled differently next time."
-          />
-          <Button variant="ghost" fullWidth onClick={() => setCreating(false)}>
-            Back to search
-          </Button>
-        </>
-      ) : (
-        <>
-          <SearchField
-            value={query}
-            onChange={setQuery}
-            placeholder="Name or phone number"
-            label="Search customers"
-            resultCount={list.items.length}
-            autoFocus
-          />
-
-          {list.items.length === 0 && !list.loading ? (
-            <div className={styles.empty}>
-              <PeopleIcon size="34px" />
-              <p className={styles.emptyTitle}>
-                {query.trim() ? 'Nobody by that name yet' : 'No customers saved yet'}
-              </p>
-              <p>You only need to save someone when they are buying on credit.</p>
-            </div>
-          ) : (
-            <ul className={styles.list}>
-              {list.items.map((c) => (
-                <li key={c.id}>
-                  <button
-                    type="button"
-                    className={styles.row}
-                    onClick={() =>
-                      onPick({
-                        id: c.id,
-                        name: c.display_name,
-                        phone: c.phone,
-                        balance: Number(c.balance),
-                      })
-                    }
-                  >
-                    <span className={styles.rowMain}>
-                      <span className={styles.rowName}>{c.display_name}</span>
-                      <span className={styles.rowMeta}>
-                        {c.phone}
-                        {c.business_name ? ` · ${c.business_name}` : ''}
-                      </span>
-                    </span>
-                    {Number(c.balance) > 0 && (
-                      <span className={styles.rowBalance}>
-                        owes {formatMoney(c.balance)}
-                      </span>
-                    )}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          <div className={styles.createRow}>
-            <Button
-              variant="secondary"
-              size="large"
-              fullWidth
-              onClick={() => {
-                // Carry whatever was typed into the new-customer form: having typed a name once,
-                // being made to type it again is the kind of small insult that gets a tool
-                // abandoned.
-                setName(query.trim());
-                setCreating(true);
-              }}
+      <ul className={styles.list}>
+        {list.items.map((c) => (
+          <li key={c.id}>
+            <button
+              type="button"
+              className={styles.row}
+              onClick={() =>
+                onPick({
+                  id: c.id,
+                  name: c.display_name,
+                  phone: c.phone,
+                  balance: Number(c.balance) || 0,
+                })
+              }
             >
-              <PlusIcon /> {query.trim() ? `Add "${query.trim()}"` : 'Add a new customer'}
-            </Button>
-          </div>
-        </>
-      )}
-      {creating && (
-        <div className={styles.createActions}>
-          <Button size="large" fullWidth busy={busy} busyLabel="Saving" onClick={create}>
-            Save and use
-          </Button>
-        </div>
-      )}
+              <span className={styles.rowMain}>
+                <span className={styles.rowName}>{c.display_name}</span>
+                <span className={styles.rowMeta}>
+                  {c.phone}
+                  {c.business_name ? ` · ${c.business_name}` : ''}
+                </span>
+              </span>
+              {Number(c.balance) > 0 && (
+                <span className={styles.rowBalance}>owes {formatMoney(c.balance)}</span>
+              )}
+            </button>
+          </li>
+        ))}
+      </ul>
+
+      {/* Somebody who has scrolled to the bottom looking for a name that is not there should not
+          have to scroll back up to add it. */}
+      {list.items.length > 0 && addButton}
     </SelectionViewer>
   );
 }

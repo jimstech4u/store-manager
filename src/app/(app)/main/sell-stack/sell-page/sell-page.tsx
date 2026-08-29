@@ -297,6 +297,9 @@ export default function SellPage() {
    */
   const needCustomerRef = useRef<(() => void) | null>(null);
   const onSettledRef = useRef<((saleId: string) => void) | null>(null);
+  const onCustomerCreatedRef = useRef<
+    ((customer: { id: string; name: string; phone: string }) => void) | null
+  >(null);
 
   useEffect(() => {
     const a = nav.provideObject('onNeedCustomer', () => () => needCustomerRef.current?.(), {
@@ -308,9 +311,24 @@ export default function SellPage() {
       () => (saleId: string) => onSettledRef.current?.(saleId),
       { global: true, scope: 'sell' },
     );
+    /*
+     * A customer created on the form page comes back here and is attached.
+     *
+     * Published under the `people` scope because that is where the form looks for it — the form
+     * is registered in two stacks and cannot know which one it was pushed from, so the CALLER
+     * says what to do with the result rather than the form guessing.
+     */
+    const c = nav.provideObject(
+      'onCustomerCreated',
+      () => (customer: { id: string; name: string; phone: string }) =>
+        onCustomerCreatedRef.current?.(customer),
+      { global: true, scope: 'people' },
+    );
+
     return () => {
       a?.();
       b?.();
+      c?.();
     };
   }, [nav]);
 
@@ -402,6 +420,21 @@ export default function SellPage() {
   needCustomerRef.current = () => {
     setResumePayment(true);
     setPickingCustomer(true);
+  };
+
+  onCustomerCreatedRef.current = (customer) => {
+    if (!activeOrder) return;
+    updateOrder(activeOrder.clientUuid, {
+      customerId: customer.id,
+      customerName: customer.name,
+      customerPhone: customer.phone,
+    });
+    // The same resumption the picker has: somebody who was sent here from the payment screen is
+    // put back on it, rather than left on the till wondering what happened.
+    if (resumePayment) {
+      setResumePayment(false);
+      void nav.push('take_payment_page', { id: activeOrder.id });
+    }
   };
 
   onSettledRef.current = (saleId: string) => {
@@ -935,6 +968,10 @@ export default function SellPage() {
           open={pickingCustomer}
           storeId={store.id}
           initialName={activeOrder.customerName}
+          onCreate={(name) => {
+            setPickingCustomer(false);
+            void nav.push('customer_form_page', { name });
+          }}
           onPick={(c) => {
             updateOrder(activeOrder.clientUuid, {
               customerId: c.id,
