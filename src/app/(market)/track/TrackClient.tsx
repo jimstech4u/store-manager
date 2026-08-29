@@ -57,9 +57,23 @@ export function TrackClient({ initialToken }: { initialToken?: string } = {}) {
   const [state, setState] = useState<'idle' | 'looking' | 'found' | 'gone'>('idle');
   const [error, setError] = useState<string | null>(null);
 
-  // Held in a ref so the poll always reads the code currently being tracked, without the interval
-  // being torn down and restarted on every keystroke.
-  const tracking = useRef<string | null>(initial || null);
+  /*
+   * WHAT IS BEING FOLLOWED, and by which of the two identifiers.
+   *
+   * A ref so the poll always reads the current one without the interval being torn down on every
+   * keystroke — and an object rather than a string because a link carries a token and the box
+   * carries a code, and the poll has to ask the right question. It only ever asked by code, so an
+   * order opened from a shared link showed once and then never moved again: the customer watched a
+   * frozen page while the seller added three more things.
+   */
+  const following = useRef<{ kind: 'code' | 'token'; value: string } | null>(
+    initial ? { kind: 'code', value: initial } : null,
+  );
+
+  /** The lines as they were last seen, so what arrives can be marked as new. */
+  const previousLines = useRef<string[]>([]);
+  const [justAdded, setJustAdded] = useState<string[]>([]);
+  const [lastChangeAt, setLastChangeAt] = useState<number | null>(null);
 
   /*
    * The token, when this page was reached by a shared link.
@@ -68,6 +82,33 @@ export function TrackClient({ initialToken }: { initialToken?: string } = {}) {
    * while an order is open, because it is recycled and may already belong to somebody else. The
    * token answers for the life of the order — and afterwards, as the receipt.
    */
+  /*
+   * Take the new answer, and notice what is different about it.
+   *
+   * The whole promise of this page is "watch your order being built", and a list that silently
+   * grows does not keep it — a customer glancing down cannot tell which line is the thing the
+   * seller just scanned. New lines are marked for a few seconds, which is long enough to catch the
+   * eye and short enough that the page settles back to being a plain bill.
+   */
+  const absorb = useCallback((next: TrackedOrder) => {
+    const names = (next.lines ?? []).map((l, i) => `${l.name}#${i}`);
+    const before = previousLines.current;
+
+    // Nothing is "new" on the first read: everything would be, and marking the whole list marks
+    // nothing.
+    if (before.length > 0) {
+      const added = names.filter((n) => !before.includes(n));
+      if (added.length > 0) {
+        setJustAdded(added);
+        setLastChangeAt(Date.now());
+        window.setTimeout(() => setJustAdded([]), 6000);
+      }
+    }
+
+    previousLines.current = names;
+    setOrder(next);
+  }, []);
+
   const lookByToken = useCallback(async (token: string, quiet = false) => {
     if (!quiet) setState('looking');
     setError(null);
@@ -81,13 +122,14 @@ export function TrackClient({ initialToken }: { initialToken?: string } = {}) {
         if (!quiet) setError('That link does not point at an order any more.');
         return;
       }
-      setOrder(data as TrackedOrder);
+      following.current = { kind: 'token', value: token };
+      absorb(data as TrackedOrder);
       setState('found');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not open that link.');
       if (!quiet) setState('idle');
     }
-  }, []);
+  }, [absorb]);
 
   const look = useCallback(async (raw: string, quiet = false) => {
     const trimmed = raw.trim().toUpperCase();
@@ -111,14 +153,14 @@ export function TrackClient({ initialToken }: { initialToken?: string } = {}) {
         if (!quiet) setError('No order has that code. Check it with the shop.');
         return;
       }
-      setOrder(data as TrackedOrder);
+      absorb(data as TrackedOrder);
       setState('found');
-      tracking.current = trimmed;
+      following.current = { kind: 'code', value: trimmed };
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not check that code.');
       if (!quiet) setState('idle');
     }
-  }, []);
+  }, [absorb]);
 
   /*
    * The ONE place in this codebase that polls, and it is deliberate.
@@ -136,10 +178,13 @@ export function TrackClient({ initialToken }: { initialToken?: string } = {}) {
   useEffect(() => {
     if (state !== 'found') return;
     const id = setInterval(() => {
-      if (tracking.current) void look(tracking.current, true);
+      const now = following.current;
+      if (!now) return;
+      if (now.kind === 'token') void lookByToken(now.value, true);
+      else void look(now.value, true);
     }, POLL_MS);
     return () => clearInterval(id);
-  }, [state, look]);
+  }, [state, look, lookByToken]);
 
   useEffect(() => {
     if (initialToken) {
@@ -152,12 +197,24 @@ export function TrackClient({ initialToken }: { initialToken?: string } = {}) {
   return (
     <MarketShell>
       <div className={styles.wrap}>
-        <h1 className={styles.title}>Follow your order</h1>
-        <p className={styles.lede}>
-          Ask the seller for the order code and type it here. You will see each item as it is added
-          up, on your own phone.
-        </p>
+        <h1 className={styles.title}>
+          {state === 'found' ? 'Your order' : 'Follow your order'}
+        </h1>
+        {state !== 'found' && (
+          <p className={styles.lede}>
+            Ask the seller for the order code and type it here. You will see each item as it is
+            added up, on your own phone.
+          </p>
+        )}
 
+{/*
+          The box goes once an order is on screen.
+
+          It is for FINDING an order, and it had nothing to do above one that was already being
+          followed — a customer who arrived from a link was shown an empty "Order code" field and
+          a "Follow it" button over their own bill, which reads as though the page had not worked.
+        */}
+        {state !== 'found' && (
         <form
           className={styles.form}
           onSubmit={(e) => {
@@ -179,6 +236,26 @@ export function TrackClient({ initialToken }: { initialToken?: string } = {}) {
             Follow it
           </Button>
         </form>
+        )}
+
+        {state === 'found' && (
+          <button
+            type="button"
+            className={styles.stop}
+            onClick={() => {
+              following.current = null;
+              previousLines.current = [];
+              setOrder(null);
+              setJustAdded([]);
+              setState('idle');
+              setCode('');
+              router.replace('/track');
+            }}
+          >
+            Follow a different order
+          </button>
+        )}
+
 
         {error && (
           <InfoPanel tone="info" title="Nothing to show">
@@ -218,7 +295,12 @@ export function TrackClient({ initialToken }: { initialToken?: string } = {}) {
             ) : (
               <ul className={styles.lines}>
                 {order.lines.map((l, i) => (
-                  <li className={styles.line} key={`${l.name}-${i}`}>
+                  <li
+                    className={`${styles.line} ${
+                      justAdded.includes(`${l.name}#${i}`) ? styles.lineNew : ''
+                    }`}
+                    key={`${l.name}-${i}`}
+                  >
                     <span className={styles.lineName}>
                       {l.name}
                       <span className={styles.lineQty}>
@@ -226,6 +308,10 @@ export function TrackClient({ initialToken }: { initialToken?: string } = {}) {
                       </span>
                     </span>
                     <span className={styles.lineTotal}>{formatMoney(l.line_total)}</span>
+                    {/* Plain words on purpose. This is read by whoever is buying, not by a seller. */}
+                    {justAdded.includes(`${l.name}#${i}`) && (
+                      <span className={styles.newTag}>Just added</span>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -273,7 +359,11 @@ export function TrackClient({ initialToken }: { initialToken?: string } = {}) {
 
             {order.status === 'open' && (
               <p className={styles.live}>
-                Updating as the seller adds things. This becomes your receipt once you have paid.
+                {justAdded.length > 0
+                  ? 'The seller just added something.'
+                  : lastChangeAt
+                    ? 'Watching for changes. This becomes your receipt once you have paid.'
+                    : 'Updating as the seller adds things. This becomes your receipt once you have paid.'}
               </p>
             )}
           </section>

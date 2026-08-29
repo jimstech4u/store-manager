@@ -371,3 +371,102 @@
   font-weight: 700;
   color: var(--text-muted);
 }
+
+/* ── A charge, and a payment, as one line each ──────────────────────────────────────── */
+
+/*
+ * The same shape for both: a way to remove it on the left, what it is in the middle with its note
+ * underneath, the amount on the right. They are read in the same glance — "what is on this bill"
+ * and "what has been handed over" — so they are built to be scanned the same way.
+ */
+.charge,
+.payRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border);
+}
+
+.chargeRemove,
+.payRemove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--danger, #c0392b);
+  cursor: pointer;
+}
+
+.chargeBody,
+.payBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.chargeName,
+.payMethod {
+  font-weight: 700;
+}
+
+/* The note sits under what it explains, quieter than it. */
+.chargeNote,
+.payRef {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.chargeAmount,
+.payAmount {
+  flex: none;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── The two composers ──────────────────────────────────────────────────────────────── */
+
+.chargeForm {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.payBox {
+  margin-bottom: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.payLabel {
+  display: block;
+  margin-bottom: var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.payList {
+  margin-bottom: var(--space-4);
+  padding: 0 var(--space-4) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.payListLabel {
+  display: block;
+  padding: var(--space-3) 0 var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text-muted);
+}

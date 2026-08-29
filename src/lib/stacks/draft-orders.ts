@@ -54,6 +54,8 @@ export interface DraftLine {
 
 export interface DraftCharge {
   key: string;
+  /** What this charge was for, in the seller's words. One note per charge, not one per sale. */
+  note?: string;
   label: string;
   amount: string;
 }
@@ -256,7 +258,11 @@ export function useDraftOrders(storeId: string | null) {
           p_fee_label: order.feeLabel || null,
           p_charges: (order.charges ?? [])
             .filter((c) => Number(c.amount) > 0)
-            .map((c) => ({ label: c.label.trim() || 'Charge', amount: Number(c.amount) })),
+            .map((c) => ({
+              label: c.label.trim() || 'Charge',
+              amount: Number(c.amount),
+              note: c.note?.trim() || null,
+            })),
           p_note: order.note || null,
           p_client_uuid: order.clientUuid,
           p_lines: order.lines
@@ -556,6 +562,7 @@ export function useDraftOrders(storeId: string | null) {
             key: newId(),
             label: String(c.label ?? ''),
             amount: String(c.amount ?? ''),
+            note: (c.note as string | null) ?? '',
           })),
           // Already the shop's own copy, so nothing to push back.
           synced: true,

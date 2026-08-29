@@ -2,12 +2,14 @@
 
 import { useCallback, useState } from 'react';
 import styles from './CustomerPicker.module.css';
-import { BottomSheet } from '@/components/ui/BottomSheet';
+import { SelectionViewer, useSelectionController } from '@academix-admin/selection-viewer';
+import { useTheme } from '@/context/ThemeContext';
+import { ViewerLoading } from '@/components/ui/ViewerState';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { SearchField, useDebounced } from '@/components/ui/SearchField';
 import { InfoPanel } from '@/components/ui/Explain';
-import { PeopleIcon, PlusIcon } from '@/components/ui/Icon';
+import { CloseIcon, PeopleIcon, PlusIcon } from '@/components/ui/Icon';
 import { getSupabase } from '@/lib/supabase/client';
 import { usePaginatedList } from '@/hooks/usePaginatedList';
 import { formatMoney } from '@/lib/format';
@@ -55,6 +57,11 @@ export function CustomerPicker({
   storeId: string;
   initialName?: string;
 }) {
+  const { theme } = useTheme();
+  const dark = theme === 'dark';
+  // The viewer's own id, so two pickers mounted at once cannot share one panel.
+  const [viewerId] = useSelectionController();
+
   const [query, setQuery] = useState(initialName);
   const debounced = useDebounced(query);
   const [creating, setCreating] = useState(false);
@@ -134,16 +141,63 @@ export function CustomerPicker({
   };
 
   return (
-    <BottomSheet
-      open={open}
+    <SelectionViewer
+      id={viewerId}
+      isOpen={open}
       onClose={onClose}
-      title={creating ? 'New customer' : 'Who is this for?'}
-      footer={
-        creating ? (
-          <Button size="large" fullWidth busy={busy} busyLabel="Saving" onClick={create}>
-            Save and use
-          </Button>
-        ) : undefined
+      titleProp={{
+        text: creating ? 'New customer' : 'Who is this for?',
+        textColor: dark ? '#f2f5f4' : '#12201d',
+      }}
+      ariaLabel={creating ? 'New customer' : 'Who is this for?'}
+      cancelButton={{ position: 'right', onClick: onClose, view: <CloseIcon /> }}
+      /*
+       * The viewer's OWN search, not a field of ours inside it.
+       *
+       * Choosing a customer is the same act as choosing a product, and the product picker has used
+       * selection-viewer all along — which is where the keyboard handling, the drag behaviour and
+       * the loading and empty states live. A sheet with a search box built on top of it is a
+       * second implementation of all of that, and it drifts.
+       *
+       * Hidden while a customer is being created: there is nothing to search on a form.
+       */
+      searchProp={
+        creating
+          ? undefined
+          : {
+              text: 'Search by name or phone',
+              onChange: (value: string) => setQuery(value),
+              background: dark ? '#1b2422' : '#eef2f1',
+              textColor: dark ? '#f2f5f4' : '#12201d',
+              autoFocus: false,
+            }
+      }
+      loadingProp={{ view: <ViewerLoading text="Looking" /> }}
+      layoutProp={{
+        backgroundColor: dark ? '#141a19' : '#ffffff',
+        handleColor: '#888',
+        handleWidth: '48px',
+        gapBetweenHandleAndTitle: '16px',
+        gapBetweenTitleAndSearch: '8px',
+        gapBetweenSearchAndContent: '12px',
+      }}
+      childrenDirection="vertical"
+      snapPoints={[0, 1]}
+      initialSnap={1}
+      minHeight="60dvh"
+      maxHeight="92dvh"
+      closeThreshold={0.2}
+      zIndex={1000}
+      /*
+       * Only the states the viewer knows. Creating a customer is a FORM, not a list, so it is
+       * shown as ordinary content rather than any of the list's own conditions.
+       */
+      /*
+       * Creating a customer is a FORM, not a list, so it is shown as ordinary data rather than any
+       * of the list's own conditions — an empty state over a form would hide the form.
+       */
+      selectionState={
+        creating ? 'data' : list.loading && list.items.length === 0 ? 'loading' : 'data'
       }
     >
       {error && (
@@ -248,6 +302,13 @@ export function CustomerPicker({
           </div>
         </>
       )}
-    </BottomSheet>
+      {creating && (
+        <div className={styles.createActions}>
+          <Button size="large" fullWidth busy={busy} busyLabel="Saving" onClick={create}>
+            Save and use
+          </Button>
+        </div>
+      )}
+    </SelectionViewer>
   );
 }

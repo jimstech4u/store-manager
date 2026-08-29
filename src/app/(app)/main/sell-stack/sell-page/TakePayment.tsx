@@ -15,11 +15,6 @@ import { chargesTotal, lineTotal, type DraftOrder } from '@/lib/stacks/draft-ord
 
 type Method = 'cash' | 'transfer' | 'pos';
 
-const METHOD_LABEL: Record<Method, string> = {
-  cash: 'Cash',
-  transfer: 'Transfer',
-  pos: 'POS',
-};
 
 interface PaymentRow {
   key: string;
@@ -77,12 +72,28 @@ export function TakePayment({
 }) {
   const accounts = useBankAccounts(storeId);
 
-  const [rows, setRows] = useState<PaymentRow[]>([
-    { key: newKey(), method: 'cash', amount: '', reference: '', bankAccountId: null },
-  ]);
+  /*
+   * Starts empty: a payment exists once it has been added, not before.
+   *
+   * A blank first row meant "paying nothing by cash" was always on the list, and the summary had
+   * to pretend it was not there.
+   */
+  const [rows, setRows] = useState<PaymentRow[]>([]);
+
+  // The payment being composed.
+  const [draftMethod, setDraftMethod] = useState<Method>('cash');
+  const [draftAmount, setDraftAmount] = useState('');
+  const [draftReference, setDraftReference] = useState('');
+  const [draftAccount, setDraftAccount] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [outstanding, setOutstanding] = useState<number | null>(null);
+
+  // The charge being composed. Held here rather than as a blank row on the order, so an
+  // abandoned half-typed charge never reaches the shop.
+  const [chargeLabel, setChargeLabel] = useState('');
+  const [chargeAmount, setChargeAmount] = useState('');
+  const [chargeNote, setChargeNote] = useState('');
 
   // Told about the one sale this screen creates. Unhandled when nobody is showing that list, which
   // is the correct outcome — it will read the truth the next time it loads.
@@ -151,8 +162,6 @@ export function TakePayment({
   const towardsOldDebt = Math.min(over, owedBefore);
   const change = Math.max(over - towardsOldDebt, 0);
 
-  const patch = (key: string, next: Partial<PaymentRow>) =>
-    setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...next } : r)));
 
   const settle = async () => {
     setError(null);
@@ -317,90 +326,104 @@ export function TakePayment({
           <span>Items</span>
           <span>{formatMoney(itemsTotal)}</span>
         </div>
-      </div>
 
-      {/*
-        The extra charge, as a section rather than something folded away.
-
-        It was collapsed because on the till it sat between the items and the button that acts on
-        them, and most sales do not need it. Here it is between who is paying and how — the moment
-        a delivery fee is actually agreed — so hiding it behind a tap costs more than the row it
-        saves.
-      */}
-      <section className={styles.charges}>
-        <span className={styles.chargesLabel}>Extra charge or note</span>
         {/*
-          A list, not one box.
-          A distributor's bill routinely carries transport AND loading AND an amount
-          carried over. Added together under one name they become a number the customer
-          cannot check and the shop cannot explain weeks later.
+          Charges sit with the goods, under their total.
+
+          They are part of what this customer is being asked to pay, and a seller reading the list
+          back needs them in the same breath as the items — not in a separate box further down
+          that has to be found and added on.
         */}
-        {(order.charges ?? []).map((c, i) => (
-          <div key={c.key} className={styles.chargeRow}>
-            <Field
-              label={`Charge ${i + 1}`}
-              value={c.label}
-              onChange={(e) =>
-                onUpdateOrder({
-                  charges: order.charges.map((x) =>
-                    x.key === c.key ? { ...x, label: e.target.value } : x,
-                  ),
-                })
-              }
-              placeholder="Transport"
-            />
-            <Field
-              label="Amount"
-              numeric
-              prefix="₦"
-              value={c.amount}
-              onChange={(e) =>
-                onUpdateOrder({
-                  charges: order.charges.map((x) =>
-                    x.key === c.key ? { ...x, amount: e.target.value } : x,
-                  ),
-                })
-              }
-              placeholder="0"
-            />
+        {(order.charges ?? []).map((c) => (
+          <div className={styles.charge} key={c.key}>
             <button
               type="button"
               className={styles.chargeRemove}
               onClick={() =>
-                onUpdateOrder({
-                  charges: order.charges.filter((x) => x.key !== c.key),
-                })
+                onUpdateOrder({ charges: order.charges.filter((x) => x.key !== c.key) })
               }
-              aria-label={`Remove ${c.label.trim() || `charge ${i + 1}`}`}
+              aria-label={`Remove ${c.label.trim() || 'this charge'}`}
             >
               <CloseIcon />
             </button>
+            <span className={styles.chargeBody}>
+              <span className={styles.chargeName}>{c.label.trim() || 'Charge'}</span>
+              {c.note ? <span className={styles.chargeNote}>{c.note}</span> : null}
+            </span>
+            <span className={styles.chargeAmount}>{formatMoney(c.amount)}</span>
           </div>
         ))}
+      </div>
 
-        <Button
-          variant="secondary"
-          fullWidth
-          onClick={() =>
-            onUpdateOrder({
-              charges: [
-                ...(order.charges ?? []),
-                { key: newChargeKey(), label: '', amount: '' },
-              ],
-            })
-          }
-        >
-          <PlusIcon /> Add a charge
-        </Button>
+      {/*
+        ONE BOX THAT COMPOSES A CHARGE, and the charges themselves listed above with the items.
+
+        The old shape gave every charge its own stack of fields, so three charges meant nine inputs
+        on screen and the thing being described — a short list of amounts — was buried in the
+        machinery for describing it. A charge is entered once and then read many times, so entering
+        it gets one box and reading it gets one line.
+      */}
+      <section className={styles.charges}>
+        <span className={styles.chargesLabel}>Add a charge</span>
+
+        <div className={styles.chargeForm}>
+          <Field
+            label="What for"
+            value={chargeLabel}
+            onChange={(e) => setChargeLabel(e.target.value)}
+            placeholder="Transport"
+          />
+          <Field
+            label="Amount"
+            numeric
+            prefix="₦"
+            value={chargeAmount}
+            onChange={(e) => setChargeAmount(e.target.value)}
+            placeholder="0"
+          />
+        </div>
 
         <Field
           label="Note"
           optional
-          value={order.note}
-          onChange={(e) => onUpdateOrder({ note: e.target.value })}
-          placeholder="Anything to remember about this sale"
+          value={chargeNote}
+          onChange={(e) => setChargeNote(e.target.value)}
+          placeholder="Anything to remember about this charge"
         />
+
+        <Button
+          variant="secondary"
+          fullWidth
+          disabled={!chargeLabel.trim() || !(Number(chargeAmount) > 0)}
+          onClick={() => {
+            onUpdateOrder({
+              charges: [
+                ...(order.charges ?? []),
+                {
+                  key: newChargeKey(),
+                  label: chargeLabel.trim(),
+                  amount: chargeAmount,
+                  note: chargeNote.trim(),
+                },
+              ],
+            });
+            // Cleared so the box is ready for the next one, which is what a seller adding two
+            // charges in a row expects.
+            setChargeLabel('');
+            setChargeAmount('');
+            setChargeNote('');
+          }}
+        >
+          <PlusIcon /> Add charge
+        </Button>
       </section>
+
+
+
+      <div className={styles.due}>
+        <span className={styles.dueLabel}>Total for this sale</span>
+        <span className={styles.dueValue}>{formatMoney(total)}</span>
+      </div>
 
       {outstanding !== null && outstanding > 0 && (
         <div className={styles.outstanding}>
@@ -411,159 +434,135 @@ export function TakePayment({
         </div>
       )}
 
-      <div className={styles.due}>
-        <span className={styles.dueLabel}>Total for this sale</span>
-        <span className={styles.dueValue}>{formatMoney(total)}</span>
-      </div>
-
-      {/* ── Payment rows ────────────────────────────────────────────────────────── */}
-      <div className={styles.payments}>
-        {rows.map((row, index) => (
-          <div className={styles.payment} key={row.key}>
-            <div className={styles.paymentHead}>
-              <span className={styles.paymentTitle}>
-                {rows.length > 1 ? `Payment ${index + 1}` : 'How are they paying?'}
+      {rows.length > 0 && (
+        <div className={styles.payList}>
+          <span className={styles.payListLabel}>Paying with</span>
+          {rows.map((row) => (
+            <div className={styles.payRow} key={row.key}>
+              <button
+                type="button"
+                className={styles.payRemove}
+                onClick={() => setRows((prev) => prev.filter((r) => r.key !== row.key))}
+                aria-label={`Remove this ${row.method} payment`}
+              >
+                <CloseIcon />
+              </button>
+              <span className={styles.payBody}>
+                <span className={styles.payMethod}>
+                  {row.method === 'cash' ? 'Cash' : row.method === 'transfer' ? 'Transfer' : 'POS'}
+                </span>
+                {row.reference ? <span className={styles.payRef}>{row.reference}</span> : null}
               </span>
-              {rows.length > 1 && (
-                <button
-                  type="button"
-                  className={styles.remove}
-                  onClick={() => setRows((prev) => prev.filter((r) => r.key !== row.key))}
-                  aria-label={`Remove payment ${index + 1}`}
-                >
-                  <CloseIcon />
-                </button>
-              )}
+              <span className={styles.payAmount}>{formatMoney(row.amount)}</span>
             </div>
-
-            <div className={styles.methods} role="group" aria-label="Payment method">
-              {(Object.keys(METHOD_LABEL) as Method[]).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  className={`${styles.method} ${row.method === m ? styles.methodActive : ''}`}
-                  onClick={() => patch(row.key, { method: m })}
-                  aria-pressed={row.method === m}
-                >
-                  {METHOD_LABEL[m]}
-                </button>
-              ))}
-            </div>
-
-            <Field
-              label="Amount"
-              numeric
-              prefix="₦"
-              value={row.amount}
-              onChange={(e) => patch(row.key, { amount: e.target.value })}
-              placeholder="0"
-            />
-
-            {/*
-              Which account the money is going into.
-              A distributor collects into more than one and picks depending on the customer, so
-              the seller reads the number straight off the screen instead of from memory — the
-              single easiest number in this business to get wrong, and getting it wrong sends
-              somebody else's money somewhere else.
-            */}
-            {row.method === 'transfer' && accounts.length > 0 && (
-              <div className={styles.accountBlock}>
-                <label className={styles.accountLabel} htmlFor={`acct-${row.key}`}>
-                  Paid into
-                </label>
-                <select
-                  id={`acct-${row.key}`}
-                  className={styles.accountSelect}
-                  value={row.bankAccountId ?? accounts.find((a) => a.is_default)?.id ?? ''}
-                  onChange={(e) => patch(row.key, { bankAccountId: e.target.value || null })}
-                >
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.bank_name} · {a.account_number}
-                      {a.is_default ? ' (main)' : ''}
-                    </option>
-                  ))}
-                </select>
-                {(() => {
-                  const chosen =
-                    accounts.find(
-                      (a) => a.id === (row.bankAccountId ?? accounts.find((x) => x.is_default)?.id),
-                    ) ?? accounts[0];
-                  // Repeated big, because this is the line the seller reads aloud.
-                  return chosen ? (
-                    <p className={styles.accountNumber}>
-                      {chosen.account_number}
-                      <span className={styles.accountName}>{chosen.account_name}</span>
-                    </p>
-                  ) : null;
-                })()}
-              </div>
-            )}
-
-            {row.method !== 'cash' && (
-              <Field
-                label="Reference"
-                optional
-                value={row.reference}
-                onChange={(e) => patch(row.key, { reference: e.target.value })}
-                placeholder="Transfer or terminal reference"
-                hint="Helps you match this against your bank later."
-              />
-            )}
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/*
-        Quick amounts. Typing an exact total on a phone keypad with a queue waiting is a common
-        source of mistyped payments, and the two figures anybody actually enters are "all of it"
-        and "whatever is left".
-      */}
-      <div className={styles.quickRow}>
-        <button
-          type="button"
-          className={styles.quick}
-          onClick={() => patch(rows[0].key, { amount: String(total) })}
-        >
-          Pay all ({formatMoney(total)})
-        </button>
+        ONE BOX THAT COMPOSES A PAYMENT, and the payments listed as lines beneath the total.
 
-        {owedBefore > 0 && (
+        Every payment used to be a full editor — method buttons, an amount, a reference, a bank
+        picker — so a sale split across cash and transfer put two of those on screen and the two
+        numbers that mattered were somewhere inside them. A payment is entered once and read
+        several times while the change is counted, so entering it gets the box and reading it gets
+        a line.
+      */}
+      <section className={styles.payBox}>
+        <span className={styles.payLabel}>How are they paying?</span>
+
+        <div className={styles.methods} role="group" aria-label="Payment method">
+          {(['cash', 'transfer', 'pos'] as Method[]).map((m) => (
+            <button
+              key={m}
+              type="button"
+              className={`${styles.method} ${draftMethod === m ? styles.methodActive : ''}`}
+              onClick={() => setDraftMethod(m)}
+              aria-pressed={draftMethod === m}
+            >
+              {m === 'cash' ? 'Cash' : m === 'transfer' ? 'Transfer' : 'POS'}
+            </button>
+          ))}
+        </div>
+
+        <Field
+          label="Amount"
+          numeric
+          prefix="₦"
+          value={draftAmount}
+          onChange={(e) => setDraftAmount(e.target.value)}
+          placeholder="0"
+        />
+
+        {draftMethod === 'transfer' && accounts.length > 0 && (
+          <div className={styles.accountRow}>
+            <span className={styles.accountLabel}>Into</span>
+            <select
+              className={styles.accountSelect}
+              value={draftAccount ?? accounts[0]?.id ?? ''}
+              onChange={(e) => setDraftAccount(e.target.value)}
+            >
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.bank_name} · {a.account_number}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {draftMethod !== 'cash' && (
+          <Field
+            label="Reference"
+            optional
+            value={draftReference}
+            onChange={(e) => setDraftReference(e.target.value)}
+            placeholder="Last 4 digits, or a name"
+          />
+        )}
+
+        {/*
+          The amounts anybody actually enters. Typing an exact total on a phone keypad with a queue
+          waiting is a common source of mistyped payments — and after a first payment, "the rest"
+          is almost always the second one.
+        */}
+        <div className={styles.quickRow}>
           <button
             type="button"
             className={styles.quick}
-            onClick={() => patch(rows[0].key, { amount: String(total + owedBefore) })}
+            onClick={() => setDraftAmount(String(remaining > 0 ? remaining : total))}
           >
-            And clear {formatMoney(owedBefore)} owed
+            {paid > 0 && remaining > 0
+              ? `The rest (${formatMoney(remaining)})`
+              : `Pay all (${formatMoney(total)})`}
           </button>
-        )}
-      </div>
 
-      <Button
-        variant="secondary"
-        fullWidth
-        onClick={() =>
-          setRows((prev) => [
-            ...prev,
-            {
-              key: newKey(),
-              method: 'transfer',
-              /*
-               * Filled with what is still outstanding.
-               *
-               * Splitting is nearly always "this much cash, the rest on transfer" — so the rest is
-               * the answer, and typing it again from a total the seller has to work out in their
-               * head is where the arithmetic goes wrong.
-               */
-              amount: remaining > 0 ? String(remaining) : '',
-              reference: '',
-              bankAccountId: null,
-            },
-          ])
-        }
-      >
-        <PlusIcon /> Split across another method
-      </Button>
+        </div>
+
+        <Button
+          variant="secondary"
+          fullWidth
+          disabled={!(Number(draftAmount) > 0)}
+          onClick={() => {
+            setRows((prev) => [
+              ...prev,
+              {
+                key: newKey(),
+                method: draftMethod,
+                amount: draftAmount,
+                reference: draftReference,
+                bankAccountId:
+                  draftMethod === 'transfer' ? (draftAccount ?? accounts[0]?.id ?? null) : null,
+              },
+            ]);
+            setDraftAmount('');
+            setDraftReference('');
+          }}
+        >
+          <PlusIcon /> Add payment
+        </Button>
+      </section>
+
 
 
       {/* ── Summary ─────────────────────────────────────────────────────────────── */}
@@ -613,6 +612,21 @@ export function TakePayment({
       </div>
 
       {/*
+        The note on the sale, last.
+
+        It belongs beside the button that files it, not inside the box for adding a charge: a note
+        about the sale is the final thing somebody writes before committing it, and sitting among
+        the charge fields it read as a note about the charge.
+      */}
+      <Field
+        label="Note on the whole sale"
+        optional
+        value={order.note}
+        onChange={(e) => onUpdateOrder({ note: e.target.value })}
+        placeholder="Anything to remember about this sale"
+      />
+
+      {/*
         The one moment a customer is genuinely required. Rather than telling the seller to go
         back and start again, this offers the action right here — the question has only just
         become relevant, and answering it should not cost them the screen they are on.
@@ -636,20 +650,20 @@ export function TakePayment({
         last thing somebody should see before recording money is the arithmetic they just did.
       */}
       <div className={styles.pageActions}>
-      <Button
-        size="large"
-        fullWidth
-        busy={busy}
-        busyLabel="Recording"
-        disabled={!order.customerId && paid < total}
-        onClick={settle}
-      >
-        {paid >= total
-          ? 'Mark as paid'
-          : paid > 0
-            ? `Take ${formatMoney(paid)}, rest on account`
-            : 'Put it all on account'}
-      </Button>
+        <Button
+          size="large"
+          fullWidth
+          busy={busy}
+          busyLabel="Recording"
+          disabled={!order.customerId && paid < total}
+          onClick={settle}
+        >
+          {paid >= total
+            ? 'Mark as paid'
+            : paid > 0
+              ? `Take ${formatMoney(paid)}, rest on account`
+              : 'Put it all on account'}
+        </Button>
       </div>
     </>
   );

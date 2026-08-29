@@ -143,3 +143,42 @@
   font-size: var(--text-sm);
   color: var(--text-muted);
 }
+
+/* ── Watching it change ─────────────────────────────────────────────────────────────── */
+
+/*
+ * A line the seller has just added.
+ *
+ * The point of this page is watching an order being built, and a list that silently grows does not
+ * deliver that — a customer glancing down cannot tell which line is the thing that was just
+ * scanned. It fades back to an ordinary row after a few seconds, because a bill covered in
+ * highlights is just a bill.
+ */
+.lineNew {
+  background: var(--primary-subtle, rgba(26, 127, 90, 0.12));
+  border-radius: var(--radius);
+}
+
+.newTag {
+  flex: none;
+  margin-left: var(--space-2);
+  padding: 1px var(--space-2);
+  border-radius: 999px;
+  background: var(--primary);
+  color: #fff;
+  font-size: var(--text-xs, 12px);
+  font-weight: 700;
+}
+
+/* Leaving one order to follow another. Quiet: most people never need it. */
+.stop {
+  width: 100%;
+  min-height: var(--touch-min, 44px);
+  margin-top: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text-muted);
+  font-weight: 700;
+  cursor: pointer;
+}

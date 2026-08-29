@@ -4,7 +4,7 @@ import { useCallback, useState } from 'react';
 import styles from '../../money-stack/money-page/money-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { useStackBack } from '@/hooks/useStackBack';
-import { useListChannel } from '@/hooks/useListChannel';
+import { useListChannel, useListNotifier } from '@/hooks/useListChannel';
 import { useNav } from '@academix-admin/navigation-stack';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
@@ -99,13 +99,6 @@ export default function PeoplePage() {
    * (the sheet is not a resume; nothing fires).
    */
   /*
-   * `refresh`, not `reload`.
-   *
-   * `reload` starts again from page one. On a list somebody has paged through, returning to it
-   * would collapse a hundred rows back to twenty — losing the row they tapped and the scroll that
-   * led to it. `refresh` re-reads the span that is already on screen and keeps its length.
-   */
-  /*
    * Not re-read on the way back — see the debtor list for why. Changes arrive one row at a time
    * through the channel below, which is the only thing that actually happened.
    */
@@ -118,6 +111,9 @@ export default function PeoplePage() {
    * through thrown away with it. The row that changed is the row to change.
    */
   useListChannel<CustomerRow>('customers', list.items, list.setItems);
+
+  // Used by this screen's own picker, which creates people as well as choosing them.
+  const notifyPeople = useListNotifier<CustomerRow>('customers');
 
   const sentinelRef = useInfiniteScroll(list.loadMore, {
     enabled: list.hasMore && !list.loading,
@@ -257,9 +253,25 @@ export default function PeoplePage() {
         open={adding}
         onClose={() => setAdding(false)}
         storeId={store.id}
-        onPick={() => {
+        onPick={(customer) => {
           setAdding(false);
-          list.reload();
+          /*
+           * The new person, put straight into the list.
+           *
+           * This used to reload from page one, which threw away every page the reader had scrolled
+           * through to find out this customer was not there — the exact reason they were adding
+           * them. The picker hands back what it created, so the list can show it without asking.
+           */
+          notifyPeople({
+            type: 'upsert',
+            row: {
+              id: customer.id,
+              display_name: customer.name,
+              business_name: null,
+              phone: customer.phone,
+              balance: String(customer.balance ?? 0),
+            },
+          });
         }}
       />
     </PageScaffold>

@@ -70,3 +70,20 @@
 .createRow {
   margin-top: var(--space-2);
 }
+
+/* The save button, in the flow of the viewer rather than a pinned footer. */
+.createActions {
+  margin-top: var(--space-5);
+}
+
+/*
+ * The save button for a new customer.
+ *
+ * A selection viewer has no pinned footer of its own — it is built for a list you scroll — so the
+ * form's action sits at the end of the form, which is where somebody filling one in is already
+ * looking.
+ */
+.createActions {
+  margin-top: var(--space-5);
+  padding-bottom: var(--space-4);
+}
