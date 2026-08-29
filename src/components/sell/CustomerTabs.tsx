@@ -109,11 +109,34 @@ export function CustomerTabs({
     const row = rowRef.current;
     if (!row) return;
     check();
+
     row.addEventListener('scroll', check, { passive: true });
     window.addEventListener('resize', check);
+
+    /*
+     * Re-checked whenever the page comes back, not only while it is being scrolled.
+     *
+     * "Active order" is showing or not on the strength of a measurement, and a measurement taken
+     * before the browser was put in the background is worth nothing when it returns: the row is
+     * re-laid-out, and the answer was decided while it had no layout at all. It showed the button
+     * over a tab that was plainly on screen.
+     *
+     * A ResizeObserver covers the same thing for the row itself — tabs arriving from the shop, the
+     * keyboard opening, the window changing shape.
+     */
+    document.addEventListener('visibilitychange', check);
+    window.addEventListener('pageshow', check);
+
+    const observer =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(check);
+    observer?.observe(row);
+
     return () => {
       row.removeEventListener('scroll', check);
       window.removeEventListener('resize', check);
+      document.removeEventListener('visibilitychange', check);
+      window.removeEventListener('pageshow', check);
+      observer?.disconnect();
     };
   }, [check, tabs.length, activeId]);
 

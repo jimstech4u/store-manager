@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useInfiniteScrollObserver } from '@academix-admin/navigation-stack';
 import { useDemandState } from '@academix-admin/state-stack';
 
 /**
@@ -204,8 +205,20 @@ export function usePaginatedList<T>({
         }));
       } catch (e: unknown) {
         if (gen !== genRef.current) return;
+        /*
+         * AN ERROR IS NOT THE END OF THE LIST.
+         *
+         * This used to set `hasMore: false`, and the snapshot is persisted — so one dropped
+         * request convinced a list it had been read to the end, permanently. The sentinel is only
+         * rendered while `hasMore`, so it disappeared and never came back: the list looked
+         * complete at thirty rows and no amount of scrolling would ask for more, in a session or
+         * in any session afterwards.
+         *
+         * `hasMore` describes the DATA — whether the last page came back full — and a request that
+         * never arrived says nothing about that. The failure is reported through `error`, which is
+         * what a retry reads.
+         */
         setError(e instanceof Error ? e.message : 'Could not load this list');
-        setSnapshot((prev) => ({ ...prev, hasMore: false }));
       } finally {
         /*
          * ALWAYS clear the flags, superseded or not.
@@ -347,27 +360,52 @@ export function usePaginatedList<T>({
  * the sentinel is visible, so the list stays ahead of the reader instead of stalling at the
  * bottom.
  */
+/**
+ * A sentinel that asks for the next page when it comes into view.
+ *
+ * DELEGATES TO NAVIGATION-STACK, which is the whole point of it. The hand-rolled version built an
+ * IntersectionObserver with no root, so it watched the VIEWPORT — and a page's rows do not live in
+ * the viewport, they live inside the ColumnBody the stack owns and scrolls. It worked well enough
+ * to look right and then quietly stopped asking for pages.
+ *
+ * The package's observer is told the container (`() => …` because it mounts after this hook runs)
+ * and does its own guarding on `hasMore` and `loading`, which is also where the "loadMore fires
+ * forty times while one request is in flight" problem is already solved. academix-web has used it
+ * for its transaction list all along; this is the same hook.
+ */
 export function useInfiniteScroll(
   onReachEnd: () => void,
-  { enabled = true, rootMargin = '400px' }: { enabled?: boolean; rootMargin?: string } = {},
+  {
+    enabled = true,
+    rootMargin = '400px',
+    hasMore = true,
+    loading = false,
+  }: { enabled?: boolean; rootMargin?: string; hasMore?: boolean; loading?: boolean } = {},
 ) {
-  const ref = useRef<HTMLDivElement | null>(null);
-  const cbRef = useRef(onReachEnd);
-  cbRef.current = onReachEnd;
+  // Held so the root can be found from the sentinel itself — a page that wraps its list in
+  // anything still works, because the container is looked up rather than passed down.
+  const node = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    const node = ref.current;
-    if (!node || !enabled || typeof IntersectionObserver === 'undefined') return;
+  const observe = useInfiniteScrollObserver({
+    onLoadMore: onReachEnd,
+    // `enabled` is how every caller here already expresses "there is more and we are not busy".
+    hasMore: enabled && hasMore,
+    loading,
+    rootMargin,
+    root: () => (node.current?.closest('.navstack-column-body') as HTMLElement | null) ?? null,
+  });
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((e) => e.isIntersecting)) cbRef.current();
-      },
-      { rootMargin },
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [enabled, rootMargin]);
-
-  return ref;
+  /*
+   * One callback ref feeding two: ours for the lookup above, the package's for the observing.
+   *
+   * The package hands back a callback ref, and callers here attach a single `ref` to their
+   * sentinel — so the two are joined here rather than every list having to know about both.
+   */
+  return useCallback(
+    (el: HTMLDivElement | null) => {
+      node.current = el;
+      observe(el);
+    },
+    [observe],
+  );
 }
