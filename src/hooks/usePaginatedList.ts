@@ -53,6 +53,13 @@ export interface PageResult<T> {
 
 export interface PaginatedList<T> {
   items: T[];
+  /**
+   * Replace the rows for a TARGETED change, leaving the paging state alone.
+   *
+   * One sale voided, one customer renamed. Re-reading the list instead would cost a round trip for
+   * something the caller already knows and throw away every page the reader had scrolled through.
+   */
+  setItems: (next: T[]) => void;
   loading: boolean;
   loadingMore: boolean;
   error: string | null;
@@ -349,7 +356,21 @@ export function usePaginatedList<T>({
     })();
   }, [enabled, pageSize, setSnapshot, load]);
 
-  return { items, loading, loadingMore, error, hasMore, loadMore, reload, refresh };
+  /*
+   * Replace the rows without touching the cursor or `hasMore`.
+   *
+   * For a targeted change — one sale voided, one customer renamed — where re-reading the list
+   * would throw away every page already scrolled through and cost a round trip for something the
+   * caller already knows. The paging state is deliberately left alone: patching a row says
+   * nothing about whether there are more pages, and pretending otherwise is how a list ends up
+   * refusing to paginate.
+   */
+  const setItems = useCallback(
+    (next: T[]) => setSnapshot((prev) => ({ ...prev, items: next })),
+    [setSnapshot],
+  );
+
+  return { items, setItems, loading, loadingMore, error, hasMore, loadMore, reload, refresh };
 }
 
 /**

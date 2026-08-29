@@ -11,7 +11,7 @@ import { InfoPanel } from '@/components/ui/Explain';
 import { ChartIcon, ChevronRightIcon, ReceiptIcon } from '@/components/ui/Icon';
 import { useAuth } from '@/providers/AuthProvider';
 import { useStackBack } from '@/hooks/useStackBack';
-import { useLiveRefresh } from '@/hooks/useLiveRefresh';
+import { useListChannel } from '@/hooks/useListChannel';
 import { useNav } from '@academix-admin/navigation-stack';
 import { usePaginatedList, useInfiniteScroll } from '@/hooks/usePaginatedList';
 import { useProvideCustomers } from '@/lib/stacks/customer-directory';
@@ -95,13 +95,19 @@ export default function MoneyPage() {
    * (the sheet is not a resume; nothing fires).
    */
   /*
-   * `refresh`, not `reload`.
+   * NOTHING IS RE-READ ON THE WAY BACK.
    *
-   * `reload` starts again from page one. On a list somebody has paged through, returning to it
-   * would collapse a hundred rows back to twenty — losing the row they tapped and the scroll that
-   * led to it. `refresh` re-reads the span that is already on screen and keeps its length.
+   * This used to call `refresh` on resume, which re-fetches the span already on screen and
+   * replaces every row in it. It keeps the LENGTH, which is why it looked reasonable — but the
+   * rows are new objects in whatever order the database returns them now, so a list somebody had
+   * paged through three times visibly shifted the moment they came back from a statement, and the
+   * row they had just tapped was no longer where they left it.
+   *
+   * A change now arrives as a change: the screen that made it says which row it touched, and only
+   * that row moves. Coming back from looking at something is not an event that requires re-reading
+   * anything, and treating it as one was the whole problem.
    */
-  useLiveRefresh(nav, list.refresh);
+  useListChannel<CustomerRow>('debtors', list.items, list.setItems);
 
   const sentinelRef = useInfiniteScroll(list.loadMore, {
     enabled: list.hasMore && !list.loading,

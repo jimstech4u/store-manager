@@ -13,6 +13,7 @@ import { ChevronRightIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePaginatedList, useInfiniteScroll } from '@/hooks/usePaginatedList';
+import { useListChannel } from '@/hooks/useListChannel';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatDateTime, formatMoney } from '@/lib/format';
 import styles from './sales-page.module.css';
@@ -78,6 +79,14 @@ export default function SalesPage() {
     deps: [store?.id ?? ''],
     enabled: Boolean(store),
   });
+
+  /*
+   * A sale recorded or voided elsewhere lands here as one row.
+   *
+   * This list is the one that grows without limit — a year is ten thousand receipts — so
+   * re-reading it because one sale changed is the clearest case of the wrong thing.
+   */
+  useListChannel<SaleRow>('sales', list.items, list.setItems);
 
   const sentinelRef = useInfiniteScroll(list.loadMore, {
     enabled: list.hasMore && !list.loading,

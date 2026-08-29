@@ -4,7 +4,7 @@ import { useCallback, useState } from 'react';
 import styles from '../../money-stack/money-page/money-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { useStackBack } from '@/hooks/useStackBack';
-import { useLiveRefresh } from '@/hooks/useLiveRefresh';
+import { useListChannel } from '@/hooks/useListChannel';
 import { useNav } from '@academix-admin/navigation-stack';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
@@ -105,7 +105,19 @@ export default function PeoplePage() {
    * would collapse a hundred rows back to twenty — losing the row they tapped and the scroll that
    * led to it. `refresh` re-reads the span that is already on screen and keeps its length.
    */
-  useLiveRefresh(nav, list.refresh);
+  /*
+   * Not re-read on the way back — see the debtor list for why. Changes arrive one row at a time
+   * through the channel below, which is the only thing that actually happened.
+   */
+
+  /*
+   * One row at a time, from wherever it changed.
+   *
+   * A customer renamed on the account screen, or created at the till, used to mean re-reading this
+   * whole list — a round trip for something the other page already knew, and every page scrolled
+   * through thrown away with it. The row that changed is the row to change.
+   */
+  useListChannel<CustomerRow>('customers', list.items, list.setItems);
 
   const sentinelRef = useInfiniteScroll(list.loadMore, {
     enabled: list.hasMore && !list.loading,

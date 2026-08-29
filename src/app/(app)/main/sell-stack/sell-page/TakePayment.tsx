@@ -10,6 +10,7 @@ import { Collapsible } from '@/components/ui/Collapsible';
 import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
 import { getSupabase } from '@/lib/supabase/client';
 import { accountsChanged } from '@/lib/stacks/customer-account';
+import { useListNotifier } from '@/hooks/useListChannel';
 import { formatMoney } from '@/lib/format';
 import { chargesTotal, lineTotal, type DraftOrder } from '@/lib/stacks/draft-orders';
 
@@ -84,6 +85,22 @@ export function TakePayment({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [outstanding, setOutstanding] = useState<number | null>(null);
+
+  // Told about the one sale this screen creates. Unhandled when nobody is showing that list, which
+  // is the correct outcome — it will read the truth the next time it loads.
+  const notifySales = useListNotifier<{
+    id: string;
+    occurred_at: string;
+    total: string;
+    paid: string;
+    outstanding: string;
+    customer_id: string | null;
+    customer_name: string | null;
+    note: string | null;
+    line_count: number;
+  }>('sales');
+
+  const notifyDebtors = useListNotifier<{ id: string; balance: string }>('debtors');
 
   // What this customer already owes, before today's sale. Fetched when the sheet opens rather
   // than kept live: it is a decision input at this moment, not a value to watch change.
@@ -167,6 +184,52 @@ export function TakePayment({
        * it happened; every screen guessing on a timer is the arrangement this replaced.
        */
       accountsChanged();
+
+      /*
+       * Tell the sales list about THIS sale, rather than telling it to read everything again.
+       *
+       * The row is built from what was just settled — the id the database returned, the customer
+       * on the order, the total that was paid. That is the whole row as the list shows it, so the
+       * list can put it at the top and be correct without a request.
+       *
+       * `accountsChanged()` above still stands and does a different job: balances and empties are
+       * derived figures spread across several screens, and no single row describes them.
+       */
+      const paidNow = payments.reduce((sum, p) => sum + p.amount, 0);
+      notifySales({
+        type: 'upsert',
+        row: {
+          id: data as string,
+          occurred_at: new Date().toISOString(),
+          total: String(total),
+          paid: String(paidNow),
+          // What is left on account. Every figure here is one this screen just committed, not a
+          // guess — which is the difference between patching a list and lying to it.
+          outstanding: String(Math.max(0, total - paidNow)),
+          customer_id: order.customerId,
+          customer_name: order.customerName || null,
+          note: order.note || null,
+          line_count: order.lines.length,
+        },
+      });
+
+      /*
+       * And the debtor list, when this sale left money on account.
+       *
+       * That list no longer re-reads itself when you return to it, so the one screen that knows a
+       * balance moved has to say so. `outstanding` above is what they owed BEFORE this sale — the
+       * figure this screen fetched and showed while deciding whether to extend more credit — so
+       * the new balance is that plus whatever went on account just now.
+       */
+      const wentOnAccount = Math.max(0, total - paidNow);
+      if (order.customerId && wentOnAccount > 0) {
+        notifyDebtors({
+          type: 'patch',
+          id: order.customerId,
+          patch: { balance: String((outstanding ?? 0) + wentOnAccount) },
+        });
+      }
+
       onSettled(data as string);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Could not record this payment');
