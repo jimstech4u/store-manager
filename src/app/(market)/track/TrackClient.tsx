@@ -47,7 +47,7 @@ interface TrackedOrder {
 /** How often to re-check while an order is open. */
 const POLL_MS = 4000;
 
-export function TrackClient() {
+export function TrackClient({ initialToken }: { initialToken?: string } = {}) {
   const router = useRouter();
   const params = useSearchParams();
   const initial = (params.get('code') ?? '').toUpperCase();
@@ -60,6 +60,34 @@ export function TrackClient() {
   // Held in a ref so the poll always reads the code currently being tracked, without the interval
   // being torn down and restarted on every keystroke.
   const tracking = useRef<string | null>(initial || null);
+
+  /*
+   * The token, when this page was reached by a shared link.
+   *
+   * A different question from the code and asked of a different function: the code answers only
+   * while an order is open, because it is recycled and may already belong to somebody else. The
+   * token answers for the life of the order — and afterwards, as the receipt.
+   */
+  const lookByToken = useCallback(async (token: string, quiet = false) => {
+    if (!quiet) setState('looking');
+    setError(null);
+    try {
+      const { data, error: e } = await getSupabase().rpc('public_track_token', {
+        p_token: token,
+      });
+      if (e) throw e;
+      if (!data) {
+        setState('gone');
+        if (!quiet) setError('That link does not point at an order any more.');
+        return;
+      }
+      setOrder(data as TrackedOrder);
+      setState('found');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not open that link.');
+      if (!quiet) setState('idle');
+    }
+  }, []);
 
   const look = useCallback(async (raw: string, quiet = false) => {
     const trimmed = raw.trim().toUpperCase();
@@ -114,8 +142,12 @@ export function TrackClient() {
   }, [state, look]);
 
   useEffect(() => {
+    if (initialToken) {
+      void lookByToken(initialToken);
+      return;
+    }
     if (initial) void look(initial);
-  }, [initial, look]);
+  }, [initial, initialToken, look, lookByToken]);
 
   return (
     <MarketShell>

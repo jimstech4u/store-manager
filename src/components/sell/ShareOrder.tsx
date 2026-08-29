@@ -26,6 +26,7 @@ export function ShareOrder({
   open,
   onClose,
   code,
+  shareToken,
   storeName,
   customerName,
   customerId,
@@ -35,6 +36,8 @@ export function ShareOrder({
   open: boolean;
   onClose: () => void;
   code: string | null;
+  /** The stable identifier a link is built from. See `/t/[token]` for why it is not the code. */
+  shareToken: string | null;
   storeName: string;
   customerName?: string;
   customerId?: string | null;
@@ -46,8 +49,20 @@ export function ShareOrder({
 
   if (!code) return null;
 
-  // The shop's public address, not whatever browser the seller is using — see `appUrl`.
-  const link = appUrl(`/track?code=${encodeURIComponent(code)}`);
+  /*
+   * THE LINK CARRIES THE TOKEN, NOT THE CODE.
+   *
+   * The code is five characters so it can be read aloud, which means there are few of them, which
+   * is why it is released when the order finishes and the next order takes it. A message sits in
+   * somebody's chat for months — long enough for that code to belong to a stranger — so a link
+   * built on it would eventually show them somebody else's order.
+   *
+   * The address itself comes from `appUrl`, not the browser's origin, or a shop setting up on
+   * localhost would send links that open nothing.
+   */
+  const link = shareToken
+    ? appUrl(`/t/${encodeURIComponent(shareToken)}`)
+    : appUrl(`/track?code=${encodeURIComponent(code)}`);
 
   const message =
     `Your order at ${storeName}` +

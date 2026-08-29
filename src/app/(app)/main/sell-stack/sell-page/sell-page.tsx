@@ -1011,6 +1011,7 @@ export default function SellPage() {
           open={sharing}
           onClose={() => setSharing(false)}
           code={activeOrder.code}
+          shareToken={activeOrder.shareToken ?? null}
           storeName={store.name}
           customerName={activeOrder.customerName}
           customerId={activeOrder.customerId}

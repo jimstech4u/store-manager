@@ -59,6 +59,14 @@ export interface DraftCharge {
 }
 
 export interface DraftOrder {
+  /**
+   * The stable identifier for a link somebody is SENT.
+   *
+   * Distinct from `code`, which is the five characters read aloud at the counter: that one is
+   * recycled when an order finishes, so a link built on it would eventually point at a stranger's
+   * order. This one is never reused.
+   */
+  shareToken?: string | null;
   id: string | null;
   /** Stable client id, used for idempotency until the server assigns an id. */
   clientUuid: string;
@@ -272,21 +280,27 @@ export function useDraftOrders(storeId: string | null) {
         // Read back the code the server generated. Only needed the first time — afterwards the
         // code is already held locally and does not change.
         let code = order.code;
-        if (!code) {
+        let shareToken = order.shareToken ?? null;
+        if (!code || !shareToken) {
           const { data: row } = await getSupabase()
             .from('draft_orders')
-            .select('code')
+            .select('code, share_token')
             .eq('id', savedId)
             .maybeSingle();
-          code = (row as { code: string } | null)?.code ?? null;
+          const found = row as { code: string; share_token: string } | null;
+          code = code ?? found?.code ?? null;
+          // Read once and kept: unlike the code, this never changes for the life of the order.
+          shareToken = shareToken ?? found?.share_token ?? null;
         }
 
         setOrders((prev) =>
           prev.map((o) =>
-            o.clientUuid === order.clientUuid ? { ...o, id: savedId, code, synced: true } : o,
+            o.clientUuid === order.clientUuid
+              ? { ...o, id: savedId, code, shareToken, synced: true }
+              : o,
           ),
         );
-        return { ...order, id: savedId, code, synced: true };
+        return { ...order, id: savedId, code, shareToken, synced: true };
       } catch (e: unknown) {
         // A failed push is not a lost order — the local copy stands and can be pushed again.
         // Saying "not saved yet" is honest; silently dropping it would not be.
@@ -590,6 +604,7 @@ export function useDraftOrders(storeId: string | null) {
         ...makeDraft(),
         id: String(row.id),
         code: (row.code as string | null) ?? null,
+        shareToken: (row.share_token as string | null) ?? null,
         label: (row.label as string | null) ?? '',
         customerId: (row.customer_id as string | null) ?? null,
         customerName: (row.customer_name as string | null) ?? '',
