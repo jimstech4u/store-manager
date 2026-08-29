@@ -1,0 +1,84 @@
+/* The menu button, and the list it opens. */
+
+.trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: var(--touch-min, 44px);
+  height: var(--touch-min, 44px);
+  /* Pulled left so the touch target is generous without pushing the label off-centre. */
+  margin-left: calc(var(--space-2) * -1);
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.trigger:hover {
+  background: var(--surface-sunken);
+}
+
+/*
+ * Three bars, drawn rather than imported.
+ *
+ * A list icon, not a hamburger for a navigation drawer — the shortest way to say "the same tabs,
+ * as a list" without adding another icon to the set.
+ */
+.bars {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 18px;
+}
+
+.bars > span {
+  height: 2px;
+  border-radius: 1px;
+  background: currentColor;
+}
+
+.bars > span:last-child {
+  width: 66%;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--touch-comfortable, 52px);
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.row:hover {
+  background: var(--surface-sunken);
+}
+
+/* The one being served now, marked so the list says where you already are. */
+.rowActive {
+  background: var(--primary-subtle, rgba(26, 127, 90, 0.1));
+}
+
+.rowActive .name {
+  color: var(--primary);
+}
+
+.name {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.amount {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}

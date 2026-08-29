@@ -2,13 +2,16 @@
 
 import { useEffect, useRef, useState } from 'react';
 import styles from './Receipt.module.css';
+import { useNav } from '@academix-admin/navigation-stack';
 import { Button } from '@/components/ui/Button';
+import { WhatsAppIcon } from '@/components/ui/Icon';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { useDemandState } from '@academix-admin/state-stack';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatDateTime, formatMoney, formatQty, pluralUnit } from '@/lib/format';
 import { renderReceiptCanvas, renderReceiptImage, shareImage, shareLink } from '@/lib/share';
 import { receiptPdf, sharePdf } from '@/lib/pdf';
+import { appUrl } from '@/lib/app-url';
 
 interface SaleDetail {
   sale: {
@@ -88,7 +91,9 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
   const error = snapshot.error;
 
   const [sharing, setSharing] = useState(false);
+  const nav = useNav();
   const [shareNote, setShareNote] = useState<string | null>(null);
+  const [sharingWhatsApp, setSharingWhatsApp] = useState(false);
   const [makingPdf, setMakingPdf] = useState(false);
 
   useEffect(() => {
@@ -352,7 +357,7 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
               });
               if (err) throw err;
 
-              const url = `${window.location.origin}/r/${token}`;
+              const url = appUrl(`/r/${token}`);
               const result = await shareLink(url, `Receipt from ${shopName}`);
               if (result === 'copied') setShareNote('Link copied. Paste it into a chat.');
             } catch (e: unknown) {
@@ -363,6 +368,50 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
           }}
         >
           Share receipt
+        </Button>
+
+        {/*
+          The same link, sent to a phone.
+          *
+          * "Share receipt" hands it to whatever the device offers, which is right when the
+          * customer is standing there. This is for when they are not — which is most regulars, and
+          * is how a shop here actually reaches them.
+          *
+          * The number comes from the sale when it has one, and the next screen lets it be changed:
+          * the customer on file is nearly always who it is going to, and the number on file is
+          * nearly always the one that has moved on.
+        */}
+        <Button
+          variant="secondary"
+          fullWidth
+          busy={sharingWhatsApp}
+          busyLabel="Preparing"
+          onClick={async () => {
+            setSharingWhatsApp(true);
+            setShareNote(null);
+            try {
+              const { data: token, error: err } = await getSupabase().rpc('create_share_link', {
+                p_store_id: storeId,
+                p_kind: 'receipt',
+                p_ref_id: saleId,
+              });
+              if (err) throw err;
+
+              const url = appUrl(`/r/${token}`);
+              void nav.push('share_whatsapp_page', {
+                message: `Your receipt from ${shopName}.\n${url}`,
+                phone: detail?.customer?.phone ?? '',
+                customerId: detail?.customer?.id ?? '',
+                customerName: detail?.customer?.name ?? '',
+              });
+            } catch (e: unknown) {
+              setShareNote(e instanceof Error ? e.message : 'Could not create a link');
+            } finally {
+              setSharingWhatsApp(false);
+            }
+          }}
+        >
+          <WhatsAppIcon /> Send on WhatsApp
         </Button>
 
         <Button

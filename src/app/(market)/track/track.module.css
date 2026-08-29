@@ -110,3 +110,36 @@
 .live {
   margin-top: var(--space-3);
 }
+
+/* ── An order that finished, one way or the other ───────────────────────────────────── */
+
+.cancelled {
+  padding: var(--space-4);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+}
+
+.paidRow,
+.owingRow {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--space-2) 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.paidRow {
+  color: var(--text-muted);
+}
+
+/* What is still owed, in the colour the shop uses for money outstanding. */
+.owingRow {
+  font-weight: 700;
+  color: var(--warning, #b26a00);
+}
+
+.settled {
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}

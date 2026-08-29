@@ -1,0 +1,55 @@
+/* The number, the offer to remember it, and what is about to be sent. */
+
+.remember {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  margin-bottom: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.remember input {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  margin-top: 1px;
+  accent-color: var(--primary);
+}
+
+.rememberHint {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/*
+ * The message, shown before it goes.
+ *
+ * Not editable: it carries a tracking link that has to stay intact. Showing it is still worth the
+ * space — this is the last moment before something reaches a customer, and a seller should be able
+ * to see what their shop is about to say.
+ */
+.preview {
+  margin-bottom: var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+}
+
+.previewLabel {
+  display: block;
+  margin-bottom: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.previewBody {
+  font-size: var(--text-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

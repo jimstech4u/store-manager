@@ -378,3 +378,24 @@ export const PersonMinusIcon = (p: IconProps) => (
     <path d="M14 17h6" />
   </Svg>
 );
+
+/** Hand something to somebody else — the platform's own share gesture. */
+export const ShareIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 3v12M12 3l-4 4M12 3l4 4" />
+    <path d="M5 13v5.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V13" />
+  </Svg>
+);
+
+/**
+ * WhatsApp.
+ *
+ * Drawn rather than pulled from a brand pack: it inherits `currentColor` like every other icon
+ * here, so it sits correctly on a green button and in dark mode without a second asset.
+ */
+export const WhatsAppIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3.5 20.5l1.3-4a8 8 0 1 1 3 2.9l-4.3 1.1Z" />
+    <path d="M9 9.5c0 3 2.5 5.5 5.5 5.5.6 0 1-.4 1-1v-.8l-1.8-.7-.9.9a5.6 5.6 0 0 1-2.2-2.2l.9-.9-.7-1.8H10c-.6 0-1 .4-1 1Z" />
+  </Svg>
+);

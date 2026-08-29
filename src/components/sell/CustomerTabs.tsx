@@ -8,9 +8,11 @@ import {
   ReturnIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  ShareIcon,
 } from '@/components/ui/Icon';
 import { AsyncAction, type AsyncState } from '@/components/ui/AsyncAction';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { CustomerMenu } from './CustomerMenu';
 import styles from './CustomerTabs.module.css';
 
 /**
@@ -40,6 +42,7 @@ export function CustomerTabs({
   onClearCustomer,
   onCloseTab,
   onClaim,
+  onShare,
   onSettlePage,
   hasCustomer,
   orderCode,
@@ -57,6 +60,8 @@ export function CustomerTabs({
   onClearCustomer: () => void;
   onCloseTab: () => void;
   onClaim: () => void;
+  /** Hands the order's tracking link to the customer. */
+  onShare: () => void;
   /**
    * Puts the order's first row back under the bar.
    *
@@ -190,6 +195,14 @@ export function CustomerTabs({
         the full width, and the fixed furniture sits above and below them.
       */}
       <div className={styles.top}>
+        {/*
+          The same customers, as a searchable list.
+
+          The strip is right for three tabs and useless for twenty — the person wanted is off the
+          edge and you are dragging sideways hunting a name.
+        */}
+        <CustomerMenu tabs={tabs} activeId={activeId} onPick={onSelect} />
+
         <span className={styles.label}>Customer</span>
 
         {/*
@@ -201,9 +214,25 @@ export function CustomerTabs({
           while the shop is still assigning one, so the bar does not change height the moment it
           arrives — the page used to visibly jump while somebody was already reading it.
         */}
-        <span className={`${styles.code} ${orderCode ? '' : styles.codePending}`}>
-          {orderCode ?? '·····'}
-        </span>
+        {/*
+          The code and the share are ONE control.
+
+          The code is what a colleague is told; the share is how the customer gets it. Tapping
+          either meant the same thing to everybody who tried it, so a separate icon with its own
+          small target would have been a distinction only the code knew about.
+        */}
+        <button
+          type="button"
+          className={styles.codeButton}
+          onClick={onShare}
+          disabled={!orderCode}
+          aria-label={orderCode ? `Share order ${orderCode}` : 'No order code yet'}
+        >
+          <span className={`${styles.code} ${orderCode ? '' : styles.codePending}`}>
+            {orderCode ?? '·····'}
+          </span>
+          {orderCode && <ShareIcon size="1.1em" />}
+        </button>
       </div>
 
       <div className={styles.tabsRow}>

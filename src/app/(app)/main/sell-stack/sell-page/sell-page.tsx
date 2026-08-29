@@ -12,6 +12,7 @@ import { InfoPanel } from '@/components/ui/Explain';
 import { CloseIcon, MinusIcon, PlusIcon, ReceiptIcon } from '@/components/ui/Icon';
 import { CustomerPicker } from '@/components/customers/CustomerPicker';
 import { CustomerTabs } from '@/components/sell/CustomerTabs';
+import { ShareOrder } from '@/components/sell/ShareOrder';
 import { ConfirmDialog, useConfirm } from '@/components/ui/Dialog';
 import { useAsyncAction } from '@/components/ui/AsyncAction';
 import { ProductPicker } from '@/components/catalog/ProductPicker';
@@ -208,6 +209,7 @@ export default function SellPage() {
    * the screen loaded — and its overlay swallows every tap behind it, which on a till means the
    * screen simply stops working. `unmountOnClose` did not help. A flag of our own is unambiguous.
    */
+  const [sharing, setSharing] = useState(false);
   const [askClearCustomer, setAskClearCustomer] = useState(false);
   const [askCloseTab, setAskCloseTab] = useState(false);
 
@@ -590,6 +592,7 @@ export default function SellPage() {
         onClearCustomer={() => setAskClearCustomer(true)}
         onCloseTab={() => setAskCloseTab(true)}
         onClaim={() => void nav.push('claim_page')}
+        onShare={() => setSharing(true)}
         hasCustomer={Boolean(activeOrder?.customerId)}
         orderCode={activeOrder?.code ?? null}
         /*
@@ -1002,6 +1005,19 @@ export default function SellPage() {
       />
       )}
 
+
+      {activeOrder && (
+        <ShareOrder
+          open={sharing}
+          onClose={() => setSharing(false)}
+          code={activeOrder.code}
+          storeName={store.name}
+          customerName={activeOrder.customerName}
+          customerId={activeOrder.customerId}
+          customerPhone={activeOrder.customerPhone}
+          total={formatMoney(total)}
+        />
+      )}
     </PageScaffold>
   );
 }

@@ -3,6 +3,7 @@
 import NavigationStack from '@academix-admin/navigation-stack';
 import SellPage from './sell-page/sell-page';
 import ClaimPage from './claim-page/claim-page';
+import ShareWhatsAppPage from './share-whatsapp-page/share-whatsapp-page';
 import ReceiptPage from './receipt-page/receipt-page';
 import TakePaymentPage from './take-payment-page/take-payment-page';
 /*
@@ -25,6 +26,7 @@ import SalesPage from '../money-stack/sales-page/sales-page';
 const navLink = {
   sell_page: SellPage,
   claim_page: ClaimPage,
+  share_whatsapp_page: ShareWhatsAppPage,
   receipt_page: ReceiptPage,
   take_payment_page: TakePaymentPage,
   product_form_page: ProductFormPage,

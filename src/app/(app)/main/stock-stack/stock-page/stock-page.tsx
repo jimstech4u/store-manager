@@ -15,6 +15,7 @@ import { usePermission } from '@/hooks/usePermission';
 import { useStackBack } from '@/hooks/useStackBack';
 import { searchProducts, useProductList, type Product } from '@/lib/stacks/catalog-stack';
 import { useInfiniteScroll } from '@/hooks/usePaginatedList';
+import { useListChannel } from '@/hooks/useListChannel';
 import { formatMoney, formatQty, pluralUnit } from '@/lib/format';
 import styles from './stock-page.module.css';
 
@@ -41,6 +42,15 @@ export default function StockPage() {
   const [searchId, searchOps, isSearchOpen] = useSearchController();
 
   const browse = useProductList(store?.id ?? null);
+
+  /*
+   * A delivery, a count or a damage changes ONE product's stock.
+   *
+   * This list is what a shop scrolls to find something on a shelf, so re-reading it because one
+   * figure moved throws away the position they were at — for a number they could have been handed.
+   * The screen that recorded the movement knows the product and the new quantity.
+   */
+  useListChannel<Product>('products', browse.items, browse.setItems);
   const products = browse.products;
   const loading = browse.loading;
   const error = browse.error;

@@ -1,0 +1,55 @@
+/*
+ * A picker's empty states: small, near the top, opaque.
+ *
+ * Not centred in the sheet. A spinner floating in the middle of a 60dvh panel reads as an error —
+ * these sit where the first result would be, so the eye is already in the right place when the
+ * list arrives.
+ */
+
+.frame {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  /* Enough to stop the sheet collapsing as states swap, far less than filling it. */
+  min-height: 180px;
+  padding: var(--space-6) var(--space-4) var(--space-4);
+  text-align: center;
+}
+
+.spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--border-strong);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: viewerspin 700ms linear infinite;
+}
+
+@keyframes viewerspin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 2400ms;
+  }
+}
+
+.text {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.title {
+  font-size: var(--text-base);
+  font-weight: 700;
+}
+
+.hint {
+  max-width: 34ch;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}

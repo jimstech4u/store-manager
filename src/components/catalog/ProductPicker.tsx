@@ -2,7 +2,7 @@
 
 import { type ReactNode, useEffect, useState } from 'react';
 import { SelectionViewer, useSelectionController } from '@academix-admin/selection-viewer';
-import { FullPageMessage } from '@/components/ui/FullPageMessage';
+import { ViewerLoading } from '@/components/ui/ViewerState';
 import { InfoPanel } from '@/components/ui/Explain';
 import { Button } from '@/components/ui/Button';
 import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
@@ -114,7 +114,7 @@ export function ProductPicker({
         background: dark ? '#1b2322' : '#eef2f1',
         padding: { l: '4px', r: '4px', t: '0px', b: '0px' },
       }}
-      loadingProp={{ view: <FullPageMessage title="Searching" tone="loading" /> }}
+      loadingProp={{ view: <ViewerLoading text="Searching" /> }}
       noResultProp={{
         view: (
           <div className={styles.empty}>

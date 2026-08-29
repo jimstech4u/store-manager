@@ -26,9 +26,13 @@ import styles from './track.module.css';
 
 interface TrackedOrder {
   code: string;
+  /** 'open' while it is being built, 'settled' once paid for, 'cancelled' if it was abandoned. */
   status: string;
   shop: string;
   updated_at: string;
+  /** Present once settled — the sale the order became. */
+  sale_id?: string | null;
+  paid?: string;
   lines: {
     name: string;
     qty: string;
@@ -68,11 +72,15 @@ export function TrackClient() {
       });
       if (e) throw e;
       if (!data) {
-        // Two different situations, one answer from the server: never existed, or already
-        // settled. Said as one sentence rather than guessing which, because guessing wrong at a
-        // counter is worse than being vague.
+        /*
+         * Genuinely unknown now, rather than "finished".
+         *
+         * A settled or cancelled order used to land here too, which is why the message had to
+         * hedge. The code follows its order through to the end now, so nothing coming back means
+         * exactly one thing: no order in this shop has that code.
+         */
         setState((prev) => (prev === 'found' ? 'gone' : 'idle'));
-        if (!quiet) setError('That code is not open. It may have been paid for already.');
+        if (!quiet) setError('No order has that code. Check it with the shop.');
         return;
       }
       setOrder(data as TrackedOrder);
@@ -160,7 +168,20 @@ export function TrackClient() {
               <p className={styles.code}>{order.code}</p>
             </div>
 
-            {order.lines.length === 0 ? (
+            {/*
+              The same code, whatever became of the order.
+
+              A buyer was handed one link while their order was being built. Sending a second one
+              for the receipt means two links for one purchase, and the first dying in their hand
+              without explanation. It follows the order through instead — and when the order was
+              abandoned, says so plainly rather than behaving like a code that never existed.
+            */}
+            {order.status === 'cancelled' ? (
+              <p className={styles.cancelled}>
+                This order was cancelled and nothing was charged. If you think that is wrong, speak
+                to the shop and quote {order.code}.
+              </p>
+            ) : order.lines.length === 0 ? (
               <p className={styles.empty}>Nothing on it yet — watch this space.</p>
             ) : (
               <ul className={styles.lines}>
@@ -185,14 +206,44 @@ export function TrackClient() {
               </div>
             ))}
 
-            <div className={styles.grand}>
-              <span>Total so far</span>
-              <span className={styles.grandValue}>{formatMoney(order.total)}</span>
-            </div>
+            {order.status !== 'cancelled' && (
+              <div className={styles.grand}>
+                <span>{order.status === 'settled' ? 'Total' : 'Total so far'}</span>
+                <span className={styles.grandValue}>{formatMoney(order.total)}</span>
+              </div>
+            )}
 
-            <p className={styles.live}>
-              Updating as the seller adds things. This stops when you have paid.
-            </p>
+            {/*
+              Once paid for, this IS the receipt.
+
+              What is outstanding matters more here than anywhere: somebody who paid part of it in
+              cash and left the rest on account should be able to see that from the link they were
+              already given.
+            */}
+            {order.status === 'settled' && (
+              <>
+                <div className={styles.paidRow}>
+                  <span>Paid</span>
+                  <span>{formatMoney(order.paid ?? '0')}</span>
+                </div>
+                {Number(order.total) - Number(order.paid ?? 0) > 0 && (
+                  <div className={styles.owingRow}>
+                    <span>On account</span>
+                    <span>{formatMoney(Number(order.total) - Number(order.paid ?? 0))}</span>
+                  </div>
+                )}
+                <p className={styles.settled}>
+                  Paid for on {new Date(order.updated_at).toLocaleDateString()}. This is your
+                  receipt — keep the link.
+                </p>
+              </>
+            )}
+
+            {order.status === 'open' && (
+              <p className={styles.live}>
+                Updating as the seller adds things. This becomes your receipt once you have paid.
+              </p>
+            )}
           </section>
         )}
       </div>
