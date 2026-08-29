@@ -26,6 +26,14 @@
   gap: var(--space-2);
 }
 
+/* The menu button and its label read as one control. */
+.lead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
 .label {
   flex: none;
   font-size: var(--text-sm);

@@ -206,35 +206,33 @@ export function lineBaseQty(line: DraftLine): number {
 
 export function useDraftOrders(storeId: string | null) {
   /*
-   * NOT PERSISTED. The shop holds the orders; this device does not keep its own copy.
+   * PERSISTED, AND RECONCILED AGAINST THE SHOP.
    *
-   * It used to, and once orders started being created server-side the two became two sources of
-   * truth for one thing — and they raced. state-stack restores its persisted value on mount, and
-   * on a device that has never been used that value is an empty list; landing after the shop's
-   * answer it erased it, so the till showed a hundred tabs and then dropped to one. Which way it
-   * went depended on how fast the network replied, which is the worst kind of bug to own.
+   * Both halves matter. A refresh should show the till instantly, from what this device already
+   * had — waiting on the network to learn who you were serving means staring at an empty screen
+   * every reload. And the shop is still the truth, so what comes back replaces it.
    *
-   * Online-first is the rule here, and this is what it costs: the orders come from the shop on
-   * every load. What it buys is that they are the same orders on every device, which is the whole
-   * point — and they reach the server the moment the "+" is pressed, so nothing is riding on this
-   * device remembering anything.
+   * This was turned OFF for a while because the two raced: state-stack restores its persisted
+   * value on mount, and on a device that had never been used that value is an empty list which
+   * landed after the shop's answer and erased it. The fix was never to drop persistence — it was
+   * to stop guessing when the restore had happened. `isHydrated` says so, and the loader below
+   * waits for it, which is how academix-web has always done this.
    */
-  const [orders, demandOrders, setOrders] = useDemandState<DraftOrder[]>([], {
+  const [orders, demandOrders, setOrders, { isHydrated }] = useDemandState<DraftOrder[]>([], {
     key: 'draftOrders',
     scope: 'sell_flow',
-    persist: false,
+    persist: true,
     deps: [storeId ?? ''],
     // Working state, not fetched data: a remount must restore what was on screen rather than
     // reloading it away mid-sale.
     revalidateOnMount: false,
   });
 
-  // Follows the orders: persisting which tab was active, when the orders themselves are fetched,
-  // would point at a tab that may no longer exist.
+  // Follows the orders: the tab you were on is part of what a refresh should give you back.
   const [activeId, , setActiveId] = useDemandState<string | null>(null, {
     key: 'draftActive',
     scope: 'sell_flow',
-    persist: false,
+    persist: true,
     deps: [storeId ?? ''],
     revalidateOnMount: false,
   });
@@ -547,13 +545,15 @@ export function useDraftOrders(storeId: string | null) {
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    if (!storeId || hydrated) return;
+    if (!storeId || hydrated || !isHydrated) return;
     const t = setTimeout(() => setAttempt((n) => n + 1), 1500);
     return () => clearTimeout(t);
-  }, [storeId, hydrated, attempt]);
+  }, [storeId, hydrated, isHydrated, attempt]);
 
   useEffect(() => {
-    if (!storeId || hydrated) return;
+    // Nothing may be decided before the device's own copy is back: reading `get()` too early says
+    // "empty" for every till, and that answer is what used to overwrite the shop's.
+    if (!storeId || hydrated || !isHydrated) return;
 
     let cancelled = false;
     void demandOrders(async ({ get, set }) => {
@@ -643,7 +643,7 @@ export function useDraftOrders(storeId: string | null) {
     return () => {
       cancelled = true;
     };
-  }, [storeId, hydrated, attempt, demandOrders, setActiveId]);
+  }, [storeId, hydrated, isHydrated, attempt, demandOrders, setActiveId]);
 
   // Push edits shortly after typing stops. Saving on every keystroke would put a request behind
   // each character; saving only on settle would mean a colleague claiming the code receives a
@@ -675,6 +675,13 @@ export function useDraftOrders(storeId: string | null) {
     push,
     syncing,
     hydrated,
+    /**
+     * Still finding out what this till is holding.
+     *
+     * True until the device's own copy is back AND the shop has answered. A screen that shows
+     * "nobody is being served" during that window is telling somebody their customers are gone.
+     */
+    settling: !isHydrated || !hydrated,
     error,
   };
 }

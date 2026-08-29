@@ -201,9 +201,16 @@ export function CustomerTabs({
           The strip is right for three tabs and useless for twenty — the person wanted is off the
           edge and you are dragging sideways hunting a name.
         */}
-        <CustomerMenu tabs={tabs} activeId={activeId} onPick={onSelect} />
+        {/*
+          The menu and the word it belongs to, together on the left.
 
-        <span className={styles.label}>Customer</span>
+          "Customer" was floating between the menu and the code, reading as a heading for the row
+          rather than a label for the button next to it.
+        */}
+        <span className={styles.lead}>
+          <CustomerMenu tabs={tabs} activeId={activeId} onPick={onSelect} />
+          <span className={styles.label}>Customer</span>
+        </span>
 
         {/*
           The order code, on the same line as the label rather than in a row of its own further

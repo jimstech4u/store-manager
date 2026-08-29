@@ -88,7 +88,7 @@ export function PageScaffold({
       backAriaLabel={backLabel}
       actions={actions}
       rightContent={action}
-      className={styles.header}
+      className={`${styles.header} ${headerScrolls ? styles.headerScrolls : ''}`}
     />
   );
 

@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/Button';
 import { useBankAccounts } from '@/lib/stacks/bank-accounts';
 import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
-import { Collapsible } from '@/components/ui/Collapsible';
 import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
 import { getSupabase } from '@/lib/supabase/client';
 import { accountsChanged } from '@/lib/stacks/customer-account';
@@ -81,7 +80,6 @@ export function TakePayment({
   const [rows, setRows] = useState<PaymentRow[]>([
     { key: newKey(), method: 'cash', amount: '', reference: '', bankAccountId: null },
   ]);
-  const [tendered, setTendered] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [outstanding, setOutstanding] = useState<number | null>(null);
@@ -125,11 +123,33 @@ export function TakePayment({
     [rows],
   );
 
+  /*
+   * The goods alone, and the sale as a whole.
+   *
+   * `total` arrives with the charges already in it, so the items figure is that less the charges
+   * rather than a second sum over the lines — one arithmetic, one answer, and the two lines on
+   * screen can never disagree.
+   */
+  const itemsTotal = Math.max(0, total - chargesTotal(order));
+
   const remaining = Math.max(total - paid, 0);
-  const tenderedNum = Number(tendered) || 0;
-  const cashRow = rows.find((r) => r.method === 'cash');
-  const cashAmount = Number(cashRow?.amount) || 0;
-  const change = tenderedNum > 0 ? Math.max(tenderedNum - cashAmount, 0) : 0;
+
+  /*
+   * WHAT IS OVER, AND WHERE IT GOES.
+   *
+   * There is no "cash handed over" field any more. It existed only to work out change, and it made
+   * the seller enter the same money twice — once as the payment and once as the note. The payment
+   * lines already say what was handed over: anything beyond this sale's total is over.
+   *
+   * And over does not automatically mean change. A customer who owes from before very often hands
+   * across more precisely to bring that down, so the excess pays the old balance first and only
+   * what is left after that is money to give back. Handing back cash that was meant for a debt is
+   * the more expensive mistake of the two.
+   */
+  const over = Math.max(paid - total, 0);
+  const owedBefore = outstanding ?? 0;
+  const towardsOldDebt = Math.min(over, owedBefore);
+  const change = Math.max(over - towardsOldDebt, 0);
 
   const patch = (key: string, next: Partial<PaymentRow>) =>
     setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...next } : r)));
@@ -241,43 +261,11 @@ export function TakePayment({
   return (
     <>
       {/*
-        WHAT IS BEING PAID FOR, before what it comes to.
-        *
-        * This screen used to open on a number with nothing behind it. A seller reading a total
-        * back to a customer who queries it had to leave the payment, go and look at the receipt,
-        * and come back — and the customer is standing there while they do it. The list is short,
-        * it is the thing the total is derived from, and it belongs above it.
-      */}
-      <div className={styles.items}>
-        <span className={styles.itemsLabel}>What they are buying</span>
-        {order.lines.map((line) => (
-          <div className={styles.item} key={line.key}>
-            <span className={styles.itemName}>{line.productName}</span>
-            <span className={styles.itemQty}>
-              {line.qty || 0}
-              {line.saleUnitName ? ` ${line.saleUnitName}` : ''} × {formatMoney(Number(line.unitPrice) || 0)}
-            </span>
-            <span className={styles.itemTotal}>{formatMoney(lineTotal(line))}</span>
-          </div>
-        ))}
-      </div>
+        WHO FIRST, then what, then how much, then how.
 
-      <div className={styles.due}>
-        <span className={styles.dueLabel}>Total for this sale</span>
-        <span className={styles.dueValue}>{formatMoney(total)}</span>
-      </div>
-
-      {/*
-        Who this is being recorded for — always visible, always tappable, never blocking.
-
-        A dialog that every sale has to answer would add a step to the commonest transaction in
-        the shop, which is an anonymous cash sale that needs no answer at all. But hiding the
-        choice unless credit is involved was also wrong: a regular paying cash is someone a
-        seller may well want in the history, and previously that could only be done by
-        remembering to attach them BEFORE opening this sheet.
-
-        A row states the current answer and offers to change it. Nothing to dismiss, nothing to
-        decide, and the option is there at the moment of settling where it belongs.
+        The screen used to open on a number. Reading it top to bottom now answers the questions in
+        the order a seller is asked them at a counter: who is this for, what are they taking, what
+        was added, what do they already owe, what does it come to, how are they paying.
       */}
       <button type="button" className={styles.forRow} onClick={onNeedCustomer}>
         {/*
@@ -299,42 +287,48 @@ export function TakePayment({
         </span>
       </button>
 
-
       {error && (
         <InfoPanel tone="danger" title="Could not record this payment">
           {error}
         </InfoPanel>
       )}
 
-      {outstanding !== null && outstanding > 0 && (
-        <div className={styles.outstanding}>
-          <span>
-            {order.customerName || 'This customer'} already owes
-          </span>
-          <span className={styles.outstandingValue}>{formatMoney(outstanding)}</span>
+      <div className={styles.items}>
+        <span className={styles.itemsLabel}>What they are buying</span>
+        {order.lines.map((line) => (
+          <div className={styles.item} key={line.key}>
+            <span className={styles.itemName}>{line.productName}</span>
+            <span className={styles.itemQty}>
+              {line.qty || 0}
+              {line.saleUnitName ? ` ${line.saleUnitName}` : ''} × {formatMoney(Number(line.unitPrice) || 0)}
+            </span>
+            <span className={styles.itemTotal}>{formatMoney(lineTotal(line))}</span>
+          </div>
+        ))}
+
+        {/*
+          The goods on their own, under a double rule.
+
+          Kept apart from "Total for this sale" further down, which adds the charges: a customer
+          querying a figure is nearly always querying one of these two, and having them in the same
+          place made it impossible to say which was which.
+        */}
+        <div className={styles.itemsTotal}>
+          <span>Items</span>
+          <span>{formatMoney(itemsTotal)}</span>
         </div>
-      )}
+      </div>
 
       {/*
-        The extra charge, immediately before the methods.
+        The extra charge, as a section rather than something folded away.
 
-        It lived on the till, where it sat between the items and the button that acts on them —
-        scrolled past on every sale that does not need it, which is most of them. A delivery fee
-        or a note is decided while money is changing hands, and the last thing settled before
-        "how are they paying" is what the total has become — so it sits directly above it.
+        It was collapsed because on the till it sat between the items and the button that acts on
+        them, and most sales do not need it. Here it is between who is paying and how — the moment
+        a delivery fee is actually agreed — so hiding it behind a tap costs more than the row it
+        saves.
       */}
-      <Collapsible
-        tone="card"
-        title="Extra charge or note"
-        defaultOpen={(order.charges?.length ?? 0) > 0 || order.note !== ''}
-        summary={
-          chargesTotal(order) > 0
-            ? `${order.charges.length} · ${formatMoney(chargesTotal(order))}`
-            : order.note
-              ? 'Note added'
-              : 'None'
-        }
-      >
+      <section className={styles.charges}>
+        <span className={styles.chargesLabel}>Extra charge or note</span>
         {/*
           A list, not one box.
           A distributor's bill routinely carries transport AND loading AND an amount
@@ -406,7 +400,21 @@ export function TakePayment({
           onChange={(e) => onUpdateOrder({ note: e.target.value })}
           placeholder="Anything to remember about this sale"
         />
-      </Collapsible>
+      </section>
+
+      {outstanding !== null && outstanding > 0 && (
+        <div className={styles.outstanding}>
+          <span>
+            {order.customerName || 'This customer'} already owes
+          </span>
+          <span className={styles.outstandingValue}>{formatMoney(outstanding)}</span>
+        </div>
+      )}
+
+      <div className={styles.due}>
+        <span className={styles.dueLabel}>Total for this sale</span>
+        <span className={styles.dueValue}>{formatMoney(total)}</span>
+      </div>
 
       {/* ── Payment rows ────────────────────────────────────────────────────────── */}
       <div className={styles.payments}>
@@ -506,8 +514,11 @@ export function TakePayment({
         ))}
       </div>
 
-      {/* Quick fills: the two amounts people actually enter. Typing an exact total on a phone
-          keypad with a queue waiting is a common source of mistyped payments. */}
+      {/*
+        Quick amounts. Typing an exact total on a phone keypad with a queue waiting is a common
+        source of mistyped payments, and the two figures anybody actually enters are "all of it"
+        and "whatever is left".
+      */}
       <div className={styles.quickRow}>
         <button
           type="button"
@@ -516,15 +527,14 @@ export function TakePayment({
         >
           Pay all ({formatMoney(total)})
         </button>
-        {remaining > 0 && paid > 0 && (
+
+        {owedBefore > 0 && (
           <button
             type="button"
             className={styles.quick}
-            onClick={() =>
-              patch(rows[0].key, { amount: String((Number(rows[0].amount) || 0) + remaining) })
-            }
+            onClick={() => patch(rows[0].key, { amount: String(total + owedBefore) })}
           >
-            Add {formatMoney(remaining)}
+            And clear {formatMoney(owedBefore)} owed
           </button>
         )}
       </div>
@@ -535,27 +545,26 @@ export function TakePayment({
         onClick={() =>
           setRows((prev) => [
             ...prev,
-            { key: newKey(), method: 'transfer', amount: '', reference: '', bankAccountId: null },
+            {
+              key: newKey(),
+              method: 'transfer',
+              /*
+               * Filled with what is still outstanding.
+               *
+               * Splitting is nearly always "this much cash, the rest on transfer" — so the rest is
+               * the answer, and typing it again from a total the seller has to work out in their
+               * head is where the arithmetic goes wrong.
+               */
+              amount: remaining > 0 ? String(remaining) : '',
+              reference: '',
+              bankAccountId: null,
+            },
           ])
         }
       >
         <PlusIcon /> Split across another method
       </Button>
 
-      {cashRow && (
-        <div style={{ marginTop: 'var(--space-5)' }}>
-          <Field
-            label="Cash handed over"
-            optional
-            numeric
-            prefix="₦"
-            value={tendered}
-            onChange={(e) => setTendered(e.target.value)}
-            placeholder="0"
-            hint="Only to work out the change. Not recorded as part of the payment."
-          />
-        </div>
-      )}
 
       {/* ── Summary ─────────────────────────────────────────────────────────────── */}
       <div className={styles.summary}>
@@ -567,6 +576,13 @@ export function TakePayment({
           <span>Paying now</span>
           <span className={styles.value}>{formatMoney(paid)}</span>
         </div>
+
+        {towardsOldDebt > 0 && (
+          <div className={styles.row}>
+            <span>Off what they owed</span>
+            <span className={`${styles.value} ${styles.big}`}>{formatMoney(towardsOldDebt)}</span>
+          </div>
+        )}
 
         {change > 0 && (
           <div className={styles.row}>
@@ -586,10 +602,12 @@ export function TakePayment({
           </div>
         )}
 
-        {outstanding !== null && remaining > 0 && (
+        {outstanding !== null && (remaining > 0 || towardsOldDebt > 0) && (
           <div className={styles.row}>
             <span>They will then owe</span>
-            <span className={styles.value}>{formatMoney(outstanding + remaining)}</span>
+            <span className={styles.value}>
+              {formatMoney(Math.max(0, owedBefore + remaining - towardsOldDebt))}
+            </span>
           </div>
         )}
       </div>

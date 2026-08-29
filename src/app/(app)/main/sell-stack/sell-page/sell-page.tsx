@@ -87,6 +87,7 @@ export default function SellPage() {
     push,
     error: draftError,
     hydrated,
+    settling,
   } = useDraftOrders(store?.id ?? null);
 
   /*
@@ -616,7 +617,18 @@ export default function SellPage() {
         </InfoPanel>
       )}
 
-      {!activeOrder ? (
+      {settling ? (
+        /*
+         * Still finding out, which is not the same as nothing.
+         *
+         * A refresh used to land on "No customer being served" for the second or two it takes the
+         * shop to answer — telling a seller their three open customers had vanished, at the exact
+         * moment they were least able to check.
+         */
+        <div className={styles.emptyState}>
+          <p className={styles.emptyTitle}>Opening your till</p>
+        </div>
+      ) : !activeOrder ? (
         <div className={styles.emptyState}>
           <ReceiptIcon size="40px" />
           <p className={styles.emptyTitle}>No customer being served</p>
