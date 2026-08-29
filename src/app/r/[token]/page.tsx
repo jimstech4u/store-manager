@@ -4,6 +4,7 @@ import { use, useEffect, useState } from 'react';
 import styles from './shared.module.css';
 import { Button } from '@/components/ui/Button';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
+import { useDemandState } from '@academix-admin/state-stack';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatDateTime, formatMoney, formatQty, pluralUnit } from '@/lib/format';
 
@@ -53,12 +54,32 @@ export default function SharedReceiptPage({
   params: Promise<{ token: string }>;
 }) {
   const { token } = use(params);
-  const [receipt, setReceipt] = useState<SharedReceipt | null>(null);
-  const [state, setState] = useState<'loading' | 'ready' | 'missing' | 'error'>('loading');
+
+  /*
+   * KEPT, because a receipt does not change and the people opening this have the worst
+   * connections in the product.
+   *
+   * It was held in `useState`, so every visit to a link somebody had already opened went back to
+   * the network and showed "Opening receipt" while it did — for a document that was finished the
+   * moment it was created. Filed under the token, so one customer's receipt can never be shown
+   * under another's link.
+   */
+  const [receipt, demandReceipt] = useDemandState<SharedReceipt | null>(null, {
+    key: `shared-receipt:${token}`,
+    scope: 'public_receipt',
+    persist: true,
+    deps: [token],
+    revalidateOnMount: false,
+  });
+
+  const [state, setState] = useState<'loading' | 'ready' | 'missing' | 'error'>(
+    // A receipt already on this device is shown at once; there is nothing to wait for.
+    receipt ? 'ready' : 'loading',
+  );
 
   useEffect(() => {
     let cancelled = false;
-    void (async () => {
+    void demandReceipt(async ({ set }) => {
       try {
         const { data, error } = await getSupabase().rpc('read_shared_receipt', {
           p_token: token,
@@ -66,19 +87,21 @@ export default function SharedReceiptPage({
         if (cancelled) return;
         if (error) throw error;
         if (!data) {
-          setState('missing');
+          // Only when there was nothing to show anyway. A link that has since been revoked should
+          // not blank a receipt the customer is looking at.
+          setState((prev) => (prev === 'ready' ? prev : 'missing'));
           return;
         }
-        setReceipt(data as unknown as SharedReceipt);
+        set(data as unknown as SharedReceipt);
         setState('ready');
       } catch {
-        if (!cancelled) setState('error');
+        if (!cancelled) setState((prev) => (prev === 'ready' ? prev : 'error'));
       }
-    })();
+    });
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, demandReceipt]);
 
   if (state === 'loading') {
     return <FullPageMessage title="Opening receipt" tone="loading" />;

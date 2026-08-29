@@ -6,6 +6,7 @@ import { ViewerLoading } from '@/components/ui/ViewerState';
 import { InfoPanel } from '@/components/ui/Explain';
 import { Button } from '@/components/ui/Button';
 import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
+import { StateStack } from '@academix-admin/state-stack';
 import { useDebounced } from '@/components/ui/SearchField';
 import { useOverlayRoute } from '@/hooks/useOverlayRoute';
 import { useTheme } from '@/context/ThemeContext';
@@ -79,6 +80,17 @@ export function ProductPicker({
   const close = () => {
     ops.close();
     setQuery('');
+
+    /*
+     * The answers go with the question.
+     *
+     * Search results are kept while the picker is open — reopening it mid-sale should not re-ask
+     * the same thing — but a closed picker has finished asking, and every term anybody typed is
+     * filed under its own key. Left alone they accumulate for the life of the session: a seller
+     * who has served forty customers is carrying forty searches nobody will read again.
+     */
+    void StateStack.core.clearScope('search_flow');
+
     onClose();
   };
 

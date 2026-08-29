@@ -89,11 +89,16 @@ export function CustomerPicker({
     getId: (r) => r.id,
     // The picker's own list, kept apart from the People page's so the two cannot overwrite
     // each other's rows while both are mounted.
+    /*
+     * Kept, so the picker opens on the people it showed last time rather than an empty sheet.
+     * The list is re-read on open regardless; this only decides what is on screen while that
+     * happens.
+     */
     key: 'customer-picker',
     scope: 'customer_flow',
     // A search, not a list — the term is in `deps` but not in the key, so these must not be
     // restored under a different term. Same reason as the product search.
-    persist: false,
+    persist: true,
     deps: [storeId, debounced],
     enabled: open && !creating,
   });

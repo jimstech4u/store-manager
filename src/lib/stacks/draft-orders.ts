@@ -212,13 +212,13 @@ export function useDraftOrders(storeId: string | null) {
    * had — waiting on the network to learn who you were serving means staring at an empty screen
    * every reload. And the shop is still the truth, so what comes back replaces it.
    *
-   * This was turned OFF for a while because the two raced: state-stack restores its persisted
-   * value on mount, and on a device that had never been used that value is an empty list which
-   * landed after the shop's answer and erased it. The fix was never to drop persistence — it was
-   * to stop guessing when the restore had happened. `isHydrated` says so, and the loader below
-   * waits for it, which is how academix-web has always done this.
+   * This was turned OFF for a while because the two appeared to race, and a pile of flags grew
+   * around it to referee. None of that was needed: `persist` puts the saved orders in `orders` for
+   * the very first render, and `demand` runs its loader after that, so there was never a moment
+   * to arbitrate. The one thing that does have an order is writing the rows before saying the
+   * shop has answered — see the loader below.
    */
-  const [orders, demandOrders, setOrders, { isHydrated }] = useDemandState<DraftOrder[]>([], {
+  const [orders, demandOrders, setOrders] = useDemandState<DraftOrder[]>([], {
     key: 'draftOrders',
     scope: 'sell_flow',
     persist: true,
@@ -525,125 +525,65 @@ export function useDraftOrders(storeId: string | null) {
    * customers they were serving are still there. Orders held by nobody come too — an order that
    * was never claimed is loose in the shop, and whoever opens the till next is who it belongs to.
    *
-   * THROUGH `demand`, NOT A BARE `set`.
-   *
-   * Written as an effect calling the setter directly, this raced state-stack's own restore: the
-   * shop's orders landed first and the persisted local copy — empty, on a device that has never
-   * been used — arrived a moment later and wiped them. The screen showed a hundred tabs and then
-   * dropped to one. `demand` is the mechanism that owns that sequencing, so hydration goes
-   * through it and the two can no longer arrive in the wrong order.
+   * THIS IS DELIBERATELY PLAIN. It grew, at various points, a hydrated flag of its own, a retry
+   * tick, a session check and a guard that read the current value before deciding — each added to
+   * beat a race, and together they raced each other. `demand` already sequences this: it runs
+   * after state-stack has restored, and `set` lands before anything reading the value renders.
+   * The only thing that has to happen in a particular order is the one below.
    */
-  const [hydrated, setHydrated] = useState(false);
-
-  /*
-   * Retried until it gets a real answer.
-   *
-   * A tick that advances only while hydration has not concluded — enough to re-run the effect
-   * after a session or a connection that was not ready the first time. It stops as soon as
-   * `hydrated` is true, so this is not a poll that runs for the life of the session.
-   */
-  const [attempt, setAttempt] = useState(0);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    if (!storeId || hydrated || !isHydrated) return;
-    const t = setTimeout(() => setAttempt((n) => n + 1), 1500);
-    return () => clearTimeout(t);
-  }, [storeId, hydrated, isHydrated, attempt]);
+    if (!storeId) return;
 
-  useEffect(() => {
-    // Nothing may be decided before the device's own copy is back: reading `get()` too early says
-    // "empty" for every till, and that answer is what used to overwrite the shop's.
-    if (!storeId || hydrated || !isHydrated) return;
+    void demandOrders(async ({ set }) => {
+      const { data } = await getSupabase().rpc('my_open_drafts', { p_store_id: storeId });
+      const rows = (data ?? []) as Record<string, unknown>[];
 
-    let cancelled = false;
-    void demandOrders(async ({ get, set }) => {
-      /*
-       * Live work on this device wins.
-       *
-       * Adopting the shop's copy over a half-typed order would replace what somebody is looking at
-       * with an older version of it — the one failure this must never have. Only an empty till
-       * asks the shop what it should be holding.
-       */
-      if ((get()?.length ?? 0) > 0) {
-        if (!cancelled) setHydrated(true);
-        return;
+      if (rows.length > 0) {
+        const restored: DraftOrder[] = rows.map((row) => ({
+          ...makeDraft(),
+          id: String(row.id),
+          code: (row.code as string | null) ?? null,
+          shareToken: (row.share_token as string | null) ?? null,
+          label: (row.label as string | null) ?? '',
+          customerId: (row.customer_id as string | null) ?? null,
+          customerName: (row.customer_name as string | null) ?? '',
+          note: (row.note as string | null) ?? '',
+          feeAmount: String(row.fee_amount ?? ''),
+          feeLabel: (row.fee_label as string | null) ?? '',
+          charges: ((row.charges ?? []) as Record<string, unknown>[]).map((c) => ({
+            key: newId(),
+            label: String(c.label ?? ''),
+            amount: String(c.amount ?? ''),
+          })),
+          // Already the shop's own copy, so nothing to push back.
+          synced: true,
+          lines: ((row.lines ?? []) as Record<string, unknown>[]).map((l) =>
+            makeDraftLine({
+              productId: String(l.product_id),
+              productName: String(l.product_name ?? 'Item'),
+              qty: String(l.qty ?? ''),
+              unitPrice: String(l.unit_price ?? ''),
+              packId: (l.pack_id as string | null) ?? null,
+            }),
+          ),
+        }));
+
+        set(restored, { override: true });
+        setActiveId(restored[0].clientUuid);
       }
 
       /*
-       * THE SESSION FIRST, or the answer means nothing.
+       * LAST, and that is the whole of the ordering that matters.
        *
-       * `my_open_drafts` reads the caller from `auth.uid()`. Asked a moment before the session is
-       * established it returns no rows — not because the shop has no open orders, but because it
-       * does not yet know who is asking. Hydration took that empty answer as final, marked itself
-       * done, and let the till start a fresh empty order: a seller signing in on a slow connection
-       * watched their open customers simply not appear.
-       *
-       * Leaving `hydrated` false is the important half. The effect runs again, so a session that
-       * arrives late is a delay rather than a lost till.
+       * `loaded` is what tells the till it may start a customer when it is holding none. Raised
+       * before the rows were written, the till saw an empty list for one render, created a tab,
+       * and that write landed on top of the hundred and sixty-seven the shop had just sent.
        */
-      const { data: session } = await getSupabase().auth.getSession();
-      if (cancelled) return;
-      if (!session.session) return;
-
-      const { data, error: err } = await getSupabase().rpc('my_open_drafts', {
-        p_store_id: storeId,
-      });
-      if (cancelled) return;
-
-      // An error is also not an answer. Same reasoning: try again rather than declare the shop
-      // empty on the strength of a failed request.
-      if (err) return;
-
-      setHydrated(true);
-      if (!data) return;
-
-      const rows = data as Record<string, unknown>[];
-      if (rows.length === 0) return;
-
-      const restored: DraftOrder[] = rows.map((row) => ({
-        ...makeDraft(),
-        id: String(row.id),
-        code: (row.code as string | null) ?? null,
-        shareToken: (row.share_token as string | null) ?? null,
-        label: (row.label as string | null) ?? '',
-        customerId: (row.customer_id as string | null) ?? null,
-        customerName: (row.customer_name as string | null) ?? '',
-        note: (row.note as string | null) ?? '',
-        feeAmount: String(row.fee_amount ?? ''),
-        feeLabel: (row.fee_label as string | null) ?? '',
-        /*
-         * The charges come back too.
-         *
-         * They were written to the shop and never read, so a delivery fee survived only on the
-         * device that typed it — pick the order up elsewhere and the items looked complete with
-         * the money quietly wrong, which is the worst shape a mistake about money can take.
-         */
-        charges: ((row.charges ?? []) as Record<string, unknown>[]).map((c) => ({
-          key: newId(),
-          label: String(c.label ?? ''),
-          amount: String(c.amount ?? ''),
-        })),
-        // Already the shop's own copy, so nothing to push back.
-        synced: true,
-        lines: ((row.lines ?? []) as Record<string, unknown>[]).map((l) =>
-          makeDraftLine({
-            productId: String(l.product_id),
-            productName: String(l.product_name ?? 'Item'),
-            qty: String(l.qty ?? ''),
-            unitPrice: String(l.unit_price ?? ''),
-            packId: (l.pack_id as string | null) ?? null,
-          }),
-        ),
-      }));
-
-      set(restored, { override: true });
-      setActiveId(restored[0].clientUuid);
+      setLoaded(true);
     });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [storeId, hydrated, isHydrated, attempt, demandOrders, setActiveId]);
+  }, [storeId, demandOrders, setActiveId]);
 
   // Push edits shortly after typing stops. Saving on every keystroke would put a request behind
   // each character; saving only on settle would mean a colleague claiming the code receives a
@@ -674,14 +614,17 @@ export function useDraftOrders(storeId: string | null) {
     mergeInto,
     push,
     syncing,
-    hydrated,
+    /** True once the shop has answered — the till may start a customer only after this. */
+    hydrated: loaded,
     /**
-     * Still finding out what this till is holding.
+     * Nothing to show yet, and not because the till is empty.
      *
-     * True until the device's own copy is back AND the shop has answered. A screen that shows
-     * "nobody is being served" during that window is telling somebody their customers are gone.
+     * `persist` means the saved orders are already in `orders` on the first render — there is no
+     * hydration to wait for and no flag to consult. So the only moment worth covering is a device
+     * that has nothing saved AND has not yet heard from the shop. Showing "nobody is being served"
+     * then tells a seller their customers are gone; a moment later they all appear.
      */
-    settling: !isHydrated || !hydrated,
+    settling: !loaded && orders.length === 0,
     error,
   };
 }

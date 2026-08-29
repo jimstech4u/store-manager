@@ -61,7 +61,14 @@ export function StockHistory({ productId, unit }: { productId: string; unit: str
   const [history, demandHistory] = useDemandState<Movement[]>([], {
     key: `product-history:${productId}`,
     scope: 'catalog_flow',
-    persist: false,
+    /*
+     * Kept, because a ledger's past does not change.
+     *
+     * Every row here already happened; re-reading them on the way back in is a request that can
+     * only return what is already on screen. New movements arrive by loading again, and the rows
+     * that were there stay there — so the page opens instantly and fills in.
+     */
+    persist: true,
     deps: [productId],
     revalidateOnMount: false,
   });
@@ -140,7 +147,8 @@ export function StockHistoryCard({
     // rather than fetching the same thing twice.
     key: `product-history:${productId}`,
     scope: 'catalog_flow',
-    persist: false,
+    // Shares the history's key, so opening the page after seeing the card is instant.
+    persist: true,
     deps: [productId],
     revalidateOnMount: false,
   });

@@ -124,8 +124,15 @@ export function useProductSearch(storeId: string | null, query: string | null) {
      */
     key: `product-search:${query ?? ''}`,
     scope: 'search_flow',
-    // Still not persisted. These are answers to a question somebody has probably stopped asking.
-    persist: false,
+    /*
+     * Kept, now that the TERM is part of the key.
+     *
+     * It was not, once, and persisting then would have shown one query's results under another
+     * query's heading — which is why this was off. With the question in the key each answer is
+     * filed under what was asked, so searching the same thing twice is instant and a reload does
+     * not lose the list somebody was reading.
+     */
+    persist: true,
     // 50 in one page and no cursor: a short page would otherwise be read as "the end", which is
     // correct here — search does not paginate.
     pageSize: 50,

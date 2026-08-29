@@ -109,11 +109,15 @@ export function usePublicStores(query: string, coords?: { lat: number; lon: numb
   return usePaginatedList<PublicStore>({
     fetchPage,
     getId: (s) => s.id,
+    /*
+     * Kept. A shopper who reloads should see the shops they were just looking at, not a spinner
+     * — and this is the one screen reached by people with the worst connections.
+     */
     key: 'public-stores',
     scope: 'storefront_flow',
     // Query-driven: the search term lives in `deps`, not in the key, so restoring these would
     // answer one search with another's results.
-    persist: false,
+    persist: true,
     // Matches the server cap, so a full page is never mistaken for "there is more".
     pageSize: 60,
     deps: [query, coords?.lat, coords?.lon],
@@ -155,7 +159,7 @@ export function usePublicProducts({
     scope: 'storefront_flow',
     // Query-driven: the search term lives in `deps`, not in the key, so restoring these would
     // answer one search with another's results.
-    persist: false,
+    persist: true,
     pageSize: 24,
     deps: [query, storeId, category],
   });
