@@ -5,7 +5,7 @@ import styles from './sell-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useOverlayRoute } from '@/hooks/useOverlayRoute';
-import { useNav } from '@academix-admin/navigation-stack';
+import { useNav, scrollIntoViewBelow } from '@academix-admin/navigation-stack';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
@@ -172,38 +172,27 @@ export default function SellPage() {
    * describing the tab BEFORE it. Frame counting only moves that boundary around; asking the
    * browser removes it.
    */
+  /*
+   * Put the order's first row back under the bar.
+   *
+   * `scrollIntoViewBelow` from navigation-stack does the work, and it is a different thing from
+   * `scrollIntoView`: it re-measures on every frame, so the bar is allowed to change height while
+   * the page travels and the glide simply follows. Nothing is corrected afterwards because nothing
+   * was ever aimed at a stale number — which is what the correcting version had to hide with a
+   * jump.
+   *
+   * It also yields to a thumb. Somebody who starts scrolling mid-glide has said what they want.
+   */
   const settlePage = useCallback(() => {
     requestAnimationFrame(() => {
       const box = orderTopRef.current;
-      const body = box?.closest<HTMLElement>('.navstack-column-body');
-      if (!box || !body) return;
-
-      // Against the bar's own height rather than a guessed number, so it stays right when the bar
-      // changes — it grows a row when the four actions collapse.
-      const bar = body.querySelector<HTMLElement>('[class*="CustomerTabs_bar"]');
-      box.style.scrollMarginTop = `${Math.round(bar?.getBoundingClientRect().height ?? 0)}px`;
-      box.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-      /*
-       * Then check it actually landed, and finish the job if it did not.
-       *
-       * A smooth scroll is a request, not a guarantee. A phone still carrying momentum from the
-       * flick that got you here cancels it — the touch wins, which is right — and the page stops
-       * halfway with the receipt still under the bar. That is the "sometimes it scrolls, sometimes
-       * it does not" that no amount of re-timing explains, because nothing was mistimed: the
-       * scroll was started and then abandoned.
-       *
-       * So it is verified once the animation has had time to run, and corrected without animation
-       * if it is still short. A jump is worse than a glide and much better than being left in the
-       * wrong place.
-       */
-      window.setTimeout(() => {
-        const clearance = bar ? bar.getBoundingClientRect().height : 0;
-        const drift = box.getBoundingClientRect().top - body.getBoundingClientRect().top - clearance;
-        if (Math.abs(drift) > 8) {
-          body.scrollTo({ top: Math.max(0, body.scrollTop + drift), behavior: 'auto' });
-        }
-      }, 600);
+      if (!box) return;
+      void scrollIntoViewBelow(box, {
+        below: () =>
+          box
+            .closest('.navstack-column-body')
+            ?.querySelector<HTMLElement>('[class*="CustomerTabs_bar"]') ?? null,
+      });
     });
   }, []);
 
