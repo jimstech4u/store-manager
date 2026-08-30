@@ -24,9 +24,18 @@ import styles from './customer-form-page.module.css';
  * a sheet left open underneath a pushed page is a sheet somebody comes back to and has to dismiss.
  *
  * WHAT COMES BACK travels through `provideObject`, the same way the product form returns what it
- * created. Whoever opened this publishes `onCustomerCreated` and gets the new customer handed to
- * them; nobody is obliged to, and without a listener this still saves — which is the part that
- * must not depend on anything.
+ * created — but ONLY WHEN THE PUSH ASKED FOR IT.
+ *
+ * That qualifier is the whole point. `onCustomerCreated` is published once by the sell screen and
+ * stays published for the session, so a form opened from anywhere at all found it and handed the
+ * new customer over. Adding somebody from the People tab — a screen with no order on it and
+ * nothing to do with the till — silently attached them to whatever sale happened to be open, and
+ * the seller carried on selling to the wrong person. Seen in a click-through: an order reading
+ * "Customer 2" came back reading "Unrelated 91379".
+ *
+ * So the caller states its intent in the push, and a caller that says nothing gets nothing back.
+ * The alternative — a callback per caller — cannot work while the name is session-wide, and
+ * making the form guess from which stack it was pushed is exactly the guessing this avoids.
  */
 export default function CustomerFormPage() {
   const nav = useNav();
@@ -37,6 +46,14 @@ export default function CustomerFormPage() {
   // The name is prefilled from whatever was typed into the picker's search: somebody who has just
   // typed "Irekanmi" and been told there is no such customer should not type it again.
   const prefill = (location?.params?.name as string | undefined) ?? '';
+
+  /*
+   * "Put whoever I create onto the sale I have open."
+   *
+   * Said by the till and by the payment screen; not said by the People tab, which is only filing
+   * somebody away.
+   */
+  const attachToSale = location?.params?.then === 'attach-to-sale';
 
   const created = useObject<(customer: { id: string; name: string; phone: string }) => void>(
     'onCustomerCreated',
@@ -67,6 +84,14 @@ export default function CustomerFormPage() {
         p_store_id: store.id,
         p_phone: phone.trim(),
         p_display_name: name.trim(),
+        /*
+         * Asked for on this form and, until now, thrown away.
+         *
+         * `upsert_customer` has taken a business name all along; this call simply never passed it.
+         * The row was then patched into the list WITH the business name, so it appeared to have
+         * saved — and vanished on the next refresh, which is the worst way for a field to fail.
+         */
+        p_business_name: business.trim() || null,
       });
       if (error) throw error;
 
@@ -89,7 +114,7 @@ export default function CustomerFormPage() {
         },
       });
 
-      if (created.isProvided) created.getter()?.(customer);
+      if (attachToSale && created.isProvided) created.getter()?.(customer);
       await nav.pop();
     } catch (e) {
       setProblem(e instanceof Error ? e.message : 'That customer could not be saved.');

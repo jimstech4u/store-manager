@@ -180,3 +180,51 @@
 .pickItem:hover {
   background: var(--surface-sunken);
 }
+
+/* ── What else the load cost ──────────────────────────────────────────────────────────
+
+   Named fees a shop really pays — loading, offloading, a union levy, a gate fee. Two fixed
+   boxes could not hold them, and every one left out goes straight into what looks like profit. */
+.chargeList {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  padding: 0;
+}
+
+.chargeItem {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--touch-min, 44px);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  color: var(--text);
+}
+
+.chargeAmount {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+/* A full touch target even beside two other things: removing a fee changes what the stock cost. */
+.chargeRemove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--touch-min, 44px);
+  height: var(--touch-min, 44px);
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--danger);
+  cursor: pointer;
+}
+
+.chargeRemove:hover {
+  background: var(--danger-subtle);
+}

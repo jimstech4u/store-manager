@@ -187,7 +187,17 @@ try {
   await admin.from('products').delete().eq('id', fifoProduct.id);
 } finally {
   for (const id of purchases) await admin.from('purchases').delete().eq('id', id);
-  await admin.from('products').delete().eq('id', product.id);
+/*
+ * Retired rather than removed, when the books will not let go.
+ *
+ * `stock_movements` is append-only and refuses deletes — rightly, it is the ledger — so a probe
+ * that received stock can never take it back out, and the delete here silently failed. Five "Cost
+ * probe" items were sitting in the shop's real product picker before anybody noticed.
+ */
+const removed = await admin.from('products').delete().eq('id', product.id);
+if (removed.error) {
+  await admin.from('products').update({ status: 'archived' }).eq('id', product.id);
+}
   console.log('  (cleaned up)');
 }
 

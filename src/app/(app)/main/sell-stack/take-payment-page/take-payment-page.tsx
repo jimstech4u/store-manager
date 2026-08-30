@@ -1,11 +1,13 @@
 'use client';
 
+import { useState } from 'react';
 import { useLocation, useNav, useObject } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FloatingAmount } from '@/components/ui/FloatingAmount';
 import { PlusIcon } from '@/components/ui/Icon';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { TakePayment } from '../sell-page/TakePayment';
+import { CustomerPicker } from '@/components/customers/CustomerPicker';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { draftTotal, useDraftOrders } from '@/lib/stacks/draft-orders';
@@ -46,7 +48,19 @@ export default function TakePaymentPage() {
   // By id first; the active tab only when no id travelled with the push.
   const activeOrder = wantedId ? (orders.find((o) => o.id === wantedId) ?? null) : current;
 
-  const needCustomer = useObject<() => void>('onNeedCustomer', { global: true, scope: 'sell' });
+  /*
+   * CHOOSING A CUSTOMER HAPPENS HERE, on this page.
+   *
+   * It used to pop back to the till, because the picker lived there and the reasoning was that
+   * seeing what is being bought is most of how a seller recognises who is buying it. That is true
+   * and it was still wrong: THIS PAGE ALREADY LISTS WHAT THEY ARE BUYING, three rows above the
+   * customer, so nothing was gained — and popping a pushed page throws away everything typed on
+   * it. A seller who had entered a delivery charge and a note, then realised the balance was going
+   * on account, came back to an empty form and had to do it again. Measured, not assumed: a probe
+   * typed both, tapped "Recording for", and found them gone.
+   */
+  const [picking, setPicking] = useState(false);
+
   const settled = useObject<(saleId: string) => void>('onSaleSettled', {
     global: true,
     scope: 'sell',
@@ -105,16 +119,7 @@ export default function TakePaymentPage() {
         onUpdateOrder={(patch) => updateOrder(activeOrder.clientUuid, patch)}
         storeId={store.id}
         total={draftTotal(activeOrder)}
-        onNeedCustomer={() => {
-          /*
-           * Back to the sell screen to attach somebody, then here again.
-           *
-           * The customer picker belongs over the receipt being built, not over the payment: seeing
-           * what is being bought is most of how a seller recognises who is buying it.
-           */
-          void nav.pop();
-          if (needCustomer.isProvided) needCustomer.getter()?.();
-        }}
+        onNeedCustomer={() => setPicking(true)}
         onSettled={(saleId) => {
           if (settled.isProvided) {
             settled.getter()?.(saleId);
@@ -131,6 +136,36 @@ export default function TakePaymentPage() {
           void nav.pushAndPopUntil('receipt_page', (entry) => entry.key === 'sell_page', {
             id: saleId,
             fresh: '1',
+          });
+        }}
+      />
+
+      <CustomerPicker
+        open={picking}
+        onClose={() => setPicking(false)}
+        storeId={store.id}
+        initialName={activeOrder.customerName}
+        onPick={(customer) => {
+          updateOrder(activeOrder.clientUuid, {
+            customerId: customer.id,
+            customerName: customer.name,
+            customerPhone: customer.phone,
+          });
+          setPicking(false);
+        }}
+        /*
+         * Creating one is still a page, and still pushed from HERE.
+         *
+         * The form hands the new customer back through the callback the sell screen publishes, and
+         * that attaches it to the order this page is paying for — the same order, so there is
+         * nothing extra to wire. Popping the form lands back on this page with the payment intact,
+         * which is the whole point.
+         */
+        onCreate={(name) => {
+          setPicking(false);
+          void nav.push('customer_form_page', {
+            ...(name.trim() ? { name } : {}),
+            then: 'attach-to-sale',
           });
         }}
       />

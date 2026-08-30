@@ -209,11 +209,20 @@ export default function SellPage() {
   const [sharing, setSharing] = useState(false);
   const [askClearCustomer, setAskClearCustomer] = useState(false);
   const [askCloseTab, setAskCloseTab] = useState(false);
+  /*
+   * Which line is having its whole amount typed, and what has been typed so far.
+   *
+   * Kept here rather than on the line, deliberately. A draft order is working state the shop
+   * SYNCS — a half-typed "35" on its way to "35000" would go to the server and to any other till
+   * holding the same order, and would be there to restore after a reload. It is a keystroke, not
+   * a fact about the sale.
+   */
+  const [editingTotal, setEditingTotal] = useState<string | null>(null);
+  const [totalDraft, setTotalDraft] = useState('');
 
   const [pickingCustomer, setPickingCustomer] = useState(false);
   // Remembers that the picker was opened mid-payment, so choosing someone returns to the
   // sheet instead of dropping the seller back on the order with the payment half-entered.
-  const [resumePayment, setResumePayment] = useState(false);
   // Sale units per product, fetched once when a product is first added to any order.
   const [saleUnits, setSaleUnits] = useState<Record<string, SaleUnit[]>>({});
   /*
@@ -291,17 +300,20 @@ export default function SellPage() {
    *
    * Provided once, through refs, so the callbacks are never a render behind.
    */
-  const needCustomerRef = useRef<(() => void) | null>(null);
   const onSettledRef = useRef<((saleId: string) => void) | null>(null);
   const onCustomerCreatedRef = useRef<
     ((customer: { id: string; name: string; phone: string }) => void) | null
   >(null);
 
   useEffect(() => {
-    const a = nav.provideObject('onNeedCustomer', () => () => needCustomerRef.current?.(), {
-      global: true,
-      scope: 'sell',
-    });
+    /*
+     * `onNeedCustomer` used to be published here.
+     *
+     * The payment page called it to send the seller back to this screen, because the picker lived
+     * here — and popping that page threw away every charge and note already typed on it. The
+     * picker now opens where the seller already is, so there is nobody left to ask and an
+     * unpublished callback is one fewer way for two screens to disagree about whose order it is.
+     */
     const b = nav.provideObject(
       'onSaleSettled',
       () => (saleId: string) => onSettledRef.current?.(saleId),
@@ -322,7 +334,6 @@ export default function SellPage() {
     );
 
     return () => {
-      a?.();
       b?.();
       c?.();
     };
@@ -446,11 +457,6 @@ export default function SellPage() {
     pickerOps.close();
   };
 
-  needCustomerRef.current = () => {
-    setResumePayment(true);
-    setPickingCustomer(true);
-  };
-
   onCustomerCreatedRef.current = (customer) => {
     if (!activeOrder) return;
     updateOrder(activeOrder.clientUuid, {
@@ -458,12 +464,6 @@ export default function SellPage() {
       customerName: customer.name,
       customerPhone: customer.phone,
     });
-    // The same resumption the picker has: somebody who was sent here from the payment screen is
-    // put back on it, rather than left on the till wondering what happened.
-    if (resumePayment) {
-      setResumePayment(false);
-      void nav.push('take_payment_page', { id: activeOrder.id });
-    }
   };
 
   onSettledRef.current = (saleId: string) => {
@@ -917,39 +917,49 @@ export default function SellPage() {
                       })()}
 
                       {/*
-                        Crates, kegs and dispenser bottles leaving with the goods.
+                        Crates and kegs leaving with the goods — STATED, not asked.
 
-                        The line already carried `containersOut` and it was sent to the server on
-                        every settle — with nothing anywhere able to set it. So a shop could sell
-                        three crates of beer and the crates themselves were never recorded as owed
-                        back, which is the larger half of what a distributor is actually tracking.
-
-                        Bottles are not asked about: for a 'content' pool the server derives the
-                        count from the quantity sold, because twelve bottles sold is twelve bottles
-                        owed and asking would be asking someone to restate what they just entered.
-                        Containers genuinely have to be declared — a customer often brings their own
-                        crates, or takes the goods loose.
+                        This was a number field on every line of every beer sale, and the answer
+                        was the quantity, every time. The unit itself now says whether it comes
+                        back, so three crates sold is three crates owed and the till can simply say
+                        so. What is left is the exception a shop really does meet — the customer
+                        who brought their own — and that is one tap, not a field to fill in.
                       */}
-                      {(returnables[line.productId]?.some((r) => r.kind === 'container') ?? false) && (
-                        <div className={styles.emptiesBlock}>
-                          <Field
-                            label={`${
-                              returnables[line.productId].find((r) => r.kind === 'container')
-                                ?.categoryName ?? 'Containers'
-                            } going out`}
-                            optional
-                            numeric
-                            value={line.containersOut}
-                            onChange={(e) =>
-                              updateLine(activeOrder.clientUuid, line.key, {
-                                containersOut: e.target.value,
-                              })
-                            }
-                            placeholder="0"
-                            hint="Leave empty if they brought their own, or took it loose."
-                          />
-                        </div>
-                      )}
+                      {(() => {
+                        const unit = saleUnits[line.productId]?.find((u) => u.id === line.saleUnitId);
+                        const container = returnables[line.productId]?.find(
+                          (r) => r.kind === 'container',
+                        );
+                        if (!unit?.isReturnable || !container) return null;
+
+                        const qty = Number(line.qty);
+                        const due = Number.isFinite(qty) ? qty : 0;
+                        // Empty string means nobody has said otherwise, so the quantity stands.
+                        const own = line.containersOut === '0';
+                        const going = own ? 0 : due;
+
+                        return (
+                          <div className={styles.emptiesLine}>
+                            <span>
+                              {going > 0
+                                ? `${formatQty(going)} ${container.categoryName.toLowerCase()} going out`
+                                : `No ${container.categoryName.toLowerCase()} going out`}
+                            </span>
+                            <button
+                              type="button"
+                              className={styles.emptiesToggle}
+                              aria-pressed={own}
+                              onClick={() =>
+                                updateLine(activeOrder.clientUuid, line.key, {
+                                  containersOut: own ? '' : '0',
+                                })
+                              }
+                            >
+                              {own ? 'No — ours are going out' : 'They brought their own'}
+                            </button>
+                          </div>
+                        );
+                      })()}
 
                       <Field
                         label={line.saleUnitName ? `Price per ${line.saleUnitName.toLowerCase()}` : 'Price each'}
@@ -983,11 +993,69 @@ export default function SellPage() {
                       />
                     </div>
 
+                    {/*
+                      THE FIGURE THE CUSTOMER ACTUALLY AGREED TO.
+
+                      Haggling in a Nigerian market happens on the total, not the unit price:
+                      "give me the four crates for thirty-five thousand". Until now the only box
+                      on the screen was price-per-crate, so a seller had to divide 35,000 by 4 at
+                      the counter with somebody waiting — and 8,750 is one of the kinder examples.
+                      A price typed here divides itself, and the line still warns if the result is
+                      below what the stock cost.
+                    */}
                     <div className={styles.lineTotal}>
-                      <span>Line total</span>
-                      <span className={`${styles.lineTotalValue} ${under ? styles.belowCost : ''}`}>
-                        {formatMoney(lineTotal(line))}
-                      </span>
+                      {editingTotal === line.key ? (
+                        <Field
+                          label="Total for this line"
+                          numeric
+                          prefix="₦"
+                          autoFocus
+                          value={totalDraft}
+                          onChange={(e) => setTotalDraft(e.target.value)}
+                          onBlur={() => {
+                            const asked = Number(totalDraft);
+                            const qty = Number(line.qty);
+                            setEditingTotal(null);
+
+                            // Nothing usable typed, or no quantity to divide by: the line keeps
+                            // the price it had rather than being handed a zero or an infinity.
+                            if (
+                              !Number.isFinite(asked) ||
+                              asked < 0 ||
+                              !Number.isFinite(qty) ||
+                              qty <= 0
+                            ) {
+                              return;
+                            }
+
+                            updateLine(activeOrder.clientUuid, line.key, {
+                              // Kobo, because a total that will not divide evenly still has to
+                              // multiply back to something near what was agreed.
+                              unitPrice: String(Number((asked / qty).toFixed(2))),
+                              priceTouched: true,
+                              priceReason: null,
+                            });
+                          }}
+                          hint={`Split across ${formatQty(Number(line.qty) || 0)} ${
+                            line.saleUnitName?.toLowerCase() ?? line.baseUnit
+                          }`}
+                        />
+                      ) : (
+                        <>
+                          <span>Line total</span>
+                          <button
+                            type="button"
+                            className={`${styles.lineTotalValue} ${under ? styles.belowCost : ''}`}
+                            onClick={() => {
+                              setTotalDraft(String(lineTotal(line) || ''));
+                              setEditingTotal(line.key);
+                            }}
+                            aria-label={`Line total ${formatMoney(lineTotal(line))} — tap to set the whole amount`}
+                          >
+                            {formatMoney(lineTotal(line))}
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 );
@@ -1059,7 +1127,7 @@ export default function SellPage() {
           initialName={activeOrder.customerName}
           onCreate={(name) => {
             setPickingCustomer(false);
-            void nav.push('customer_form_page', { name });
+            void nav.push('customer_form_page', { name, then: 'attach-to-sale' });
           }}
           onPick={(c) => {
             updateOrder(activeOrder.clientUuid, {
@@ -1068,20 +1136,8 @@ export default function SellPage() {
               customerPhone: c.phone,
             });
             setPickingCustomer(false);
-            if (resumePayment) {
-              setResumePayment(false);
-              void nav.push('take_payment_page');
-            }
           }}
-          onClose={() => {
-            setPickingCustomer(false);
-            // Backing out must also return to the payment page — the seller may simply have
-            // decided the sale is anonymous after all, and should not have to start again.
-            if (resumePayment) {
-              setResumePayment(false);
-              void nav.push('take_payment_page');
-            }
-          }}
+          onClose={() => setPickingCustomer(false)}
         />
       )}
 

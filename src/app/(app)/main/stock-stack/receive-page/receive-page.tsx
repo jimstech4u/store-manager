@@ -27,6 +27,14 @@ interface ReceiveLine {
   qty: string;
   /** Per ENTERED unit — per pack when a pack is chosen. What the invoice actually says. */
   unitCost: string;
+  /**
+   * Thrown in by the supplier, not on the invoice.
+   *
+   * Sellable stock that cost nothing extra, which is exactly what makes taking the deal worth it —
+   * and what makes the cost per unit fall. Counted separately from `qty` because the invoice
+   * total must stay the invoice total.
+   */
+  freeQty: string;
 }
 
 const newKey = () => Math.random().toString(36).slice(2);
@@ -50,8 +58,19 @@ export default function ReceivePage() {
   const [lines, setLines] = useState<ReceiveLine[]>([]);
   const [supplier, setSupplier] = useState('');
   const [invoiceRef, setInvoiceRef] = useState('');
-  const [delivery, setDelivery] = useState('');
-  const [distribution, setDistribution] = useState('');
+  /*
+   * The other things a delivery costs, and the ones that give money back.
+   *
+   * "Delivery" and "Distribution" were the only two boxes, because they were the two somebody
+   * happened to name first. A real load carries loading, offloading, a union levy, a gate fee —
+   * and the shop paid every one of them, so leaving them out puts the difference straight into
+   * what looks like profit. `record_purchase` has taken named charges and a rebate since the
+   * costing was rewritten; nothing had ever offered them.
+   */
+  const [charges, setCharges] = useState<{ key: string; label: string; amount: string }[]>([]);
+  const [chargeLabel, setChargeLabel] = useState('');
+  const [chargeAmount, setChargeAmount] = useState('');
+  const [rebate, setRebate] = useState('');
   const [picking, setPicking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,23 +92,37 @@ export default function ReceivePage() {
         packQty: p.packQty,
         qty: '',
         unitCost: '',
+        freeQty: '',
       },
     ]);
     setPicking(false);
   };
 
-  const baseQtyOf = (l: ReceiveLine) => {
-    const qty = Number(l.qty) || 0;
-    const factor = l.packId && l.packQty ? Number(l.packQty) : 1;
-    return qty * factor;
-  };
+  const factorOf = (l: ReceiveLine) => (l.packId && l.packQty ? Number(l.packQty) : 1);
+
+  /**
+   * Everything that arrived, paid for or not.
+   *
+   * A supplier who sends 100 packs and throws in 7 has delivered 107 packs of sellable stock for
+   * the price of 100 — so the free ones belong in the divisor, and leaving them out is what makes
+   * a shop think a good deal cost the same as a bad one.
+   */
+  const baseQtyOf = (l: ReceiveLine) =>
+    ((Number(l.qty) || 0) + (Number(l.freeQty) || 0)) * factorOf(l);
 
   const goodsTotal = useMemo(
     () => lines.reduce((sum, l) => sum + (Number(l.qty) || 0) * (Number(l.unitCost) || 0), 0),
     [lines],
   );
 
-  const fees = (Number(delivery) || 0) + (Number(distribution) || 0);
+  const namedCharges = charges.reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
+
+
+  /*
+   * A rebate is money BACK, so it comes off — and it can take the extras below zero, which is
+   * correct: a big enough rebate really does make the load cost less than the invoice.
+   */
+  const fees = namedCharges - (Number(rebate) || 0);
   const grandTotal = goodsTotal + fees;
 
   /**
@@ -104,8 +137,11 @@ export default function ReceivePage() {
     const lineValue = (Number(l.qty) || 0) * (Number(l.unitCost) || 0);
     if (baseQty <= 0) return null;
     const raw = lineValue / baseQty;
-    if (goodsTotal <= 0 || fees <= 0) return raw;
-    return raw + (fees * (lineValue / goodsTotal)) / baseQty;
+    // Never below nothing: a rebate larger than the goods would otherwise make stock cost a
+    // negative amount, and every margin computed from it would be nonsense. The server clamps the
+    // same way, and a preview that disagreed with the saved figure would be its own bug.
+    if (goodsTotal <= 0 || fees === 0) return raw;
+    return Math.max(raw + (fees * (lineValue / goodsTotal)) / baseQty, 0);
   };
 
   const submit = async () => {
@@ -118,6 +154,7 @@ export default function ReceivePage() {
         .map((l) => ({
           product_id: l.productId,
           qty: Number(l.qty),
+          free_qty: Number(l.freeQty) || 0,
           pack_id: l.packId,
           unit_cost: Number(l.unitCost) || 0,
         }));
@@ -129,8 +166,20 @@ export default function ReceivePage() {
         p_lines: payload,
         p_supplier: supplier || null,
         p_invoice_ref: invoiceRef || null,
-        p_delivery: Number(delivery) || 0,
-        p_distribution: Number(distribution) || 0,
+        /*
+         * Everything is a NAMED charge now.
+         *
+         * `p_delivery` and `p_distribution` stay in the signature for the deliveries already
+         * recorded through them, and are sent as nothing: two fixed boxes could never hold what a
+         * real load carries, and the shop naming each fee is what makes it readable months later.
+         * Both are summed into the same landed cost either way.
+         */
+        p_delivery: 0,
+        p_distribution: 0,
+        p_charges: charges
+          .filter((c) => c.label.trim() && Number(c.amount) > 0)
+          .map((c) => ({ label: c.label.trim(), amount: Number(c.amount) })),
+        p_rebate: Number(rebate) || 0,
         // Idempotency: a retry after a timeout must not receive the same delivery twice, which
         // would inflate stock and drag the average cost down with phantom goods.
         p_client_uuid: crypto.randomUUID(),
@@ -219,6 +268,24 @@ export default function ReceivePage() {
                 />
               </div>
 
+              {/*
+                What the supplier threw in.
+
+                Optional and quiet, because most lines have none — but a "buy 20 get 1 free" is
+                ordinary in this trade, and a shop that cannot record it either loses the free
+                stock from its shelf count or records it as bought and drags its own cost up.
+              */}
+              <Field
+                label="Free, on top"
+                optional
+                numeric
+                value={l.freeQty}
+                onChange={(e) => patch(l.key, { freeQty: e.target.value })}
+                suffix={l.packName ?? l.baseUnit}
+                placeholder="0"
+                hint="Thrown in by the supplier. It lands on the shelf and lowers your cost."
+              />
+
               {Number(l.qty) > 0 && (
                 <div className={styles.lineFoot}>
                   <span>
@@ -226,7 +293,7 @@ export default function ReceivePage() {
                   </span>
                   {landed !== null && (
                     <span className={styles.landed}>
-                      {fees > 0 && (
+                      {fees !== 0 && (
                         <span className={styles.rawCost}>{formatMoney(perBaseRaw, 2)}</span>
                       )}
                       {formatMoney(landed, 2)} each
@@ -245,33 +312,92 @@ export default function ReceivePage() {
 
       {lines.length > 0 && (
         <>
-          <h2 className={styles.section}>Fees on this delivery</h2>
+          <h2 className={styles.section}>What else this load cost</h2>
           <p className={styles.sectionNote}>
-            These are shared across everything above, by value.
+            Delivery, loading, a union levy — whatever you paid on top of the invoice. Shared
+            across everything above, by value.
           </p>
+
+          {/*
+            ONE SET OF BOXES, and a list of what has been added.
+
+            Not a fixed field per kind of fee. Nobody can name in advance every charge a load might
+            carry, and a screen that tries has ten empty boxes on it for the nine that do not apply
+            this time. The shop names each one as it adds it — which is also why they are stored by
+            name: "loading" and "union levy" still mean something when somebody reads it back.
+          */}
+          {charges.length > 0 && (
+            <ul className={styles.chargeList}>
+              {charges.map((c) => (
+                <li key={c.key} className={styles.chargeItem}>
+                  <span>{c.label}</span>
+                  <span className={styles.chargeAmount}>{formatMoney(Number(c.amount) || 0)}</span>
+                  <button
+                    type="button"
+                    className={styles.chargeRemove}
+                    aria-label={`Remove ${c.label}`}
+                    onClick={() => setCharges((prev) => prev.filter((x) => x.key !== c.key))}
+                  >
+                    <CloseIcon />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
 
           <div className={styles.grid}>
             <Field
-              label="Delivery"
+              label="What for"
               optional
-              numeric
-              prefix="₦"
-              value={delivery}
-              onChange={(e) => setDelivery(e.target.value)}
-              placeholder="0"
+              value={chargeLabel}
+              onChange={(e) => setChargeLabel(e.target.value)}
+              placeholder="Delivery, loading, levy…"
             />
             <Field
-              label="Distribution"
+              label="How much"
               optional
               numeric
               prefix="₦"
-              value={distribution}
-              onChange={(e) => setDistribution(e.target.value)}
+              value={chargeAmount}
+              onChange={(e) => setChargeAmount(e.target.value)}
               placeholder="0"
             />
           </div>
 
-          <Explain label="Why do the fees change my cost?" defaultOpen={fees > 0}>
+          <Button
+            variant="secondary"
+            fullWidth
+            disabled={!chargeLabel.trim() || !(Number(chargeAmount) > 0)}
+            onClick={() => {
+              setCharges((prev) => [
+                ...prev,
+                { key: newKey(), label: chargeLabel.trim(), amount: chargeAmount },
+              ]);
+              setChargeLabel('');
+              setChargeAmount('');
+            }}
+          >
+            <PlusIcon /> Add this fee
+          </Button>
+
+          {/*
+            Money coming back, which is the only figure here that makes stock cheaper.
+
+            Its own box rather than a fee typed as a negative: somebody one missed minus sign away
+            from a delivery costing twenty thousand MORE than it did.
+          */}
+          <Field
+            label="Rebate or discount given back"
+            optional
+            numeric
+            prefix="₦"
+            value={rebate}
+            onChange={(e) => setRebate(e.target.value)}
+            placeholder="0"
+            hint="Money the supplier gave back on this load. It lowers what the stock cost you."
+          />
+
+          <Explain label="Why do the fees change my cost?" defaultOpen={fees !== 0}>
             <p>
               Because you paid them. If you only count the invoice price, every sale looks more
               profitable than it was — and the gap is exactly the fees.
