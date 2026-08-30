@@ -254,3 +254,11 @@
   color: var(--text);
   font: inherit;
 }
+
+/* The total and the commit action, at the END of the page rather than pinned to its foot. */
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}

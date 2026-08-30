@@ -27,6 +27,31 @@ wrong even by a session that reads nothing else.
 - **The Library Charter:** `@academix-admin/*` packages are public-first, app-agnostic and
   non-breaking. A package never learns about store-manager.
 
+## A screen for everything the shop can do, and nothing it cannot
+
+The database is ahead of the screens, and silently. A shop can invite staff, hold deposits, agree a
+price with one customer, read its own audit log and take back a shared receipt link — all built,
+permissioned and tested — and reach none of it. Nothing fails; the capability simply has no door,
+so nobody knows to ask for it.
+
+**[UI_AUDIT.md](UI_AUDIT.md) is the standing list**, and `scripts/audit-ui.py` regenerates the raw
+scan. Run it after any migration that adds a function or a table. The scan over-reports on purpose
+— a helper called only from SQL is not a gap — so the file records the READING of it, and what was
+ruled out, so the next pass does not re-raise the same rows.
+
+Both directions count:
+
+- **Backend with no UI.** A migration that ends without a screen is half a feature. If the screen
+  is genuinely for later, say so in UI_AUDIT.md rather than leaving it to be rediscovered.
+- **UI with no backend, or with none left.** `formatQtyWithPack` still describes the
+  one-pack-per-product model that no longer exists. Dead code goes to `_unused/` with a MANIFEST
+  row, never a straight delete.
+- **UI wired to nothing.** The product form sends `p_category_id: null` on every save, so a
+  category can be displayed and never chosen. A field that cannot change anything is worse than a
+  missing one, because it looks answered.
+- **An API with no consumer is a bug in the same family.** Two RPCs added in one session had no
+  caller by the end of it. The Library Charter says do not publish one; the same applies to SQL.
+
 ## Things that were got wrong, with the reason
 
 Each of these was a real defect found by clicking, not by reading. The reason is the part worth

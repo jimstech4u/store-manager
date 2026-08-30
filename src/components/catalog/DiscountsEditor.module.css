@@ -1,0 +1,87 @@
+.none {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  padding: 0;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: var(--touch-comfortable, 52px);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  color: var(--text);
+}
+
+/* Read as a sentence — "5 or more packs · ₦4,500 each" — because the row underneath is three
+   numbers and a foreign key, and nobody in a shop thinks in those. */
+.sentence {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-2);
+}
+
+.each {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+/* A full touch target even beside text: removing a band changes what customers are charged. */
+.remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--touch-min, 44px);
+  height: var(--touch-min, 44px);
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--danger);
+  cursor: pointer;
+}
+
+.remove:hover {
+  background: var(--danger-subtle);
+}
+
+.unitChoice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.unitChoiceLabel {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text);
+}
+
+.select {
+  min-height: var(--touch-comfortable, 52px);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}

@@ -231,19 +231,6 @@ export default function ReceivePage() {
       onBack={goBack}
       title="Record a delivery"
       subtitle="What came in, and what it really cost"
-      footer={
-        lines.length > 0 ? (
-          <>
-            <div className={styles.footerRow}>
-              <span className={styles.footerLabel}>Total paid</span>
-              <span className={styles.footerTotal}>{formatMoney(grandTotal)}</span>
-            </div>
-            <Button size="large" fullWidth busy={busy} busyLabel="Recording" onClick={submit}>
-              Record this delivery
-            </Button>
-          </>
-        ) : undefined
-      }
     >
       {error && (
         <InfoPanel tone="danger" title="Could not record this">
@@ -563,6 +550,26 @@ export default function ReceivePage() {
           distribution fees.
         </InfoPanel>
       </BottomSheet>
+
+      {/*
+        The total and the action END the page rather than being pinned to its foot.
+
+        A pinned bar costs a row of the form on every phone this runs on, and this screen is a
+        list of delivery lines with three number fields each, plus the fee composer. Scrolling to
+        the end to commit is also the honest gesture: the last thing somebody should see before
+        recording what a load cost is the last figure they entered into it.
+      */}
+      {lines.length > 0 && (
+        <div className={styles.actions}>
+          <div className={styles.footerRow}>
+            <span className={styles.footerLabel}>Total paid</span>
+            <span className={styles.footerTotal}>{formatMoney(grandTotal)}</span>
+          </div>
+          <Button size="large" fullWidth busy={busy} busyLabel="Recording" onClick={submit}>
+            Record this delivery
+          </Button>
+        </div>
+      )}
     </PageScaffold>
   );
 }

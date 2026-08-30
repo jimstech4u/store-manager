@@ -1,9 +1,19 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
-import { Explain, InfoPanel, InlineHint } from '@/components/ui/Explain';
+import { InfoPanel } from '@/components/ui/Explain';
+import { UnitsEditor, unitProblems } from '@/components/catalog/UnitsEditor';
+import { DiscountsEditor, type Discount } from '@/components/catalog/DiscountsEditor';
+import {
+  fetchDiscounts,
+  saveDiscounts,
+  saveProductUnits,
+  useProductUnits,
+  useStoreUnits,
+  type ProductUnit,
+} from '@/lib/stacks/product-units';
 import { getSupabase } from '@/lib/supabase/client';
 import type { Product } from '@/lib/stacks/catalog-stack';
 import styles from './ProductForm.module.css';
@@ -11,22 +21,33 @@ import styles from './ProductForm.module.css';
 /**
  * Add a product, or change one. The BODY of a page — see `product-form-page`.
  *
- * One component for both, because they are the same eight questions and a shop that learns the
- * add form should not have to learn a second, differently-arranged edit form. What changes
- * between the two is which fields the server will accept, not which the person sees.
+ * ONE FORM, ONE PRODUCT. It used to ask "how do you count it?" and "what is a pack?", which is the
+ * one-pack-per-product model: a base unit, one pack, one price. Real trade does not fit it. Cooking
+ * oil arrives in bags and in kilogrammes and leaves by the litre; beer arrives in crates and leaves
+ * as crates, half crates and single bottles. A shop with any of that had to either lie to the form
+ * or keep the real answer in its head.
  *
- * Reachable from three places on purpose — the Stock list, a product's own page, and the picker
- * in the middle of a sale. The last one matters most: a customer asks for something the shop
- * sells but has never entered, and the alternatives are abandoning the receipt or writing the
- * sale down on paper. Both happen, and both end with the ledger being wrong.
+ * So the form asks what the item IS — its name and the codes you find it by — and then the two
+ * questions that actually matter: what it is bought in, what it is sold in, and what a customer
+ * pays for buying more of it.
  *
- * IT WAS A BOTTOM SHEET AND IS NOW A PAGE. Eight fields, three of them numeric, one conditional
- * on another — on a 390px phone the keyboard covers the half you are typing into, dragging up to
- * reach "Barcode" reads as a dismiss gesture, and there is no back button, so the way out is a
- * gesture you have to already know. A page gets a title, a back arrow, the whole screen, and a
- * URL; it also survives a rotation and a reload, which a sheet's local state does not.
+ * A NEW PRODUCT IS CREATED BEFORE ITS UNITS ARE SAVED, because units and prices hang off an id
+ * that does not exist until then. If the units fail to save, the item still exists — unconfigured,
+ * and visibly so: the stock screen names anything that can arrive but never leave.
+ *
+ * Reachable from three places on purpose — the Stock list, a product's own page, and the picker in
+ * the middle of a sale. The last one matters most: a customer asks for something the shop sells but
+ * has never entered, and the alternatives are abandoning the receipt or writing the sale down on
+ * paper. Both happen, and both end with the ledger being wrong.
  */
 
+/*
+ * The global units a product row can be measured in.
+ *
+ * `products.base_unit` is a foreign key to a fixed list and is now only a fallback label — the
+ * shop's own units carry the meaning. It is no longer asked for: it is worked out from the
+ * smallest thing the shop said it sells, and falls back to pieces, which is what most goods are.
+ */
 const UNITS = [
   { code: 'piece', label: 'Pieces — bottles, cans, wraps, items' },
   { code: 'kg', label: 'Kilograms — rice, garri, cement' },
@@ -50,22 +71,39 @@ export function ProductForm({
   product,
   /** Prefills the name when opened from a search that found nothing. */
   initialName = '',
+  onCreateUnit,
 }: {
   onSaved: (result: ProductFormResult) => void;
   onCancel: () => void;
   storeId: string;
   product?: Product | null;
   initialName?: string;
+  /**
+   * Hands over to whoever can push the page that invents a new unit.
+   *
+   * The form does not push it itself: this component is rendered from three stacks, and a
+   * component reaching for a route by name breaks the moment it is reused where that route does
+   * not exist — the same reason the customer picker asks its caller.
+   */
+  onCreateUnit?: (name: string) => void;
 }) {
   const editing = Boolean(product);
 
   const [name, setName] = useState('');
-  const [baseUnit, setBaseUnit] = useState<string>('piece');
-  const [packName, setPackName] = useState('');
-  const [packQty, setPackQty] = useState('');
-  const [price, setPrice] = useState('');
   const [sku, setSku] = useState('');
   const [barcode, setBarcode] = useState('');
+
+  /*
+   * What it is bought and sold in, and the cheaper prices for buying more.
+   *
+   * Held here and saved with the name, so a shop answers the whole question in one place. For an
+   * item being edited these arrive from the server; for a new one they start empty and the form
+   * refuses to save until at least one thing is sellable.
+   */
+  const { units: existingUnits } = useProductUnits(product?.id ?? null);
+  const { units: storeUnits, reload: reloadStoreUnits } = useStoreUnits(storeId);
+  const [units, setUnits] = useState<ProductUnit[]>([]);
+  const [discounts, setDiscounts] = useState<Discount[]>([]);
 
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -81,13 +119,51 @@ export function ProductForm({
   useEffect(() => {
     setProblem(null);
     setName(product?.name ?? initialName);
-    setBaseUnit(product?.baseUnit ?? 'piece');
-    setPackName(product?.packName ?? '');
-    setPackQty(product?.packQty ?? '');
-    setPrice(product?.listPrice ?? '');
     setSku(product?.sku ?? '');
     setBarcode(product?.barcode ?? '');
   }, [product, initialName]);
+
+  /*
+   * The units this item already has, once they arrive.
+   *
+   * Copied into local state rather than edited in place: this is a form, and nothing reaches the
+   * shop until Save. Guarded on length so a re-render cannot overwrite edits in progress with the
+   * server's copy — the same shape as filling the name above.
+   */
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (seeded.current || existingUnits.length === 0) return;
+    seeded.current = true;
+    setUnits(existingUnits);
+  }, [existingUnits]);
+
+  useEffect(() => {
+    if (!product?.id) return;
+    let live = true;
+    void fetchDiscounts(product.id).then((rows) => {
+      if (live) setDiscounts(rows);
+    });
+    return () => {
+      live = false;
+    };
+  }, [product?.id]);
+
+  /*
+   * The unit a product ROW is measured in.
+   *
+   * `products.base_unit` points at a fixed global list and is only a fallback label now — the
+   * shop's own units carry the meaning. Rather than asking a question whose answer is already
+   * implied, it is read off the smallest thing the shop said it sells, matched by name, and falls
+   * back to pieces. A shop selling litres gets litres; a shop selling crates of drinks gets pieces,
+   * which is what a crate is made of.
+   */
+  const impliedBaseUnit = (): string => {
+    const sold = units.filter((u) => u.isSold);
+    if (sold.length === 0) return 'piece';
+    const smallest = sold.reduce((a, b) => (b.baseQty < a.baseQty ? b : a));
+    const match = UNITS.find((g) => g.code === smallest.name.toLowerCase());
+    return match?.code ?? 'piece';
+  };
 
   const save = async () => {
     const trimmed = name.trim();
@@ -96,10 +172,17 @@ export function ProductForm({
       return;
     }
 
+    const wrong = unitProblems(units);
+    if (wrong) {
+      setProblem(wrong);
+      return;
+    }
+
     setSaving(true);
     setProblem(null);
     try {
       const supabase = getSupabase();
+      let id = product?.id ?? '';
 
       if (editing && product) {
         const { error } = await supabase.rpc('update_product', {
@@ -110,24 +193,30 @@ export function ProductForm({
           p_sku: sku.trim(),
           p_barcode: barcode.trim(),
           p_category_id: null,
-          p_list_price: price.trim() === '' ? null : Number(price),
+          /*
+           * No list price any more.
+           *
+           * Price belongs to a UNIT — a crate and a bottle are not the same money — and asking for
+           * one figure per product is what produced a receipt reading "1 piece, ₦4,500" for
+           * something sold by the pack. Null leaves whatever is there alone.
+           */
+          p_list_price: null,
         });
         if (error) throw error;
-        onSaved({ id: product.id, name: trimmed });
       } else {
-        const qty = Number(packQty);
         const { data, error } = await supabase.rpc('create_product', {
           p_store_id: storeId,
           p_name: trimmed,
-          p_base_unit: baseUnit,
-          p_pack_name: packName.trim() || null,
-          p_pack_qty: packName.trim() && Number.isFinite(qty) && qty > 0 ? qty : null,
-          p_list_price: price.trim() === '' ? null : Number(price),
-          p_price_per_pack: Boolean(packName.trim()),
+          p_base_unit: impliedBaseUnit(),
+          // The one-pack model, no longer asked for and no longer sent.
+          p_pack_name: null,
+          p_pack_qty: null,
+          p_list_price: null,
+          p_price_per_pack: false,
         });
         if (error) throw error;
+        id = data as string;
 
-        const id = data as string;
         // Codes are a second call: create_product predates them and widening it would mean a
         // second overload of a function half the app already calls.
         if (sku.trim() || barcode.trim()) {
@@ -140,8 +229,18 @@ export function ProductForm({
             p_list_price: null,
           });
         }
-        onSaved({ id, name: trimmed });
       }
+
+      /*
+       * Units before discounts, because a discount points at a unit.
+       *
+       * Saving the units also rebuilds what the till reads, so the sale units a band refers to
+       * exist by the time the bands are written.
+       */
+      await saveProductUnits(id, units);
+      await saveDiscounts(id, discounts);
+
+      onSaved({ id, name: trimmed });
     } catch (e) {
       setProblem(e instanceof Error ? e.message : 'That could not be saved.');
     } finally {
@@ -166,71 +265,41 @@ export function ProductForm({
         autoFocus
       />
 
-      {!editing && (
-        <>
-          <div className={styles.field}>
-            <label className={styles.label} htmlFor="sm-base-unit">
-              How do you count it?
-            </label>
-            <select
-              id="sm-base-unit"
-              className={styles.select}
-              value={baseUnit}
-              onChange={(e) => setBaseUnit(e.target.value)}
-            >
-              {UNITS.map((u) => (
-                <option key={u.code} value={u.code}>
-                  {u.label}
-                </option>
-              ))}
-            </select>
-            <InlineHint>
-              The smallest amount you would ever sell or count. Packs come next.
-            </InlineHint>
-          </div>
+      {/*
+        What it is bought in and sold in.
 
-          <Explain label="What is a pack, and do I need one?">
-            A pack is how the item arrives and how you usually sell it — a pack of 12 bottles, a
-            crate of 12, a carton of 24.
-            <br />
-            <br />
-            Fill this in and you can sell &ldquo;2 packs&rdquo; instead of working out 24 pieces
-            every time. Leave it empty for anything you sell one at a time, or by weight.
-          </Explain>
+        This replaced "How do you count it?" and "What is a pack?" — the one-pack-per-product
+        model, which real trade does not fit: oil arrives in bags and in kilogrammes and leaves by
+        the litre, beer arrives in crates and leaves as crates, half crates and single bottles. A
+        shop with any of that had to either lie to the form or keep the real answer in its head.
 
-          <Field
-            label="Pack name"
-            optional
-            value={packName}
-            onChange={(e) => setPackName(e.target.value)}
-            placeholder="Pack, Crate, Carton, Bag"
-          />
+        The single "Price each" went with it. Price belongs to a UNIT — a crate and a bottle are
+        not the same money — and one figure per product is what produced a receipt reading
+        "1 piece, ₦4,500" for something sold by the pack.
+      */}
+      <h2 className={styles.section}>How you buy and sell it</h2>
+      <UnitsEditor
+        units={units}
+        setUnits={setUnits}
+        storeUnits={storeUnits}
+        onCreateUnit={(unitName) => {
+          /*
+           * Re-read the shop's vocabulary when the form comes back.
+           *
+           * The page that invents a unit pops back to this one, which never unmounted — so
+           * without this the picker would still be showing the list from before, missing the very
+           * word somebody just went and added.
+           */
+          reloadStoreUnits();
+          onCreateUnit?.(unitName);
+        }}
+      />
 
-          {packName.trim() !== '' && (
-            <Field
-              label={`How many ${baseUnit === 'piece' ? 'pieces' : baseUnit} in one ${packName.trim().toLowerCase()}?`}
-              numeric
-              value={packQty}
-              onChange={(e) => setPackQty(e.target.value)}
-              placeholder="12"
-            />
-          )}
-        </>
-      )}
-
-      <Field
-        label={
-          packName.trim() || product?.packName
-            ? `Price for one ${(packName.trim() || product?.packName || '').toLowerCase()}`
-            : 'Price each'
-        }
-        optional
-        numeric
-        prefix="₦"
-        value={price}
-        onChange={(e) => setPrice(e.target.value)}
-        placeholder="0"
-        hint="A starting point. You can always charge something else on the day."
+      <h2 className={styles.section}>Cheaper for buying more</h2>
+      <DiscountsEditor
+        discounts={discounts}
+        setDiscounts={setDiscounts}
+        soldUnits={units.filter((u) => u.isSold)}
       />
 
       <Field

@@ -143,7 +143,7 @@ try {
    * number on a screen two pushes down and sat waiting for an invisible element to become
    * editable.
    */
-  const answer = page.locator('[class*="units-page_sentence"] input').first();
+  const answer = page.locator('[class*="UnitsEditor_sentence"] input').first();
   await answer.fill('24');
   await page.waitForTimeout(1500);
   await page.screenshot({ path: `${SHOTS}/4-answered.png`, fullPage: true });

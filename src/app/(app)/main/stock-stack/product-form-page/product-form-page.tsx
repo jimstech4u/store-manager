@@ -70,6 +70,16 @@ export default function ProductFormPage() {
         storeId={store.id}
         product={product}
         initialName={prefillName}
+        /*
+         * A unit the shop has no word for yet.
+         *
+         * Pushed from here rather than by the form, which is rendered in three stacks and cannot
+         * know which one it is in — the same reason the customer picker asks its caller. The form
+         * re-reads the shop's units when it comes back, so the new word is in the picker.
+         */
+        onCreateUnit={(unitName) =>
+          void nav.push('unit_form_page', unitName.trim() ? { name: unitName } : undefined)
+        }
         onCancel={() => void nav.pop()}
         onSaved={(result) => {
           /*

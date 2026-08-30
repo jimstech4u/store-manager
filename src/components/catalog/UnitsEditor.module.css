@@ -184,8 +184,18 @@
   background: var(--surface-sunken);
 }
 
-/* The commit action, at the END of the page rather than pinned to its foot. A pinned bar costs a
-   row of the form on every phone this runs on. */
-.actions {
-  margin-top: var(--space-5);
+/* Turning the sentence round. "One bottle is 12 crates" is what the form asks when the crate was
+   added first, and the honest answer is a twelfth — which nobody types into a shop screen. */
+.swap {
+  flex: 1 0 100%;
+  min-height: var(--touch-min, 44px);
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  text-decoration: underline;
+  cursor: pointer;
 }

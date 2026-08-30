@@ -107,7 +107,7 @@ try {
 
     // Any unanswered "one X is [ ] Y" is filled with 1 so the form will save. The point of this
     // step is the WRITE, not what is written.
-    for (const box of await p.locator('[class*="units-page_sentence"] input').all()) {
+    for (const box of await p.locator('[class*="UnitsEditor_sentence"] input').all()) {
       if ((await box.inputValue()).trim() === '') {
         await box.fill('1');
         await p.waitForTimeout(300);

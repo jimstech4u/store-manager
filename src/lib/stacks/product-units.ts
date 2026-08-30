@@ -4,6 +4,7 @@ import { useCallback, useEffect } from 'react';
 import { useDemandState } from '@academix-admin/state-stack';
 import { getSupabase } from '@/lib/supabase/client';
 import { catalogChanged } from '@/lib/stacks/catalog-stack';
+import type { Discount } from '@/components/catalog/DiscountsEditor';
 import { useInvalidation } from '@/lib/stacks/invalidation';
 
 /**
@@ -242,4 +243,122 @@ export function unitGaps(units: ProductUnit[]): ProductUnit[] {
   }
 
   return units.filter((u) => u.isBought && !answered.has(u.storeUnitId));
+}
+
+
+/**
+ * The cheaper prices a product carries for buying more.
+ *
+ * Stored as price tiers, which the till has honoured since they were built — a line's price drops
+ * on its own when the quantity crosses a band. Nothing let a shop set one, so the only tiers that
+ * existed got there through SQL.
+ *
+ * KEYED BY THE STORE UNIT ON SCREEN, resolved to the sale-unit row on the way in and out. The form
+ * works in the shop's own units; the tier table points at `product_sale_units`, which is derived
+ * and whose ids a form has no business knowing.
+ */
+export async function fetchDiscounts(productId: string): Promise<Discount[]> {
+  const supabase = getSupabase();
+
+  const [{ data: tiers }, { data: saleUnits }] = await Promise.all([
+    supabase.rpc('product_price_tiers_for', { p_product_id: productId }),
+    supabase.rpc('product_sale_units_for', { p_product_id: productId }),
+  ]);
+
+  const nameById = new Map(
+    ((saleUnits ?? []) as { id: string; name: string }[]).map((u) => [u.id, u.name]),
+  );
+
+  const { data: storeUnits } = await supabase.rpc('product_units_for', {
+    p_product_id: productId,
+  });
+  const idByName = new Map(
+    ((storeUnits ?? []) as { store_unit_id: string; name: string }[]).map((u) => [
+      u.name,
+      u.store_unit_id,
+    ]),
+  );
+
+  return ((tiers ?? []) as PriceTierRow[])
+    .map((t) => {
+      const unitName = t.sale_unit_id ? nameById.get(t.sale_unit_id) : undefined;
+      const storeUnitId = unitName ? idByName.get(unitName) : undefined;
+      return {
+        id: t.id,
+        storeUnitId: storeUnitId ?? '',
+        minQty: String(Number(t.min_qty)),
+        maxQty: t.max_qty === null ? '' : String(Number(t.max_qty)),
+        price: String(Number(t.price)),
+      };
+    })
+    /*
+     * A band whose unit is no longer sold is dropped rather than shown against nothing.
+     *
+     * It is already unreachable — the till matches on the sale unit — so showing it would be
+     * showing a rule that cannot fire, next to ones that can.
+     */
+    .filter((d) => d.storeUnitId !== '');
+}
+
+/**
+ * Replace the whole set.
+ *
+ * As a set, because the bands are only right or wrong together: the database refuses overlapping
+ * ones, so removing "5–10" and adding "5 or more" has to happen in that order. Deleting first and
+ * inserting after is what makes an edit that swaps two bands possible at all.
+ */
+export async function saveDiscounts(productId: string, discounts: Discount[]) {
+  const supabase = getSupabase();
+
+  const { data: saleUnits } = await supabase.rpc('product_sale_units_for', {
+    p_product_id: productId,
+  });
+  const { data: storeUnits } = await supabase.rpc('product_units_for', {
+    p_product_id: productId,
+  });
+
+  const nameByStoreUnit = new Map(
+    ((storeUnits ?? []) as { store_unit_id: string; name: string }[]).map((u) => [
+      u.store_unit_id,
+      u.name,
+    ]),
+  );
+  const saleUnitByName = new Map(
+    ((saleUnits ?? []) as { id: string; name: string }[]).map((u) => [u.name, u.id]),
+  );
+
+  const { error: delErr } = await supabase
+    .from('product_price_tiers')
+    .delete()
+    .eq('product_id', productId);
+  if (delErr) throw delErr;
+
+  const rows = discounts
+    .map((d) => {
+      const saleUnitId = saleUnitByName.get(nameByStoreUnit.get(d.storeUnitId) ?? '');
+      if (!saleUnitId) return null;
+      return {
+        product_id: productId,
+        sale_unit_id: saleUnitId,
+        min_qty: Number(d.minQty),
+        max_qty: d.maxQty.trim() === '' ? null : Number(d.maxQty),
+        price: Number(d.price),
+      };
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null);
+
+  if (rows.length > 0) {
+    const { error } = await supabase.from('product_price_tiers').insert(rows);
+    if (error) throw error;
+  }
+
+  catalogChanged();
+}
+
+interface PriceTierRow {
+  id: string;
+  sale_unit_id: string | null;
+  min_qty: string;
+  max_qty: string | null;
+  price: string;
 }
