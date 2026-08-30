@@ -35,6 +35,7 @@ import {
   type DraftLine,
 } from '@/lib/stacks/draft-orders';
 import { formatMoney, formatQty } from '@/lib/format';
+import { partsFor, snapQty, startingQty } from '@/lib/quantity-rules';
 import { getSupabase } from '@/lib/supabase/client';
 
 /**
@@ -62,11 +63,6 @@ import { getSupabase } from '@/lib/supabase/client';
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-const FRACTIONS = [
-  { label: '¼', value: 0.25 },
-  { label: '½', value: 0.5 },
-  { label: '¾', value: 0.75 },
-] as const;
 
 export default function SellPage() {
   const goBack = useStackBack();
@@ -388,10 +384,26 @@ export default function SellPage() {
       (l) => l.productId === product.id && l.saleUnitId === (first?.id ?? null),
     );
     if (existing) {
-      const current = Number(existing.qty);
-      updateLine(activeOrder.clientUuid, existing.key, {
-        qty: String((Number.isFinite(current) ? current : 0) + 1),
-      });
+      /*
+       * ONE MORE ONLY MEANS SOMETHING FOR A THING SOLD WHOLE.
+       *
+       * Tapping a crate twice plainly means two crates. Tapping a chicken twice does not mean two
+       * kilogrammes — it means a second bird, whose weight the scale has yet to say — and adding
+       * one to a half-crate line that deliberately started at nothing would answer the very
+       * question the line is asking.
+       *
+       * So the quantity is left exactly as the seller set it whenever they are the one who has to
+       * state it, and only ever incremented where there is nothing to state.
+       */
+      const rules = unitRulesFor(existing);
+      const soldWholeOnly = rules.wholeDigit && partsFor(rules).length === 0;
+
+      if (soldWholeOnly) {
+        const current = Number(existing.qty);
+        updateLine(activeOrder.clientUuid, existing.key, {
+          qty: String((Number.isFinite(current) ? current : 0) + 1),
+        });
+      }
       pickerOps.close();
       return;
     }
@@ -412,6 +424,23 @@ export default function SellPage() {
         saleUnitBaseQty: first?.baseQty ?? null,
         // A starting point, not a rule: the seller sets the real price on the line.
         unitPrice: first?.price ?? product.listPrice ?? '',
+        /*
+         * One crate, or nothing at all.
+         *
+         * A thing sold only whole starts at one, because there is no question worth asking. A
+         * thing sold in halves starts at NOTHING, so the seller has to say which — half a crate
+         * recorded as a whole one is a real loss, and one is exactly the guess that gets left
+         * there when somebody is hurrying. A weighed thing starts at nothing for the plainer
+         * reason that nobody can guess what a chicken weighs.
+         */
+        qty: String(
+          startingQty({
+            wholeDigit: first?.wholeDigit ?? true,
+            allowQuarter: first?.allowQuarter ?? false,
+            allowHalf: first?.allowHalf ?? false,
+            allowThreeQuarter: first?.allowThreeQuarter ?? false,
+          }),
+        ),
       }),
     );
     pickerOps.close();
@@ -488,6 +517,17 @@ export default function SellPage() {
    * and the customer-price precedence are all enforced in the database. A second copy of that in
    * the client is a second answer waiting to disagree with the first.
    */
+  /** The part-amount rules for whichever unit a line is being sold in. */
+  const unitRulesFor = (line: DraftLine) => {
+    const unit = saleUnits[line.productId]?.find((u) => u.id === line.saleUnitId);
+    return {
+      wholeDigit: unit?.wholeDigit ?? true,
+      allowQuarter: unit?.allowQuarter ?? false,
+      allowHalf: unit?.allowHalf ?? false,
+      allowThreeQuarter: unit?.allowThreeQuarter ?? false,
+    };
+  };
+
   const repriceLine = async (line: DraftLine, qty: string, saleUnitId: string | null) => {
     // Never overwrite a figure the seller typed. Re-suggesting on the next quantity nudge would
     // silently undo a deliberate decision — a favour, a haggle — and nobody would see it happen.
@@ -759,14 +799,45 @@ export default function SellPage() {
                             numeric
                             value={line.qty}
                             onChange={(e) => {
+                              // Typed freely while the keyboard is up: snapping mid-word would
+                              // fight somebody halfway through "4.5" by rewriting "4." to "4".
                               updateLine(activeOrder.clientUuid, line.key, {
                                 qty: e.target.value,
                               });
                               void repriceLine(line, e.target.value, line.saleUnitId);
                             }}
+                            onBlur={() => {
+                              /*
+                               * SNAPPED WHEN THEY LOOK AWAY, not while they type.
+                               *
+                               * A shop selling half crates gets 4.3 typed at it now and then —
+                               * they meant 4.5, and 4.3 is a line the database refuses at the
+                               * worst possible moment, after the money has been counted. Rounded
+                               * to the NEAREST step, because somebody who overshoots slightly
+                               * meant the figure they were reaching for.
+                               */
+                              const rules = unitRulesFor(line);
+                              const typed = Number(line.qty);
+                              if (!Number.isFinite(typed)) return;
+
+                              const snapped = snapQty(typed, rules);
+                              if (snapped === typed) return;
+
+                              updateLine(activeOrder.clientUuid, line.key, {
+                                qty: String(snapped),
+                              });
+                              void repriceLine(line, String(snapped), line.saleUnitId);
+                            }}
                             suffix={line.saleUnitName ?? line.packName ?? line.baseUnit}
                             error={
-                              Number(line.qty) > 0 ? null : 'Add a quantity, or remove this item'
+                              Number(line.qty) > 0
+                                ? null
+                                : partsFor(unitRulesFor(line)).length > 0
+                                  ? // Starting at nothing is deliberate for a unit sold in parts:
+                                    // there is no safe default, and half a crate recorded as a
+                                    // whole one is a real loss.
+                                    'Say how many — tap a part below, or use +'
+                                  : 'Add a quantity, or remove this item'
                             }
                           />
                         </div>
@@ -789,8 +860,17 @@ export default function SellPage() {
                          * the database rejects it — so the guard belongs here too rather than
                          * letting the seller build a line that cannot be settled.
                          */
-                        const per = baseUnitsPerSaleUnit(line);
-                        const options = FRACTIONS.filter((f) => (per * f.value) % 1 === 0);
+                        /*
+                         * WHAT THIS SHOP SELLS, not what divides evenly.
+                         *
+                         * The old rule offered a fraction whenever it landed on whole base units,
+                         * so a shop selling half crates of Gulder was offered quarters and
+                         * three-quarters too — twelve divides by four — and each was a way to
+                         * record something it cannot deliver. The shop states its parts once on
+                         * the unit and the till obeys.
+                         */
+                        const rules = unitRulesFor(line);
+                        const options = partsFor(rules);
                         if (options.length === 0) return null;
 
                         const current = Number(line.qty);

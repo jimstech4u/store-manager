@@ -12,9 +12,12 @@ import { getSupabase } from '@/lib/supabase/client';
  * remain the arithmetic — two deliveries cannot be added together without a common unit — but they
  * stop being what anybody reads.
  *
- * A PRODUCT MAY HAVE SEVERAL. Cooking oil bought in litres and kilogrammes, sold in litres, is
- * ordinary here, so this holds a row per selling unit and a screen can show "300 litres" and "3 kg"
- * rather than picking one and being wrong about the other. `isDefault` is the one to lead with.
+ * A PRODUCT MAY HAVE SEVERAL, AND THEY ARE NOT SEPARATE STOCK. Cooking oil sold in litres and in
+ * kilogrammes has ONE pool behind it; each row is that pool divided by the size of its unit. Three
+ * hundred litres and twelve and a half kilogrammes are the same oil, said twice — so a screen shows
+ * one of them as the figure and the rest as ways of saying it, never as lines to be added up.
+ *
+ * `isDefault` is the one to lead with.
  */
 
 export interface SellingUnit {
@@ -109,8 +112,71 @@ export function useSellingUnits(storeId: string | null) {
   return { units, byProduct, reload: load };
 }
 
+/**
+ * The same stock said in another unit.
+ *
+ * Phrased for a screen, because the honest sentence is the whole point: "the same as 12.5 Kgs", not
+ * a second figure sitting under the first where it reads as more stock.
+ */
+export function alsoReadsAs(units: SellingUnit[] | undefined, lead: SellingUnit | null): string {
+  if (!units || !lead) return '';
+  const others = units.filter((u) => u.productUnitId !== lead.productUnitId);
+  if (others.length === 0) return '';
+
+  return `the same as ${others
+    .map((u) => {
+      // Trimmed rather than rounded: a shop holding 12.5 kg should read 12.5, and 12.4999 is noise
+      // from the division, not a fact about the drum.
+      const qty = Number(u.onHand.toFixed(2));
+      return `${qty} ${qty === 1 ? u.name : u.plural}`;
+    })
+    .join(', ')}`;
+}
+
 /** The unit to lead with for one product, and the rest behind it. */
 export function leadUnit(units: SellingUnit[] | undefined): SellingUnit | null {
   if (!units || units.length === 0) return null;
   return units.find((u) => u.isDefault) ?? units[0];
+}
+
+/**
+ * Products bought in a unit that reaches nothing they are sold in.
+ *
+ * Cooking oil received in kilogrammes, sold only in litres, with nobody having said what a
+ * kilogramme is: those kilogrammes can arrive and can never leave. The catalogue refuses to save
+ * one now, but a shop may already be carrying some from before the rule, and finding them by
+ * opening every product one at a time is not finding them at all.
+ */
+export function useUnitGaps(storeId: string | null) {
+  const [gaps, demandGaps] = useDemandState<UnitGap[]>([], {
+    key: `unit-gaps:${storeId ?? 'none'}`,
+    scope: 'catalog_flow',
+    persist: true,
+    deps: [storeId ?? ''],
+    revalidateOnMount: false,
+  });
+
+  const load = useCallback(() => {
+    if (!storeId) return;
+    void demandGaps(async ({ set }) => {
+      const { data } = await getSupabase().rpc('products_with_unit_gaps', { p_store_id: storeId });
+      set(
+        ((data ?? []) as { product_id: string; product_name: string; gap_units: string[] }[]).map(
+          (r) => ({ productId: r.product_id, productName: r.product_name, units: r.gap_units }),
+        ),
+        { override: true },
+      );
+    });
+  }, [storeId, demandGaps]);
+
+  useEffect(load, [load]);
+
+  return { gaps, reload: load };
+}
+
+export interface UnitGap {
+  productId: string;
+  productName: string;
+  /** The units nothing can be sold in, by name — what the warning has to say out loud. */
+  units: string[];
 }

@@ -283,6 +283,18 @@ export function catalogChanged() {
 }
 
 export interface SaleUnit {
+  /**
+   * The part-amounts THIS shop sells in.
+   *
+   * Not derived from arithmetic any more. A shop selling half crates and nothing else was offered
+   * quarters too, because twelve divides by four — and every extra button is a way for a tired
+   * seller to record something the shop cannot deliver.
+   */
+  wholeDigit: boolean;
+  allowQuarter: boolean;
+  allowHalf: boolean;
+  allowThreeQuarter: boolean;
+  isReturnable: boolean;
   id: string;
   name: string;
   baseQty: string;
@@ -294,6 +306,11 @@ interface SaleUnitRow {
   name: string;
   base_qty: string;
   price: string | null;
+  whole_digit: boolean;
+  allow_quarter: boolean;
+  allow_half: boolean;
+  allow_three_quarter: boolean;
+  is_returnable: boolean;
 }
 
 /** Fetch the configured sale units for a product. Empty means "sell in base units". */
@@ -306,6 +323,11 @@ export async function fetchSaleUnits(productId: string): Promise<SaleUnit[]> {
     id: r.id,
     name: r.name,
     baseQty: r.base_qty,
+    wholeDigit: r.whole_digit !== false,
+    allowQuarter: Boolean(r.allow_quarter),
+    allowHalf: Boolean(r.allow_half),
+    allowThreeQuarter: Boolean(r.allow_three_quarter),
+    isReturnable: Boolean(r.is_returnable),
     price: r.price,
   }));
 }

@@ -14,7 +14,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
 import { useStackBack } from '@/hooks/useStackBack';
 import { searchProducts, useProductList, type Product } from '@/lib/stacks/catalog-stack';
-import { leadUnit, useSellingUnits } from '@/lib/stacks/selling-units';
+import { alsoReadsAs, leadUnit, useSellingUnits, useUnitGaps } from '@/lib/stacks/selling-units';
 import { useListChannel } from '@/hooks/useListChannel';
 import { useInfiniteScroll } from '@/hooks/usePaginatedList';
 import { formatMoney, formatQty, pluralUnit } from '@/lib/format';
@@ -51,6 +51,17 @@ export default function StockPage() {
    * orders or prices pieces. Base units stay the arithmetic; they stop being what anybody reads.
    */
   const { byProduct } = useSellingUnits(store?.id ?? null);
+
+  /*
+   * Stock that can arrive and can never leave.
+   *
+   * Something received in kilogrammes and sold only in litres, where nobody ever said what a
+   * kilogramme is worth, quietly climbs forever: no sale can move it, and every count from then on
+   * has to be argued around it. The catalogue refuses to save one now — but a shop may be carrying
+   * some from before that rule, and those get found by being SHOWN, not by somebody opening eight
+   * hundred products one at a time looking for them.
+   */
+  const { gaps } = useUnitGaps(store?.id ?? null);
 
   /*
    * A delivery, a count or a damage changes ONE product's stock.
@@ -220,6 +231,23 @@ export default function StockPage() {
             </div>
           )}
 
+          {gaps.length > 0 && (
+            <InfoPanel tone="warning" title="Some stock can come in but never go out">
+              {gaps.slice(0, 3).map((g) => (
+                <p key={g.productId}>
+                  <strong>{g.productName}</strong> is bought in {g.units.join(', ')}, and nothing is
+                  sold in {g.units.length === 1 ? 'it' : 'them'}.
+                </p>
+              ))}
+              {gaps.length > 3 && <p>…and {gaps.length - 3} more.</p>}
+              <p>
+                Open the item and either sell in that unit too, or say what one of them is worth in
+                a unit you do sell in — one bag is 24 litres, and so on. Until then that stock sits
+                there and no sale can touch it.
+              </p>
+            </InfoPanel>
+          )}
+
           {anyEstimated && (
             <InfoPanel tone="warning" title="Some costs are still estimates">
               Items marked <strong>estimated</strong> use the figure entered at setup. The next
@@ -257,18 +285,16 @@ export default function StockPage() {
                     </p>
 
                     {/*
-                      The other units this is sold in, when there are any.
+                      The same stock, said in the other units it is sold in.
 
-                      Cooking oil bought in litres and kilogrammes is ordinary here, and showing one
-                      figure would be wrong about the other.
+                      Written as "the same as 12.5 Kgs" and never as a bare second figure, because a
+                      bare figure under the first one reads as MORE STOCK. There is one pool behind
+                      both — cooking oil sold in litres and in kilogrammes is one drum — and a
+                      screen that lets somebody add the two lines together has told them they have
+                      twice what they have.
                     */}
                     {sellingUnits.length > 1 && (
-                      <p className={styles.itemMeta}>
-                        {sellingUnits
-                          .filter((u) => u.productUnitId !== lead?.productUnitId)
-                          .map((u) => `${formatQty(u.onHand)} ${u.onHand === 1 ? u.name : u.plural}`)
-                          .join(' · ')}
-                      </p>
+                      <p className={styles.itemMeta}>{alsoReadsAs(sellingUnits, lead)}</p>
                     )}
                   </div>
                   <div className={styles.itemQty}>
