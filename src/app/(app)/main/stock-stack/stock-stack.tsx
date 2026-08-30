@@ -6,6 +6,8 @@ import ReceivePage from './receive-page/receive-page';
 import ProductPage from './product-page/product-page';
 import StockHistoryPage from './stock-history-page/stock-history-page';
 import ProductFormPage from './product-form-page/product-form-page';
+import UnitsPage from './units-page/units-page';
+import UnitFormPage from './unit-form-page/unit-form-page';
 
 const navLink = {
   stock_page: StockPage,
@@ -13,6 +15,8 @@ const navLink = {
   product_page: ProductPage,
   stock_history_page: StockHistoryPage,
   product_form_page: ProductFormPage,
+  units_page: UnitsPage,
+  unit_form_page: UnitFormPage,
 };
 
 export const StockStack = () => (

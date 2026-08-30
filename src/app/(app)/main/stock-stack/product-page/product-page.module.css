@@ -64,3 +64,40 @@
   font-size: var(--text-sm);
   color: var(--text-muted);
 }
+
+/* The way in to how this item is bought and sold — a row, because it opens a screen. */
+.unitsRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--touch-comfortable, 52px);
+  margin: var(--space-4) 0;
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.unitsRow:hover {
+  background: var(--surface-sunken);
+}
+
+.unitsMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.unitsTitle {
+  font-weight: 700;
+}
+
+.unitsNote {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}

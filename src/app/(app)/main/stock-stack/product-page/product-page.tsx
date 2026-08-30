@@ -9,12 +9,14 @@ import { InfoPanel } from '@/components/ui/Explain';
 import { Button } from '@/components/ui/Button';
 import { PhotoUpload } from '@/components/ui/PhotoUpload';
 import { BottomSheet } from '@/components/ui/BottomSheet';
-import { EditIcon, TrashIcon } from '@/components/ui/Icon';
+import { ChevronRightIcon, EditIcon, TrashIcon } from '@/components/ui/Icon';
 import { getSupabase } from '@/lib/supabase/client';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useProduct } from '@/lib/stacks/catalog-stack';
+import { useSellingUnits } from '@/lib/stacks/selling-units';
+import { unitGaps, useProductUnits } from '@/lib/stacks/product-units';
 import { formatMoney, formatQty, pluralUnit } from '@/lib/format';
 import styles from './product-page.module.css';
 
@@ -42,6 +44,18 @@ export default function ProductPage() {
    */
   const { product, error, settled, reload: load } = useProduct(productId);
   const loading = !settled;
+
+  /*
+   * What this is sold in, and whether anything it arrives in has been left unanswered for.
+   *
+   * Read here rather than only on the editor, because the warning has to be visible to somebody
+   * who came to look at the item — a gap found by opening a form nobody had a reason to open is a
+   * gap that stays there.
+   */
+  const { byProduct } = useSellingUnits(store?.id ?? null);
+  const { units: productUnits } = useProductUnits(productId);
+  const sellingUnits = byProduct.get(productId ?? '') ?? [];
+  const gapUnits = unitGaps(productUnits).map((u) => u.name.toLowerCase());
 
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
@@ -200,6 +214,45 @@ export default function ProductPage() {
           </div>
         )}
       </dl>
+
+      {/*
+        How this is bought and sold.
+
+        Its own screen rather than more fields on the edit form: a shop that takes oil in bags and
+        sells it by the litre is answering a different question from what the thing is called, and
+        the two crammed together is what produced a form asking about "the pack" as though every
+        trade had exactly one shape.
+      */}
+      {can('products.manage') && (
+        <button
+          type="button"
+          className={styles.unitsRow}
+          onClick={() => void nav.push('units_page', { id: product.id })}
+        >
+          <span className={styles.unitsMain}>
+            <span className={styles.unitsTitle}>How you buy and sell it</span>
+            <span className={styles.unitsNote}>
+              {sellingUnits.length > 0
+                ? `Sold in ${sellingUnits.map((u) => u.plural.toLowerCase()).join(', ')}`
+                : 'Not set up yet — say what a customer can buy'}
+            </span>
+          </span>
+          <ChevronRightIcon />
+        </button>
+      )}
+
+      {/*
+        Stock that can arrive and never leave: received in a unit nothing is sold in, with nobody
+        having said what one of them is worth. Shown here, on the item itself, because this is the
+        one screen where it can be fixed.
+      */}
+      {gapUnits.length > 0 && (
+        <InfoPanel tone="danger" title="Some of this can come in but never go out">
+          You take delivery in {gapUnits.join(', ')}, and nothing is sold in{' '}
+          {gapUnits.length === 1 ? 'it' : 'them'}. Open <strong>How you buy and sell it</strong> and
+          say what one is worth in something you do sell.
+        </InfoPanel>
+      )}
 
       <StockHistoryCard
         productId={product.id}

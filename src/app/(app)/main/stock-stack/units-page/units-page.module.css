@@ -1,0 +1,185 @@
+.heading {
+  margin: var(--space-5) 0 var(--space-1);
+  font-size: var(--text-lg);
+  font-weight: 800;
+  color: var(--text);
+}
+
+.headingNote {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-3);
+  padding: 0;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 14px);
+  background: var(--surface);
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.cardName {
+  font-size: var(--text-lg);
+  font-weight: 800;
+  color: var(--text);
+}
+
+.remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--touch-min, 44px);
+  height: var(--touch-min, 44px);
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--danger);
+  cursor: pointer;
+}
+
+.remove:hover {
+  background: var(--danger-subtle);
+}
+
+.checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+}
+
+/* The whole row is the target, so it can be hit without aiming. */
+.check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--touch-min, 44px);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.check input {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--primary);
+}
+
+/*
+  "One bag is [24] [litres]" — laid out as the sentence it is, so it reads as something a person
+  says rather than as three unrelated inputs.
+*/
+.sentence {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+}
+
+/*
+  Its own line, always.
+
+  Sharing a row with the number box, the opening words were the first thing to be squeezed out on a
+  narrow phone — leaving a grey box that began "How many litres" with nothing saying what it was
+  asking about.
+*/
+.sentencePart {
+  flex: 1 0 100%;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.sentence > :global(.field),
+.sentence > div {
+  flex: 1 1 8ch;
+  min-width: 8ch;
+}
+
+.select {
+  min-height: var(--touch-comfortable, 52px);
+  margin-bottom: var(--space-1);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.smallest {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.howSold {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.howSoldLabel {
+  flex: 1 0 100%;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text);
+}
+
+.choice {
+  min-height: var(--touch-min, 44px);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.choiceOn {
+  border-color: var(--primary);
+  background: var(--primary-subtle, var(--surface-sunken));
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: var(--touch-comfortable, 52px);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--primary);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.add:hover {
+  background: var(--surface-sunken);
+}
