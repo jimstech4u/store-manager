@@ -15,6 +15,7 @@ import { useStackBack } from '@/hooks/useStackBack';
 import { searchProducts, useProductList, type Product } from '@/lib/stacks/catalog-stack';
 import { useListChannel } from '@/hooks/useListChannel';
 import { formatQty, pluralUnit } from '@/lib/format';
+import { leadUnit, useSellingUnits } from '@/lib/stacks/selling-units';
 
 /**
  * The stock count — CRODS.
@@ -37,6 +38,23 @@ export default function CountPage() {
   const [searchId, searchOps, isSearchOpen] = useSearchController();
 
   const browse = useProductList(store?.id ?? null);
+
+  /*
+   * What the records say, in the unit the shelf is counted in.
+   *
+   * "records say 1,596 pieces" next to a shelf holding 133 packs is a comparison nobody can make
+   * standing in front of it, and the whole point of a count is that somebody can.
+   */
+  const { byProduct } = useSellingUnits(store?.id ?? null);
+
+  const saidAs = (p: { id: string; onHand: string | number; baseUnit: string }) => {
+    const unit = leadUnit(byProduct.get(p.id));
+    const base = Number(p.onHand);
+    if (!unit) return `${formatQty(base)} ${pluralUnit(p.baseUnit, base)}`;
+
+    const n = base / unit.baseQty;
+    return `${formatQty(n)} ${n === 1 ? unit.name : unit.plural}`;
+  };
 
   /*
    * A product changed somewhere else lands here as one row.
@@ -112,7 +130,7 @@ export default function CountPage() {
             <span className={styles.rowMain}>
               <span className={styles.rowName}>{p.name}</span>
               <span className={styles.rowMeta}>
-                records say {formatQty(p.onHand)} {pluralUnit(p.baseUnit, Number(p.onHand))}
+                records say {saidAs(p)}
               </span>
             </span>
             <ClipboardCheckIcon />
@@ -136,7 +154,7 @@ export default function CountPage() {
                 <span className={styles.rowMain}>
                   <span className={styles.rowName}>{p.name}</span>
                   <span className={styles.rowMeta}>
-                    records say {formatQty(p.onHand)} {pluralUnit(p.baseUnit, Number(p.onHand))}
+                    records say {saidAs(p)}
                   </span>
                 </span>
                 <ClipboardCheckIcon />

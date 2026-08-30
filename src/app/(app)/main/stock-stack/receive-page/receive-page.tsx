@@ -11,6 +11,7 @@ import { Field } from '@/components/ui/Field';
 import { ProductPicker } from '@/components/catalog/ProductPicker';
 import { Explain, InfoPanel, WorkedExample } from '@/components/ui/Explain';
 import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
+import { useBuyingUnits } from '@/lib/stacks/selling-units';
 import { useAuth } from '@/providers/AuthProvider';
 import { type Product } from '@/lib/stacks/catalog-stack';
 import { getSupabase } from '@/lib/supabase/client';
@@ -35,6 +36,17 @@ interface ReceiveLine {
    * total must stay the invoice total.
    */
   freeQty: string;
+  /**
+   * The shop's own unit this arrived in, and what one of them is worth.
+   *
+   * `packId` is the old one-pack-per-product model. A shop that now says it buys oil in bags AND
+   * kilogrammes has two bought-in units and a pack row for neither, so a delivery in bags could
+   * only be entered as loose litres. Null falls back to the pack, which is what every delivery
+   * recorded before this did.
+   */
+  buyUnitId: string | null;
+  buyUnitName: string | null;
+  buyUnitFactor: number | null;
 }
 
 const newKey = () => Math.random().toString(36).slice(2);
@@ -71,6 +83,14 @@ export default function ReceivePage() {
   const [chargeLabel, setChargeLabel] = useState('');
   const [chargeAmount, setChargeAmount] = useState('');
   const [rebate, setRebate] = useState('');
+  /*
+   * What each product can arrive in.
+   *
+   * Loaded for the whole catalogue rather than per line: a delivery has a dozen items on it and a
+   * request per row is fine with eight products and painful with eight hundred.
+   */
+  const { byProduct: buyUnits } = useBuyingUnits(store?.id ?? null);
+
   const [picking, setPicking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,6 +100,9 @@ export default function ReceivePage() {
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...next } : l)));
 
   const addProduct = (p: Product) => {
+    const options = buyUnits.get(p.id) ?? [];
+    const lead = options.find((u) => u.isDefault) ?? options[0] ?? null;
+
     setLines((prev) => [
       ...prev,
       {
@@ -93,12 +116,17 @@ export default function ReceivePage() {
         qty: '',
         unitCost: '',
         freeQty: '',
+        // The largest, which is how a delivery usually arrives — by the bag rather than the litre.
+        buyUnitId: lead?.productUnitId ?? null,
+        buyUnitName: lead?.name ?? null,
+        buyUnitFactor: lead?.baseQty ?? null,
       },
     ]);
     setPicking(false);
   };
 
-  const factorOf = (l: ReceiveLine) => (l.packId && l.packQty ? Number(l.packQty) : 1);
+  const factorOf = (l: ReceiveLine) =>
+    l.buyUnitFactor ?? (l.packId && l.packQty ? Number(l.packQty) : 1);
 
   /**
    * Everything that arrived, paid for or not.
@@ -155,6 +183,8 @@ export default function ReceivePage() {
           product_id: l.productId,
           qty: Number(l.qty),
           free_qty: Number(l.freeQty) || 0,
+          // What the shop said one of these holds. The server prefers it over the pack lookup.
+          base_factor: l.buyUnitFactor,
           pack_id: l.packId,
           unit_cost: Number(l.unitCost) || 0,
         }));
@@ -254,11 +284,11 @@ export default function ReceivePage() {
                   numeric
                   value={l.qty}
                   onChange={(e) => patch(l.key, { qty: e.target.value })}
-                  suffix={l.packName ?? l.baseUnit}
+                  suffix={l.buyUnitName ?? l.packName ?? l.baseUnit}
                   placeholder="0"
                 />
                 <Field
-                  label={`Price per ${l.packName?.toLowerCase() ?? l.baseUnit}`}
+                  label={`Price per ${(l.buyUnitName ?? l.packName ?? l.baseUnit).toLowerCase()}`}
                   numeric
                   prefix="₦"
                   value={l.unitCost}
@@ -281,10 +311,42 @@ export default function ReceivePage() {
                 numeric
                 value={l.freeQty}
                 onChange={(e) => patch(l.key, { freeQty: e.target.value })}
-                suffix={l.packName ?? l.baseUnit}
+                suffix={l.buyUnitName ?? l.packName ?? l.baseUnit}
                 placeholder="0"
                 hint="Thrown in by the supplier. It lands on the shelf and lowers your cost."
               />
+
+              {/*
+                Which shape it arrived in, when the shop takes this in more than one.
+
+                Only shown when there is a genuine choice: a product bought only in crates has one
+                answer, and a select with one option is a question with no purpose.
+              */}
+              {(buyUnits.get(l.productId)?.length ?? 0) > 1 && (
+                <label className={styles.unitChoice}>
+                  <span className={styles.unitChoiceLabel}>It arrived in</span>
+                  <select
+                    className={styles.unitSelect}
+                    value={l.buyUnitId ?? ''}
+                    onChange={(e) => {
+                      const chosen = buyUnits
+                        .get(l.productId)
+                        ?.find((u) => u.productUnitId === e.target.value);
+                      patch(l.key, {
+                        buyUnitId: chosen?.productUnitId ?? null,
+                        buyUnitName: chosen?.name ?? null,
+                        buyUnitFactor: chosen?.baseQty ?? null,
+                      });
+                    }}
+                  >
+                    {(buyUnits.get(l.productId) ?? []).map((u) => (
+                      <option key={u.productUnitId} value={u.productUnitId}>
+                        {u.plural}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
 
               {Number(l.qty) > 0 && (
                 <div className={styles.lineFoot}>

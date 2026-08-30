@@ -228,3 +228,29 @@
 .chargeRemove:hover {
   background: var(--danger-subtle);
 }
+
+/* Which shape a line arrived in, when the shop takes it in more than one. Shown only where there
+   is a real choice — a select with one option is a question with no purpose. */
+.unitChoice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.unitChoiceLabel {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text);
+}
+
+.unitSelect {
+  min-height: var(--touch-comfortable, 52px);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}

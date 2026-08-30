@@ -12,6 +12,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
 import { useProduct } from '@/lib/stacks/catalog-stack';
 import { describeVariance, formatMoney, formatQty, pluralUnit } from '@/lib/format';
+import { leadUnit, useSellingUnits } from '@/lib/stacks/selling-units';
 import styles from '../count-page/count-page.module.css';
 
 /**
@@ -69,6 +70,28 @@ export default function CountEntryPage() {
    */
   const { product: active, error: loadError, reload: load } = useProduct(productId);
 
+  /*
+   * COUNTED IN WHAT THE SHOP SELLS IN, not in base units.
+   *
+   * Nobody on a shop floor counts 1,596 pieces. They count 133 packs, and a screen that asks for
+   * pieces is asking somebody to do twelve times table on a ladder — which is not a count, it is
+   * an invitation to write down whatever the records already said.
+   *
+   * The arithmetic stays in base units, because that is the only figure a delivery and a sale can
+   * both be added into. The conversion happens at the two edges: what is typed is multiplied on
+   * the way in, and every figure shown is divided on the way out.
+   */
+  const { byProduct } = useSellingUnits(store?.id ?? null);
+  const unit = leadUnit(byProduct.get(productId ?? ''));
+  const per = unit?.baseQty ?? 1;
+
+  /** A base-unit figure, said in the unit the shop counts in. */
+  const inUnits = (base: number) => base / per;
+
+  /** What one, or several, of them are called. */
+  const unitName = (n: number) =>
+    unit ? (n === 1 ? unit.name : unit.plural) : pluralUnit(active?.baseUnit ?? 'piece', n);
+
   const [counted, setCounted] = useState('');
   const [state, setState] = useState<CountState | null>(null);
   const [busy, setBusy] = useState(false);
@@ -105,7 +128,8 @@ export default function CountEntryPage() {
 
       const { error: cErr } = await supabase.rpc('enter_stock_count', {
         p_period_id: periodId,
-        p_counted: Number(counted),
+        // Back into base units, which is the only language the ledger speaks.
+        p_counted: Number(counted) * per,
       });
       if (cErr) throw cErr;
 
@@ -197,7 +221,7 @@ export default function CountEntryPage() {
             numeric
             required
             autoFocus
-            suffix={active ? pluralUnit(active.baseUnit, Number(counted) || 0) : undefined}
+            suffix={unitName(Number(counted) || 0)}
             value={counted}
             onChange={(e) => setCounted(e.target.value)}
             hint="Count it yourself. We will show you what the records expect afterwards."
@@ -228,7 +252,7 @@ export default function CountEntryPage() {
                 </span>
                 <span className={styles.crodsValue}>
                   {sign}
-                  {formatQty(value as number)}
+                  {formatQty(inUnits(value as number))}
                 </span>
               </div>
             ))}
@@ -238,7 +262,9 @@ export default function CountEntryPage() {
                 <strong>Should be on the shelf</strong>
               </span>
               <span className={styles.crodsValue}>
-                <strong>{formatQty(state.expected)}</strong>
+                <strong>
+                  {formatQty(inUnits(state.expected))} {unitName(inUnits(state.expected))}
+                </strong>
               </span>
             </div>
 
@@ -247,7 +273,9 @@ export default function CountEntryPage() {
                 <strong>You counted</strong>
               </span>
               <span className={styles.crodsValue}>
-                <strong>{formatQty(state.actual ?? 0)}</strong>
+                <strong>
+                  {formatQty(inUnits(state.actual ?? 0))} {unitName(inUnits(state.actual ?? 0))}
+                </strong>
               </span>
             </div>
           </div>
@@ -264,7 +292,7 @@ export default function CountEntryPage() {
                   {variance < 0 ? 'Stock is missing' : 'More than expected'}
                 </p>
                 <p className={styles.gapNumber}>
-                  {describeVariance(variance, active?.baseUnit ?? 'piece')}
+                  {describeVariance(inUnits(variance), unit?.name ?? active?.baseUnit ?? 'piece')}
                 </p>
                 {lossValue > 0 && (
                   <p className={styles.gapMeaning}>

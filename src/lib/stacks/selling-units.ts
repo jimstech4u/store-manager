@@ -180,3 +180,68 @@ export interface UnitGap {
   /** The units nothing can be sold in, by name — what the warning has to say out loud. */
   units: string[];
 }
+
+/**
+ * The units a shop takes DELIVERY in.
+ *
+ * The mirror of `useSellingUnits`, and a separate list on purpose: a shop buys cooking oil in bags
+ * and sells it by the litre, so "what can arrive" and "what a customer can buy" are two questions
+ * with two answers. `baseQty` is what the delivery screen sends back as `base_factor`, so what the
+ * shop said a bag holds is exactly what the costing divides by.
+ */
+export function useBuyingUnits(storeId: string | null) {
+  const [units, demandUnits] = useDemandState<BuyingUnit[]>([], {
+    key: `buying-units:${storeId ?? 'none'}`,
+    scope: 'catalog_flow',
+    persist: true,
+    deps: [storeId ?? ''],
+    revalidateOnMount: false,
+  });
+
+  const load = useCallback(() => {
+    if (!storeId) return;
+    void demandUnits(async ({ set }) => {
+      const { data } = await getSupabase().rpc('product_buying_units', { p_store_id: storeId });
+      set(
+        ((data ?? []) as BuyingUnitRow[]).map((r) => ({
+          productId: r.product_id,
+          productUnitId: r.product_unit_id,
+          name: r.unit_name,
+          plural: r.unit_plural,
+          baseQty: Number(r.base_qty),
+          isDefault: r.is_default,
+        })),
+        { override: true },
+      );
+    });
+  }, [storeId, demandUnits]);
+
+  useEffect(load, [load]);
+
+  const byProduct = new Map<string, BuyingUnit[]>();
+  for (const u of units) {
+    const list = byProduct.get(u.productId);
+    if (list) list.push(u);
+    else byProduct.set(u.productId, [u]);
+  }
+
+  return { units, byProduct, reload: load };
+}
+
+export interface BuyingUnit {
+  productId: string;
+  productUnitId: string;
+  name: string;
+  plural: string;
+  baseQty: number;
+  isDefault: boolean;
+}
+
+interface BuyingUnitRow {
+  product_id: string;
+  product_unit_id: string;
+  unit_name: string;
+  unit_plural: string;
+  base_qty: string;
+  is_default: boolean;
+}
