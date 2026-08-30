@@ -14,6 +14,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
 import { useStackBack } from '@/hooks/useStackBack';
 import { searchProducts, useProductList, type Product } from '@/lib/stacks/catalog-stack';
+import { leadUnit, useSellingUnits } from '@/lib/stacks/selling-units';
 import { useListChannel } from '@/hooks/useListChannel';
 import { useInfiniteScroll } from '@/hooks/usePaginatedList';
 import { formatMoney, formatQty, pluralUnit } from '@/lib/format';
@@ -42,6 +43,14 @@ export default function StockPage() {
   const [searchId, searchOps, isSearchOpen] = useSearchController();
 
   const browse = useProductList(store?.id ?? null);
+
+  /*
+   * Everything on this screen is said in the unit the shop SELLS in.
+   *
+   * "1,596 pieces" is true of something bought and sold in packs, and useless — nobody counts,
+   * orders or prices pieces. Base units stay the arithmetic; they stop being what anybody reads.
+   */
+  const { byProduct } = useSellingUnits(store?.id ?? null);
 
   /*
    * A delivery, a count or a damage changes ONE product's stock.
@@ -163,13 +172,31 @@ export default function StockPage() {
             <div className={styles.itemMain}>
               <p className={styles.itemName}>{p.name}</p>
               <p className={styles.itemMeta}>
-                {formatMoney(p.avgUnitCost, 2)} per {p.baseUnit} cost
+                {(() => {
+                  const lead = leadUnit(byProduct.get(p.id));
+                  return lead
+                    ? `${formatMoney(lead.cost, 2)} per ${lead.name.toLowerCase()} cost`
+                    : `${formatMoney(p.avgUnitCost, 2)} per ${p.baseUnit} cost`;
+                })()}
                 {p.categoryName && <span>· {p.categoryName}</span>}
               </p>
             </div>
             <div className={styles.itemQty}>
-              <span className={styles.qtyValue}>{formatQty(p.onHand)}</span>
-              <span className={styles.qtyUnit}>{pluralUnit(p.baseUnit, Number(p.onHand))}</span>
+              {(() => {
+                const lead = leadUnit(byProduct.get(p.id));
+                const qty = lead ? lead.onHand : Number(p.onHand);
+                const unit = lead
+                  ? qty === 1
+                    ? lead.name
+                    : lead.plural
+                  : pluralUnit(p.baseUnit, Number(p.onHand));
+                return (
+                  <>
+                    <span className={styles.qtyValue}>{formatQty(qty)}</span>
+                    <span className={styles.qtyUnit}>{unit}</span>
+                  </>
+                );
+              })()}
             </div>
           </button>
         )}
@@ -202,7 +229,10 @@ export default function StockPage() {
 
           <ul className={styles.list}>
             {products.map((p) => {
-              const out = Number(p.onHand) <= 0;
+              const sellingUnits = byProduct.get(p.id) ?? [];
+              const lead = leadUnit(sellingUnits);
+              const onHand = lead ? lead.onHand : Number(p.onHand);
+              const out = onHand <= 0;
               return (
                 <li key={p.id}>
                   {/* A button, not a div with onClick: this has to be reachable by keyboard and
@@ -216,17 +246,41 @@ export default function StockPage() {
                   <div className={styles.itemMain}>
                     <p className={styles.itemName}>{p.name}</p>
                     <p className={styles.itemMeta}>
-                      {formatMoney(p.avgUnitCost, 2)} per {p.baseUnit} cost
+                      {lead
+                        ? `${formatMoney(lead.cost, 2)} per ${lead.name.toLowerCase()} cost`
+                        : `${formatMoney(p.avgUnitCost, 2)} per ${p.baseUnit} cost`}
+                      {lead?.price != null && (
+                        <span>· sells for {formatMoney(lead.price)}</span>
+                      )}
                       {p.categoryName && <span>· {p.categoryName}</span>}
                       {p.costIsEstimated && <span className={styles.estimate}>estimated</span>}
                     </p>
+
+                    {/*
+                      The other units this is sold in, when there are any.
+
+                      Cooking oil bought in litres and kilogrammes is ordinary here, and showing one
+                      figure would be wrong about the other.
+                    */}
+                    {sellingUnits.length > 1 && (
+                      <p className={styles.itemMeta}>
+                        {sellingUnits
+                          .filter((u) => u.productUnitId !== lead?.productUnitId)
+                          .map((u) => `${formatQty(u.onHand)} ${u.onHand === 1 ? u.name : u.plural}`)
+                          .join(' · ')}
+                      </p>
+                    )}
                   </div>
                   <div className={styles.itemQty}>
                     <span className={`${styles.qtyValue} ${out ? styles.qtyLow : ''}`}>
-                      {formatQty(p.onHand)}
+                      {formatQty(onHand)}
                     </span>
                     <span className={styles.qtyUnit}>
-                      {pluralUnit(p.baseUnit, Number(p.onHand))}
+                      {lead
+                        ? onHand === 1
+                          ? lead.name
+                          : lead.plural
+                        : pluralUnit(p.baseUnit, Number(p.onHand))}
                     </span>
                   </div>
                   <ChevronRightIcon className={styles.itemChevron} />
