@@ -27,6 +27,52 @@ wrong even by a session that reads nothing else.
 - **The Library Charter:** `@academix-admin/*` packages are public-first, app-agnostic and
   non-breaking. A package never learns about store-manager.
 
+## Things that were got wrong, with the reason
+
+Each of these was a real defect found by clicking, not by reading. The reason is the part worth
+keeping — the rule alone is forgettable, the bug behind it is not.
+
+- **A page never clears a scope it does not own.** `useLiveRefresh` took a `scope` and cleared it
+  in `onExit`. The account page cleared `customer_flow` — where the People list and the customer
+  picker both live — so opening somebody's account and pressing Back deleted the list of everybody.
+  Signing out and switching shop are the only things that legitimately delete cached data.
+- **"Something changed" means re-read, not delete.** `catalogChanged()` and friends called
+  `clearScope`, which throws the cached values away. For a hook that refetches on mount that is
+  merely redundant; for a paginated list it destroys the reader's place. They publish to
+  `invalidate()` now and holders call their own `refresh()` — which keeps the rows on screen while
+  they are corrected, per the older rule that a loader must never blank before it fetches.
+- **A callback published once is found by everyone.** The customer form handed its result back
+  through a session-wide `onCustomerCreated` that the sell screen publishes and never withdraws, so
+  a form opened from the People tab attached the new customer to whatever sale happened to be open.
+  When a pushed page hands something back, the CALLER states the intent in the push
+  (`then: 'attach-to-sale'`), and a caller that says nothing gets nothing.
+- **Popping a pushed page destroys what was typed on it.** Choosing a customer from Take payment
+  popped back to the till because the picker lived there, discarding the charge and note already
+  entered. If a screen needs a choice, the sheet opens ON that screen.
+- **The measuring unit must be one the shop sells.** The units screen exempts one unit from having
+  to be measured; picking it by size alone landed on a bought-only unit, which is exactly the kind
+  that must be answered for — the screen then demanded an answer it gave no way to give.
+- **Copy a working SQL function verbatim and change one line.** 0058 rewrote `save_draft_order`
+  "more tidily", changed the parameter order, created a second overload, and PostgREST answered 300
+  to every call — the till stopped saving. 0059 restored it from memory and lost the idempotency
+  lookup. Diff the new definition against the old before applying, and check the live overload
+  count is still 1.
+- **A guard must not fail open.** `assert_product_units_settled` asked a membership-filtered reader
+  for gaps; RLS removed every row before it could see one, so a product with stranded stock saved
+  cleanly reporting nothing wrong. Checks answer honestly for any caller and are reachable only
+  from SECURITY DEFINER; readers keep the membership test, because empty is the right answer to a
+  READ and a lie as an answer to "may this save?".
+- **A probe that cannot fail is worse than no probe.** One asserted a form value against
+  `innerText`, which never contains an input's value, and reported data loss that had already been
+  fixed. Another used `getByRole('button', { name: 'Sell' })`, which matches SUBSTRINGS, and hit
+  "Close this tab without selling" — opening a dialog that then looked exactly like the bug being
+  hunted. Mutation-test every probe by restoring the fault, and make the mutation faithful: a
+  half-restored one passes and proves nothing.
+- **Probes clean up after themselves.** `stock_movements` is append-only and refuses deletes, so a
+  probe that received stock cannot remove its product — five "Cost probe" items sat in the shop's
+  real picker, and ninety-three empty draft tabs accumulated in the customer bar. Retire what
+  cannot be deleted, and cancel the tabs a run opened.
+
 ## The library comes first
 
 `@academix-admin/*` is not a folder of helpers to reach past. Before building anything that looks

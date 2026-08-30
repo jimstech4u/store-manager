@@ -4,6 +4,7 @@ import { useCallback, useEffect } from 'react';
 import { useDemandState } from '@academix-admin/state-stack';
 import { getSupabase } from '@/lib/supabase/client';
 import { catalogChanged } from '@/lib/stacks/catalog-stack';
+import { useInvalidation } from '@/lib/stacks/invalidation';
 
 /**
  * What a product is bought in and sold in.
@@ -94,6 +95,7 @@ export function useStoreUnits(storeId: string | null) {
   }, [storeId, demandUnits]);
 
   useEffect(load, [load]);
+  useInvalidation('catalog_flow', load);
 
   return { units, reload: load };
 }

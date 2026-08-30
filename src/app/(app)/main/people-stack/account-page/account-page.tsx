@@ -14,7 +14,6 @@ import {
   useCustomerAccount,
   useEmptiesPools,
   type EmptiesPool,
-  ACCOUNT_SCOPE,
 } from '@/lib/stacks/customer-account';
 import { formatMoney, formatQty } from '@/lib/format';
 import styles from './account-page.module.css';
@@ -50,7 +49,14 @@ export default function AccountPage() {
   const nav = useNav();
   // Same staleness problem as the statement page, same answer — see the hook for why a single
   // lifecycle signal was not enough.
-  useLiveRefresh(nav, reload, { scope: ACCOUNT_SCOPE });
+  /*
+   * Re-read on the way back in. NOTHING is dropped on the way out.
+   *
+   * This used to clear ACCOUNT_SCOPE on exit — and the People list and the customer picker both
+   * live in that scope, so opening somebody's account and pressing Back deleted the list of
+   * everybody.
+   */
+  useLiveRefresh(nav, reload);
 
 
   if (!store) return null;

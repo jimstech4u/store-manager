@@ -22,10 +22,16 @@
   border-bottom: 1px solid var(--border);
 }
 
+/*
+ * Pulled out to the full width, and NOT padded back in.
+ *
+ * The negative margin is right: it cancels the body's side padding so the header's bottom border
+ * reaches both edges of the screen. The padding that used to sit beside it was a duplicate — the
+ * header package already insets its own content by the same 16px — so the title and description
+ * were indented TWICE. Measured at 32px against the 16px every card below them sits at.
+ */
 .headerScrolls {
   margin: 0 calc(var(--space-4) * -1);
-  padding-left: var(--space-4);
-  padding-right: var(--space-4);
 }
 
 /* The one scrolling region. Owned here rather than by each page, so scroll restoration and the

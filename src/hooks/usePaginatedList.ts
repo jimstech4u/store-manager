@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useInfiniteScrollObserver } from '@academix-admin/navigation-stack';
 import { useDemandState } from '@academix-admin/state-stack';
+import { useInvalidation } from '@/lib/stacks/invalidation';
 
 /**
  * Infinite list with cursor pagination.
@@ -369,6 +370,17 @@ export function usePaginatedList<T>({
     (next: T[]) => setSnapshot((prev) => ({ ...prev, items: next })),
     [setSnapshot],
   );
+
+  /*
+   * Somebody wrote to this scope, so re-read what is on screen.
+   *
+   * `refresh`, never `reload`: reload resets to page one, which on a list somebody has paged
+   * through means tapping the hundredth row, coming back, and finding twenty. Refresh re-asks for
+   * the span already loaded, with no loading flag, so the rows stay drawn while they are corrected.
+   *
+   * This replaces `clearScope`, which deleted the rows outright and blanked the screen.
+   */
+  useInvalidation(scope, refresh);
 
   return { items, setItems, loading, loadingMore, error, hasMore, loadMore, reload, refresh };
 }

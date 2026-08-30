@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import { useDemandState } from '@academix-admin/state-stack';
-import { StateStack } from '@academix-admin/state-stack';
 import { CATALOG_SCOPE } from '@/lib/stacks/customer-account';
 import { getSupabase } from '@/lib/supabase/client';
 import { usePaginatedList } from '@/hooks/usePaginatedList';
+import { invalidate } from '@/lib/stacks/invalidation';
 
 /**
  * Products — searchable and paginated.
@@ -279,7 +279,14 @@ export function useProduct(productId: string | null) {
  * needing to know which screens exist — the same shape as `accountsChanged()` for money.
  */
 export function catalogChanged() {
-  void StateStack.core.clearScope(CATALOG_SCOPE);
+  /*
+   * Told, not deleted.
+   *
+   * This called `clearScope`, which threw the cached values away — including the products list,
+   * so saving anything about a product blanked the stock screen and lost the reader's place. The
+   * lists re-read themselves and keep showing what they have until the answer arrives.
+   */
+  invalidate(CATALOG_SCOPE);
 }
 
 export interface SaleUnit {

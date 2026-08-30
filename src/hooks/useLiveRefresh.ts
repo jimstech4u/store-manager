@@ -1,7 +1,6 @@
 'use client';
 
 import { usePageLifecycle, type NavStackAPI } from '@academix-admin/navigation-stack';
-import { StateStack } from '@academix-admin/state-stack';
 
 /**
  * Reload a screen's figures when it is returned to, and drop them when it is left.
@@ -18,7 +17,7 @@ import { StateStack } from '@academix-admin/state-stack';
  *             then OVERRIDDEN with what came back. Nothing is cleared first, so there is no blank
  *             frame and no spinner over a figure that is very nearly right.
  *
- *   onExit    CLEARS the scope. Leaving the page for good is the honest moment to drop what was
+ *   onExit    does nothing here any more — see below.
  *             cached about it: the next visit starts from the server rather than from something
  *             saved before an unknown number of sales.
  *
@@ -26,24 +25,26 @@ import { StateStack } from '@academix-admin/state-stack';
  * anything had changed — which is both wasteful and still wrong for the first seconds after a
  * sale, exactly when someone is looking at the number. `onResume` is the app saying so.
  */
-export function useLiveRefresh(
-  nav: NavStackAPI,
-  reload: () => void | Promise<void>,
-  {
-    /** state-stack scope to drop on exit. Omit to keep the cache across visits. */
-    scope,
-  }: { scope?: string } = {},
-) {
+export function useLiveRefresh(nav: NavStackAPI, reload: () => void | Promise<void>) {
+  /*
+   * NOTHING IS DROPPED ON THE WAY OUT.
+   *
+   * This took an optional `scope` and cleared it in `onExit` — "tidy up after yourself on the way
+   * out", which sounds thrifty and is destructive. A scope is SHARED: the account page cleared
+   * `customer_flow`, and the People list and the customer picker both live there. Opening
+   * somebody's account and pressing Back deleted the list of everybody.
+   *
+   * A page does not own the scope it reads from, so a page has no business emptying one. The only
+   * thing that legitimately deletes cached data is signing out or switching shop, and
+   * `AuthProvider` does exactly that.
+   */
   usePageLifecycle(
     nav,
     {
       onResume: () => {
         void reload();
       },
-      onExit: () => {
-        if (scope) void StateStack.core.clearScope(scope);
-      },
     },
-    [reload, scope],
+    [reload],
   );
 }

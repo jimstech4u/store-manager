@@ -10,6 +10,7 @@
  */
 
 import { chromium } from '@playwright/test';
+import { createClient } from '@supabase/supabase-js';
 import { readFileSync, mkdirSync } from 'node:fs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3100';
@@ -41,6 +42,41 @@ const check = (what, ok, detail = '') => {
  */
 const TOUCH_MIN = 44;
 const VIEWPORT = 390;
+
+
+/*
+ * Tidy up the tabs this run opened.
+ *
+ * Tapping "Start another customer" creates a real open order in the shop, with a real spoken code
+ * reserved against it. Left behind, they pile up in the customer bar a seller has to scroll past —
+ * ninety-three of them accumulated before anybody noticed. Only EMPTY ones opened after this run
+ * started are touched, so a real sale somebody is building is never cancelled.
+ */
+async function closeTabsOpenedByThisRun(admin, storeId, since) {
+  const { data: opened } = await admin
+    .from('draft_orders')
+    .select('id')
+    .eq('store_id', storeId)
+    .eq('status', 'open')
+    .gte('created_at', since);
+
+  for (const d of opened ?? []) {
+    const { count } = await admin
+      .from('draft_order_lines')
+      .select('id', { count: 'exact', head: true })
+      .eq('draft_order_id', d.id);
+    if ((count ?? 0) === 0) {
+      // Cancelled, not deleted — that is what releases the code for the next order.
+      await admin.from('draft_orders').update({ status: 'cancelled', code: null }).eq('id', d.id);
+    }
+  }
+}
+
+const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+  auth: { persistSession: false },
+});
+const storeId = (await admin.from('stores').select('id').limit(1).single()).data.id;
+const runStartedAt = new Date().toISOString();
 
 const browser = await chromium.launch();
 const p = await browser.newPage({
@@ -160,6 +196,7 @@ try {
   }
 } finally {
   await browser.close();
+  await closeTabsOpenedByThisRun(admin, storeId, runStartedAt);
 }
 
 console.log(`\nscreenshots in ${SHOTS}`);

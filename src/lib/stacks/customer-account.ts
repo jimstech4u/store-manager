@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect } from 'react';
-import { StateStack, useDemandState } from '@academix-admin/state-stack';
+import { useDemandState } from '@academix-admin/state-stack';
 import { getSupabase } from '@/lib/supabase/client';
+import { invalidate } from '@/lib/stacks/invalidation';
 
 /**
  * One customer's whole position, and the events behind it.
@@ -90,7 +91,9 @@ export const CATALOG_SCOPE = 'catalog_flow';
  * say so.
  */
 export function accountsChanged() {
-  void StateStack.core.clearScope(ACCOUNT_SCOPE);
+  // Told, not deleted — see `invalidate`. Clearing took the People list and the customer picker
+  // with it, both of which live in this scope and neither of which the writer knows about.
+  invalidate(ACCOUNT_SCOPE);
 }
 
 /**

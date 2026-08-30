@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect } from 'react';
-import { StateStack, useDemandState } from '@academix-admin/state-stack';
+import { useDemandState } from '@academix-admin/state-stack';
 import { getSupabase } from '@/lib/supabase/client';
+import { invalidate } from '@/lib/stacks/invalidation';
 
 export interface BankAccount {
   id: string;
@@ -28,7 +29,8 @@ export const SETTINGS_SCOPE = 'settings_flow';
  * money, because a customer pays into it.
  */
 export function settingsChanged() {
-  void StateStack.core.clearScope(SETTINGS_SCOPE);
+  // Told, not deleted — see `invalidate`.
+  invalidate(SETTINGS_SCOPE);
 }
 
 interface AccountsState {

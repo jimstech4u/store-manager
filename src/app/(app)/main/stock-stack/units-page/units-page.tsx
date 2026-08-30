@@ -38,6 +38,28 @@ import styles from './units-page.module.css';
  * The database refuses the save; this page asks the question before it comes to that, in the
  * shop's own words rather than as a field called `base_qty`.
  */
+/**
+ * The unit everything else on an item is measured in.
+ *
+ * THE SMALLEST ONE THE SHOP SELLS, not simply the smallest. That distinction is the whole of a
+ * dead end this page had: the measuring unit is the one exempt from having to be measured, and
+ * picking it by size alone landed it on a unit that was bought and never sold — which is exactly
+ * the kind that MUST be answered for. The screen then said "nothing is sold in piece" and offered
+ * no way to say what a piece was worth, because it had declared the piece the ruler.
+ *
+ * Measuring against something the shop sells also means every other unit is answered for by
+ * definition, which is the rule the database enforces.
+ *
+ * Falls back to the smallest of anything when nothing is sold yet — the page says so separately,
+ * and a half-built item should still lay out.
+ */
+function measuringUnit(units: ProductUnit[]): ProductUnit | null {
+  const smallestOf = (list: ProductUnit[]) =>
+    list.length === 0 ? null : list.reduce((a, b) => (b.baseQty < a.baseQty ? b : a));
+
+  return smallestOf(units.filter((u) => u.isSold)) ?? smallestOf(units);
+}
+
 export default function UnitsPage() {
   const nav = useNav();
   const goBack = useStackBack();
@@ -84,8 +106,7 @@ export default function UnitsPage() {
    * for.
    */
   useEffect(() => {
-    const smallest =
-      units.length === 0 ? null : units.reduce((a, b) => (b.baseQty < a.baseQty ? b : a));
+    const smallest = measuringUnit(units);
     if (!smallest) return;
     const stray = units.filter(
       (u) => u.storeUnitId !== smallest.storeUnitId && u.definedAgainst === null,
@@ -162,10 +183,7 @@ export default function UnitsPage() {
    * can arrive with no relationship on it — a catalogue built before 0067, or an import — and
    * "the first one with nothing set" then landed on whichever the database happened to return.
    */
-  const smallest =
-    units.length === 0
-      ? null
-      : units.reduce((a, b) => (b.baseQty < a.baseQty ? b : a));
+  const smallest = measuringUnit(units);
 
   const gaps = unitGaps(units);
 
@@ -271,7 +289,7 @@ export default function UnitsPage() {
 
       {smallest && u.storeUnitId === smallest.storeUnitId && (
         <p className={styles.smallest}>
-          The smallest one. Everything else on this item is measured in {u.plural.toLowerCase()}.
+          Everything else on this item is measured in {u.plural.toLowerCase()}.
         </p>
       )}
 
