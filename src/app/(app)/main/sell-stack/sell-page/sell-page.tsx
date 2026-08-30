@@ -458,6 +458,15 @@ export default function SellPage() {
       fresh: '1',
     });
 
+    /*
+     * Marked settled BEFORE it is closed.
+     *
+     * The debounced sync runs on whatever is still in local state, and the shop has already closed
+     * this order — so a push would find nothing to update, try to insert, and fail. The seller
+     * returned from the receipt to "Not saved to the shop yet" over a sale that had gone through.
+     */
+    updateOrder(activeOrder.clientUuid, { settled: true });
+
     // Only once the sale is recorded. Closing optimistically would lose the order if the write
     // failed.
     closeOrder(activeOrder.clientUuid);

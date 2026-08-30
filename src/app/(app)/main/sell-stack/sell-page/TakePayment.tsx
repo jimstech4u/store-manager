@@ -129,9 +129,39 @@ export function TakePayment({
     };
   }, [order.customerId]);
 
+  /*
+   * AN AMOUNT TYPED BUT NOT YET ADDED STILL COUNTS.
+   *
+   * Splitting payments into a composer and a list introduced a trap: tapping "Pay all" fills the
+   * box, and a seller who then goes straight to "Mark as paid" settles a sale with no payments at
+   * all. It said the sale was saved, and the sales list showed it unpaid — money apparently taken
+   * and no record of it.
+   *
+   * The typed amount is what they meant. It is counted in the totals, listed with the rest, and
+   * sent when the sale settles; pressing "Add payment" is only needed to start a SECOND one.
+   */
+  const pending: PaymentRow | null = useMemo(
+    () =>
+      Number(draftAmount) > 0
+        ? {
+            key: 'pending',
+            method: draftMethod,
+            amount: draftAmount,
+            reference: draftReference,
+            bankAccountId:
+              draftMethod === 'transfer' ? (draftAccount ?? accounts[0]?.id ?? null) : null,
+          }
+        : null,
+    [draftAmount, draftMethod, draftReference, draftAccount, accounts],
+  );
+
+  // Memoised because the total is derived from it; a fresh array each render would recompute the
+  // sum on every keystroke.
+  const allRows = useMemo(() => (pending ? [...rows, pending] : rows), [rows, pending]);
+
   const paid = useMemo(
-    () => rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0),
-    [rows],
+    () => allRows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0),
+    [allRows],
   );
 
   /*
@@ -167,7 +197,7 @@ export function TakePayment({
     setError(null);
     setBusy(true);
     try {
-      const payments = rows
+      const payments = allRows
         .filter((r) => Number(r.amount) > 0)
         .map((r) => ({
           amount: Number(r.amount),
@@ -434,15 +464,19 @@ export function TakePayment({
         </div>
       )}
 
-      {rows.length > 0 && (
+      {allRows.length > 0 && (
         <div className={styles.payList}>
           <span className={styles.payListLabel}>Paying with</span>
-          {rows.map((row) => (
+          {allRows.map((row) => (
             <div className={styles.payRow} key={row.key}>
               <button
                 type="button"
                 className={styles.payRemove}
-                onClick={() => setRows((prev) => prev.filter((r) => r.key !== row.key))}
+                onClick={() =>
+                  row.key === 'pending'
+                    ? setDraftAmount('')
+                    : setRows((prev) => prev.filter((r) => r.key !== row.key))
+                }
                 aria-label={`Remove this ${row.method} payment`}
               >
                 <CloseIcon />

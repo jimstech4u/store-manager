@@ -62,6 +62,14 @@ export interface DraftCharge {
 
 export interface DraftOrder {
   /**
+   * The shop has turned this into a sale.
+   *
+   * Kept for the moment between settling and the tab closing, so nothing tries to save an order
+   * the shop has already closed — which fails, and tells the seller their completed sale was not
+   * saved.
+   */
+  settled?: boolean;
+  /**
    * The stable identifier for a link somebody is SENT.
    *
    * Distinct from `code`, which is the five characters read aloud at the counter: that one is
@@ -347,10 +355,22 @@ export function useDraftOrders(storeId: string | null) {
   const closeOrder = useCallback(
     (clientUuid: string) => {
       setOrders((prev) => {
+        const at = prev.findIndex((o) => o.clientUuid === clientUuid);
         const next = prev.filter((o) => o.clientUuid !== clientUuid);
-        setActiveId((current) =>
-          current === clientUuid ? (next[next.length - 1]?.clientUuid ?? null) : current,
-        );
+
+        /*
+         * THE ONE TO THE RIGHT, or the left when there is nothing to the right.
+         *
+         * A counter works left to right — the next person waiting is the next tab along — and
+         * jumping to the END of the row after every sale sent the seller to whoever had been
+         * waiting longest instead of whoever is standing in front of them.
+         */
+        setActiveId((current) => {
+          if (current !== clientUuid) return current;
+          if (next.length === 0) return null;
+          return next[Math.min(at, next.length - 1)].clientUuid;
+        });
+
         return next;
       });
     },
@@ -596,9 +616,17 @@ export function useDraftOrders(storeId: string | null) {
   // each character; saving only on settle would mean a colleague claiming the code receives a
   // stale order.
   useEffect(() => {
-    // No `lines.length > 0` any more: an empty tab is a real order in the shop, and the whole
-    // point of creating it server-side is that it exists before anything is on it.
-    const unsynced = orders.filter((o) => !o.synced);
+    /*
+     * Only orders that are still OPEN.
+     *
+     * A settled order is gone from the shop's point of view — `settle_draft_order` closes it — so
+     * pushing it again finds nothing to update, tries to insert, and fails. The seller came back
+     * from a receipt to "Not saved to the shop yet" over a sale that had gone through perfectly.
+     *
+     * No `lines.length > 0` condition: an empty tab is a real order in the shop, and the whole
+     * point of creating it server-side is that it exists before anything is on it.
+     */
+    const unsynced = orders.filter((o) => !o.synced && !o.settled);
     if (unsynced.length === 0) return;
     const t = setTimeout(() => {
       unsynced.forEach((o) => void push(o));
