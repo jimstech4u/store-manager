@@ -6,6 +6,7 @@ import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
 import { UnitsEditor, unitProblems } from '@/components/catalog/UnitsEditor';
 import { DiscountsEditor, type Discount } from '@/components/catalog/DiscountsEditor';
+import { useNav } from '@academix-admin/navigation-stack';
 import {
   fetchDiscounts,
   saveDiscounts,
@@ -13,6 +14,7 @@ import {
   useProductUnits,
   useStoreUnits,
   type ProductUnit,
+  type StoreUnit,
 } from '@/lib/stacks/product-units';
 import { getSupabase } from '@/lib/supabase/client';
 import type { Product } from '@/lib/stacks/catalog-stack';
@@ -61,6 +63,18 @@ const UNITS = [
 export interface ProductFormResult {
   id: string;
   name: string;
+  /**
+   * The row as it now stands, for a list to patch itself with.
+   *
+   * It used to hand back only an id and a name, on the reasoning that a new product's cost, stock
+   * and pack are computed elsewhere and fabricating them would put wrong numbers on screen. That
+   * is true of a product that has TRADED. A product created ten seconds ago has nothing on the
+   * shelf and nothing spent on it, and saying so is not a guess — it is the only correct answer.
+   * So the list takes this row and shows it, with no round trip to be told what it already knows.
+   */
+  row: Product;
+  /** New here, as opposed to an edit — the list inserts rather than patches. */
+  created: boolean;
 }
 
 export function ProductForm({
@@ -87,6 +101,7 @@ export function ProductForm({
    */
   onCreateUnit?: (name: string) => void;
 }) {
+  const nav = useNav();
   const editing = Boolean(product);
 
   const [name, setName] = useState('');
@@ -101,7 +116,7 @@ export function ProductForm({
    * refuses to save until at least one thing is sellable.
    */
   const { units: existingUnits } = useProductUnits(product?.id ?? null);
-  const { units: storeUnits, reload: reloadStoreUnits } = useStoreUnits(storeId);
+  const { units: storeUnits, add: addStoreUnit } = useStoreUnits(storeId);
   const [units, setUnits] = useState<ProductUnit[]>([]);
   const [discounts, setDiscounts] = useState<Discount[]>([]);
 
@@ -130,6 +145,25 @@ export function ProductForm({
    * shop until Save. Guarded on length so a re-render cannot overwrite edits in progress with the
    * server's copy — the same shape as filling the name above.
    */
+  /*
+   * A unit invented on the pushed page, put straight into the picker.
+   *
+   * This page never unmounts while the unit form sits on top of it, so nothing would otherwise
+   * tell the picker the shop has a new word — and it was missing until somebody reloaded. Added
+   * to the cache rather than refetched: this device made the change and already knows the answer.
+   */
+  const onUnitCreatedRef = useRef<(unit: StoreUnit) => void>(() => {});
+  onUnitCreatedRef.current = (unit) => addStoreUnit(unit);
+
+  useEffect(() => {
+    const cleanup = nav.provideObject(
+      'onUnitCreated',
+      () => (unit: StoreUnit) => onUnitCreatedRef.current(unit),
+      { global: true, scope: 'catalog' },
+    );
+    return cleanup;
+  }, [nav]);
+
   const seeded = useRef(false);
   useEffect(() => {
     if (seeded.current || existingUnits.length === 0) return;
@@ -240,7 +274,33 @@ export function ProductForm({
       await saveProductUnits(id, units);
       await saveDiscounts(id, discounts);
 
-      onSaved({ id, name: trimmed });
+      /*
+       * The row, built from what this device just did.
+       *
+       * Nothing here is invented: a brand-new item has nothing on the shelf and nothing spent on
+       * it, and an edited one keeps the figures it already had while taking the name and codes
+       * that were just typed.
+       */
+      const row: Product = {
+        ...(product ?? {
+          baseUnit: impliedBaseUnit(),
+          categoryId: null,
+          categoryName: null,
+          avgUnitCost: '0',
+          costIsEstimated: false,
+          onHand: '0',
+          packId: null,
+          packName: null,
+          packQty: null,
+          listPrice: null,
+        }),
+        id,
+        name: trimmed,
+        sku: sku.trim() || null,
+        barcode: barcode.trim() || null,
+      };
+
+      onSaved({ id, name: trimmed, row, created: !editing });
     } catch (e) {
       setProblem(e instanceof Error ? e.message : 'That could not be saved.');
     } finally {
@@ -256,6 +316,8 @@ export function ProductForm({
         </InfoPanel>
       )}
 
+      <h2 className={`${styles.section} ${styles.sectionFirst}`}>What it is</h2>
+
       <Field
         label="What is it called?"
         value={name}
@@ -263,43 +325,6 @@ export function ProductForm({
         placeholder="Coca-Cola PET 60cl"
         hint="Write it the way you and your customers say it."
         autoFocus
-      />
-
-      {/*
-        What it is bought in and sold in.
-
-        This replaced "How do you count it?" and "What is a pack?" — the one-pack-per-product
-        model, which real trade does not fit: oil arrives in bags and in kilogrammes and leaves by
-        the litre, beer arrives in crates and leaves as crates, half crates and single bottles. A
-        shop with any of that had to either lie to the form or keep the real answer in its head.
-
-        The single "Price each" went with it. Price belongs to a UNIT — a crate and a bottle are
-        not the same money — and one figure per product is what produced a receipt reading
-        "1 piece, ₦4,500" for something sold by the pack.
-      */}
-      <h2 className={styles.section}>How you buy and sell it</h2>
-      <UnitsEditor
-        units={units}
-        setUnits={setUnits}
-        storeUnits={storeUnits}
-        onCreateUnit={(unitName) => {
-          /*
-           * Re-read the shop's vocabulary when the form comes back.
-           *
-           * The page that invents a unit pops back to this one, which never unmounted — so
-           * without this the picker would still be showing the list from before, missing the very
-           * word somebody just went and added.
-           */
-          reloadStoreUnits();
-          onCreateUnit?.(unitName);
-        }}
-      />
-
-      <h2 className={styles.section}>Cheaper for buying more</h2>
-      <DiscountsEditor
-        discounts={discounts}
-        setDiscounts={setDiscounts}
-        soldUnits={units.filter((u) => u.isSold)}
       />
 
       <Field
@@ -318,6 +343,40 @@ export function ProductForm({
         onChange={(e) => setBarcode(e.target.value)}
         placeholder="5449000000996"
         hint="The number under the bars on the label, if it has one."
+      />
+
+
+      {/*
+        What it is bought in and sold in.
+
+        This replaced "How do you count it?" and "What is a pack?" — the one-pack-per-product
+        model, which real trade does not fit: oil arrives in bags and in kilogrammes and leaves by
+        the litre, beer arrives in crates and leaves as crates, half crates and single bottles. A
+        shop with any of that had to either lie to the form or keep the real answer in its head.
+
+        The single "Price each" went with it. Price belongs to a UNIT — a crate and a bottle are
+        not the same money — and one figure per product is what produced a receipt reading
+        "1 piece, ₦4,500" for something sold by the pack.
+      */}
+      <h2 className={styles.section}>How you buy and sell it</h2>
+      <p className={styles.sectionNote}>
+        The shapes it arrives in and the shapes a customer can buy, with a price on each.
+      </p>
+      <UnitsEditor
+        units={units}
+        setUnits={setUnits}
+        storeUnits={storeUnits}
+        onCreateUnit={(unitName) => onCreateUnit?.(unitName)}
+      />
+
+      <h2 className={styles.section}>Cheaper for buying more</h2>
+      <p className={styles.sectionNote}>
+        A price that applies once a customer takes enough of them. Optional.
+      </p>
+      <DiscountsEditor
+        discounts={discounts}
+        setDiscounts={setDiscounts}
+        soldUnits={units.filter((u) => u.isSold)}
       />
 
       {!editing && (

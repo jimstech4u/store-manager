@@ -32,8 +32,17 @@ export default function UnitFormPage() {
   const [state, setState] = useState<AsyncState>('idle');
   const [problem, setProblem] = useState<string | null>(null);
 
-  // Published by the units page, which pushed this one and is waiting underneath for the answer.
-  const onCreated = useObject<(unit: StoreUnit) => void>('onUnitCreated');
+  /*
+   * Published GLOBALLY, under the catalogue scope, so this must ask for it the same way.
+   *
+   * It asked without either, which addresses a page-scoped object by its provider's uid — never
+   * found from here. `isProvided` was quietly false, the callback never ran, and a unit somebody
+   * had just invented was missing from the picker they came back to.
+   */
+  const onCreated = useObject<(unit: StoreUnit) => void>('onUnitCreated', {
+    global: true,
+    scope: 'catalog',
+  });
 
   if (!store) return null;
 

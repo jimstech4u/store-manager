@@ -7,7 +7,7 @@ import { ProductForm, type ProductFormResult } from '@/components/catalog/Produc
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { useListNotifier } from '@/hooks/useListChannel';
-import { catalogChanged, useProduct } from '@/lib/stacks/catalog-stack';
+import { useProduct, type Product } from '@/lib/stacks/catalog-stack';
 
 /**
  * Adding an item you sell, or changing one — a page.
@@ -31,7 +31,7 @@ export default function ProductFormPage() {
   const { store } = useAuth();
 
   // Told about the one product this form changes.
-  const notifyProducts = useListNotifier<{ id: string; name: string }>('products');
+  const notifyProducts = useListNotifier<Product>('products');
 
   const productId = (location?.params?.id as string | undefined) ?? null;
   const prefillName = (location?.params?.name as string | undefined) ?? '';
@@ -83,28 +83,32 @@ export default function ProductFormPage() {
         onCancel={() => void nav.pop()}
         onSaved={(result) => {
           /*
-           * A RENAME is patched; a NEW item still asks the catalogue to re-read.
+           * THE LIST IS TOLD, NOT ASKED.
            *
-           * The form hands back an id and a name, which is genuinely all it knows — so that is
-           * all that is claimed. Renaming patches the one row every list shows, without anybody
-           * re-reading three hundred items to learn one word changed.
+           * A rename used to patch and a new item used to call `catalogChanged()`, which made
+           * every catalogue list re-read itself — a round trip to learn something this device had
+           * just decided. Worse, until it landed the new item was simply missing, so a shop that
+           * added something and pressed Back saw the old list and reached for a page refresh.
            *
-           * A product that did not exist a moment ago is a different case: there is no row to
-           * patch and no full shape to invent — its cost, its stock, its pack are all computed
-           * elsewhere. Fabricating them to save a request would put wrong numbers on screen, so
-           * the catalogue is re-read, which is the honest thing for something genuinely new.
+           * The form hands back the whole row now, and for a brand-new item that row is complete:
+           * nothing on the shelf, nothing spent on it. Another device's change is a different
+           * matter and arrives on the next read.
            */
-          if (productId) {
-            notifyProducts({ type: 'patch', id: result.id, patch: { name: result.name } });
-          } else {
-            catalogChanged();
-          }
-          // `getter()` unwraps to the callback the caller published. It is checked rather than
-          // assumed because most callers do not publish one at all.
+          notifyProducts({ type: 'upsert', row: result.row });
+
+          /*
+           * And whoever asked for the result gets it.
+           *
+           * The sell screen publishes this when a seller adds something mid-receipt: a customer
+           * asks for an item the shop has never entered, and the alternative is abandoning the
+           * receipt. `getter()` unwraps to the callback; it is checked rather than assumed
+           * because most callers do not publish one.
+           */
           if (onSavedObj.isProvided) {
             const notify = onSavedObj.getter();
             if (notify) notify(result);
           }
+
           void nav.pop();
         }}
       />

@@ -27,6 +27,36 @@ wrong even by a session that reads nothing else.
 - **The Library Charter:** `@academix-admin/*` packages are public-first, app-agnostic and
   non-breaking. A package never learns about store-manager.
 
+## A change this device made is already known — do not go and ask
+
+state-stack is reactive. A write patches the cache the screen is already holding; it does not
+invalidate it and wait to be told what just happened.
+
+This was wrong in four places at once and produced one symptom every time: **the shop had to
+reload the page.** Add an item and press Back — the list does not have it. Invent a unit and return
+to the picker — never heard of it. Rename something — the old name. Remove something — still there,
+so remove it again.
+
+The rule:
+
+- **The writer knows the row.** A page that saves knows the id it touched and what it now says, so
+  it says so: `useListNotifier` → `upsert` / `patch` / `remove`, which patches the list in the
+  state it already holds. Nothing is fetched and no scroll position is lost.
+- **Hand back the whole row, not an id.** The product form used to return `{id, name}` on the
+  reasoning that a new item's cost and stock are computed elsewhere and inventing them would put
+  wrong numbers on screen. That is true of an item that has TRADED. One created ten seconds ago has
+  nothing on the shelf and nothing spent on it — saying so is the only correct answer, not a guess.
+- **Invalidate only what the server computes.** `catalogChanged()` now notifies a DERIVED scope —
+  stock on hand, landed cost, which units something sells in. The lists are not in it. Notifying
+  the scope the paginated list lives in means every save costs a full re-read to learn something
+  this device decided.
+- **Another device is the exception.** Its changes arrive on the next genuine read — `onResume`,
+  or a reload somebody asked for. That is a real trigger; our own writes are not.
+
+`scripts/probe-no-round-trip.mjs` holds the line: it **watches the network**, not the pixels, and
+fails if a list-read RPC fires after an add, a rename or a new unit. "It appeared" is not the
+claim; "it appeared without asking" is.
+
 ## A screen for everything the shop can do, and nothing it cannot
 
 The database is ahead of the screens, and silently. A shop can invite staff, hold deposits, agree a

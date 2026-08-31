@@ -14,7 +14,8 @@ import { getSupabase } from '@/lib/supabase/client';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
 import { useStackBack } from '@/hooks/useStackBack';
-import { useProduct } from '@/lib/stacks/catalog-stack';
+import { useProduct, type Product } from '@/lib/stacks/catalog-stack';
+import { useListNotifier } from '@/hooks/useListChannel';
 import { useSellingUnits } from '@/lib/stacks/selling-units';
 import { unitGaps, useProductUnits } from '@/lib/stacks/product-units';
 import { formatMoney, formatQty, pluralUnit } from '@/lib/format';
@@ -32,6 +33,9 @@ export default function ProductPage() {
   const goBack = useStackBack();
   const location = useLocation();
   const { store } = useAuth();
+
+  // Told when this item is removed, so the stock list loses it without being re-read.
+  const notifyProducts = useListNotifier<Product>('products');
   const { can } = usePermission();
 
   const productId = (location?.params?.id as string | undefined) ?? null;
@@ -141,6 +145,17 @@ export default function ProductPage() {
                     p_force: onHand !== 0,
                   });
                   if (error) throw error;
+
+                  /*
+                   * The list is told it is gone.
+                   *
+                   * Without this the item stayed on the stock screen until something re-read it,
+                   * so a shop removed something, pressed Back, saw it still there, and removed it
+                   * again — or reached for a page refresh. This device knows exactly which row
+                   * went; asking the server to say so is asking a question we answered.
+                   */
+                  notifyProducts({ type: 'remove', id: product.id });
+
                   setRemoving(false);
                   nav.pop();
                 } catch (e) {

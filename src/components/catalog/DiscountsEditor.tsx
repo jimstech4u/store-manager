@@ -156,14 +156,20 @@ export function DiscountsEditor({
       )}
 
       <div className={styles.grid}>
+        {/*
+          The unit is in the LABEL, not in a suffix.
+
+          A suffix box is a fixed slot beside a number, and "FCrates457287" was clipped to
+          "rates4572" — which reads as a different word. The label has the whole width of the
+          field and wraps.
+        */}
         <Field
-          label="From"
+          label={`From how many ${chosen?.plural.toLowerCase() ?? 'of them'}?`}
           numeric
           value={from}
           onChange={(e) => setFrom(e.target.value)}
-          suffix={chosen?.plural.toLowerCase()}
           placeholder="5"
-          hint="The quantity the cheaper price starts at."
+          hint="Where the cheaper price starts."
         />
         <Field
           label="Up to"
@@ -171,9 +177,8 @@ export function DiscountsEditor({
           numeric
           value={to}
           onChange={(e) => setTo(e.target.value)}
-          suffix={chosen?.plural.toLowerCase()}
           placeholder="Any"
-          hint="Leave empty for “and upwards”."
+          hint="Empty means “and upwards”."
         />
       </div>
 

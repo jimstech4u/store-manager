@@ -278,15 +278,31 @@ export function useProduct(productId: string | null) {
  * product list re-reads on its next look, without any of them polling and without the writer
  * needing to know which screens exist — the same shape as `accountsChanged()` for money.
  */
+/**
+ * The scope for figures only the server can work out.
+ *
+ * Separate from the one the lists live in, which is the whole point: a write invalidates what was
+ * computed, never what the writer already knows.
+ */
+export const DERIVED_SCOPE = 'catalog_derived';
+
 export function catalogChanged() {
   /*
-   * Told, not deleted.
+   * Only what this device CANNOT work out for itself.
    *
-   * This called `clearScope`, which threw the cached values away — including the products list,
-   * so saving anything about a product blanked the stock screen and lost the reader's place. The
-   * lists re-read themselves and keep showing what they have until the answer arrives.
+   * Two rounds of getting this wrong. First it called `clearScope`, which deleted the cached
+   * values — including the products list — so saving anything blanked the stock screen. Then it
+   * notified that same scope, which the paginated list subscribes to, so every save still cost a
+   * full re-read of the list to learn something this device had just decided. Adding an item and
+   * pressing Back showed the old list until the answer landed, and the habit became to reload the
+   * page.
+   *
+   * A LIST IS TOLD ITS OWN NEWS, through `useListChannel`: the page that made the change knows
+   * which row it touched and what it now says. What is left here is the DERIVED side — stock on
+   * hand, landed cost, which units a product now sells in — figures the server computes and a
+   * browser genuinely cannot. Those re-read; nothing else does.
    */
-  invalidate(CATALOG_SCOPE);
+  invalidate(DERIVED_SCOPE);
 }
 
 export interface SaleUnit {

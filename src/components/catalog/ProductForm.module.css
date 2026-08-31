@@ -1,6 +1,8 @@
+/* Cancel and the commit button, side by side at the end of the page. */
 .actions {
   display: flex;
   gap: var(--space-3);
+  margin-top: var(--space-7);
 }
 
 .actions > * {
@@ -41,4 +43,35 @@
   outline: none;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px var(--primary-subtle);
+}
+
+/* ── The three questions this form asks ───────────────────────────────────────────────
+
+   What the item IS, how it is bought and sold, and what a customer pays for buying more.
+   They were plain <h2>s against a class that did not exist, so the three ran together as one
+   undifferentiated column of fields — the "jam-packed" look. Each now opens with real air above
+   it and a rule across the top, so a shop can see where one question ends and the next begins. */
+.section {
+  margin: var(--space-7) 0 var(--space-4);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border);
+  font-size: var(--text-xl, 1.25rem);
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--text);
+}
+
+/* A line under the heading, saying what the section is for before the fields start. */
+.sectionNote {
+  margin: calc(var(--space-4) * -1) 0 var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* The first section opens the page, so it needs neither the rule nor the space above it — those
+   separate one question from the previous one, and there is none. */
+.sectionFirst {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
 }

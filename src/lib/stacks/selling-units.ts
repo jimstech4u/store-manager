@@ -4,6 +4,7 @@ import { useCallback, useEffect } from 'react';
 import { useDemandState } from '@academix-admin/state-stack';
 import { getSupabase } from '@/lib/supabase/client';
 import { useInvalidation } from '@/lib/stacks/invalidation';
+import { DERIVED_SCOPE } from '@/lib/stacks/catalog-stack';
 
 /**
  * What a product is worth and how much of it there is — in the unit the shop sells in.
@@ -103,7 +104,7 @@ export function useSellingUnits(storeId: string | null) {
   useEffect(load, [load]);
   // A page pushed under another never remounts, so a catalogue write while it sits there
   // would otherwise leave it showing figures from before the change.
-  useInvalidation('catalog_flow', load);
+  useInvalidation(DERIVED_SCOPE, load);
 
   /** Grouped by product, largest-selling unit first — the order a shop thinks in. */
   const byProduct = new Map<string, SellingUnit[]>();
@@ -176,7 +177,7 @@ export function useUnitGaps(storeId: string | null) {
   useEffect(load, [load]);
   // A page pushed under another never remounts, so a catalogue write while it sits there
   // would otherwise leave it showing figures from before the change.
-  useInvalidation('catalog_flow', load);
+  useInvalidation(DERIVED_SCOPE, load);
 
   return { gaps, reload: load };
 }
@@ -226,7 +227,7 @@ export function useBuyingUnits(storeId: string | null) {
   useEffect(load, [load]);
   // A page pushed under another never remounts, so a catalogue write while it sits there
   // would otherwise leave it showing figures from before the change.
-  useInvalidation('catalog_flow', load);
+  useInvalidation(DERIVED_SCOPE, load);
 
   const byProduct = new Map<string, BuyingUnit[]>();
   for (const u of units) {

@@ -75,7 +75,7 @@ export default function StaffPage() {
    * their own permissions screen. Three `useState`s meant coming back from that screen re-ran all
    * three calls behind a full-page "Loading your team", over a team that had not changed.
    */
-  const [snapshot, demand] = useDemandState<{
+  const [snapshot, demand, setSnapshot] = useDemandState<{
     members: Member[];
     invites: Invitation[];
     roles: Role[];
@@ -377,8 +377,21 @@ export default function StaffPage() {
                     p_user_id: confirmRemove.user_id,
                   });
                   if (e) throw e;
+
+                  /*
+                   * Taken out of the list here, rather than re-reading the team.
+                   *
+                   * `load()` fetched every member again to learn one had gone — a round trip for
+                   * something this device had just done, with the old list on screen until it
+                   * landed.
+                   */
+                  setSnapshot({
+                    ...snapshotRef.current,
+                    members: snapshotRef.current.members.filter(
+                      (m) => m.user_id !== confirmRemove.user_id,
+                    ),
+                  });
                   setConfirmRemove(null);
-                  await load();
                 } catch (e) {
                   setProblem(e instanceof Error ? e.message : 'They could not be removed.');
                   setConfirmRemove(null);

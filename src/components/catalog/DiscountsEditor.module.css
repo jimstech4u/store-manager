@@ -80,8 +80,22 @@
   font: inherit;
 }
 
+/*
+  "From" and "Up to" — stacked on a phone, side by side once there is room.
+
+  Two abreast at 390px left the inputs on different lines, because one label wraps to two rows and
+  the other does not, so the boxes sat at different heights and the pair read as two unrelated
+  fields rather than the two ends of one range.
+*/
 .grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: var(--space-3);
+}
+
+@media (min-width: 460px) {
+  .grid {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
 }

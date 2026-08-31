@@ -5,7 +5,6 @@ import { useDemandState } from '@academix-admin/state-stack';
 import { getSupabase } from '@/lib/supabase/client';
 import { catalogChanged } from '@/lib/stacks/catalog-stack';
 import type { Discount } from '@/components/catalog/DiscountsEditor';
-import { useInvalidation } from '@/lib/stacks/invalidation';
 
 /**
  * What a product is bought in and sold in.
@@ -79,7 +78,7 @@ interface ProductUnitRow {
  * another. Persisted: a picker should open on the words the shop uses, not on a spinner.
  */
 export function useStoreUnits(storeId: string | null) {
-  const [units, demandUnits] = useDemandState<StoreUnit[]>([], {
+  const [units, demandUnits, setUnits] = useDemandState<StoreUnit[]>([], {
     key: `store-units:${storeId ?? 'none'}`,
     scope: 'catalog_flow',
     persist: true,
@@ -96,9 +95,24 @@ export function useStoreUnits(storeId: string | null) {
   }, [storeId, demandUnits]);
 
   useEffect(load, [load]);
-  useInvalidation('catalog_flow', load);
 
-  return { units, reload: load };
+  /**
+   * A unit this shop has just invented, put straight into the list.
+   *
+   * NOT A REFETCH. The shop made this change on this device, so asking the server what it now
+   * looks like is asking a question we already know the answer to — and the round trip is exactly
+   * what made a newly added word missing from the picker until somebody reloaded the page. Another
+   * device's change is a different matter and comes on the next read.
+   */
+  const add = useCallback(
+    (unit: StoreUnit) => {
+      if (units.some((u) => u.id === unit.id)) return;
+      setUnits([...units, unit].sort((a, b) => a.name.localeCompare(b.name)));
+    },
+    [units, setUnits],
+  );
+
+  return { units, setUnits, add, reload: load };
 }
 
 /** A word this shop had no unit for yet. Returns the id, existing or new. */
