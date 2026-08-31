@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
@@ -11,7 +11,7 @@ import { EditIcon, PlusIcon, StarIcon, TrashIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
 import { usePermission } from '@/hooks/usePermission';
 import { useAuth } from '@/providers/AuthProvider';
-import { settingsChanged, useBankAccountsState } from '@/lib/stacks/bank-accounts';
+import { useBankAccountsState } from '@/lib/stacks/bank-accounts';
 import { getSupabase } from '@/lib/supabase/client';
 import styles from './bank-page.module.css';
 
@@ -48,22 +48,18 @@ export default function BankPage() {
    * different shape — a race whichever way round it ran, and it crashed the page outright. There
    * is one reader of that key now, and both this screen and the payment screens go through it.
    */
-  const { accounts, error, settled, reload } = useBankAccountsState(store?.id ?? null);
+  const { accounts, error, settled, reload, write } = useBankAccountsState(store?.id ?? null);
   const loading = !settled;
 
   const [confirmRemove, setConfirmRemove] = useState<Account | null>(null);
 
   /*
-   * Reload after a write.
+   * Nothing reloads after a write any more.
    *
-   * `settingsChanged()` first, so this is a real read rather than a re-serve of the value that was
-   * cached before whatever write called us.
+   * There was a `load()` here that called `settingsChanged()` and then re-read every account, to
+   * learn something this page had just done. The writes patch the list instead; `reload` stays for
+   * the error panel's Try again, which IS a genuine ask.
    */
-  const load = useCallback(async () => {
-    settingsChanged();
-    await reload();
-  }, [reload]);
-
   if (!store) return null;
   const editable = can('store.settings');
 
@@ -102,9 +98,19 @@ export default function BankPage() {
         what the shop recorded is possible at the end of the month.
       </Explain>
 
+      {/*
+        A failure with a way out of it.
+
+        The panel said what went wrong and offered nothing to do about it, so the only recourse was
+        to leave the page and come back. This is the one place a re-read is honest: the shop is
+        asking for it.
+      */}
       {error && (
         <InfoPanel tone="danger" title="Could not load">
-          {error}
+          <p>{error}</p>
+          <Button variant="secondary" onClick={() => void reload()}>
+            Try again
+          </Button>
         </InfoPanel>
       )}
 
@@ -175,8 +181,15 @@ export default function BankPage() {
               onClick={async () => {
                 if (!confirmRemove) return;
                 await getSupabase().rpc('archive_bank_account', { p_id: confirmRemove.id });
+
+                /*
+                 * Taken out here rather than re-read.
+                 *
+                 * `load()` fetched every account to learn that one had gone, with the removed one
+                 * still on screen until it landed — long enough for somebody to press it again.
+                 */
+                write(accounts.filter((a) => a.id !== confirmRemove.id));
                 setConfirmRemove(null);
-                await load();
               }}
             >
               Remove it

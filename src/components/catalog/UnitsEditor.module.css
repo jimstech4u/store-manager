@@ -189,13 +189,25 @@
 .swap {
   flex: 1 0 100%;
   min-height: var(--touch-min, 44px);
-  padding: 0;
+  padding: var(--space-2) 0;
   border: none;
   background: none;
   color: var(--primary);
   font: inherit;
-  font-weight: 700;
   text-align: left;
-  text-decoration: underline;
   cursor: pointer;
+}
+
+/* The swap reads as two lines: what is wrong, and what it would say instead. A bare
+   "Say it the other way round" described the control and not the reason to press it. */
+.swapLead {
+  display: block;
+  font-weight: 800;
+}
+
+.swapDetail {
+  display: block;
+  margin-top: 2px;
+  font-weight: 500;
+  text-decoration: none;
 }

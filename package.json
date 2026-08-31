@@ -18,7 +18,7 @@
     "@academix-admin/search-viewer": "^0.3.0",
     "@academix-admin/selection-viewer": "^0.4.0",
     "@academix-admin/sidebar": "^0.1.1",
-    "@academix-admin/state-stack": "^0.2.3",
+    "@academix-admin/state-stack": "^0.3.0",
     "@supabase/supabase-js": "^2.112.3",
     "motion": "^13.1.1",
     "next": "^15.5.9",

@@ -67,6 +67,16 @@ export interface HistoryEvent {
 export const ACCOUNT_SCOPE = 'customer_flow';
 
 /**
+ * The scope for figures only the server can work out — a balance, a statement, empties owed.
+ *
+ * Separate from the one the customer LISTS live in, and that separation is the point. Notifying
+ * the list's scope meant settling a sale re-read every customer in the shop to learn one person's
+ * balance had moved — a round trip for something the till had just done, with the old figure on
+ * screen until it landed. The lists are told their own news through `useListChannel`.
+ */
+export const ACCOUNT_DERIVED_SCOPE = 'account_derived';
+
+/**
  * The shop's own configuration — its empties pools — kept OUT of the account scope.
  *
  * They started in it, and leaving a customer's account cleared them: the account page drops
@@ -93,7 +103,7 @@ export const CATALOG_SCOPE = 'catalog_flow';
 export function accountsChanged() {
   // Told, not deleted — see `invalidate`. Clearing took the People list and the customer picker
   // with it, both of which live in this scope and neither of which the writer knows about.
-  invalidate(ACCOUNT_SCOPE);
+  invalidate(ACCOUNT_DERIVED_SCOPE);
 }
 
 /**
@@ -135,12 +145,19 @@ export function useCustomerAccount(customerId: string | null) {
     { account: null, history: [], error: null, settled: false },
     {
       key: `account:${customerId ?? 'none'}`,
-      scope: ACCOUNT_SCOPE,
+      scope: ACCOUNT_DERIVED_SCOPE,
       persist: true,
       deps: [customerId ?? ''],
-      // Half a minute. Long enough that flicking between screens does not re-fetch on every step,
-      // short enough that a figure nobody explicitly invalidated still corrects itself.
-      ttl: 30_000,
+      /*
+       * NO TTL. It deletes live state; it does not mark it stale.
+       *
+       * Half a minute of "long enough not to refetch on every step" reads as a caching tweak and
+       * behaves as a timer that empties the screen: the value is GONE when it expires, so the next
+       * look starts from nothing and the page blanks on the way back to it — the very thing the
+       * persisted cache exists to prevent. Staleness is handled by saying what changed, which is
+       * what `accountsChanged()` does.
+       */
+
     },
   );
 
@@ -223,7 +240,11 @@ export function useEmptiesPools(storeId: string | null) {
     scope: CATALOG_SCOPE,
     persist: true,
     deps: [storeId ?? ''],
-    ttl: 10 * 60_000,
+    /*
+     * NO TTL — see `useCustomerAccount`. Ten minutes is worse than thirty seconds here, not
+     * better: the pools change perhaps twice a year, so the timer's only observable effect is to
+     * empty a screen somebody left open.
+     */
   });
 
   useEffect(() => {

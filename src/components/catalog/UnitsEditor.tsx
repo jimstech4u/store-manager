@@ -229,12 +229,24 @@ export function UnitsEditor({
               ))}
           </select>
 
+          {/*
+            Which way round the sentence goes.
+
+            It was a bare link reading "Say it the other way round", which says what the control
+            does to ITSELF and nothing about why anybody would press it. Written out, the shop can
+            see both sentences and pick the one that is true — and the one with a whole number in
+            it is almost always the one they mean.
+          */}
           <button
             type="button"
             className={styles.swap}
             onClick={() => swapDirection(u)}
           >
-            Say it the other way round
+            <span className={styles.swapLead}>Wrong way round?</span>
+            <span className={styles.swapDetail}>
+              Say “one {units.find((x) => x.storeUnitId === u.definedAgainst)?.name.toLowerCase() ?? 'unit'} is
+              … {u.plural.toLowerCase()}” instead
+            </span>
           </button>
         </div>
       )}

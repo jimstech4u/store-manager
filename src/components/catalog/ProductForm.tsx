@@ -316,8 +316,14 @@ export function ProductForm({
         </InfoPanel>
       )}
 
-      <h2 className={`${styles.section} ${styles.sectionFirst}`}>What it is</h2>
+      {/*
+        No heading over the first question.
 
+        "What it is" sat directly above "What is it called?", under a page already titled "Add an
+        item you sell" — the same thing said three times before a shop has typed anything. The rule
+        and the space below still separate this from the next section, which is what the heading
+        was really for.
+      */}
       <Field
         label="What is it called?"
         value={name}

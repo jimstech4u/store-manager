@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { StateStack } from '@academix-admin/state-stack';
 
 /**
  * Saying that something changed, without throwing away what is on screen.
@@ -33,6 +34,17 @@ const listeners = new Map<string, Set<() => void>>();
  * will read fresh when it mounts.
  */
 export function invalidate(scope: string) {
+  /*
+   * Let every demand-backed cache in this scope run its loader again.
+   *
+   * `useDemandState`'s `demand()` returns early once a key has been demanded, so telling a screen
+   * to load again does nothing on its own — which is why replacing `clearScope` with a plain
+   * notification silently stopped every derived cache from ever refreshing. `invalidateScope`
+   * (state-stack 0.3.0) clears the flag and keeps the value, which is the whole point: re-read
+   * without blanking.
+   */
+  StateStack.core.invalidateScope(scope);
+
   const set = listeners.get(scope);
   if (!set) return;
   // Copied before iterating: a listener may unsubscribe itself as it runs.

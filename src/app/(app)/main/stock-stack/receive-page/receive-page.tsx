@@ -4,7 +4,6 @@ import { useMemo, useState } from 'react';
 import styles from './receive-page.module.css';
 import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
-import { BottomSheet } from '@/components/ui/BottomSheet';
 import { useStackBack } from '@/hooks/useStackBack';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
@@ -13,7 +12,8 @@ import { Explain, InfoPanel, WorkedExample } from '@/components/ui/Explain';
 import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
 import { useBuyingUnits } from '@/lib/stacks/selling-units';
 import { useAuth } from '@/providers/AuthProvider';
-import { type Product } from '@/lib/stacks/catalog-stack';
+import { catalogChanged, useProductList, type Product } from '@/lib/stacks/catalog-stack';
+import { useListNotifier } from '@/hooks/useListChannel';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatMoney, formatQty, pluralUnit } from '@/lib/format';
 
@@ -90,6 +90,15 @@ export default function ReceivePage() {
    * request per row is fine with eight products and painful with eight hundred.
    */
   const { byProduct: buyUnits } = useBuyingUnits(store?.id ?? null);
+
+  /*
+   * The stock list, so a delivery can say what it changed.
+   *
+   * Read for the CURRENT on-hand of each line — the new figure is that plus what arrived, and the
+   * alternative is asking the server for a number this device is about to determine.
+   */
+  const { products } = useProductList(store?.id ?? null);
+  const notifyProducts = useListNotifier<Product>('products');
 
   const [picking, setPicking] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -216,6 +225,44 @@ export default function ReceivePage() {
       });
       if (err) throw err;
 
+      /*
+       * WHAT JUST ARRIVED, told to the screens holding it.
+       *
+       * The stock list showed "0 pieces, ₦0.00" for an item ten crates had just been delivered
+       * into — it was holding the row from when the item was created and nothing had said
+       * otherwise. This device knows both figures: the quantity is what was typed, and the landed
+       * cost is the same sum the server does, verified to the kobo against it.
+       */
+      for (const l of lines) {
+        if (!l.productId) continue;
+        const arrived = baseQtyOf(l);
+        const landed = landedFor(l);
+        const current = Number(
+          products.find((x) => x.id === l.productId)?.onHand ?? 0,
+        );
+
+        notifyProducts({
+          type: 'patch',
+          id: l.productId,
+          patch: {
+            onHand: String(current + arrived),
+            /*
+             * The dearest stock still held is what a price is warned against, and a delivery that
+             * cost more than what is on the shelf becomes that figure. Cheaper stock does not
+             * lower it while the dearer is still there, which is why this takes the higher.
+             */
+            ...(landed !== null ? { avgUnitCost: String(landed), costIsEstimated: false } : {}),
+          },
+        });
+      }
+
+      /*
+       * And the DERIVED figures re-read: stock in selling units, the dearest live cost, which
+       * items can now come in but never go out. Those the server computes from layers this device
+       * cannot see, so this is a re-read that earns its round trip.
+       */
+      catalogChanged();
+
       setDone(true);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Could not record this delivery');
@@ -238,7 +285,35 @@ export default function ReceivePage() {
         </InfoPanel>
       )}
 
-      {lines.length === 0 && (
+      {/*
+        A RESULT IS PAGE CONTENT, not a sheet.
+
+        This was a BottomSheet, and a sheet is an overlay with its own history entry. Its Done
+        button popped a page while that entry was still open, so the two unwound each other: the
+        stack went from `stock-stack:1.a1.b1` to `stock-stack:1` and the shop was left looking at a
+        COMPLETELY BLANK SCREEN, having just recorded a delivery. Closing the sheet first only
+        moved the race — the deferred history step landed back on a page that had already
+        unmounted, blank again.
+
+        The rule this codebase already carries is "a form is a page, a choice is a sheet". A result
+        is neither: it is the answer to what the page was for, so it belongs in the page.
+      */}
+      {done && (
+        <>
+          <InfoPanel tone="success" title="Stock is in">
+            Your stock has gone up, and the cost of each item now includes the fees and any rebate
+            you entered.
+          </InfoPanel>
+
+          <div className={styles.actions}>
+            <Button size="large" fullWidth onClick={() => void nav.pop()}>
+              Done
+            </Button>
+          </div>
+        </>
+      )}
+
+      {!done && lines.length === 0 && (
         <InfoPanel tone="info" title="Add what came in">
           Enter the quantity and the price on the invoice. The delivery and distribution fees go
           in below, and we will work out what each item truly cost you.
@@ -534,22 +609,6 @@ export default function ReceivePage() {
         Not dismissible by a stray swipe: it is the only confirmation that the stock actually went
         in, and a delivery is the sort of thing people re-enter if they are unsure it saved.
       */}
-      <BottomSheet
-        open={done}
-        onClose={() => nav.pop()}
-        title="Delivery recorded"
-        dismissible={false}
-        footer={
-          <Button size="large" fullWidth onClick={() => nav.pop()}>
-            Done
-          </Button>
-        }
-      >
-        <InfoPanel tone="success" title="Stock is in">
-          Your stock has gone up and the cost of each item now includes the delivery and
-          distribution fees.
-        </InfoPanel>
-      </BottomSheet>
 
       {/*
         The total and the action END the page rather than being pinned to its foot.
@@ -559,7 +618,7 @@ export default function ReceivePage() {
         the end to commit is also the honest gesture: the last thing somebody should see before
         recording what a load cost is the last figure they entered into it.
       */}
-      {lines.length > 0 && (
+      {!done && lines.length > 0 && (
         <div className={styles.actions}>
           <div className={styles.footerRow}>
             <span className={styles.footerLabel}>Total paid</span>

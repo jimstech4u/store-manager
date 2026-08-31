@@ -73,7 +73,12 @@ export default function StatementPage() {
       scope: 'money_flow',
       persist: true,
       deps: [customerId ?? ''],
-      ttl: 30_000,
+      /*
+       * NO TTL. It deletes live state rather than marking it stale, so a statement somebody had
+       * open for a minute emptied itself and the page went blank on the way back to it — with
+       * `revalidateOnMount: false` right underneath deliberately NOT refetching. The two together
+       * guaranteed an empty screen. A write says what changed; nothing else needs to.
+       */
       revalidateOnMount: false,
     },
   );

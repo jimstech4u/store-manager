@@ -9,7 +9,7 @@ import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
-import { settingsChanged, useBankAccountsState } from '@/lib/stacks/bank-accounts';
+import { useBankAccountsState, type BankAccount } from '@/lib/stacks/bank-accounts';
 import { getSupabase } from '@/lib/supabase/client';
 import styles from './bank-form-page.module.css';
 
@@ -40,7 +40,7 @@ export default function BankFormPage() {
   const { store } = useAuth();
 
   const accountId = (location?.params?.id as string | undefined) ?? null;
-  const { accounts, settled } = useBankAccountsState(store?.id ?? null);
+  const { accounts, settled, write } = useBankAccountsState(store?.id ?? null);
   const editing = accountId ? (accounts.find((a) => a.id === accountId) ?? null) : null;
 
   const [form, setForm] = useState(BLANK);
@@ -85,7 +85,7 @@ export default function BankFormPage() {
     setBusy(true);
     setProblem(null);
     try {
-      const { error } = await getSupabase().rpc('save_bank_account', {
+      const { data: savedId, error } = await getSupabase().rpc('save_bank_account', {
         p_store_id: store.id,
         p_bank_name: form.bank_name.trim(),
         p_account_name: form.account_name.trim(),
@@ -94,8 +94,30 @@ export default function BankFormPage() {
         p_id: editing?.id ?? null,
       });
       if (error) throw error;
-      // Say the configuration moved, so the list behind this page and every payment screen re-read.
-      settingsChanged();
+
+      /*
+       * The list is told, not asked.
+       *
+       * `settingsChanged()` made the list behind this page and every payment screen re-read — a
+       * round trip to learn what was just typed here, with the old details showing until it
+       * landed. Everything about the row is on this form; the id comes back from the save.
+       */
+      const id = (editing?.id ?? (savedId as string | null)) ?? '';
+      const row: BankAccount = {
+        id,
+        bank_name: form.bank_name.trim(),
+        account_name: form.account_name.trim(),
+        account_number: form.account_number.trim(),
+        is_default: form.is_default,
+      };
+
+      const others = accounts
+        .filter((a) => a.id !== id)
+        // Only one account can be the default, and the server has just enforced that.
+        .map((a) => (form.is_default ? { ...a, is_default: false } : a));
+
+      write(editing ? [...others, row].sort((a, b) => a.bank_name.localeCompare(b.bank_name)) : [...others, row]);
+
       await nav.pop();
     } catch (e) {
       setProblem(e instanceof Error ? e.message : 'That account could not be saved.');

@@ -65,7 +65,15 @@ const p = await browser.newPage({
 });
 
 /** The reads that would mean the screen asked instead of knowing. */
-const LIST_READS = ['list_products', 'store_units_for', 'product_selling_units'];
+const LIST_READS = [
+  'list_products',
+  'store_units_for',
+  'product_selling_units',
+  'list_sales',
+  'list_customers',
+  'list_bank_accounts',
+  'list_staff',
+];
 let reads = [];
 p.on('request', (r) => {
   const m = /\/rest\/v1\/rpc\/([a-z_]+)/.exec(r.url());
@@ -177,6 +185,45 @@ try {
   check(
     'with no re-read',
     !reads.includes('list_products'),
+    reads.join(', ') || 'no list reads',
+  );
+
+  // ── 4. A settled sale reaches the sales list ──────────────────────────────────────
+  console.log('\n— a sale the shop settles —');
+  await tab('Sell');
+
+  const plus = p.getByRole('button', { name: 'Start another customer' }).first();
+  if (await plus.count()) {
+    await plus.click();
+    await p.waitForTimeout(5000);
+  }
+  await p.getByRole('button', { name: /Add an item/i }).first().click();
+  await p.waitForTimeout(3500);
+  const item = p.locator('[role="dialog"] [class*="ProductPicker_name"]').first();
+  if (await item.count()) {
+    await item.click();
+    await p.waitForTimeout(6000);
+  }
+
+  await p.getByRole('button', { name: /take payment/i }).first().click();
+  await p.waitForTimeout(5000);
+
+  // Paid in full, in cash, so nothing lands on anybody's account.
+  const payAll = p.getByRole('button', { name: /Pay all|Mark as paid|Record payment/i }).first();
+  if (await payAll.count()) {
+    await payAll.click();
+    await p.waitForTimeout(1500);
+  }
+
+  reads = [];
+  const settle = p.getByRole('button', { name: /Mark as paid|Record this|Settle/i }).last();
+  await settle.click().catch(() => {});
+  await p.waitForTimeout(9000);
+  await p.screenshot({ path: `${SHOTS}/5-after-settle.png` });
+
+  check(
+    'settling did not re-read the customer list',
+    !reads.includes('list_customers'),
     reads.join(', ') || 'no list reads',
   );
 

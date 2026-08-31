@@ -124,7 +124,7 @@ try {
    * Adding the crate first makes it the ruler, so the bottle's card asks "One bottle is [ ]
    * crates", whose honest answer is a twelfth. The form offers to turn the sentence round.
    */
-  await p.getByRole('button', { name: /Say it the other way round/i }).first().click();
+  await p.getByRole('button', { name: /Wrong way round/i }).first().click();
   await p.waitForTimeout(1200);
 
   const sentence = await p.locator('[class*="UnitsEditor_sentence"]').first().innerText();

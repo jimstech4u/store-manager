@@ -178,7 +178,23 @@ export default function StaffPage() {
         p_role_code: code,
       });
       if (e) throw e;
-      await load();
+
+      /*
+       * The row is changed here, not re-read.
+       *
+       * `load()` fetched the whole team — members, invitations and roles, three calls — to learn
+       * one person's role, with the old role on screen until it landed. The role name comes from
+       * the list this screen already holds.
+       */
+      const named = snapshotRef.current.roles.find((r) => r.code === code);
+      setSnapshot({
+        ...snapshotRef.current,
+        members: snapshotRef.current.members.map((m) =>
+          m.user_id === member.user_id
+            ? { ...m, role_code: code, role_name: named?.name ?? m.role_name }
+            : m,
+        ),
+      });
     } catch (e) {
       setProblem(e instanceof Error ? e.message : 'That role could not be changed.');
     }
@@ -313,7 +329,16 @@ export default function StaffPage() {
                         p_store_id: store.id,
                         p_user_id: m.user_id,
                       });
-                      await load();
+
+                      // Back among the active, without re-reading the team to be told so.
+                      setSnapshot({
+                        ...snapshotRef.current,
+                        members: snapshotRef.current.members.map((x) =>
+                          x.user_id === m.user_id
+                            ? { ...x, status: 'active', removed_at: null }
+                            : x,
+                        ),
+                      });
                     }}
                   >
                     Bring back
@@ -345,7 +370,12 @@ export default function StaffPage() {
                   className={styles.remove}
                   onClick={async () => {
                     await getSupabase().rpc('revoke_invitation', { p_id: i.id });
-                    await load();
+
+                    // Taken off the waiting list here; nothing about the rest of the team changed.
+                    setSnapshot({
+                      ...snapshotRef.current,
+                      invites: snapshotRef.current.invites.filter((x) => x.id !== i.id),
+                    });
                   }}
                   aria-label={`Cancel the invitation for ${i.email}`}
                 >

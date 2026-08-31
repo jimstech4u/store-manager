@@ -111,6 +111,15 @@ export function TakePayment({
 
   const notifyDebtors = useListNotifier<{ id: string; balance: string }>('debtors');
 
+  /*
+   * The People list carries a balance too, and it was never told.
+   *
+   * It used to be swept up by `accountsChanged()`, which re-read the whole list. Now that only the
+   * derived figures re-read, the one row that moved is patched here — otherwise somebody settles a
+   * sale, opens People, and reads yesterday's figure.
+   */
+  const notifyCustomers = useListNotifier<{ id: string; balance: string }>('customers');
+
   // What this customer already owes, before today's sale. Fetched when the sheet opens rather
   // than kept live: it is a decision input at this moment, not a value to watch change.
   useEffect(() => {
@@ -282,11 +291,10 @@ export function TakePayment({
        */
       const wentOnAccount = Math.max(0, total - paidNow);
       if (order.customerId && wentOnAccount > 0) {
-        notifyDebtors({
-          type: 'patch',
-          id: order.customerId,
-          patch: { balance: String((outstanding ?? 0) + wentOnAccount) },
-        });
+        const owedNow = String((outstanding ?? 0) + wentOnAccount);
+        notifyDebtors({ type: 'patch', id: order.customerId, patch: { balance: owedNow } });
+        // The People list shows the same figure and is a different list.
+        notifyCustomers({ type: 'patch', id: order.customerId, patch: { balance: owedNow } });
       }
 
       onSettled(data as string);

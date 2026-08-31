@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useDemandState } from '@academix-admin/state-stack';
 import { getSupabase } from '@/lib/supabase/client';
 import { invalidate } from '@/lib/stacks/invalidation';
@@ -54,7 +54,7 @@ interface AccountsState {
  * money into is the highest-value edit in the product.
  */
 export function useBankAccountsState(storeId: string | null) {
-  const [state, demand] = useDemandState<AccountsState>(
+  const [state, demand, setState] = useDemandState<AccountsState>(
     { accounts: [], error: null, settled: false },
     {
       key: `bank-accounts:${storeId ?? 'none'}`,
@@ -114,7 +114,25 @@ export function useBankAccountsState(storeId: string | null) {
     void reload();
   }, [reload]);
 
-  return { ...state, reload };
+  /*
+   * The current value, readable from `write` without making it a dependency of the thing that
+   * writes it — the same shape the loader above uses for its failure path.
+   */
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  /**
+   * Change what this device just changed, without asking the shop to say it again.
+   *
+   * Editing an account called `settingsChanged()` and removing one called `reload()`; both cost a
+   * round trip to learn something the writer already knew, with the old list on screen until it
+   * landed. Another device's change still arrives on the next read.
+   */
+  const write = useCallback((next: BankAccount[]) => {
+    setState({ ...stateRef.current, accounts: next });
+  }, [setState]);
+
+  return { ...state, reload, write };
 }
 
 /** Just the accounts, for the screens that only read them out. */

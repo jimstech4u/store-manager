@@ -87,7 +87,7 @@ const toUnit = (r: Row): SellingUnit => ({
 export function useSellingUnits(storeId: string | null) {
   const [units, demandUnits] = useDemandState<SellingUnit[]>([], {
     key: `selling-units:${storeId ?? 'none'}`,
-    scope: 'catalog_flow',
+    scope: DERIVED_SCOPE,
     persist: true,
     deps: [storeId ?? ''],
     revalidateOnMount: false,
@@ -155,7 +155,7 @@ export function leadUnit(units: SellingUnit[] | undefined): SellingUnit | null {
 export function useUnitGaps(storeId: string | null) {
   const [gaps, demandGaps] = useDemandState<UnitGap[]>([], {
     key: `unit-gaps:${storeId ?? 'none'}`,
-    scope: 'catalog_flow',
+    scope: DERIVED_SCOPE,
     persist: true,
     deps: [storeId ?? ''],
     revalidateOnMount: false,
@@ -200,7 +200,7 @@ export interface UnitGap {
 export function useBuyingUnits(storeId: string | null) {
   const [units, demandUnits] = useDemandState<BuyingUnit[]>([], {
     key: `buying-units:${storeId ?? 'none'}`,
-    scope: 'catalog_flow',
+    scope: DERIVED_SCOPE,
     persist: true,
     deps: [storeId ?? ''],
     revalidateOnMount: false,
