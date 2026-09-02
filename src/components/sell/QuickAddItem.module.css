@@ -1,0 +1,10 @@
+/* Two actions, side by side. Cancel is visible rather than hidden behind a gesture: this opens
+   over a half-built receipt and the way out must be as obvious as the way on. */
+.actions {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.actions > * {
+  flex: 1;
+}

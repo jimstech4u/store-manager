@@ -16,9 +16,11 @@ import { ShareOrder } from '@/components/sell/ShareOrder';
 import { ConfirmDialog, useConfirm } from '@/components/ui/Dialog';
 import { useAsyncAction } from '@/components/ui/AsyncAction';
 import { ProductPicker } from '@/components/catalog/ProductPicker';
+import { QuickAddItem } from '@/components/sell/QuickAddItem';
+import { CountGate } from '@/components/sell/CountGate';
+import { whichNeedCount } from '@/lib/stacks/mid-sale';
 import type { ProductFormResult } from '@/components/catalog/ProductForm';
 import { useAuth } from '@/providers/AuthProvider';
-import { usePermission } from '@/hooks/usePermission';
 import { FloatingAmount } from '@/components/ui/FloatingAmount';
 import {
   fetchProduct,
@@ -67,7 +69,6 @@ import { getSupabase } from '@/lib/supabase/client';
 export default function SellPage() {
   const goBack = useStackBack();
   const nav = useNav();
-  const { can } = usePermission();
   const { store } = useAuth();
   const {
     orders,
@@ -208,6 +209,15 @@ export default function SellPage() {
    */
   const [sharing, setSharing] = useState(false);
   const [askClearCustomer, setAskClearCustomer] = useState(false);
+  /*
+   * The two things that used to stop a sale.
+   *
+   * Something the shop has never entered, and stock nobody has counted today. Both are real
+   * questions and both, asked as blocking ones, end with the seller writing the sale on paper.
+   */
+  const [quickAdd, setQuickAdd] = useState<string | null>(null);
+  const [needCount, setNeedCount] = useState<string[]>([]);
+
   const [askCloseTab, setAskCloseTab] = useState(false);
   /*
    * Which line is having its whole amount typed, and what has been typed so far.
@@ -455,6 +465,26 @@ export default function SellPage() {
       }),
     );
     pickerOps.close();
+
+    /*
+     * HAS THIS BEEN COUNTED TODAY?
+     *
+     * Asked AFTER the line is on the receipt, never before. The sale is not what is in question —
+     * the shelf figure is — and a seller who is blocked at the counter reaches for paper, which
+     * loses the sale as well as the count.
+     *
+     * Failures are swallowed on purpose. If the shop cannot be reached, the right outcome is a
+     * sale that goes through and a count that gets asked for next time; refusing to sell because
+     * a background question could not be answered would be the worst of both.
+     */
+    try {
+      const owing = await whichNeedCount([product.id]);
+      if (owing.has(product.id)) {
+        setNeedCount((ids) => (ids.includes(product.id) ? ids : [...ids, product.id]));
+      }
+    } catch {
+      // Nothing to say to the seller. The sale stands.
+    }
   };
 
   onCustomerCreatedRef.current = (customer) => {
@@ -1099,14 +1129,21 @@ export default function SellPage() {
           onClose={pickerOps.close}
           storeId={store.id}
           onPick={(p) => void addProduct(p)}
-          onAddNew={
-            can('products.manage')
-              ? (typed) => {
-                  pickerOps.close();
-                  void nav.push('product_form_page', typed ? { name: typed } : undefined);
-                }
-              : undefined
-          }
+          /*
+           * OFFERED TO ANYONE WHO MAY SELL, which is the whole point.
+           *
+           * It used to appear only for `products.manage`, so a seller who was asked for something
+           * the shop had never entered had no way forward at all — and the way they find is paper,
+           * which loses the sale as well as the record. Whoever may sell may add; what they cannot
+           * do is vouch for it, and the review queue handles that.
+           *
+           * The quick sheet rather than the full form even for a manager: there is a customer
+           * waiting, and the eleven-question form belongs on the item's own screen.
+           */
+          onAddNew={(typed) => {
+            pickerOps.close();
+            setQuickAdd(typed ?? '');
+          }}
         />
       )}
 
@@ -1119,6 +1156,50 @@ export default function SellPage() {
         with nothing to pay for does not carry a blank gap.
       */}
       {activeOrder && activeOrder.lines.length > 0 && <div className={styles.floatSpacer} />}
+
+      {activeOrder && (
+        <QuickAddItem
+          open={quickAdd !== null}
+          onClose={() => setQuickAdd(null)}
+          storeId={store.id}
+          initialName={quickAdd ?? ''}
+          onAdded={(productId) => {
+            setQuickAdd(null);
+            /*
+             * Read back before it goes on the receipt.
+             *
+             * A line needs more than an id — the unit it is sold in, the price, the cost the
+             * below-cost warning compares against. Fetching it here is also what makes this work
+             * at all: something created seconds ago is in no list this page is holding.
+             */
+            void fetchProduct(productId).then((fresh) => {
+              if (fresh) void addProductRef.current?.(fresh);
+            });
+          }}
+        />
+      )}
+
+      {activeOrder && (
+        <CountGate
+          open={needCount.length > 0}
+          onClose={() => setNeedCount([])}
+          items={needCount.flatMap((id) => {
+            const line = activeOrder.lines.find((l) => l.productId === id);
+            if (!line) return [];
+            const unit = saleUnits[id]?.find((u) => u.id === line.saleUnitId);
+            return [
+              {
+                productId: id,
+                productName: line.productName,
+                unitName: unit?.name ?? line.baseUnit,
+                unitPlural: unit?.name ?? line.baseUnit,
+                baseQty: Number(unit?.baseQty ?? 1),
+              },
+            ];
+          })}
+          onCounted={(done) => setNeedCount((ids) => ids.filter((id) => !done.includes(id)))}
+        />
+      )}
 
       {activeOrder && (
         <CustomerPicker

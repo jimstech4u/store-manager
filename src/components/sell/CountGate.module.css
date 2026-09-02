@@ -1,0 +1,28 @@
+.lead {
+  margin: 0 0 var(--space-4);
+  color: var(--text);
+}
+
+.list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-4);
+  padding: 0;
+}
+
+.row {
+  margin: 0;
+}
+
+/* Two actions, side by side: carry on, or record what is there. Neither is hidden — a seller with
+   a customer waiting must be able to see the way past without hunting for it. */
+.actions {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.actions > * {
+  flex: 1;
+}
