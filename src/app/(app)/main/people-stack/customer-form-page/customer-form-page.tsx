@@ -13,6 +13,7 @@ import { getSupabase } from '@/lib/supabase/client';
 import { useListNotifier } from '@/hooks/useListChannel';
 import styles from './customer-form-page.module.css';
 import { messageOf } from '@/lib/format';
+import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
 
 /**
  * Saving somebody as a customer.
@@ -96,6 +97,17 @@ export default function CustomerFormPage() {
   const [owedThem, setOwedThem] = useState('');
   const [pool, setPool] = useState('');
   const [poolQty, setPoolQty] = useState('');
+  /*
+   * The lines added so far, and the shop's explicit "none".
+   *
+   * A quantity can be zero; a list cannot. So the question is asked outright and either answer is
+   * accepted — lines, or "none are out". What is refused is neither, because a blank list and an
+   * unanswered question look identical afterwards and only one of them is a fact.
+   */
+  const [openingEmpties, setOpeningEmpties] = useState<{ id: string; name: string; qty: string }[]>(
+    [],
+  );
+  const [noEmpties, setNoEmpties] = useState(false);
   const [openingNote, setOpeningNote] = useState('');
   const [pools, setPools] = useState<{ id: string; name: string; kind: string }[]>([]);
 
@@ -125,8 +137,10 @@ export default function CustomerFormPage() {
       problem.show('Do they already owe you anything? Put 0 if they do not.');
       return;
     }
-    if (minimum && pools.length > 0 && poolQty.trim() === '') {
-      problem.show('Are any containers already out with them? Put 0 if none are.');
+    if (minimum && pools.length > 0 && openingEmpties.length === 0 && !noEmpties) {
+      problem.show(
+        'Are any containers already out with them? Add them, or tick that none are.',
+      );
       return;
     }
 
@@ -183,12 +197,19 @@ export default function CustomerFormPage() {
         if (e2) throw e2;
       }
 
-      if (Number(poolQty) > 0 && pool) {
+      /*
+       * One call per pool, in order.
+       *
+       * Sequential rather than parallel so a failure half way through says which line failed — the
+       * shop can then add the rest from the account rather than guessing which of four went in.
+       */
+      for (const line of openingEmpties) {
+        if (!(Number(line.qty) > 0)) continue;
         const { error: e3 } = await getSupabase().rpc('backfill_empties', {
           p_store_id: store.id,
           p_customer_id: customer.id,
-          p_category_id: pool,
-          p_qty: Number(poolQty),
+          p_category_id: line.id,
+          p_qty: Number(line.qty),
           p_as_of: asOf,
         });
         if (e3) throw e3;
@@ -317,38 +338,95 @@ export default function CustomerFormPage() {
 
       {pools.length > 0 && (
         <>
+          <h3 className={styles.subsection}>Containers already out with them</h3>
+
+          {/*
+            ONE COMPOSER, and what has been added listed above it — the rule this project already
+            follows for fees and payments. A customer can owe crates AND bottles at once, and a
+            single select with a single quantity can only ever record the first of them.
+          */}
+          {openingEmpties.length > 0 && (
+            <ul className={styles.lineList}>
+              {openingEmpties.map((line) => (
+                <li key={line.id} className={styles.lineRow}>
+                  <span>
+                    {Number(line.qty)} {line.name}
+                  </span>
+                  <button
+                    type="button"
+                    className={styles.lineRemove}
+                    onClick={() =>
+                      setOpeningEmpties((prev) => prev.filter((l) => l.id !== line.id))
+                    }
+                    aria-label={`Remove ${line.name}`}
+                  >
+                    <CloseIcon />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
           <div className={styles.poolPick}>
             <label className={styles.poolLabel} htmlFor="opening-pool">
-              Containers already out with them
+              Which kind
             </label>
             <select
               id="opening-pool"
               className={styles.poolSelect}
               value={pool}
               onChange={(e) => setPool(e.target.value)}
+              disabled={noEmpties}
             >
-              <option value="">Which kind?</option>
-              {pools.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
+              <option value="">Choose one</option>
+              {pools
+                .filter((x) => !openingEmpties.some((l) => l.id === x.id))
+                .map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.name}
+                  </option>
+                ))}
             </select>
           </div>
 
           <Field
             label="How many"
             numeric
-            required={minimum}
             value={poolQty}
             onChange={(e) => setPoolQty(e.target.value)}
             placeholder="0"
-            hint={
-              minimum
-                ? 'Put 0 if none are out. One kind now; add the rest from their account.'
-                : 'One kind here; the rest can be added from their account afterwards.'
-            }
+            disabled={noEmpties}
           />
+
+          <Button
+            fullWidth
+            disabled={noEmpties || !pool || !(Number(poolQty) > 0)}
+            onClick={() => {
+              const chosen = pools.find((x) => x.id === pool);
+              if (!chosen) return;
+              setOpeningEmpties((prev) => [...prev, { id: chosen.id, name: chosen.name, qty: poolQty }]);
+              setPool('');
+              setPoolQty('');
+            }}
+          >
+            <PlusIcon /> Add these
+          </Button>
+
+          {/*
+            The other answer, and it has to be as easy to give as the first.
+            A shop that ticks this has ANSWERED; a shop that leaves the list empty has not.
+          */}
+          <label className={styles.toggleRow}>
+            <input
+              type="checkbox"
+              checked={noEmpties}
+              onChange={(e) => {
+                setNoEmpties(e.target.checked);
+                if (e.target.checked) setOpeningEmpties([]);
+              }}
+            />
+            <span>None are out with them</span>
+          </label>
         </>
       )}
 

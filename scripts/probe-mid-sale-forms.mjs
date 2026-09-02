@@ -237,31 +237,100 @@ try {
     );
   }
 
-  // ══ A customer, on the same terms ═════════════════════════════════════════════════
+  // ══ A customer, on the same terms ════════════════════════════════════════════════
   console.log('\n— and a customer created mid-sale —');
-  const custBtn = p.getByRole('button', { name: /customer/i }).first();
-  if (await custBtn.count()) {
-    await custBtn.click();
-    await p.waitForTimeout(2500);
-    const NAME = `ZZ Cust ${stamp}`;
-    const search = p.getByPlaceholder(/Search/i).first();
-    if (await search.count()) {
-      await search.fill(NAME);
-      await p.waitForTimeout(2500);
-      const addNew = p.getByRole('button', { name: new RegExp(`Add "${NAME}"|Add somebody`) }).first();
-      if (await addNew.count()) {
-        await addNew.click();
-        await p.waitForTimeout(4500);
-        await p.screenshot({ path: `${SHOTS}/5-customer-form.png`, fullPage: true });
+  /*
+   * Reached by the control the till actually has.
+   *
+   * A first version guessed at a button called "customer" and found nothing, so every check in this
+   * section sat inside an `if` that never ran — and the probe reported success having tested
+   * nothing at all. A second guessed at `forRow`, which belongs to the PAYMENT screen. The till's
+   * own control says "Say who this sale is for", and asking for it by that name is the difference
+   * between testing the journey and testing a guess.
+   */
+  const forRow = p.getByRole('button', { name: /Say who this sale is for|Change who this sale is for/i }).first();
+  check('the till offers to name a customer', (await forRow.count()) > 0);
+  await forRow.click();
+  await p.waitForTimeout(4000);
 
-        const cf = await body();
-        check('the customer form asks what they already owed', /Before you started here/i.test(cf), cf.slice(0, 90));
-        check('and whether containers are out with them', /Containers already out|already owe you/i.test(cf));
-      } else {
-        check('the customer form asks what they already owed', false, 'no add-new offered');
-      }
-    }
+  const CNAME = `ZZ Cust ${stamp}`;
+  const csearch = p.getByPlaceholder(/Search/i).first();
+  await csearch.fill(CNAME);
+  await p.waitForTimeout(2500);
+  const addCust = p.getByRole('button', { name: new RegExp(`Add "${CNAME}"|Add somebody|Add a new`) }).first();
+  check('and adding one who is not on the list', (await addCust.count()) > 0, (await body()).slice(0, 90));
+  await addCust.click();
+  await p.waitForTimeout(4500);
+  await p.screenshot({ path: `${SHOTS}/5-customer-form.png`, fullPage: true });
+
+  const cf = await body();
+  check('the real customer form is pushed', /Add a customer/i.test(cf), cf.slice(0, 70));
+  check('asking what they already owed', /Before you started here/i.test(cf));
+  check('and what containers are out with them', /Containers already out/i.test(cf));
+
+  // ── The requirements bite ───────────────────────────────────────────────────────
+  await p.getByLabel(/Phone/i).first().fill(`0809${stamp}1`);
+  await p.waitForTimeout(400);
+  const saveCust = p.getByRole('button', { name: /Save customer|Add them|^Save$/i }).last();
+  await saveCust.scrollIntoViewIfNeeded();
+  await saveCust.click();
+  await p.waitForTimeout(3000);
+
+  check(
+    'leaving what they owe blank is refused',
+    (await dialog().count()) > 0 && /already owe/i.test(await body()),
+    (await body()).slice(0, 110),
+  );
+  if (await dialog().count()) {
+    await p.getByRole('button', { name: /^OK$/ }).first().click();
+    await p.waitForTimeout(1200);
   }
+
+  const owes = p.getByLabel(/They already owe you/i).first();
+  await owes.scrollIntoViewIfNeeded();
+  await owes.fill('0');
+  await p.waitForTimeout(400);
+
+  await saveCust.scrollIntoViewIfNeeded();
+  await saveCust.click();
+  await p.waitForTimeout(3000);
+  await p.screenshot({ path: `${SHOTS}/6-empties-required.png` });
+
+  /*
+   * A LIST cannot be zero, so the question is asked outright.
+   *
+   * "None are out" is an answer; an empty list is not, and the two are indistinguishable a month
+   * later. This is the same rule as the numbers, said the only way a list can say it.
+   */
+  const emptiesAsked = (await dialog().count()) > 0 && /containers already out/i.test(await body());
+  check('and an unanswered empties question is refused too', emptiesAsked, (await body()).slice(0, 110));
+  if (await dialog().count()) {
+    await p.getByRole('button', { name: /^OK$/ }).first().click();
+    await p.waitForTimeout(1200);
+  }
+
+  const none = p.getByText(/None are out with them/i).first();
+  if (await none.count()) {
+    await none.scrollIntoViewIfNeeded();
+    await none.click();
+    await p.waitForTimeout(600);
+  }
+  await saveCust.scrollIntoViewIfNeeded();
+  await saveCust.click();
+  await p.waitForTimeout(7000);
+  await p.screenshot({ path: `${SHOTS}/7-customer-attached.png` });
+
+  check('saying "none are out" is accepted', (await dialog().count()) === 0, (await body()).slice(0, 90));
+  check(
+    'and the customer is attached to the sale being built',
+    (await body()).includes(CNAME),
+    (await body()).slice(0, 110),
+  );
+
+  const { data: cust } = await admin
+    .from('store_customers').select('id').eq('display_name', CNAME).maybeSingle();
+  check('the customer exists', Boolean(cust));
+  if (cust) made.customers.push(cust.id);
 
   check('no page errors throughout', errors.length === 0, errors.join(' | '));
 } finally {
@@ -273,6 +342,7 @@ try {
     const gone = await admin.from('products').delete().eq('id', id);
     if (gone.error) await admin.from('products').update({ status: 'archived' }).eq('id', id);
   }
+  for (const id of made.customers) await admin.from('store_customers').delete().eq('id', id);
   await admin.from('store_customers').delete().like('display_name', `ZZ Cust ${stamp}%`);
   for (const id of made.units) await admin.from('store_units').delete().eq('id', id);
   console.log('\n  (probe rows removed)');

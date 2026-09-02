@@ -44,3 +44,58 @@
   color: var(--text);
   font-size: var(--text-base);
 }
+
+/* ── Lines added to a composer ────────────────────────────────────────────────────── */
+
+.subsection {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  margin: var(--space-5) 0 var(--space-2);
+}
+
+.lineList {
+  list-style: none;
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.lineRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+  background: var(--surface);
+}
+
+.lineRow + .lineRow { border-top: 1px solid var(--border); }
+
+.lineRemove {
+  flex: none;
+  /* A real tap target, and destructive, so it is not next to anything else. */
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 0;
+  color: var(--danger);
+  cursor: pointer;
+}
+
+.toggleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.toggleRow input { width: 18px; height: 18px; flex: none; }
