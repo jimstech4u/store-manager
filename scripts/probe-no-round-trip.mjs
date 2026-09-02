@@ -165,7 +165,13 @@ try {
 
   // ── 3. A rename reaches the list ──────────────────────────────────────────────────
   console.log('\n— and when the shop renames it —');
-  await p.locator('[class*="stock-page_itemName"]:visible').filter({ hasText: NAME }).first().click();
+  // Anything still open over the page intercepts every click beneath it.
+  await p.keyboard.press('Escape');
+  await p.waitForTimeout(1200);
+
+  const newRow = p.locator('[class*="stock-page_itemName"]').filter({ hasText: NAME }).first();
+  await newRow.scrollIntoViewIfNeeded();
+  await newRow.click();
   await p.waitForTimeout(4000);
   await p.locator('button[aria-label*="Edit" i]:visible').first().click();
   await p.waitForTimeout(4000);
@@ -203,6 +209,17 @@ try {
   if (await item.count()) {
     await item.click();
     await p.waitForTimeout(6000);
+  }
+
+  /*
+   * The till now asks for a shelf count the first time an item is sold that day. It is a real
+   * question and it is not this probe's subject, so it is answered with "Not now" and the sale
+   * carries on — which is the behaviour being relied on.
+   */
+  const notNow = p.getByRole('button', { name: /^Not now$/i }).first();
+  if (await notNow.count()) {
+    await notNow.click();
+    await p.waitForTimeout(1500);
   }
 
   await p.getByRole('button', { name: /take payment/i }).first().click();

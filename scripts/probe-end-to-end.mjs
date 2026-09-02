@@ -168,6 +168,19 @@ try {
 
   // ══ 2. Take a delivery ══════════════════════════════════════════════════════════════
   console.log('\n— ten crates at 9,000, plus 5,000 delivery —');
+  // The header autohides on scroll, and the stock list is long enough to scroll now.
+  await p.mouse.wheel(0, -3000);
+  await p.waitForTimeout(1000);
+  /*
+   * Anything still open over the page is dismissed first.
+   *
+   * A sheet left open intercepts every click on the page beneath it, and the failure reads as
+   * "button not found" when the button is right there.
+   */
+  await p.keyboard.press('Escape');
+  await p.waitForTimeout(1200);
+  await p.mouse.wheel(0, -3000);
+  await p.waitForTimeout(800);
   await p.getByRole('button', { name: /record a delivery|receive/i }).first().click();
   await p.waitForTimeout(4000);
   await p.getByRole('button', { name: /Add an item/i }).first().click();
