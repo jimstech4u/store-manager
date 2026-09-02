@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import styles from './receive-page.module.css';
 import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
@@ -8,7 +8,6 @@ import { useStackBack } from '@/hooks/useStackBack';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { ProductPicker } from '@/components/catalog/ProductPicker';
-import { QuickAddItem } from '@/components/sell/QuickAddItem';
 import { Explain, InfoPanel, WorkedExample } from '@/components/ui/Explain';
 import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
 import { useBuyingUnits } from '@/lib/stacks/selling-units';
@@ -103,13 +102,31 @@ export default function ReceivePage() {
   const notifyProducts = useListNotifier<Product>('products');
 
   const [picking, setPicking] = useState(false);
-  const [quickAdd, setQuickAdd] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const error = useProblem();
   const [done, setDone] = useState(false);
 
   const patch = (key: string, next: Partial<ReceiveLine>) =>
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...next } : l)));
+
+  /*
+   * An item created from here lands on THIS delivery.
+   *
+   * The same hook the till uses, published while this screen is open and withdrawn when it closes —
+   * a callback left published is found by whoever pushes the form next, which is how a customer
+   * created from the People tab once attached itself to an open sale.
+   */
+  useEffect(() => {
+    const cleanup = nav.provideObject(
+      'onProductSaved',
+      () => async (created: { id: string }) => {
+        const fresh = await fetchProduct(created.id);
+        if (fresh) addProductRef.current?.(fresh);
+      },
+      { global: true, scope: 'catalog' },
+    );
+    return cleanup;
+  }, [nav]);
 
   const addProduct = (p: Product) => {
     const options = buyUnits.get(p.id) ?? [];
@@ -136,6 +153,16 @@ export default function ReceivePage() {
     ]);
     setPicking(false);
   };
+
+  /*
+   * Held in a ref, so the callback published above is never a render behind.
+   *
+   * `provideObject` runs once; `addProduct` closes over `buyUnits`, which arrives after the first
+   * render. Without the ref the published version would be the one that could not see the units,
+   * and a line added this way would land with no buying unit.
+   */
+  const addProductRef = useRef(addProduct);
+  addProductRef.current = addProduct;
 
   const factorOf = (l: ReceiveLine) =>
     l.buyUnitFactor ?? (l.packId && l.packQty ? Number(l.packQty) : 1);
@@ -610,9 +637,15 @@ export default function ReceivePage() {
           of something the supplier simply sent this week. The item gets created here and the line
           lands on the delivery, exactly as the till does it; a manager checks it afterwards.
         */
+        /*
+          THE REAL FORM, PUSHED. The delivery is pushed under and keeps every line already entered.
+        */
         onAddNew={(typed) => {
           setPicking(false);
-          setQuickAdd(typed ?? '');
+          void nav.push('product_form_page', {
+            required: 'minimum',
+            ...(typed?.trim() ? { name: typed.trim() } : {}),
+          });
         }}
         emptyHint="Nothing by that name yet — add it here and carry on with the delivery."
         renderMeta={(p) => (
@@ -623,27 +656,6 @@ export default function ReceivePage() {
         )}
       />
 
-      <QuickAddItem
-        open={quickAdd !== null}
-        onClose={() => setQuickAdd(null)}
-        storeId={store.id}
-        initialName={quickAdd ?? ''}
-        purpose="delivery"
-        onAdded={(productId) => {
-          setQuickAdd(null);
-          /*
-            Read back before it becomes a line.
-
-            `addProduct` wants a whole product — its base unit, what is on hand, the units it is
-            bought in. Something created two seconds ago is in no list this page is holding, so
-            asking for it is not a round trip that could have been avoided; it is the only place
-            the answer exists.
-          */
-          void fetchProduct(productId).then((fresh) => {
-            if (fresh) addProduct(fresh);
-          });
-        }}
-      />
 
       {/*
         The outcome is a SHEET, not a replacement screen.

@@ -166,6 +166,8 @@ export default function TakePaymentPage() {
           void nav.push('customer_form_page', {
             ...(name.trim() ? { name } : {}),
             then: 'attach-to-sale',
+                      // Mid-sale: ask for the opening position while the shop is with them.
+            required: 'minimum',
           });
         }}
       />

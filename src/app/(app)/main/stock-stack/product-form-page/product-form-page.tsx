@@ -35,6 +35,13 @@ export default function ProductFormPage() {
 
   const productId = (location?.params?.id as string | undefined) ?? null;
   const prefillName = (location?.params?.name as string | undefined) ?? '';
+  /*
+   * Pushed from a counter with somebody waiting.
+   *
+   * The caller says so; the form cannot tell. It changes which fields are REQUIRED — what is on
+   * the shelf, whether the container comes back, how many are already out — not which exist.
+   */
+  const minimum = location?.params?.required === 'minimum';
 
   const { product, settled } = useProduct(productId);
 
@@ -63,13 +70,18 @@ export default function ProductFormPage() {
       onBack={goBack}
       title={productId ? 'Edit this item' : 'Add an item you sell'}
       subtitle={
-        productId ? 'Change what this item is called and costs' : 'Something new for your shelf'
+        productId
+          ? 'Change what this item is called and costs'
+          : minimum
+            ? 'The few things a sale needs — the rest can wait'
+            : 'Something new for your shelf'
       }
     >
       <ProductForm
         storeId={store.id}
         product={product}
         initialName={prefillName}
+        minimum={minimum}
         /*
          * A unit the shop has no word for yet.
          *

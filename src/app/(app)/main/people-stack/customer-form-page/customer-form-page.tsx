@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNav, useObject } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { Button } from '@/components/ui/Button';
@@ -76,9 +76,60 @@ export default function CustomerFormPage() {
   const [busy, setBusy] = useState(false);
   const problem = useProblem();
 
+  /*
+   * Pushed from a counter with somebody waiting. The caller says so; the form cannot tell.
+   *
+   * It changes which of the opening figures are REQUIRED — not which exist. A shop that is putting
+   * a customer on account mid-sale is the shop most likely to already be owed something by them,
+   * and it is the moment they know.
+   */
+  const minimum = location?.params?.required === 'minimum';
+
+  /*
+   * WHAT THEY ALREADY OWED, before this shop started here.
+   *
+   * Recorded through `backfill_debtor` / `backfill_empties` rather than as a fake sale, so nothing
+   * pretends goods moved on a day they did not. They land on the timeline as opening entries, and
+   * every later figure is built on top of them.
+   */
+  const [owes, setOwes] = useState('');
+  const [owedThem, setOwedThem] = useState('');
+  const [pool, setPool] = useState('');
+  const [poolQty, setPoolQty] = useState('');
+  const [openingNote, setOpeningNote] = useState('');
+  const [pools, setPools] = useState<{ id: string; name: string; kind: string }[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getSupabase()
+      .rpc('store_empties_categories', { p_store_id: store?.id })
+      .then(({ data }) => {
+        if (!cancelled) setPools((data ?? []) as typeof pools);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [store?.id]);
+
   if (!store) return null;
 
   const save = async () => {
+    /*
+     * REQUIRED, AND ZERO IS AN ANSWER.
+     *
+     * "They owe nothing" is a fact somebody checked. A blank is a question nobody asked, and it
+     * looks identical afterwards — which is how a customer's opening balance quietly becomes zero
+     * for the rest of the shop's life.
+     */
+    if (minimum && owes.trim() === '') {
+      problem.show('Do they already owe you anything? Put 0 if they do not.');
+      return;
+    }
+    if (minimum && pools.length > 0 && poolQty.trim() === '') {
+      problem.show('Are any containers already out with them? Put 0 if none are.');
+      return;
+    }
+
     setBusy(true);
     try {
       const { data, error } = await getSupabase().rpc('upsert_customer', {
@@ -97,6 +148,51 @@ export default function CustomerFormPage() {
       if (error) throw error;
 
       const customer = { id: data as string, name: name.trim(), phone: phone.trim() };
+
+      /*
+       * The opening position, dated to the day the shop opened its book — not today.
+       *
+       * `p_as_of` is what keeps a report able to separate "brought forward" from "traded here". A
+       * balance stamped with today's date reads as business this shop did, and no later report can
+       * tell the difference.
+       */
+      const asOf = new Date().toISOString().slice(0, 10);
+
+      if (Number(owes) > 0) {
+        const { error: e1 } = await getSupabase().rpc('backfill_debtor', {
+          p_store_id: store.id,
+          p_customer_id: customer.id,
+          p_amount: Number(owes),
+          p_as_of: asOf,
+          p_note: openingNote.trim() || 'What they owed before we started here',
+        });
+        if (e1) throw e1;
+      }
+
+      if (Number(owedThem) > 0) {
+        const { error: e2 } = await getSupabase().rpc('backfill_debtor', {
+          p_store_id: store.id,
+          p_customer_id: customer.id,
+          // Negative: the same ledger, the other direction. A shop that owes a customer is an
+          // ordinary situation — an overpayment, a returned load — and it belongs on the same line
+          // as what they owe, or the two can disagree.
+          p_amount: -Number(owedThem),
+          p_as_of: asOf,
+          p_note: openingNote.trim() || 'What we owed them before we started here',
+        });
+        if (e2) throw e2;
+      }
+
+      if (Number(poolQty) > 0 && pool) {
+        const { error: e3 } = await getSupabase().rpc('backfill_empties', {
+          p_store_id: store.id,
+          p_customer_id: customer.id,
+          p_category_id: pool,
+          p_qty: Number(poolQty),
+          p_as_of: asOf,
+        });
+        if (e3) throw e3;
+      }
 
       /*
        * The list is told about this one customer rather than asked to read itself again.
@@ -178,6 +274,91 @@ export default function CustomerFormPage() {
         value={business}
         onChange={(e) => setBusiness(e.target.value)}
         placeholder="Their shop or company"
+      />
+
+      {/*
+        WHAT THEY ALREADY OWED, asked here because here is where it is known.
+
+        A shop moving off a paper book creates the person and their history in one breath. Asking on
+        a second screen afterwards means half of them never get asked — and an opening balance
+        nobody entered is indistinguishable from a customer who owes nothing.
+
+        Required with ZERO ACCEPTED when this form was pushed from a counter. "They owe nothing" is
+        a fact somebody checked; a blank is a question nobody asked, and the two look identical a
+        month later.
+      */}
+      <h2 className={styles.section}>Before you started here</h2>
+      <p className={styles.sectionNote}>
+        From your book, if you have been trading with them already. Dated before today, so your
+        reports can tell it apart from business done here.
+      </p>
+
+      <Field
+        label="They already owe you"
+        numeric
+        prefix="₦"
+        required={minimum}
+        value={owes}
+        onChange={(e) => setOwes(e.target.value)}
+        placeholder="0"
+        hint={minimum ? 'Put 0 if they owe you nothing.' : 'Leave blank if there is nothing to carry over.'}
+      />
+
+      <Field
+        label="You owe them"
+        optional
+        numeric
+        prefix="₦"
+        value={owedThem}
+        onChange={(e) => setOwedThem(e.target.value)}
+        placeholder="0"
+        hint="An overpayment, or a load they brought back. Rarer, and it still belongs on the account."
+      />
+
+      {pools.length > 0 && (
+        <>
+          <div className={styles.poolPick}>
+            <label className={styles.poolLabel} htmlFor="opening-pool">
+              Containers already out with them
+            </label>
+            <select
+              id="opening-pool"
+              className={styles.poolSelect}
+              value={pool}
+              onChange={(e) => setPool(e.target.value)}
+            >
+              <option value="">Which kind?</option>
+              {pools.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <Field
+            label="How many"
+            numeric
+            required={minimum}
+            value={poolQty}
+            onChange={(e) => setPoolQty(e.target.value)}
+            placeholder="0"
+            hint={
+              minimum
+                ? 'Put 0 if none are out. One kind now; add the rest from their account.'
+                : 'One kind here; the rest can be added from their account afterwards.'
+            }
+          />
+        </>
+      )}
+
+      <Field
+        label="Where this came from"
+        optional
+        value={openingNote}
+        onChange={(e) => setOpeningNote(e.target.value)}
+        placeholder="Blue book, page 14"
+        hint="For whoever reads the account later and wonders where the figure came from."
       />
 
       <div className={styles.actions}>

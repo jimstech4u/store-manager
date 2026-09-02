@@ -16,7 +16,6 @@ import { ShareOrder } from '@/components/sell/ShareOrder';
 import { ConfirmDialog, useConfirm } from '@/components/ui/Dialog';
 import { useAsyncAction } from '@/components/ui/AsyncAction';
 import { ProductPicker } from '@/components/catalog/ProductPicker';
-import { QuickAddItem } from '@/components/sell/QuickAddItem';
 import { CountGate } from '@/components/sell/CountGate';
 import { findByBarcode, whichNeedCount } from '@/lib/stacks/mid-sale';
 import { BarcodeScanner } from '@/components/catalog/BarcodeScanner';
@@ -216,7 +215,6 @@ export default function SellPage() {
    * Something the shop has never entered, and stock nobody has counted today. Both are real
    * questions and both, asked as blocking ones, end with the seller writing the sale on paper.
    */
-  const [quickAdd, setQuickAdd] = useState<string | null>(null);
 
   /*
    * Scanning, at the till.
@@ -1181,9 +1179,20 @@ export default function SellPage() {
            * The quick sheet rather than the full form even for a manager: there is a customer
            * waiting, and the eleven-question form belongs on the item's own screen.
            */
+          /*
+            THE REAL FORM, PUSHED — not a second one in a sheet.
+
+            The till is pushed UNDER, not popped, so nothing on the receipt is lost by using the
+            whole screen. `required: 'minimum'` asks only what a sale needs; the result comes back
+            through `onProductSaved`, which this page already provides.
+          */
           onAddNew={(typed) => {
             pickerOps.close();
-            setQuickAdd(typed ?? '');
+            setScanProblem(null);
+            void nav.push('product_form_page', {
+              required: 'minimum',
+              ...(typed?.trim() ? { name: typed.trim() } : {}),
+            });
           }}
         />
       )}
@@ -1240,8 +1249,7 @@ export default function SellPage() {
                 setScanProblem(
                   'Nothing in the shop has that barcode. Add it and it can be scanned next time.',
                 );
-                setQuickAdd('');
-              } catch (e) {
+                } catch (e) {
                 setScanProblem(
                   messageOf(e, 'That barcode could not be looked up.'),
                 );
@@ -1251,28 +1259,6 @@ export default function SellPage() {
         />
       )}
 
-      {activeOrder && (
-        <QuickAddItem
-          open={quickAdd !== null}
-          onClose={() => setQuickAdd(null)}
-          storeId={store.id}
-          initialName={quickAdd ?? ''}
-          onAdded={(productId) => {
-            setQuickAdd(null);
-            setScanProblem(null);
-            /*
-             * Read back before it goes on the receipt.
-             *
-             * A line needs more than an id — the unit it is sold in, the price, the cost the
-             * below-cost warning compares against. Fetching it here is also what makes this work
-             * at all: something created seconds ago is in no list this page is holding.
-             */
-            void fetchProduct(productId).then((fresh) => {
-              if (fresh) void addProductRef.current?.(fresh);
-            });
-          }}
-        />
-      )}
 
       {activeOrder && (
         <CountGate
@@ -1303,7 +1289,12 @@ export default function SellPage() {
           initialName={activeOrder.customerName}
           onCreate={(name) => {
             setPickingCustomer(false);
-            void nav.push('customer_form_page', { name, then: 'attach-to-sale' });
+            void nav.push('customer_form_page', {
+              name,
+              then: 'attach-to-sale',
+              // Mid-sale: ask for the opening position while the shop is standing in front of them.
+              required: 'minimum',
+            });
           }}
           onPick={(c) => {
             updateOrder(activeOrder.clientUuid, {

@@ -1,11 +1,9 @@
 'use client';
 
-import { useState } from 'react';
 import styles from './count-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { PlusIcon } from '@/components/ui/Icon';
-import { QuickAddItem } from '@/components/sell/QuickAddItem';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
 import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
@@ -39,7 +37,6 @@ export default function CountPage() {
 
   // Browsing here; searching happens in the sheet, where the results get the whole screen.
   const [searchId, searchOps, isSearchOpen] = useSearchController();
-  const [quickAdd, setQuickAdd] = useState<string | null>(null);
 
   const browse = useProductList(store?.id ?? null);
 
@@ -106,7 +103,12 @@ export default function CountPage() {
         {
           key: 'add',
           icon: <PlusIcon />,
-          onClick: () => setQuickAdd(''),
+          /*
+            THE REAL FORM, PUSHED, and it asks for the count as one of its required answers — so
+            somebody adding a thing they are looking at records how many there are in the same
+            breath, rather than being asked twice.
+          */
+          onClick: () => void nav.push('product_form_page', { required: 'minimum' }),
           ariaLabel: 'Something not on this list',
         },
       ]}
@@ -122,17 +124,6 @@ export default function CountPage() {
         onOpen={searchOps.open}
       />
 
-      <QuickAddItem
-        open={quickAdd !== null}
-        onClose={() => setQuickAdd(null)}
-        storeId={store.id}
-        initialName={quickAdd ?? ''}
-        purpose="count"
-        onAdded={(productId) => {
-          setQuickAdd(null);
-          void nav.push('count_entry_page', { id: productId });
-        }}
-      />
 
       <SearchSheet<Product>
         id={searchId}

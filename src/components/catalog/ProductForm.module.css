@@ -75,3 +75,43 @@
   padding-top: 0;
   border-top: none;
 }
+
+/* ── Yes/no rows ──────────────────────────────────────────────────────────────────── */
+
+.toggleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  /* A real tap target: these decide whether an obligation is tracked at all. */
+  min-height: 44px;
+  font-size: var(--text-sm);
+}
+
+.toggleRow input { width: 18px; height: 18px; flex: none; }
+
+.toggleRow label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+
+/* ── Folded sections ──────────────────────────────────────────────────────────────── */
+
+.disclosure {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  /* A real tap target: this is the only way to the fields it hides. */
+  min-height: 48px;
+  margin-bottom: var(--space-4);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}

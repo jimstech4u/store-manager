@@ -90,6 +90,7 @@ export function ProductForm({
   /** Prefills the name when opened from a search that found nothing. */
   initialName = '',
   onCreateUnit,
+  minimum = false,
 }: {
   onSaved: (result: ProductFormResult) => void;
   onCancel: () => void;
@@ -104,6 +105,18 @@ export function ProductForm({
    * not exist — the same reason the customer picker asks its caller.
    */
   onCreateUnit?: (name: string) => void;
+  /**
+   * ASK ONLY WHAT THE SALE NEEDS, and ask it properly.
+   *
+   * Set when this form is pushed from a counter with a customer waiting. It does not hide
+   * anything — every field is still here, below — it changes which ones are REQUIRED and which
+   * sections start folded.
+   *
+   * The three it adds are required in this mode and not in the other, because at a counter they
+   * are knowable and later they are not: what is on the shelf right now, whether the container
+   * comes back, and how many are already out. A shop that answers them a day later is guessing.
+   */
+  minimum?: boolean;
 }) {
   const nav = useNav();
   const editing = Boolean(product);
@@ -111,6 +124,27 @@ export function ProductForm({
   const [name, setName] = useState('');
   const [sku, setSku] = useState('');
   const [barcode, setBarcode] = useState('');
+  // Folded at a counter, open everywhere else. See the disclosure below.
+  const [showCodes, setShowCodes] = useState(false);
+
+  /*
+   * The opening facts, and why they are REQUIRED WITH ZERO ALLOWED.
+   *
+   * "None on the shelf" and "nobody looked" are different facts, and only one of them means the
+   * next person can trust the figure. Leaving these optional makes every new item silently claim
+   * nothing is out and nothing is owed — which is right most of the time and catastrophic the rest,
+   * because nobody ever goes back to check a blank they did not know they left.
+   *
+   * So the form insists on an answer and accepts 0 as one.
+   */
+  const [openingCount, setOpeningCount] = useState('');
+  const [returnable, setReturnable] = useState(false);
+  const [poolName, setPoolName] = useState('');
+  const [poolKind, setPoolKind] = useState<'content' | 'container'>('content');
+  const [poolPerUnit, setPoolPerUnit] = useState('1');
+  const [poolDeposit, setPoolDeposit] = useState('');
+  const [emptiesOut, setEmptiesOut] = useState('');
+  const [pools, setPools] = useState<{ id: string; name: string; kind: string; deposit: string }[]>([]);
 
   /*
    * What it is bought and sold in, and the cheaper prices for buying more.
@@ -203,10 +237,51 @@ export function ProductForm({
     return match?.code ?? 'piece';
   };
 
+  /*
+   * The pools this shop already has.
+   *
+   * Offered rather than typed, because "NBL crate" and "NBL Crate" are one pool to a shop and two
+   * rows to a database. The seller can still name a new one — `set_product_returnable` matches
+   * case-insensitively and creates it only when nothing matches.
+   */
+  useEffect(() => {
+    if (editing) return;
+    let cancelled = false;
+    void getSupabase()
+      .rpc('store_empties_categories', { p_store_id: storeId })
+      .then(({ data }) => {
+        if (!cancelled) setPools((data ?? []) as typeof pools);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [storeId, editing]);
+
   const save = async () => {
     const trimmed = name.trim();
     if (!trimmed) {
       problem.show('Give the item a name.');
+      return;
+    }
+
+    /*
+     * REQUIRED, AND ZERO IS AN ANSWER.
+     *
+     * Blank is refused; "0" is accepted and recorded. The difference is the whole point — a shop
+     * that has run out of something is a fact worth writing down, and a shop that never looked is
+     * a figure nobody should trust. Only in `minimum` mode, because that is the moment somebody is
+     * standing in front of the shelf.
+     */
+    if (minimum && openingCount.trim() === '') {
+      problem.show('How many are on the shelf right now? Put 0 if there are none.');
+      return;
+    }
+    if (minimum && returnable && !poolName.trim()) {
+      problem.show('What comes back — a crate, a bottle? Name it, or turn off "comes back".');
+      return;
+    }
+    if (minimum && returnable && emptiesOut.trim() === '') {
+      problem.show('How many are already out with customers? Put 0 if none are.');
       return;
     }
 
@@ -278,6 +353,36 @@ export function ProductForm({
       await saveDiscounts(id, discounts);
 
       /*
+       * The opening facts, AFTER the units — a count is in base units and the units define them.
+       *
+       * Ordered rather than parallel, and deliberately: if the returnable link fails, the shop
+       * still has an item it can sell, and the failure says so. The reverse — a returnable pool
+       * pointing at a product whose units never saved — is a row nobody can read.
+       */
+      if (!editing && openingCount.trim() !== '') {
+        const { error } = await supabase.rpc('open_stock_by_count', {
+          p_store_id: storeId,
+          p_product_id: id,
+          p_qty: Number(openingCount) || 0,
+          p_unit_cost: null,
+          p_note: 'Counted when the item was added',
+        });
+        if (error) throw error;
+      }
+
+      if (!editing && returnable && poolName.trim()) {
+        const { error } = await supabase.rpc('set_product_returnable', {
+          p_store_id: storeId,
+          p_product_id: id,
+          p_category_name: poolName.trim(),
+          p_kind: poolKind,
+          p_qty_per_base_unit: Number(poolPerUnit) || 1,
+          p_deposit: Number(poolDeposit) || 0,
+        });
+        if (error) throw error;
+      }
+
+      /*
        * The row, built from what this device just did.
        *
        * Nothing here is invented: a brand-new item has nothing on the shelf and nothing spent on
@@ -338,6 +443,27 @@ export function ProductForm({
         autoFocus
       />
 
+      {/*
+        THE CODES FOLD AWAY WHEN THERE IS SOMEBODY WAITING.
+
+        Nothing is removed — every field is one tap down — but a seller adding something mid-sale
+        met "Your own code" and "Barcode" before anything the sale needs. `minimum` was changing
+        which fields are required and leaving the order alone, which is half a job: the fastest way
+        to make a form feel long is to put its optional half first.
+      */}
+      {minimum ? (
+        <>
+          <button
+            type="button"
+            className={styles.disclosure}
+            onClick={() => setShowCodes((v) => !v)}
+            aria-expanded={showCodes}
+          >
+            {showCodes ? 'Hide codes and barcode' : 'Codes and barcode'}
+            <span aria-hidden="true">{showCodes ? '\u2212' : '+'}</span>
+          </button>
+          {showCodes && (
+            <>
       <Field
         label="Your own code"
         optional
@@ -374,7 +500,49 @@ export function ProductForm({
           setScanning(false);
         }}
       />
+            </>
+          )}
+        </>
+      ) : (
+        <>
+      <Field
+        label="Your own code"
+        optional
+        value={sku}
+        onChange={(e) => setSku(e.target.value)}
+        placeholder="CC-PET-60"
+        hint="Anything short you use to find it quickly. Leave empty if you do not use codes."
+      />
 
+      {/*
+        Thirteen digits off a curved label, at a counter.
+
+        Typed, that is the kind of task people abandon halfway — and a wrong barcode is worse than
+        none, because it will match the wrong thing later. The phone already has a scanner.
+      */}
+      <Field
+        label="Barcode"
+        optional
+        value={barcode}
+        onChange={(e) => setBarcode(e.target.value)}
+        placeholder="5449000000996"
+        hint="The number under the bars on the label, if it has one."
+      />
+
+      <Button variant="secondary" fullWidth onClick={() => setScanning(true)}>
+        <CameraIcon /> Scan it with the camera
+      </Button>
+
+      <BarcodeScanner
+        open={scanning}
+        onClose={() => setScanning(false)}
+        onRead={(code) => {
+          setBarcode(code);
+          setScanning(false);
+        }}
+      />
+        </>
+      )}
 
       {/*
         What it is bought in and sold in.
@@ -398,6 +566,137 @@ export function ProductForm({
         storeUnits={storeUnits}
         onCreateUnit={(unitName) => onCreateUnit?.(unitName)}
       />
+
+      {/*
+        WHAT IS TRUE RIGHT NOW, asked while somebody is standing in front of the shelf.
+
+        Only when creating. Editing an item a week later and being asked "how many are on the
+        shelf?" invites a guess, and a guess written into stock is worse than no figure — it looks
+        like a count.
+
+        Required in `minimum` mode with ZERO ACCEPTED. Blank and nought are different facts and the
+        form refuses to conflate them: a shop that has run out is worth recording, a shop that never
+        looked is a number nobody should trust.
+      */}
+      {!editing && (
+        <>
+          <h2 className={styles.section}>What you have now</h2>
+          <p className={styles.sectionNote}>
+            Counted on the shelf, not worked out from deliveries. Most shops starting here have
+            stock and no delivery history, and an invented delivery invents a cost.
+          </p>
+          <Field
+            label="On the shelf right now"
+            numeric
+            required={minimum}
+            value={openingCount}
+            onChange={(e) => setOpeningCount(e.target.value)}
+            placeholder="0"
+            hint={
+              minimum
+                ? 'Put 0 if there are none. "None" and "did not look" are different answers.'
+                : 'Leave it blank if you would rather count later.'
+            }
+          />
+
+          <h2 className={styles.section}>Does the container come back?</h2>
+          <p className={styles.sectionNote}>
+            Crates and bottles a customer returns. Say so now and every sale tracks them for you.
+          </p>
+
+          <label className={styles.toggleRow}>
+            <input
+              type="checkbox"
+              checked={returnable}
+              onChange={(e) => setReturnable(e.target.checked)}
+            />
+            <span>Yes — something comes back with this</span>
+          </label>
+
+          {returnable && (
+            <>
+              <Field
+                label="What comes back"
+                required={minimum}
+                value={poolName}
+                onChange={(e) => setPoolName(e.target.value)}
+                placeholder="NBL crate"
+                list="empties-pools"
+                hint={
+                  pools.length > 0
+                    ? `Pick one you already use, or name a new one. You have: ${pools
+                        .map((p) => p.name)
+                        .join(', ')}.`
+                    : 'Name the pool. Products that share a pool settle each other — a Star bottle pays back a Gulder bottle.'
+                }
+              />
+              <datalist id="empties-pools">
+                {pools.map((p) => (
+                  <option key={p.id} value={p.name} />
+                ))}
+              </datalist>
+
+              <div className={styles.toggleRow}>
+                <label>
+                  <input
+                    type="radio"
+                    checked={poolKind === 'content'}
+                    onChange={() => setPoolKind('content')}
+                  />
+                  <span>A bottle — counted from how much is sold</span>
+                </label>
+              </div>
+              <div className={styles.toggleRow}>
+                <label>
+                  <input
+                    type="radio"
+                    checked={poolKind === 'container'}
+                    onChange={() => setPoolKind('container')}
+                  />
+                  {/*
+                    A container's count cannot be derived and is declared at the till: six loose
+                    bottles may or may not go out in a crate, and only the person handing them over
+                    knows which.
+                  */}
+                  <span>A crate — counted when one actually leaves</span>
+                </label>
+              </div>
+
+              {poolKind === 'content' && (
+                <Field
+                  label="How many come back per unit sold"
+                  numeric
+                  value={poolPerUnit}
+                  onChange={(e) => setPoolPerUnit(e.target.value)}
+                  placeholder="1"
+                  hint="One bottle per bottle sold, usually."
+                />
+              )}
+
+              <Field
+                label="What you usually hold as deposit, each"
+                optional
+                numeric
+                prefix="₦"
+                value={poolDeposit}
+                onChange={(e) => setPoolDeposit(e.target.value)}
+                placeholder="0"
+                hint="A suggestion the till offers you. You still decide the figure on the day."
+              />
+
+              <Field
+                label="Already out with customers"
+                numeric
+                required={minimum}
+                value={emptiesOut}
+                onChange={(e) => setEmptiesOut(e.target.value)}
+                placeholder="0"
+                hint="From before you started here. Put 0 if none are out."
+              />
+            </>
+          )}
+        </>
+      )}
 
       <h2 className={styles.section}>Cheaper for buying more</h2>
       <p className={styles.sectionNote}>

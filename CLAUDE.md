@@ -173,6 +173,29 @@ like a sheet, a picker, a list, a dialog or a nav surface:
 4. **A package never learns about store-manager.** That is the Library Charter, and it is what
    makes 2 and 3 safe to do.
 
+## One form per record, and it is a page
+
+There is ONE product form and ONE customer form, and mid-sale reaches them by pushing the real
+page with `{ required: 'minimum' }` — never a second, smaller form in a sheet. A quick-add sheet
+existed and asked four questions where the real form asks eleven; two forms for one record drift,
+always, and a sheet's local state does not survive a rotation.
+
+`minimum` changes what is REQUIRED and what starts folded. It hides nothing.
+
+**Required at a counter, and ZERO IS AN ANSWER.** What is on the shelf, whether the container comes
+back, how many are already out, what the customer already owed. Blank is refused; `0` is accepted
+and recorded. "None" and "nobody looked" are different facts, and a form that accepts a blank makes
+every new record silently claim nothing is owed — right most of the time, and unrecoverable the
+rest, because nobody goes back to check a blank they did not know they left.
+
+A count of zero is a COUNT, not a movement: `stock_movements` refuses `qty_delta = 0` and is right
+to, so `open_stock_by_count` writes the movement only when something moved and always records the
+count.
+
+**Register a pushed route in EVERY stack that can push it.** The product form is reachable from
+four; the unit form it offers to push was registered in two. The symptom is navigation-stack's own
+"Missing route" screen, on the one journey nobody walked.
+
 ## A failure interrupts. A condition stays on the page.
 
 **Something that FAILED opens a dialog** — `@academix-admin/dialog-viewer`, through

@@ -24,6 +24,15 @@ import EmptiesSettlePage from './empties-settle-page/empties-settle-page';
  */
 import ProductFormPage from '../stock-stack/product-form-page/product-form-page';
 /*
+ * And the unit form, because the product form offers to push it.
+ *
+ * A seller adding something the shop measures in a word it has never used — "sachet", "keg" — is
+ * offered a way to invent it, and without this that offer led to navigation-stack's unknown-page
+ * screen. A route registered in one stack and not another is a dead end that only appears on the
+ * journey nobody tested.
+ */
+import UnitFormPage from '../stock-stack/unit-form-page/unit-form-page';
+/*
  * The sales list, registered here too, for the same reason.
  *
  * The till's header action opens what has already been sold. Reaching it by jumping to the money
@@ -49,6 +58,7 @@ const navLink = {
   empties_page: EmptiesPage,
   empties_settle_page: EmptiesSettlePage,
   product_form_page: ProductFormPage,
+  unit_form_page: UnitFormPage,
   sales_page: SalesPage,
   customer_form_page: CustomerFormPage,
 };

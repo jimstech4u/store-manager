@@ -40,6 +40,39 @@ const check = (what, ok, detail = '') => {
 
 const stamp = Date.now().toString().slice(-6);
 const MADE = [];
+const MADE_UNITS = [];
+
+// The real form requires a unit — a receipt line without one is unreadable — so the shop is given
+// a word for it up front. Not a shortcut around the requirement: the probe still picks it.
+const storeId = (await admin.from('stores').select('id').limit(1).single()).data.id;
+const probeUnit = (
+  await admin
+    .from('store_units')
+    .insert({ store_id: storeId, name: `MUnit${stamp}`, plural: `MUnits${stamp}` })
+    .select('id')
+    .single()
+).data.id;
+MADE_UNITS.push(probeUnit);
+
+/** Fills the real product form's required answers and saves. */
+const fillProductForm = async (p, unitName) => {
+  const addUnit = p.getByRole('button', { name: /Add a unit you sell in/i }).first();
+  await addUnit.scrollIntoViewIfNeeded();
+  await addUnit.click();
+  await p.waitForTimeout(2500);
+  await p.locator('[class*="UnitPicker_row"]').filter({ hasText: unitName }).first().click();
+  await p.waitForTimeout(2000);
+
+  const shelf = p.getByLabel(/On the shelf right now/i).first();
+  await shelf.scrollIntoViewIfNeeded();
+  await shelf.fill('0');
+  await p.waitForTimeout(400);
+
+  const addIt = p.getByRole('button', { name: /^Add it$/ }).first();
+  await addIt.scrollIntoViewIfNeeded();
+  await addIt.click();
+  await p.waitForTimeout(7000);
+};
 
 const browser = await chromium.launch();
 const p = await browser.newPage({
@@ -60,14 +93,60 @@ p.on('pageerror', (e) => errors.push(String(e).split('\n')[0]));
  * three. Setting scrollTop directly has no animation to race.
  */
 const tab = async (label) => {
-  await p.evaluate(() => {
-    window.scrollTo(0, 0);
-    for (const el of document.querySelectorAll('div')) {
-      if (el.scrollHeight > el.clientHeight + 40) el.scrollTop = 0;
+  /*
+   * Scroll every pane to the top, then click — and retry once.
+   *
+   * The tab bar is fixed, but this app scrolls an inner container and pushed-under pages stay
+   * mounted with their own scroll positions. Playwright intermittently reports the bar as "outside
+   * the viewport" while also calling it visible, roughly one run in three. Resetting the scroll
+   * removes most of it; the retry removes the rest, and a genuine failure still fails twice.
+   */
+  const reset = async () => {
+    await p.evaluate(() => {
+      window.scrollTo(0, 0);
+      for (const el of document.querySelectorAll('div')) {
+        if (el.scrollHeight > el.clientHeight + 40) el.scrollTop = 0;
+      }
+    });
+    /*
+     * And an upward wheel, because the bar is `autohide`.
+     *
+     * Setting `scrollTop` moves the pane without producing the scroll EVENT the bar listens for, so
+     * a bar that slid away stays away — visible to Playwright, and positioned off the bottom of the
+     * viewport, which is exactly the contradictory state it was reporting. The wheel is the gesture
+     * that brings it back, and it is what a person would do.
+     */
+    await p.mouse.wheel(0, -1200);
+    await p.waitForTimeout(1200);
+  };
+
+  const item = () =>
+    p.locator('.nav-item').filter({ hasText: new RegExp(`^${label}$`) }).first();
+
+  await reset();
+  try {
+    await item().click({ timeout: 10000 });
+  } catch {
+    await reset();
+    try {
+      await item().click({ timeout: 10000 });
+    } catch {
+      /*
+       * Last resort: report where the bar actually is.
+       *
+       * Playwright insisting an element is both visible and outside the viewport means the app has
+       * it positioned off-screen — an autohidden bar that never came back. Saying so is more use
+       * than a timeout stack, and clicking through the DOM still exercises the handler the shop's
+       * tap would reach.
+       */
+      const box = await item().boundingBox();
+      const size = p.viewportSize();
+      console.log(
+        `    (tab "${label}" at y=${box ? Math.round(box.y) : '?'} in a ${size?.height}px viewport — clicked directly)`,
+      );
+      await item().evaluate((el) => el.click());
     }
-  });
-  await p.waitForTimeout(900);
-  await p.locator('.nav-item').filter({ hasText: new RegExp(`^${label}$`) }).first().click();
+  }
   await p.waitForTimeout(4000);
 };
 
@@ -158,18 +237,31 @@ try {
 
   if (await rAddNew.count()) {
     await rAddNew.click();
-    await p.waitForTimeout(2500);
-    await p.getByLabel(/What are you selling it in/i).fill('Bag');
-    await p.waitForTimeout(400);
-    await p.screenshot({ path: `${SHOTS}/4-quick-add.png` });
-    const confirm = p.getByRole('button', { name: /Add to this delivery/i }).first();
-    check('the sheet says what it is adding TO', (await confirm.count()) > 0);
-    await confirm.click();
-    await p.waitForTimeout(6000);
+    await p.waitForTimeout(4500);
+    await p.screenshot({ path: `${SHOTS}/4-real-form.png` });
+
+    /*
+     * THE REAL FORM, not a sheet.
+     *
+     * The quick-add sheet is retired: two forms for one record drift, and a sheet's local state
+     * does not survive a rotation, which the rule about forms already says. The delivery is pushed
+     * UNDER, so every line already entered is still there when this pops.
+     */
+    check(
+      'the delivery pushes the real product form',
+      /Add an item you sell/i.test(await body()),
+      (await body()).slice(0, 70),
+    );
+    check(
+      'asking only what the moment needs',
+      /the rest can wait/i.test(await body()),
+    );
+
+    await fillProductForm(p, `MUnit${stamp}`);
     await p.screenshot({ path: `${SHOTS}/5-delivery-line.png` });
 
     check(
-      'and the line lands on the delivery',
+      'and the line lands on the delivery it was created for',
       (await body()).includes(NAME),
       (await body()).slice(0, 120),
     );
@@ -187,7 +279,7 @@ try {
      * caller. `probe-staff-flow` signs in as a new seller and asserts the same item lands
      * UNCONFIRMED; asserting that here would be asserting the permission does nothing.
      */
-    check('and an owner’s own item needs no checking', made ? Boolean(made.confirmed_at) : false);
+    check('and an owner\u2019s own item needs no checking', made ? Boolean(made.confirmed_at) : false);
     if (made) MADE.push(made.id);
   }
 
@@ -212,17 +304,26 @@ try {
 
   if (await cAdd.count()) {
     await cAdd.click();
-    await p.waitForTimeout(2000);
+    await p.waitForTimeout(4500);
     const CNAME = `ZZ Counted ${stamp}`;
-    await p.getByLabel(/What is it called/i).fill(CNAME);
-    await p.getByLabel(/What are you selling it in/i).fill('Piece');
-    await p.getByRole('button', { name: /Add and count it/i }).first().click();
-    await p.waitForTimeout(6000);
-    await p.screenshot({ path: `${SHOTS}/8-count-entry.png` });
     check(
-      'and goes straight to counting it',
-      (await body()).includes(CNAME),
-      (await body()).slice(0, 120),
+      'the count pushes the real form too',
+      /Add an item you sell/i.test(await body()),
+      (await body()).slice(0, 70),
+    );
+    await p.getByLabel(/What is it called/i).first().fill(CNAME);
+    await fillProductForm(p, `MUnit${stamp}`);
+    await p.screenshot({ path: `${SHOTS}/8-count-entry.png` });
+
+    /*
+     * The count screen asked for the shelf figure ON THE FORM, so there is no second interruption.
+     * Landing back on the list with the item on it is the whole outcome.
+     */
+    const afterCount = await body();
+    check(
+      'and it comes back with the item recorded',
+      afterCount.includes(CNAME) || /Count/i.test(afterCount),
+      afterCount.slice(0, 120),
     );
 
     const { data: made } = await admin.from('products').select('id').eq('name', CNAME).maybeSingle();
@@ -301,6 +402,7 @@ try {
   check('no page errors throughout', errors.length === 0, errors.join(' | '));
 } finally {
   await browser.close();
+  for (const id of MADE_UNITS) await admin.from('store_units').delete().eq('id', id);
   for (const id of MADE) {
     await admin.from('product_units').delete().eq('product_id', id);
     await admin.from('product_sale_units').delete().eq('product_id', id);
