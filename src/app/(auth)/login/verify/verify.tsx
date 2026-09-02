@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/Button';
 import { InfoPanel } from '@/components/ui/Explain';
 import { getSupabase } from '@/lib/supabase/client';
 import styles from './verify.module.css';
+import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
+import { messageOf } from '@/lib/format';
 
 /**
  * The six digits that prove a business owns the address it signed up with.
@@ -36,7 +38,7 @@ export default function Verify() {
 
   const [digits, setDigits] = useState('');
   const [busy, setBusy] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
+  const problem = useProblem();
   const [note, setNote] = useState<string | null>(null);
 
   /*
@@ -69,7 +71,6 @@ export default function Verify() {
 
   const verify = async () => {
     setBusy(true);
-    setProblem(null);
     try {
       const { error } = await getSupabase().auth.verifyOtp({
         email,
@@ -81,7 +82,7 @@ export default function Verify() {
       if (error) throw error;
       router.replace('/main');
     } catch (e) {
-      setProblem(
+      problem.show(
         e instanceof Error
           ? // Supabase's own wording is "Token has expired or is invalid", which is accurate and
             // unhelpful about which. Both cases have the same remedy.
@@ -96,7 +97,6 @@ export default function Verify() {
   };
 
   const resend = async () => {
-    setProblem(null);
     setNote(null);
     try {
       const { error } = await getSupabase().auth.resend({ type: 'signup', email });
@@ -104,7 +104,7 @@ export default function Verify() {
       setNote(`A new code is on its way to ${email}.`);
       setWait(60);
     } catch (e) {
-      setProblem(e instanceof Error ? e.message : 'That code could not be sent.');
+      problem.show(messageOf(e, 'That code could not be sent.'));
     }
   };
 
@@ -119,11 +119,13 @@ export default function Verify() {
         </>
       }
     >
-      {problem && (
-        <InfoPanel tone="danger" title="Not verified">
-          {problem}
-        </InfoPanel>
-      )}
+      {/*
+        A FAILURE INTERRUPTS; it does not sit on the page.
+
+        As a panel this was the first thing pushed off the top when a keyboard opened, so an action
+        that failed looked exactly like one that did nothing — and the button gets pressed again.
+      */}
+      <ProblemDialog problem={problem} title="Not verified" />
       {note && (
         <InfoPanel tone="info" title="Sent">
           {note}

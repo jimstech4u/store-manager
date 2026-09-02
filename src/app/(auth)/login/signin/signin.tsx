@@ -7,9 +7,11 @@ import { AuthShell } from '@/components/auth/AuthShell';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
+import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 import { getSupabase } from '@/lib/supabase/client';
 import { isStaffAddress } from '@/lib/auth/staff-address';
 import styles from './signin.module.css';
+import { messageOf } from '@/lib/format';
 
 /**
  * Signing in — the root of the auth stack.
@@ -26,7 +28,16 @@ export default function SignIn() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
+  /*
+   * TWO SURFACES, BECAUSE THERE ARE TWO KINDS OF THING HERE.
+   *
+   * "Enter your email address" is a CONDITION — this form can see it without attempting anything,
+   * it is still true after any acknowledgement, and it belongs beside the fields being fixed.
+   * "That email and password do not match" came back from an attempt that actually happened, and
+   * a seller who does not notice it presses the button again.
+   */
   const [error, setError] = useState<string | null>(null);
+  const problem = useProblem();
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -44,7 +55,7 @@ export default function SignIn() {
       if (err) throw err;
       router.replace('/main');
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Something went wrong';
+      const message = messageOf(err, 'Something went wrong');
 
       /*
        * An unconfirmed business is not an error, it is an unfinished step.
@@ -71,7 +82,7 @@ export default function SignIn() {
        * person who can change it, and saying so is more use than a generic failure.
        */
       if (isStaffAddress(email)) {
-        setError(
+        problem.show(
           'That is a shop login. If the password is not working, ask whoever set up your account ' +
             'to give you a new one — password emails are not sent to shop logins.',
         );
@@ -81,7 +92,7 @@ export default function SignIn() {
       // Supabase returns "Invalid login credentials" for both a wrong password and an unknown
       // address — correct, since saying which would let someone enumerate accounts. Reworded
       // because the raw string reads like a system fault rather than something to try again.
-      setError(
+      problem.show(
         /invalid login credentials/i.test(message)
           ? 'That email and password do not match. Check both and try again.'
           : message,
@@ -93,8 +104,10 @@ export default function SignIn() {
 
   return (
     <AuthShell title="Sign in" lead="Welcome back.">
+      <ProblemDialog problem={problem} title="Could not sign you in" />
+
       {error && (
-        <InfoPanel tone="danger" title="Could not continue">
+        <InfoPanel tone="danger" title="Check these first">
           {error}
         </InfoPanel>
       )}

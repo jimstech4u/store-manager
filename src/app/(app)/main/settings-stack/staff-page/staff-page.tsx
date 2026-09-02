@@ -15,6 +15,8 @@ import { settingsChanged, SETTINGS_SCOPE } from '@/lib/stacks/bank-accounts';
 import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
 import styles from './staff-page.module.css';
+import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
+import { messageOf } from '@/lib/format';
 
 /**
  * Who works here, and what each of them may do.
@@ -105,7 +107,7 @@ export default function StaffPage() {
   const error = snapshot.error;
   const loading = !snapshot.settled;
 
-  const [problem, setProblem] = useState<string | null>(null);
+  const problem = useProblem();
 
   const [confirmRemove, setConfirmRemove] = useState<Member | null>(null);
 
@@ -139,7 +141,7 @@ export default function StaffPage() {
         set(
           {
             ...snapshotRef.current,
-            error: e instanceof Error ? e.message : 'Could not load your team.',
+            error: messageOf(e, 'Could not load your team.'),
             settled: true,
           },
           { override: true },
@@ -170,7 +172,6 @@ export default function StaffPage() {
   }
 
   const changeRole = async (member: Member, code: string) => {
-    setProblem(null);
     try {
       const { error: e } = await getSupabase().rpc('set_member_role', {
         p_store_id: store.id,
@@ -196,7 +197,7 @@ export default function StaffPage() {
         ),
       });
     } catch (e) {
-      setProblem(e instanceof Error ? e.message : 'That role could not be changed.');
+      problem.show(messageOf(e, 'That role could not be changed.'));
     }
   };
 
@@ -213,7 +214,6 @@ export default function StaffPage() {
           key: 'add',
           icon: <PlusIcon />,
           onClick: () => {
-            setProblem(null);
             void nav.push('staff_invite_page');
           },
           ariaLabel: 'Add someone to your team',
@@ -242,11 +242,13 @@ export default function StaffPage() {
           {error}
         </InfoPanel>
       )}
-      {problem && (
-        <InfoPanel tone="danger" title="Not changed">
-          {problem}
-        </InfoPanel>
-      )}
+      {/*
+        A FAILURE INTERRUPTS; it does not sit on the page.
+
+        As a panel this was the first thing pushed off the top when a keyboard opened, so an action
+        that failed looked exactly like one that did nothing — and the button gets pressed again.
+      */}
+      <ProblemDialog problem={problem} title="Not changed" />
 
       <ul className={styles.list}>
         {members.filter((m) => m.status === 'active').map((m) => (
@@ -400,7 +402,6 @@ export default function StaffPage() {
               variant="danger"
               onClick={async () => {
                 if (!confirmRemove) return;
-                setProblem(null);
                 try {
                   const { error: e } = await getSupabase().rpc('remove_member', {
                     p_store_id: store.id,
@@ -423,7 +424,7 @@ export default function StaffPage() {
                   });
                   setConfirmRemove(null);
                 } catch (e) {
-                  setProblem(e instanceof Error ? e.message : 'They could not be removed.');
+                  problem.show(messageOf(e, 'They could not be removed.'));
                   setConfirmRemove(null);
                 }
               }}

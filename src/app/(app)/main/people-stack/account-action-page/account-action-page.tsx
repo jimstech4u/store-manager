@@ -15,8 +15,9 @@ import {
   useEmptiesPools,
   type EmptiesPool,
 } from '@/lib/stacks/customer-account';
-import { formatMoney } from '@/lib/format';
+import { formatMoney, messageOf } from '@/lib/format';
 import styles from './account-action-page.module.css';
+import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 
 /**
  * Recording money or containers against a customer: a PAGE, not a sheet.
@@ -85,7 +86,7 @@ export default function AccountActionPage() {
   const [refundMode, setRefundMode] = useState<'credit' | 'cash' | 'none'>('credit');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
+  const problem = useProblem();
 
   // Default to the first pool once they load, so the picker is never showing an empty selection
   // over a form that needs one.
@@ -97,7 +98,6 @@ export default function AccountActionPage() {
 
   const run = async () => {
     setBusy(true);
-    setProblem(null);
     const supabase = getSupabase();
     const now = new Date().toISOString();
     try {
@@ -195,7 +195,7 @@ export default function AccountActionPage() {
       accountsChanged();
       await nav.pop();
     } catch (e) {
-      setProblem(e instanceof Error ? e.message : 'That could not be recorded.');
+      problem.show(messageOf(e, 'That could not be recorded.'));
     } finally {
       setBusy(false);
     }
@@ -205,11 +205,13 @@ export default function AccountActionPage() {
 
   return (
     <PageScaffold onBack={goBack} title={TITLES[kind]} subtitle={SUBTITLES[kind]}>
-      {problem && (
-        <InfoPanel tone="danger" title="Not recorded">
-          {problem}
-        </InfoPanel>
-      )}
+      {/*
+        A FAILURE INTERRUPTS; it does not sit on the page.
+
+        As a panel this was the first thing pushed off the top when a keyboard opened, so an action
+        that failed looked exactly like one that did nothing — and the button gets pressed again.
+      */}
+      <ProblemDialog problem={problem} title="Not recorded" />
 
       {kind === 'opening' && (
         <InfoPanel tone="info" title="Only for what happened before you started here">

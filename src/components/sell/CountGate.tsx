@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
 import { countFromTill } from '@/lib/stacks/mid-sale';
-import { formatQty } from '@/lib/format';
+import { formatQty, messageOf } from '@/lib/format';
 import styles from './CountGate.module.css';
+import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 
 /**
  * "How many are on the shelf?" — asked once, at the counter, the first time an item is sold today.
@@ -45,13 +46,12 @@ export function CountGate({
 }) {
   const [counts, setCounts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
+  const problem = useProblem();
 
   // A fresh set of items is a fresh set of questions.
   useEffect(() => {
     if (open) {
       setCounts({});
-      setProblem(null);
     }
   }, [open, items.length]);
 
@@ -62,7 +62,6 @@ export function CountGate({
 
   const save = async () => {
     setBusy(true);
-    setProblem(null);
     try {
       const done: string[] = [];
       for (const i of answered) {
@@ -73,7 +72,7 @@ export function CountGate({
       onCounted(done);
       onClose();
     } catch (e) {
-      setProblem(e instanceof Error ? e.message : 'That could not be recorded.');
+      problem.show(messageOf(e, 'That could not be recorded.'));
     } finally {
       setBusy(false);
     }
@@ -102,11 +101,13 @@ export function CountGate({
         </div>
       }
     >
-      {problem && (
-        <InfoPanel tone="danger" title="Not recorded">
-          {problem}
-        </InfoPanel>
-      )}
+      {/*
+        A FAILURE INTERRUPTS; it does not sit on the page.
+
+        As a panel this was the first thing pushed off the top when a keyboard opened, so an action
+        that failed looked exactly like one that did nothing — and the button gets pressed again.
+      */}
+      <ProblemDialog problem={problem} title="Not recorded" />
 
       <p className={styles.lead}>
         {items.length === 1 ? 'This has' : 'These have'} not been counted today. Say what is on the

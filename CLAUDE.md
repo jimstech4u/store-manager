@@ -173,6 +173,37 @@ like a sheet, a picker, a list, a dialog or a nav surface:
 4. **A package never learns about store-manager.** That is the Library Charter, and it is what
    makes 2 and 3 safe to do.
 
+## A failure interrupts. A condition stays on the page.
+
+**Something that FAILED opens a dialog** — `@academix-admin/dialog-viewer`, through
+`src/components/ui/Dialog.tsx`. Not an `InfoPanel` somewhere on the page. A save that failed is a
+one-off event that must be acknowledged before anything else continues, and a panel two screens
+down gets scrolled past: the shop presses Save, sees nothing change, presses it again.
+
+**Every confirmation is a dialog too** — no `window.confirm`, no hand-rolled overlay. A question
+that must be answered before work continues is exactly what a dialog is.
+
+**A CONDITION is not a failure and must not be dismissible.** "Some of this can come in but never
+go out", "Enter your email address" — these describe the state the form is in, they stay visible
+while they are being fixed, and a dialog would let them be dismissed with the problem still there.
+Those stay as `InfoPanel`.
+
+**The test is whether an ATTEMPT happened.** A condition is something the form can see about itself
+without trying anything: a missing field, a unit with nowhere to go. A failure is what came back
+from work that was actually done — a save, a sign-in, an upload. A first version of this rule asked
+"would it still be true after pressing OK?", which sounds equivalent and is not: "that email and
+password do not match" is still true afterwards, and it is unmistakably a failure. The signin form
+holds both kinds in one variable and needs both surfaces.
+
+"Could not load" is neither — that is a whole screen with no content, so it is a `FullPageMessage`.
+
+The pattern is academix-web's, and it is worth reading rather than guessing:
+`payment-stack/top-up-page` for errors (`const errorDialog = useDialog()`, `errorDialog.open(<…>)`,
+`<errorDialog.DialogViewer title buttons showCancel closeOnBackdrop layoutProp />`) and
+`profile-stack/profile-page/profile-title` for confirmations with a busy state on the confirming
+button. The theme is handed over in `layoutProp`, because the package is app-agnostic by charter
+and has no business reading store-manager's CSS variables.
+
 ## Green is what adds
 
 Any control that turns what has been typed into a line — "Add charge", "Add payment", "Add this

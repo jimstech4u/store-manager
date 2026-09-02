@@ -9,7 +9,7 @@ import { Explain, InfoPanel } from '@/components/ui/Explain';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
-import { formatMoney } from '@/lib/format';
+import { formatMoney, messageOf } from '@/lib/format';
 import {
   lineTotal,
   makeDraftLine,
@@ -17,6 +17,7 @@ import {
   type DraftLine,
 } from '@/lib/stacks/draft-orders';
 import styles from './claim-page.module.css';
+import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 
 /**
  * Taking over a colleague's order, and settling what happens to both sets of items.
@@ -56,7 +57,7 @@ export default function ClaimPage() {
 
   const [code, setCode] = useState('');
   const [looking, setLooking] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
+  const problem = useProblem();
   const [found, setFound] = useState<FoundOrder | null>(null);
 
   /*
@@ -89,7 +90,6 @@ export default function ClaimPage() {
   const find = async () => {
     if (!store) return;
     setLooking(true);
-    setProblem(null);
     try {
       const supabase = getSupabase();
       const wanted = code.trim().toUpperCase();
@@ -109,7 +109,7 @@ export default function ClaimPage() {
 
       const row = (rows as Record<string, unknown>[] | null)?.[0];
       if (!row) {
-        setProblem('No open order has that code. Check it with your colleague.');
+        problem.show('No open order has that code. Check it with your colleague.');
         return;
       }
 
@@ -137,7 +137,7 @@ export default function ClaimPage() {
         ),
       });
     } catch (e) {
-      setProblem(e instanceof Error ? e.message : 'That order could not be looked up.');
+      problem.show(messageOf(e, 'That order could not be looked up.'));
     } finally {
       setLooking(false);
     }
@@ -153,7 +153,6 @@ export default function ClaimPage() {
   const accept = async () => {
     if (!activeOrder || !found) return;
     setLooking(true);
-    setProblem(null);
     try {
       // Drop the lines of mine that were switched off.
       for (const line of mine) {
@@ -221,7 +220,7 @@ export default function ClaimPage() {
 
       await nav.pop();
     } catch (e) {
-      setProblem(e instanceof Error ? e.message : 'That could not be applied.');
+      problem.show(messageOf(e, 'That could not be applied.'));
     } finally {
       setLooking(false);
     }
@@ -262,11 +261,13 @@ export default function ClaimPage() {
         ) : undefined
       }
     >
-      {problem && (
-        <InfoPanel tone="danger" title="Not taken over">
-          {problem}
-        </InfoPanel>
-      )}
+      {/*
+        A FAILURE INTERRUPTS; it does not sit on the page.
+
+        As a panel this was the first thing pushed off the top when a keyboard opened, so an action
+        that failed looked exactly like one that did nothing — and the button gets pressed again.
+      */}
+      <ProblemDialog problem={problem} title="Not taken over" />
 
       {!found ? (
         <>

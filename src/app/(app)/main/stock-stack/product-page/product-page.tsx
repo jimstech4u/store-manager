@@ -18,8 +18,9 @@ import { useProduct, type Product } from '@/lib/stacks/catalog-stack';
 import { useListNotifier } from '@/hooks/useListChannel';
 import { useSellingUnits } from '@/lib/stacks/selling-units';
 import { unitGaps, useProductUnits } from '@/lib/stacks/product-units';
-import { formatMoney, formatQty, pluralUnit } from '@/lib/format';
+import { formatMoney, formatQty, pluralUnit, messageOf } from '@/lib/format';
 import styles from './product-page.module.css';
+import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 
 /**
  * One product: what it is, what it cost, what is left, and its pictures.
@@ -62,7 +63,7 @@ export default function ProductPage() {
   const gapUnits = unitGaps(productUnits).map((u) => u.name.toLowerCase());
 
   const [removing, setRemoving] = useState(false);
-  const [removeError, setRemoveError] = useState<string | null>(null);
+  const removeError = useProblem();
   const [busy, setBusy] = useState(false);
 
 
@@ -111,7 +112,7 @@ export default function ProductPage() {
           ? [
               { key: 'edit', icon: <EditIcon />, onClick: () => void nav.push('product_form_page', { id: productId }),
                 ariaLabel: 'Edit this item' },
-              { key: 'remove', icon: <TrashIcon />, onClick: () => { setRemoveError(null); setRemoving(true); },
+              { key: 'remove', icon: <TrashIcon />, onClick: () => setRemoving(true),
                 ariaLabel: 'Remove this item' },
             ]
           : undefined
@@ -137,7 +138,6 @@ export default function ProductPage() {
               busy={busy}
               onClick={async () => {
                 setBusy(true);
-                setRemoveError(null);
                 try {
                   const { error } = await getSupabase().rpc('archive_product', {
                     p_product_id: product.id,
@@ -159,7 +159,7 @@ export default function ProductPage() {
                   setRemoving(false);
                   nav.pop();
                 } catch (e) {
-                  setRemoveError(e instanceof Error ? e.message : 'Could not remove it.');
+                  removeError.show(messageOf(e, 'Could not remove it.'));
                 } finally {
                   setBusy(false);
                 }
@@ -170,11 +170,13 @@ export default function ProductPage() {
           </div>
         }
       >
-        {removeError && (
-          <InfoPanel tone="danger" title="Not removed">
-            {removeError}
-          </InfoPanel>
-        )}
+      {/*
+        A FAILURE INTERRUPTS; it does not sit on the page.
+
+        As a panel this was the first thing pushed off the top when a keyboard opened, so an action
+        that failed looked exactly like one that did nothing — and the button gets pressed again.
+      */}
+      <ProblemDialog problem={removeError} title="Not removed" />
 
         {onHand !== 0 && (
           <InfoPanel tone="warning" title={`There are still ${formatQty(product.onHand)} on the shelf`}>

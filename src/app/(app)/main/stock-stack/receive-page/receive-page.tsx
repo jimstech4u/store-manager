@@ -16,7 +16,8 @@ import { useAuth } from '@/providers/AuthProvider';
 import { fetchProduct, stockMoved, useProductList, type Product } from '@/lib/stacks/catalog-stack';
 import { useListNotifier } from '@/hooks/useListChannel';
 import { getSupabase } from '@/lib/supabase/client';
-import { formatMoney, formatQty, pluralUnit } from '@/lib/format';
+import { formatMoney, formatQty, pluralUnit, messageOf } from '@/lib/format';
+import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 
 interface ReceiveLine {
   key: string;
@@ -104,7 +105,7 @@ export default function ReceivePage() {
   const [picking, setPicking] = useState(false);
   const [quickAdd, setQuickAdd] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const error = useProblem();
   const [done, setDone] = useState(false);
 
   const patch = (key: string, next: Partial<ReceiveLine>) =>
@@ -186,7 +187,6 @@ export default function ReceivePage() {
   const submit = async () => {
     if (!store) return;
     setBusy(true);
-    setError(null);
     try {
       const payload = lines
         .filter((l) => l.productId && Number(l.qty) > 0)
@@ -271,7 +271,7 @@ export default function ReceivePage() {
 
       setDone(true);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Could not record this delivery');
+      error.show(messageOf(e, 'Could not record this delivery'));
     } finally {
       setBusy(false);
     }
@@ -285,11 +285,13 @@ export default function ReceivePage() {
       title="Record a delivery"
       subtitle="What came in, and what it really cost"
     >
-      {error && (
-        <InfoPanel tone="danger" title="Could not record this">
-          {error}
-        </InfoPanel>
-      )}
+      {/*
+        A FAILURE INTERRUPTS; it does not sit on the page.
+
+        As a panel this was the first thing pushed off the top when a keyboard opened, so an action
+        that failed looked exactly like one that did nothing — and the button gets pressed again.
+      */}
+      <ProblemDialog problem={error} title="Could not record this" />
 
       {/*
         A RESULT IS PAGE CONTENT, not a sheet.

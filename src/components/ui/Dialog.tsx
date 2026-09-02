@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDialog } from '@academix-admin/dialog-viewer';
 import { useTheme } from '@/context/ThemeContext';
 
@@ -22,10 +22,25 @@ export function useConfirm() {
 
   const dark = theme === 'dark';
 
-  /** The theme, handed to the package rather than assumed by it. */
+  /*
+   * The theme, handed to the package rather than assumed by it.
+   *
+   * The BUTTONS matter as much as the background. Left to the package's defaults the confirming
+   * button is iOS blue and the destructive one iOS red, on a screen where every other button is the
+   * shop's deep teal — it reads as another app's dialog, and a seller hesitates before pressing a
+   * button they do not recognise. dialog-viewer 0.4.0 takes these; every one defaults to its old
+   * colour, so nothing else that uses the package changed.
+   */
   const layoutProp = {
     backgroundColor: dark ? '#141a19' : '#ffffff',
     titleColor: dark ? '#f2f5f4' : '#12201d',
+    messageColor: dark ? '#b9c6c2' : '#4a5c57',
+    primaryColor: dark ? '#3fa08a' : '#0b6252',
+    primaryTextColor: dark ? '#08201b' : '#ffffff',
+    secondaryColor: dark ? '#25302d' : '#eef2f1',
+    secondaryTextColor: dark ? '#e6edea' : '#12201d',
+    dangerColor: '#c0392b',
+    dangerTextColor: '#ffffff',
     margin: '16px',
     maxWidth: '420px',
     borderRadius: '16px',
@@ -127,6 +142,86 @@ export function ConfirmDialog({
       unmountOnClose
       closeOnBackdrop
       zIndex={1100}
+      layoutProp={layoutProp}
+    />
+  );
+}
+
+/**
+ * Something failed, and the shop must be told before it presses the button again.
+ *
+ * `useProblem()` returns a controller and a `<ProblemDialog />` to render. Call `show(message)`
+ * from a catch block; the dialog opens with one OK button and closes on the backdrop, because
+ * there is nothing to decide — only something to know.
+ *
+ * WHY NOT AN InfoPanel. A failure is an EVENT: it happened once, at a moment, in response to
+ * something the shop just did. A panel is a place, and a place gets scrolled past — the seller
+ * presses Save, the page does not visibly change, and they press it again. Measured on the
+ * delivery screen, where the failure panel sits above a form long enough to push it off a phone.
+ *
+ * A CONDITION still belongs on the page. "Some of this can come in but never go out" is true
+ * before the press and after it, and a dialog would let it be dismissed with the problem intact.
+ * The test is whether it would still be true after pressing OK.
+ */
+export function useProblem() {
+  const controller = useConfirm();
+  const [message, setMessage] = useState<string | null>(null);
+
+  const show = useCallback((text: string) => setMessage(text), []);
+  const clear = useCallback(() => setMessage(null), []);
+
+  /*
+   * Memoised, because callers put this in dependency arrays.
+   *
+   * A hook that returns a fresh object every render is a footgun: the honest thing for a caller to
+   * do is list it as a dependency, and doing so then re-runs the effect or rebuilds the callback on
+   * every render — so the lint rule's advice makes the code worse and the usual response is to
+   * silence the rule. `controller` comes from `useDialog`, and `message` genuinely changes; the
+   * rest are already stable.
+   */
+  return useMemo(() => ({ controller, message, show, clear }), [controller, message, show, clear]);
+}
+
+export function ProblemDialog({
+  problem,
+  title = 'That did not work',
+}: {
+  problem: ReturnType<typeof useProblem>;
+  title?: string;
+}) {
+  const { controller, message, clear } = problem;
+  const { DialogViewer, close, open, layoutProp } = controller;
+
+  /*
+   * Opened when there IS one, and only then — this component is rendered unconditionally by its
+   * page, so the message is what decides. Rendering it always is what keeps the caller from having
+   * to hold a second "is the dialog up" flag, which is the thing that went wrong with ConfirmDialog
+   * and cost three taps per press.
+   */
+  useEffect(() => {
+    if (message) open();
+  }, [message, open]);
+
+  if (!message) return null;
+
+  return (
+    <DialogViewer
+      title={title}
+      message={message}
+      buttons={[
+        {
+          text: 'OK',
+          variant: 'primary',
+          onClick: () => {
+            close();
+            clear();
+          },
+        },
+      ]}
+      showCancel={false}
+      unmountOnClose
+      closeOnBackdrop
+      zIndex={1200}
       layoutProp={layoutProp}
     />
   );

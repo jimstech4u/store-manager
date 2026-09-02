@@ -176,3 +176,25 @@ export function formatDateTime(value: string | Date | null | undefined): string 
     minute: '2-digit',
   })}`;
 }
+
+/**
+ * What actually went wrong, said in whatever words are available.
+ *
+ * `e instanceof Error ? e.message : fallback` is written in 31 files here and is wrong in the case
+ * that matters most: a Supabase error is a PLAIN OBJECT with a `message`, not an `Error`. So every
+ * failed RPC — the commonest failure this app has — took the fallback branch, and the shop was told
+ * "That could not be saved" while the database was saying something specific and useful like which
+ * constraint refused it.
+ *
+ * Found by a probe that forced a 500 and read the dialog, not by reading the code: the fallback is
+ * a perfectly plausible sentence, so nothing looks broken.
+ */
+export function messageOf(e: unknown, fallback: string): string {
+  if (e instanceof Error && e.message) return e.message;
+  if (typeof e === 'string' && e) return e;
+  if (e && typeof e === 'object') {
+    const m = (e as { message?: unknown }).message;
+    if (typeof m === 'string' && m) return m;
+  }
+  return fallback;
+}

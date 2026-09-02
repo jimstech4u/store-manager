@@ -14,7 +14,8 @@ import { usePermission } from '@/hooks/usePermission';
 import { useNav } from '@academix-admin/navigation-stack';
 import { useStackBack } from '@/hooks/useStackBack';
 import { getSupabase } from '@/lib/supabase/client';
-import { formatDateTime, formatQty, pluralUnit } from '@/lib/format';
+import { formatDateTime, formatQty, pluralUnit, messageOf } from '@/lib/format';
+import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 
 interface PendingProduct {
   id: string;
@@ -103,8 +104,15 @@ export default function ReviewPage() {
    * outlive this visit. Sharing one slot meant a stale "could not approve" reappeared, from cache,
    * over a queue that had since loaded perfectly.
    */
-  const [actionError, setActionError] = useState<string | null>(null);
-  const error = actionError ?? snapshot.error;
+  /*
+   * The LOAD error and the ATTEMPT error are different things and get different surfaces.
+   *
+   * A page that could not load has nothing on it and the message is its whole state — it stays.
+   * A save that failed came back from work that was actually done, and a seller who does not
+   * notice it presses the button again.
+   */
+  const actionError = useProblem();
+  const error = snapshot.error;
 
   const load = useCallback(async () => {
     if (!store) return;
@@ -152,11 +160,10 @@ export default function ReviewPage() {
 
   const run = async (key: string, fn: () => Promise<void>) => {
     setBusy(key);
-    setActionError(null);
     try {
       await fn();
     } catch (e: unknown) {
-      setActionError(e instanceof Error ? e.message : 'Could not do that');
+      actionError.show(messageOf(e, 'Could not do that'));
     } finally {
       setBusy(null);
     }
@@ -186,8 +193,10 @@ export default function ReviewPage() {
       title="Waiting for you"
       subtitle={total === 0 ? 'Nothing to check' : `${total} to check`}
     >
+      <ProblemDialog problem={actionError} title="Could not do that" />
+
       {error && (
-        <InfoPanel tone="danger" title="Could not do that">
+        <InfoPanel tone="danger" title="Could not load what is waiting">
           {error}
         </InfoPanel>
       )}

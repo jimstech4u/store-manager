@@ -18,6 +18,7 @@ import {
   type StoreUnit,
 } from '@/lib/stacks/product-units';
 import styles from './units-page.module.css';
+import { messageOf } from '@/lib/format';
 
 /**
  * How a shop buys and sells one thing, on its own screen.
@@ -94,7 +95,7 @@ export default function UnitsPage() {
       setState('failed');
       // The database's own sentence, which names the unit. Better than anything generic this page
       // could invent, and it is the last word on whether the set adds up.
-      setProblem(e instanceof Error ? e.message : 'Could not save this.');
+      setProblem(messageOf(e, 'Could not save this.'));
     }
   };
 

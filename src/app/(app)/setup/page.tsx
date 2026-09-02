@@ -8,6 +8,8 @@ import { Field } from '@/components/ui/Field';
 import { Explain, InfoPanel } from '@/components/ui/Explain';
 import { getSupabase } from '@/lib/supabase/client';
 import { useAuth } from '@/providers/AuthProvider';
+import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
+import { messageOf } from '@/lib/format';
 
 /** A URL-safe slug from a shop name, with a short random tail so two "Blessing Stores" can coexist. */
 function slugify(name: string): string {
@@ -26,14 +28,13 @@ export default function CreateStorePage() {
   const { refreshStores } = useAuth();
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const error = useProblem();
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    setError(null);
 
     const trimmed = name.trim();
-    if (!trimmed) return setError('Enter the name of your shop');
+    if (!trimmed) return error.show('Enter the name of your shop');
 
     setBusy(true);
     try {
@@ -49,7 +50,7 @@ export default function CreateStorePage() {
       await refreshStores();
       router.replace('/setup/opening');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not create your shop');
+      error.show(messageOf(err, 'Could not create your shop'));
     } finally {
       setBusy(false);
     }
@@ -64,11 +65,13 @@ export default function CreateStorePage() {
           This is the business whose stock and money you are keeping track of.
         </p>
 
-        {error && (
-          <InfoPanel tone="danger" title="Could not create your shop">
-            {error}
-          </InfoPanel>
-        )}
+      {/*
+        A FAILURE INTERRUPTS; it does not sit on the page.
+
+        As a panel this was the first thing pushed off the top when a keyboard opened, so an action
+        that failed looked exactly like one that did nothing — and the button gets pressed again.
+      */}
+      <ProblemDialog problem={error} title="Could not create your shop" />
 
         <form onSubmit={submit} noValidate>
           <div className={styles.card}>

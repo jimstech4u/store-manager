@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useInfiniteScrollObserver } from '@academix-admin/navigation-stack';
 import { useDemandState } from '@academix-admin/state-stack';
 import { useInvalidation } from '@/lib/stacks/invalidation';
+import { messageOf } from '@/lib/format';
 
 /**
  * Infinite list with cursor pagination.
@@ -226,7 +227,7 @@ export function usePaginatedList<T>({
          * never arrived says nothing about that. The failure is reported through `error`, which is
          * what a retry reads.
          */
-        setError(e instanceof Error ? e.message : 'Could not load this list');
+        setError(messageOf(e, 'Could not load this list'));
       } finally {
         /*
          * ALWAYS clear the flags, superseded or not.
@@ -342,7 +343,7 @@ export function usePaginatedList<T>({
         if (gen !== genRef.current) return;
         // Keep the rows. A failed refresh is a network problem, not a reason to empty a list
         // somebody is looking at.
-        setError(e instanceof Error ? e.message : 'Could not refresh this list');
+        setError(messageOf(e, 'Could not refresh this list'));
       } finally {
         /*
          * ALWAYS release the flag, superseded or not.

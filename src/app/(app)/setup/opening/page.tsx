@@ -5,10 +5,12 @@ import { useRouter } from 'next/navigation';
 import styles from '../setup.module.css';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
-import { Explain, InfoPanel, WorkedExample } from '@/components/ui/Explain';
+import { Explain, WorkedExample } from '@/components/ui/Explain';
 import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
 import { getSupabase } from '@/lib/supabase/client';
 import { useAuth } from '@/providers/AuthProvider';
+import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
+import { messageOf } from '@/lib/format';
 
 /**
  * Opening balances.
@@ -61,7 +63,7 @@ export default function OpeningBalancesPage() {
   const [stock, setStock] = useState<StockRow[]>([emptyStock()]);
   const [debtors, setDebtors] = useState<DebtorRow[]>([]);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const error = useProblem();
 
   const patchStock = (key: string, patch: Partial<StockRow>) =>
     setStock((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -71,7 +73,6 @@ export default function OpeningBalancesPage() {
 
   const submit = async () => {
     if (!store) return;
-    setError(null);
     setBusy(true);
 
     try {
@@ -132,7 +133,7 @@ export default function OpeningBalancesPage() {
       await refreshStores();
       router.replace('/main');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not save your opening balances');
+      error.show(messageOf(err, 'Could not save your opening balances'));
     } finally {
       setBusy(false);
     }
@@ -160,11 +161,13 @@ export default function OpeningBalancesPage() {
           your records begin from where you actually are.
         </p>
 
-        {error && (
-          <InfoPanel tone="danger" title="Could not save">
-            {error}
-          </InfoPanel>
-        )}
+      {/*
+        A FAILURE INTERRUPTS; it does not sit on the page.
+
+        As a panel this was the first thing pushed off the top when a keyboard opened, so an action
+        that failed looked exactly like one that did nothing — and the button gets pressed again.
+      */}
+      <ProblemDialog problem={error} title="Could not save" />
 
         {/* ── Stock ─────────────────────────────────────────────────────────────── */}
         <h2 className={styles.sectionTitle}>Stock on your shelf</h2>

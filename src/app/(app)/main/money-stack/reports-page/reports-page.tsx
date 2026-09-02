@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
-import { Explain, InfoPanel } from '@/components/ui/Explain';
+import { Explain } from '@/components/ui/Explain';
 import { PrinterIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
@@ -16,8 +16,9 @@ import {
   type SalesReport,
   type StockReport,
 } from '@/lib/stacks/reports';
-import { formatDateTime, formatMoney, formatQty } from '@/lib/format';
+import { formatDateTime, formatMoney, formatQty, messageOf } from '@/lib/format';
 import styles from './reports-page.module.css';
+import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 
 /**
  * The three reports a shop actually asks for, on paper or as a PDF.
@@ -61,22 +62,31 @@ export default function ReportsPage() {
   const [debtors, setDebtors] = useState<DebtorReport | null>(null);
   const [sales, setSales] = useState<SalesReport | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const error = useProblem();
+  /*
+   * Bound to a local, because a dependency array needs a value the linter can reason about.
+   *
+   * `show` never changes; the controller object does, as soon as a message appears. Depending on
+   * the object would rebuild this callback after every failure — and the effect that calls it would
+   * fire again, fail again, and loop. Depending on the member expression satisfies nobody: the rule
+   * cannot prove a property is stable and asks for the whole object back. A local const is the one
+   * form that is both honest and safe.
+   */
+  const showError = error.show;
 
   const load = useCallback(async () => {
     if (!store) return;
     setLoading(true);
-    setError(null);
     try {
       if (which === 'stock') setStock(await stockReport(store.id));
       else if (which === 'debtors') setDebtors(await debtorReport(store.id));
       else setSales(await salesReport(store.id, 30));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not build that report.');
+      showError(messageOf(e, 'Could not build that report.'));
     } finally {
       setLoading(false);
     }
-  }, [store, which]);
+  }, [store, which, showError]);
 
   useEffect(() => {
     void load();
@@ -146,11 +156,13 @@ export default function ReportsPage() {
 
       <p className={styles.blurb}>{active.blurb}</p>
 
-      {error && (
-        <InfoPanel tone="danger" title="Could not build that report">
-          {error}
-        </InfoPanel>
-      )}
+      {/*
+        A FAILURE INTERRUPTS; it does not sit on the page.
+
+        As a panel this was the first thing pushed off the top when a keyboard opened, so an action
+        that failed looked exactly like one that did nothing — and the button gets pressed again.
+      */}
+      <ProblemDialog problem={error} title="Could not build that report" />
 
       {loading ? (
         <FullPageMessage title="Working it out" tone="loading" />

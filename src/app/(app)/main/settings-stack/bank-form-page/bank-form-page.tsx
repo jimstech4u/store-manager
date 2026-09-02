@@ -6,12 +6,13 @@ import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
-import { InfoPanel } from '@/components/ui/Explain';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { useBankAccountsState, type BankAccount } from '@/lib/stacks/bank-accounts';
 import { getSupabase } from '@/lib/supabase/client';
 import styles from './bank-form-page.module.css';
+import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
+import { messageOf } from '@/lib/format';
 
 /**
  * Adding a bank account, or correcting one — a page.
@@ -45,7 +46,7 @@ export default function BankFormPage() {
 
   const [form, setForm] = useState(BLANK);
   const [busy, setBusy] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
+  const problem = useProblem();
 
   /*
    * Fill from the record once it arrives.
@@ -83,7 +84,6 @@ export default function BankFormPage() {
 
   const save = async () => {
     setBusy(true);
-    setProblem(null);
     try {
       const { data: savedId, error } = await getSupabase().rpc('save_bank_account', {
         p_store_id: store.id,
@@ -120,7 +120,7 @@ export default function BankFormPage() {
 
       await nav.pop();
     } catch (e) {
-      setProblem(e instanceof Error ? e.message : 'That account could not be saved.');
+      problem.show(messageOf(e, 'That account could not be saved.'));
     } finally {
       setBusy(false);
     }
@@ -136,11 +136,13 @@ export default function BankFormPage() {
           : 'The account customers transfer money into'
       }
     >
-      {problem && (
-        <InfoPanel tone="danger" title="Not saved">
-          {problem}
-        </InfoPanel>
-      )}
+      {/*
+        A FAILURE INTERRUPTS; it does not sit on the page.
+
+        As a panel this was the first thing pushed off the top when a keyboard opened, so an action
+        that failed looked exactly like one that did nothing — and the button gets pressed again.
+      */}
+      <ProblemDialog problem={problem} title="Not saved" />
 
       <Field
         label="Account number"

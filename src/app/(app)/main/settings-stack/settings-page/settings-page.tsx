@@ -20,6 +20,7 @@ import { ROLE_DESCRIPTION, ROLE_LABEL } from '@/lib/permissions';
 import { getSupabase } from '@/lib/supabase/client';
 import { useTheme } from '@/context/ThemeContext';
 import { NOTICE_NAMES, showNotice, useHiddenNotices } from '@/lib/hidden-notices';
+import { messageOf } from '@/lib/format';
 
 /** Common thermal roll widths, offered as shortcuts beside a free field — like a print dialog. */
 const PRESET_WIDTHS = [40, 58, 80, 100];
@@ -218,7 +219,7 @@ export default function SettingsPage() {
       if (err) throw err;
       setSaved(true);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Could not save your settings');
+      setError(messageOf(e, 'Could not save your settings'));
     } finally {
       setBusy(false);
     }
@@ -255,7 +256,7 @@ export default function SettingsPage() {
       }
     >
       {error && (
-        <InfoPanel tone="danger" title="Could not save">
+        <InfoPanel tone="danger" title="Could not load your settings">
           {error}
         </InfoPanel>
       )}
@@ -416,9 +417,7 @@ export default function SettingsPage() {
                   setLogoError(
                     err instanceof LogoRejected
                       ? err.message
-                      : err instanceof Error
-                        ? err.message
-                        : 'That logo could not be used.',
+                      : messageOf(err, 'That logo could not be used.'),
                   );
                 } finally {
                   setLogoBusy(false);

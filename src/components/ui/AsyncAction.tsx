@@ -2,6 +2,7 @@
 
 import { useCallback, useState, type ReactNode } from 'react';
 import styles from './AsyncAction.module.css';
+import { messageOf } from '@/lib/format';
 
 /**
  * A control that goes to the shop, and says so.
@@ -42,7 +43,7 @@ export function useAsyncAction() {
         await action();
         setState('idle');
       } catch (e) {
-        setProblem(e instanceof Error ? e.message : 'That did not go through.');
+        setProblem(messageOf(e, 'That did not go through.'));
         // Held so Retry runs the same action, not a fresh closure over stale values.
         setRetry(() => attempt);
         setState('failed');

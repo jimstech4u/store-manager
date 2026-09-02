@@ -7,6 +7,8 @@ import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
 import { quickAddSellable } from '@/lib/stacks/mid-sale';
 import styles from './QuickAddItem.module.css';
+import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
+import { messageOf } from '@/lib/format';
 
 /**
  * Something the shop sells and has never entered, added without leaving the receipt.
@@ -77,7 +79,7 @@ export function QuickAddItem({
   const [plural, setPlural] = useState('');
   const [price, setPrice] = useState('');
   const [busy, setBusy] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
+  const problem = useProblem();
 
   useEffect(() => {
     if (open) {
@@ -85,7 +87,6 @@ export function QuickAddItem({
       setUnit('');
       setPlural('');
       setPrice('');
-      setProblem(null);
     }
   }, [open, initialName]);
 
@@ -93,13 +94,12 @@ export function QuickAddItem({
 
   const save = async () => {
     setBusy(true);
-    setProblem(null);
     try {
       const id = await quickAddSellable(storeId, name, unit, plural, price);
       onAdded(id, name.trim());
       onClose();
     } catch (e) {
-      setProblem(e instanceof Error ? e.message : 'That could not be added.');
+      problem.show(messageOf(e, 'That could not be added.'));
     } finally {
       setBusy(false);
     }
@@ -121,11 +121,13 @@ export function QuickAddItem({
         </div>
       }
     >
-      {problem && (
-        <InfoPanel tone="danger" title="Not added">
-          {problem}
-        </InfoPanel>
-      )}
+      {/*
+        A FAILURE INTERRUPTS; it does not sit on the page.
+
+        As a panel this was the first thing pushed off the top when a keyboard opened, so an action
+        that failed looked exactly like one that did nothing — and the button gets pressed again.
+      */}
+      <ProblemDialog problem={problem} title="Not added" />
 
       <Field
         label="What is it called?"

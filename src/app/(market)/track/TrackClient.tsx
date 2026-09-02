@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
 import { getSupabase } from '@/lib/supabase/client';
-import { formatMoney, formatQty } from '@/lib/format';
+import { formatMoney, formatQty, messageOf } from '@/lib/format';
 import styles from './track.module.css';
 
 /**
@@ -126,7 +126,7 @@ export function TrackClient({ initialToken }: { initialToken?: string } = {}) {
       absorb(data as TrackedOrder);
       setState('found');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not open that link.');
+      setError(messageOf(err, 'Could not open that link.'));
       if (!quiet) setState('idle');
     }
   }, [absorb]);
@@ -157,7 +157,7 @@ export function TrackClient({ initialToken }: { initialToken?: string } = {}) {
       setState('found');
       following.current = { kind: 'code', value: trimmed };
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not check that code.');
+      setError(messageOf(err, 'Could not check that code.'));
       if (!quiet) setState('idle');
     }
   }, [absorb]);

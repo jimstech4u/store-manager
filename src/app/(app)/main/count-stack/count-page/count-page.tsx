@@ -4,7 +4,6 @@ import { useState } from 'react';
 import styles from './count-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
-import { Button } from '@/components/ui/Button';
 import { PlusIcon } from '@/components/ui/Icon';
 import { QuickAddItem } from '@/components/sell/QuickAddItem';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
@@ -91,7 +90,27 @@ export default function CountPage() {
 
 
   return (
-    <PageScaffold title="Count" subtitle="Check the shelf against the records">
+    <PageScaffold
+      title="Count"
+      subtitle="Check the shelf against the records"
+      /*
+        ADDING IS A HEADER ACTION, the same as it is on Stock.
+
+        It was a full-width button between the search and the list — the widest, greenest thing on
+        a screen whose job is to work DOWN a list of what is already there. It read as the main
+        action and it is not: the commonest thing a count turns up is something nobody entered, but
+        it is still the uncommon case. The icon keeps it one tap away without competing with the
+        list, and it puts the gesture where a shop has already learnt it.
+      */
+      actions={[
+        {
+          key: 'add',
+          icon: <PlusIcon />,
+          onClick: () => setQuickAdd(''),
+          ariaLabel: 'Something not on this list',
+        },
+      ]}
+    >
       <InfoPanel tone="info" title="Count the shelf, then we compare">
         Pick a product, count what is actually there, and we will tell you whether it matches what
         your records say it should be.
@@ -102,20 +121,6 @@ export default function CountPage() {
         placeholder="Search products or a category"
         onOpen={searchOps.open}
       />
-
-      {/*
-        FOUND ON THE SHELF, NOT IN THE CATALOGUE.
-
-        The commonest thing a count turns up is something nobody ever entered — a case a supplier
-        threw in, an old line still moving. Sending the counter to Stock to file it means coming
-        back to a count half done, so the item is created here and the count carries straight on to
-        it. Same sheet the till uses, same review queue afterwards.
-      */}
-      <div className={styles.addRow}>
-        <Button fullWidth onClick={() => setQuickAdd('')}>
-          <PlusIcon /> Something not on this list
-        </Button>
-      </div>
 
       <QuickAddItem
         open={quickAdd !== null}
@@ -171,8 +176,8 @@ export default function CountPage() {
 
       {products.length === 0 ? (
         <InfoPanel tone="info" title="Nothing to count yet">
-          Add what you sell under Stock, or use the button above for something you are looking at
-          right now.
+          Add what you sell under Stock, or use <strong>+</strong> at the top for something you are
+          looking at right now.
         </InfoPanel>
       ) : (
         <ul className={styles.list}>

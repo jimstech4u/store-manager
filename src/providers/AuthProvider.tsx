@@ -13,6 +13,7 @@ import {
 import type { Session, User } from '@supabase/supabase-js';
 import { getSupabase } from '@/lib/supabase/client';
 import { StateStack } from '@academix-admin/state-stack';
+import { messageOf } from '@/lib/format';
 
 /**
  * Auth and the current store, in one provider.
@@ -186,7 +187,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await loadStores(data.session?.user.id ?? null);
       })
       .catch((e: unknown) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Could not sign in');
+        if (!cancelled) setError(messageOf(e, 'Could not sign in'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

@@ -15,6 +15,8 @@ import {
   type ProductImage,
 } from '@/lib/stacks/product-media';
 import styles from './PhotoUpload.module.css';
+import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
+import { messageOf } from '@/lib/format';
 
 /**
  * Add and manage a product's pictures.
@@ -55,7 +57,17 @@ export function PhotoUpload({
   } | null>(null);
   const [keepBackground, setKeepBackground] = useState(false);
   const [working, setWorking] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
+  const problem = useProblem();
+  /*
+   * Bound to a local, because a dependency array needs a value the linter can reason about.
+   *
+   * `show` never changes; the controller object does, as soon as a message appears. Depending on
+   * the object would rebuild this callback after every failure — and the effect that calls it would
+   * fire again, fail again, and loop. Depending on the member expression satisfies nobody: the rule
+   * cannot prove a property is stable and asks for the whole object back. A local const is the one
+   * form that is both honest and safe.
+   */
+  const showProblem = problem.show;
 
   // Object URLs are not garbage collected. Left alone, a shop photographing thirty products in one
   // sitting leaks thirty full-size bitmaps into a tab that is already tight on a cheap phone.
@@ -74,7 +86,6 @@ export function PhotoUpload({
 
   const prepare = useCallback(
     async (file: File, keep: boolean) => {
-      setProblem(null);
       setWorking(true);
       try {
         const result = await normaliseProductImage(file, { keepBackground: keep });
@@ -86,12 +97,12 @@ export function PhotoUpload({
           backgroundRemoved: result.backgroundRemoved,
         });
       } catch (e) {
-        setProblem(e instanceof Error ? e.message : 'That picture could not be read.');
+        showProblem(messageOf(e, 'That picture could not be read.'));
       } finally {
         setWorking(false);
       }
     },
-    [],
+    [showProblem],
   );
 
   const onPick = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -115,7 +126,6 @@ export function PhotoUpload({
   const save = async () => {
     if (!pending) return;
     setWorking(true);
-    setProblem(null);
     try {
       const added = await addProductImage({
         storeId,
@@ -127,7 +137,7 @@ export function PhotoUpload({
       setImages([...images, added]);
       setPending(null);
     } catch (e) {
-      setProblem(e instanceof Error ? e.message : 'That picture could not be saved.');
+      showProblem(messageOf(e, 'That picture could not be saved.'));
     } finally {
       setWorking(false);
     }
@@ -135,12 +145,11 @@ export function PhotoUpload({
 
   const remove = async (image: ProductImage) => {
     setWorking(true);
-    setProblem(null);
     try {
       await removeProductImage(image);
       setImages(images.filter((i) => i.id !== image.id));
     } catch (e) {
-      setProblem(e instanceof Error ? e.message : 'That picture could not be removed.');
+      showProblem(messageOf(e, 'That picture could not be removed.'));
     } finally {
       setWorking(false);
     }
@@ -148,11 +157,10 @@ export function PhotoUpload({
 
   const promote = async (image: ProductImage) => {
     setWorking(true);
-    setProblem(null);
     try {
       setImages(await makePrimaryImage(images, image.id));
     } catch (e) {
-      setProblem(e instanceof Error ? e.message : 'The order could not be changed.');
+      showProblem(messageOf(e, 'The order could not be changed.'));
       void reload();
     } finally {
       setWorking(false);
@@ -173,11 +181,13 @@ export function PhotoUpload({
         </Explain>
       </div>
 
-      {problem && (
-        <InfoPanel tone="danger" title="That did not work">
-          {problem}
-        </InfoPanel>
-      )}
+      {/*
+        A FAILURE INTERRUPTS; it does not sit on the page.
+
+        As a panel this was the first thing pushed off the top when a keyboard opened, so an action
+        that failed looked exactly like one that did nothing — and the button gets pressed again.
+      */}
+      <ProblemDialog problem={problem} title="That did not work" />
 
       {images.length === 0 && !loading && (
         <p className={styles.emptyNote}>

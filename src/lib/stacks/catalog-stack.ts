@@ -6,6 +6,7 @@ import { CATALOG_SCOPE } from '@/lib/stacks/customer-account';
 import { getSupabase } from '@/lib/supabase/client';
 import { usePaginatedList } from '@/hooks/usePaginatedList';
 import { invalidate } from '@/lib/stacks/invalidation';
+import { messageOf } from '@/lib/format';
 
 /**
  * Products — searchable and paginated.
@@ -255,7 +256,7 @@ export function useProduct(productId: string | null) {
         set(
           {
             ...stateRef.current,
-            error: e instanceof Error ? e.message : 'Could not load this product.',
+            error: messageOf(e, 'Could not load this product.'),
             settled: true,
           },
           { override: true },

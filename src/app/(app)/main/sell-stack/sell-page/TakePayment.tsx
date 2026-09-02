@@ -11,8 +11,9 @@ import { getSupabase } from '@/lib/supabase/client';
 import { accountsChanged } from '@/lib/stacks/customer-account';
 import { stockMoved } from '@/lib/stacks/catalog-stack';
 import { useListNotifier } from '@/hooks/useListChannel';
-import { formatMoney } from '@/lib/format';
+import { formatMoney, messageOf } from '@/lib/format';
 import { chargesTotal, lineTotal, type DraftOrder } from '@/lib/stacks/draft-orders';
+import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 
 type Method = 'cash' | 'transfer' | 'pos';
 
@@ -87,7 +88,7 @@ export function TakePayment({
   const [draftReference, setDraftReference] = useState('');
   const [draftAccount, setDraftAccount] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const error = useProblem();
   const [outstanding, setOutstanding] = useState<number | null>(null);
 
   // The charge being composed. Held here rather than as a blank row on the order, so an
@@ -204,7 +205,6 @@ export function TakePayment({
 
 
   const settle = async () => {
-    setError(null);
     setBusy(true);
     try {
       const payments = allRows
@@ -309,7 +309,7 @@ export function TakePayment({
 
       onSettled(data as string);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Could not record this payment');
+      error.show(messageOf(e, 'Could not record this payment'));
     } finally {
       setBusy(false);
     }
@@ -344,11 +344,13 @@ export function TakePayment({
         </span>
       </button>
 
-      {error && (
-        <InfoPanel tone="danger" title="Could not record this payment">
-          {error}
-        </InfoPanel>
-      )}
+      {/*
+        A FAILURE INTERRUPTS; it does not sit on the page.
+
+        As a panel this was the first thing pushed off the top when a keyboard opened, so an action
+        that failed looked exactly like one that did nothing — and the button gets pressed again.
+      */}
+      <ProblemDialog problem={error} title="Could not record this payment" />
 
       <div className={styles.items}>
         <span className={styles.itemsLabel}>What they are buying</span>

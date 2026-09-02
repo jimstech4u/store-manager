@@ -15,7 +15,7 @@ import { type HistoryEvent } from '@/lib/stacks/customer-account';
 import { useCustomerFromList } from '@/lib/stacks/customer-directory';
 import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
-import { formatDate, formatDateTime, formatMoney } from '@/lib/format';
+import { formatDate, formatDateTime, formatMoney, messageOf } from '@/lib/format';
 import styles from '../money-page/money-page.module.css';
 
 /**
@@ -145,7 +145,7 @@ export default function StatementPage() {
             history: [],
             balance: null,
             name: null,
-            error: e instanceof Error ? e.message : 'Could not load this statement.',
+            error: messageOf(e, 'Could not load this statement.'),
             settled: true,
           },
           { override: true },

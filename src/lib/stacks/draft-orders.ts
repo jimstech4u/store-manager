@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDemandState } from '@academix-admin/state-stack';
 import { getSupabase } from '@/lib/supabase/client';
+import { messageOf } from '@/lib/format';
 
 /**
  * Open orders — several customers being served at once, shareable between staff.
@@ -316,7 +317,7 @@ export function useDraftOrders(storeId: string | null) {
       } catch (e: unknown) {
         // A failed push is not a lost order — the local copy stands and can be pushed again.
         // Saying "not saved yet" is honest; silently dropping it would not be.
-        setError(e instanceof Error ? e.message : 'Could not save this order');
+        setError(messageOf(e, 'Could not save this order'));
         return order;
       } finally {
         setSyncing(false);
@@ -532,7 +533,7 @@ export function useDraftOrders(storeId: string | null) {
         setActiveId(claimed.clientUuid);
         return claimed;
       } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : 'Could not find that order');
+        setError(messageOf(e, 'Could not find that order'));
         return null;
       }
     },

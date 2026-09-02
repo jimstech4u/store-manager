@@ -7,8 +7,10 @@ import { AuthShell } from '@/components/auth/AuthShell';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
+import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 import { getSupabase } from '@/lib/supabase/client';
 import styles from '../signin/signin.module.css';
+import { messageOf } from '@/lib/format';
 
 /**
  * Opening a shop.
@@ -24,7 +26,16 @@ export default function SignUp() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
+  /*
+   * TWO SURFACES, BECAUSE THERE ARE TWO KINDS OF THING HERE.
+   *
+   * "Enter your email address" is a CONDITION — this form can see it without attempting anything,
+   * it is still true after any acknowledgement, and it belongs beside the fields being fixed.
+   * "That email and password do not match" came back from an attempt that actually happened, and
+   * a seller who does not notice it presses the button again.
+   */
   const [error, setError] = useState<string | null>(null);
+  const problem = useProblem();
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -58,8 +69,8 @@ export default function SignUp() {
 
       router.replace('/main');
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Something went wrong';
-      setError(
+      const message = messageOf(err, 'Something went wrong');
+      problem.show(
         /already registered|already exists/i.test(message)
           ? 'There is already an account with that address. Go back and sign in instead.'
           : message,
@@ -71,8 +82,10 @@ export default function SignUp() {
 
   return (
     <AuthShell title="Create your account" lead="You will set up your shop in the next step.">
+      <ProblemDialog problem={problem} title="Could not create your account" />
+
       {error && (
-        <InfoPanel tone="danger" title="Could not continue">
+        <InfoPanel tone="danger" title="Check these first">
           {error}
         </InfoPanel>
       )}

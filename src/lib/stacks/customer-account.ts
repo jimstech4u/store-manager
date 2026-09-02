@@ -4,6 +4,7 @@ import { useCallback, useEffect } from 'react';
 import { useDemandState } from '@academix-admin/state-stack';
 import { getSupabase } from '@/lib/supabase/client';
 import { invalidate } from '@/lib/stacks/invalidation';
+import { messageOf } from '@/lib/format';
 
 /**
  * One customer's whole position, and the events behind it.
@@ -191,7 +192,7 @@ export function useCustomerAccount(customerId: string | null) {
           {
             account: null,
             history: [],
-            error: e instanceof Error ? e.message : 'Could not load this account.',
+            error: messageOf(e, 'Could not load this account.'),
             settled: true,
           },
           { override: true },

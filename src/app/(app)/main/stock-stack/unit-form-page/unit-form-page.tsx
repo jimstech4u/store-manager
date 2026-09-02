@@ -10,6 +10,7 @@ import { Explain } from '@/components/ui/Explain';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { createStoreUnit, type StoreUnit } from '@/lib/stacks/product-units';
+import { messageOf } from '@/lib/format';
 
 /**
  * A word this shop had no unit for yet.
@@ -59,7 +60,7 @@ export default function UnitFormPage() {
       void nav.pop();
     } catch (e) {
       setState('failed');
-      setProblem(e instanceof Error ? e.message : 'Could not add that unit.');
+      setProblem(messageOf(e, 'Could not add that unit.'));
     }
   };
 

@@ -11,9 +11,10 @@ import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
 import { useProduct } from '@/lib/stacks/catalog-stack';
-import { describeVariance, formatMoney, formatQty, pluralUnit } from '@/lib/format';
+import { describeVariance, formatMoney, formatQty, pluralUnit, messageOf } from '@/lib/format';
 import { leadUnit, useSellingUnits } from '@/lib/stacks/selling-units';
 import styles from '../count-page/count-page.module.css';
+import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 
 /**
  * Counting one product: a PAGE, not a sheet.
@@ -95,10 +96,17 @@ export default function CountEntryPage() {
   const [counted, setCounted] = useState('');
   const [state, setState] = useState<CountState | null>(null);
   const [busy, setBusy] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  /*
+   * The LOAD error and the ATTEMPT error are different things and get different surfaces.
+   *
+   * A page that could not load has nothing on it and the message is its whole state — it stays.
+   * A save that failed came back from work that was actually done, and a seller who does not
+   * notice it presses the button again.
+   */
+  const submitError = useProblem();
   // A product that would not load and a count that would not submit are different failures with
   // different lifetimes — the first belongs to the cached product, the second to this visit.
-  const error = submitError ?? loadError;
+  const error = loadError;
   const [reason, setReason] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [done, setDone] = useState(false);
@@ -118,7 +126,6 @@ export default function CountEntryPage() {
   const submitCount = async () => {
     if (!active || !store) return;
     setBusy(true);
-    setSubmitError(null);
     try {
       const supabase = getSupabase();
       const { data: periodId, error: pErr } = await supabase.rpc('ensure_open_period', {
@@ -161,7 +168,7 @@ export default function CountEntryPage() {
         withinTolerance: Boolean(within),
       });
     } catch (e: unknown) {
-      setSubmitError(e instanceof Error ? e.message : 'Could not save the count');
+      submitError.show(messageOf(e, 'Could not save the count'));
     } finally {
       setBusy(false);
     }
@@ -171,7 +178,6 @@ export default function CountEntryPage() {
   const resolveAndClose = async () => {
     if (!state) return;
     setBusy(true);
-    setSubmitError(null);
     try {
       const supabase = getSupabase();
 
@@ -193,7 +199,7 @@ export default function CountEntryPage() {
 
       setDone(true);
     } catch (e: unknown) {
-      setSubmitError(e instanceof Error ? e.message : 'Could not close this count');
+      submitError.show(messageOf(e, 'Could not close this count'));
     } finally {
       setBusy(false);
     }
@@ -203,8 +209,10 @@ export default function CountEntryPage() {
 
   return (
     <PageScaffold onBack={goBack} title={active?.name ?? 'Count'} subtitle="Check the shelf">
+      <ProblemDialog problem={submitError} title="Could not continue" />
+
       {error && (
-        <InfoPanel tone="danger" title="Could not continue">
+        <InfoPanel tone="danger" title="Could not load this item">
           {error}
         </InfoPanel>
       )}

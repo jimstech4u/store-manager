@@ -37,7 +37,7 @@ import {
   useDraftOrders,
   type DraftLine,
 } from '@/lib/stacks/draft-orders';
-import { formatMoney, formatQty } from '@/lib/format';
+import { formatMoney, formatQty, messageOf } from '@/lib/format';
 import { partsFor, snapQty, startingQty } from '@/lib/quantity-rules';
 import { getSupabase } from '@/lib/supabase/client';
 
@@ -1230,7 +1230,7 @@ export default function SellPage() {
                 setQuickAdd('');
               } catch (e) {
                 setScanProblem(
-                  e instanceof Error ? e.message : 'That barcode could not be looked up.',
+                  messageOf(e, 'That barcode could not be looked up.'),
                 );
               }
             })();

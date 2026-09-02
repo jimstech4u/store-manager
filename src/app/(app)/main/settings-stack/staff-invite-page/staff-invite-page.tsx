@@ -13,6 +13,8 @@ import { useAuth } from '@/providers/AuthProvider';
 import { settingsChanged, SETTINGS_SCOPE } from '@/lib/stacks/bank-accounts';
 import { getSupabase } from '@/lib/supabase/client';
 import styles from './staff-invite-page.module.css';
+import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
+import { messageOf } from '@/lib/format';
 
 /**
  * Giving somebody a till.
@@ -105,7 +107,7 @@ export default function StaffInvitePage() {
   const [touched, setTouched] = useState(false);
 
   const [busy, setBusy] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
+  const problem = useProblem();
   const [done, setDone] = useState<{ email: string; warning?: string } | null>(null);
 
   useEffect(() => {
@@ -196,7 +198,6 @@ export default function StaffInvitePage() {
 
   const create = async () => {
     setBusy(true);
-    setProblem(null);
     try {
       const { data: session } = await getSupabase().auth.getSession();
       const token = session.session?.access_token;
@@ -229,7 +230,7 @@ export default function StaffInvitePage() {
       settingsChanged();
       setDone({ email: result.email ?? '', warning: result.warning });
     } catch (e) {
-      setProblem(e instanceof Error ? e.message : 'That account could not be created.');
+      problem.show(messageOf(e, 'That account could not be created.'));
     } finally {
       setBusy(false);
     }
@@ -243,11 +244,13 @@ export default function StaffInvitePage() {
       title="Add someone to your team"
       subtitle="They sign in with a login this shop owns"
     >
-      {problem && (
-        <InfoPanel tone="danger" title="Not added">
-          {problem}
-        </InfoPanel>
-      )}
+      {/*
+        A FAILURE INTERRUPTS; it does not sit on the page.
+
+        As a panel this was the first thing pushed off the top when a keyboard opened, so an action
+        that failed looked exactly like one that did nothing — and the button gets pressed again.
+      */}
+      <ProblemDialog problem={problem} title="Not added" />
 
       <Field
         label="First name"

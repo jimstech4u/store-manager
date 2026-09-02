@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@academix-admin/bottom-viewer": "^0.4.0",
-    "@academix-admin/dialog-viewer": "^0.3.0",
+    "@academix-admin/dialog-viewer": "^0.4.0",
     "@academix-admin/header": "^0.2.4",
     "@academix-admin/modal-sheet": "^0.2.0",
     "@academix-admin/navigation-bar": "^0.1.5",

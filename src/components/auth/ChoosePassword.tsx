@@ -3,9 +3,10 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
-import { InfoPanel } from '@/components/ui/Explain';
 import { getSupabase } from '@/lib/supabase/client';
 import styles from './ChoosePassword.module.css';
+import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
+import { messageOf } from '@/lib/format';
 
 /**
  * A staff member choosing their own password, before they can do anything else.
@@ -30,7 +31,7 @@ export function ChoosePassword({
   const [password, setPassword] = useState('');
   const [again, setAgain] = useState('');
   const [busy, setBusy] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
+  const problem = useProblem();
 
   const tooShort = password.length > 0 && password.length < 8;
   const mismatch = again.length > 0 && password !== again;
@@ -38,7 +39,6 @@ export function ChoosePassword({
 
   const save = async () => {
     setBusy(true);
-    setProblem(null);
     try {
       const supabase = getSupabase();
       const { error } = await supabase.auth.updateUser({ password });
@@ -55,7 +55,7 @@ export function ChoosePassword({
 
       onDone();
     } catch (e) {
-      setProblem(e instanceof Error ? e.message : 'That password could not be saved.');
+      problem.show(messageOf(e, 'That password could not be saved.'));
     } finally {
       setBusy(false);
     }
@@ -76,11 +76,13 @@ export function ChoosePassword({
           )}
         </p>
 
-        {problem && (
-          <InfoPanel tone="danger" title="Not saved">
-            {problem}
-          </InfoPanel>
-        )}
+      {/*
+        A FAILURE INTERRUPTS; it does not sit on the page.
+
+        As a panel this was the first thing pushed off the top when a keyboard opened, so an action
+        that failed looked exactly like one that did nothing — and the button gets pressed again.
+      */}
+      <ProblemDialog problem={problem} title="Not saved" />
 
         <Field
           label="New password"

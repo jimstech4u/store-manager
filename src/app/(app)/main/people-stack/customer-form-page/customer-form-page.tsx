@@ -6,11 +6,13 @@ import { PageScaffold } from '@/components/ui/PageScaffold';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
+import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
 import { useListNotifier } from '@/hooks/useListChannel';
 import styles from './customer-form-page.module.css';
+import { messageOf } from '@/lib/format';
 
 /**
  * Saving somebody as a customer.
@@ -72,13 +74,12 @@ export default function CustomerFormPage() {
   const [phone, setPhone] = useState('');
   const [business, setBusiness] = useState('');
   const [busy, setBusy] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
+  const problem = useProblem();
 
   if (!store) return null;
 
   const save = async () => {
     setBusy(true);
-    setProblem(null);
     try {
       const { data, error } = await getSupabase().rpc('upsert_customer', {
         p_store_id: store.id,
@@ -117,7 +118,7 @@ export default function CustomerFormPage() {
       if (attachToSale && created.isProvided) created.getter()?.(customer);
       await nav.pop();
     } catch (e) {
-      setProblem(e instanceof Error ? e.message : 'That customer could not be saved.');
+      problem.show(messageOf(e, 'That customer could not be saved.'));
     } finally {
       setBusy(false);
     }
@@ -129,11 +130,14 @@ export default function CustomerFormPage() {
       title="Add a customer"
       subtitle="Somebody you sell to more than once"
     >
-      {problem && (
-        <InfoPanel tone="danger" title="Not saved">
-          {problem}
-        </InfoPanel>
-      )}
+      {/*
+        A FAILURE INTERRUPTS; it does not sit on the page.
+
+        This was an InfoPanel above the fields. On a phone it is the first thing pushed off the top
+        as soon as the keyboard opens, so a save that failed looked exactly like a save that did
+        nothing — and the shop presses the button again.
+      */}
+      <ProblemDialog problem={problem} title="Not saved" />
 
       <InfoPanel tone="info" title="When to save somebody">
         You only need this for people buying on credit, or regulars you want a history for. An

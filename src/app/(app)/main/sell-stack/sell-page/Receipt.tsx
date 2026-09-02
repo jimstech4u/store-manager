@@ -8,7 +8,7 @@ import { WhatsAppIcon } from '@/components/ui/Icon';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { useDemandState } from '@academix-admin/state-stack';
 import { getSupabase } from '@/lib/supabase/client';
-import { formatDateTime, formatMoney, formatQty, pluralUnit } from '@/lib/format';
+import { formatDateTime, formatMoney, formatQty, pluralUnit, messageOf } from '@/lib/format';
 import { renderReceiptCanvas, renderReceiptImage, shareImage, shareLink } from '@/lib/share';
 import { receiptPdf, sharePdf } from '@/lib/pdf';
 import { appUrl } from '@/lib/app-url';
@@ -133,9 +133,7 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
             ...snapshotRef.current,
             error: snapshotRef.current.detail
               ? null
-              : e instanceof Error
-                ? e.message
-                : 'Could not load the receipt',
+              : messageOf(e, 'Could not load the receipt'),
           },
           { override: true },
         );
@@ -361,7 +359,7 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
               const result = await shareLink(url, `Receipt from ${shopName}`);
               if (result === 'copied') setShareNote('Link copied. Paste it into a chat.');
             } catch (e: unknown) {
-              setShareNote(e instanceof Error ? e.message : 'Could not create a link');
+              setShareNote(messageOf(e, 'Could not create a link'));
             } finally {
               setSharing(false);
             }
@@ -405,7 +403,7 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
                 customerName: detail?.customer?.name ?? '',
               });
             } catch (e: unknown) {
-              setShareNote(e instanceof Error ? e.message : 'Could not create a link');
+              setShareNote(messageOf(e, 'Could not create a link'));
             } finally {
               setSharingWhatsApp(false);
             }
@@ -465,7 +463,7 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
               );
               if (where === 'downloaded') setShareNote('PDF saved to your downloads.');
             } catch (e: unknown) {
-              setShareNote(e instanceof Error ? e.message : 'Could not make a PDF');
+              setShareNote(messageOf(e, 'Could not make a PDF'));
             } finally {
               setMakingPdf(false);
             }

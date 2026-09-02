@@ -21,6 +21,8 @@ import {
 import { getSupabase } from '@/lib/supabase/client';
 import type { Product } from '@/lib/stacks/catalog-stack';
 import styles from './ProductForm.module.css';
+import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
+import { messageOf } from '@/lib/format';
 
 /**
  * Add a product, or change one. The BODY of a page — see `product-form-page`.
@@ -124,7 +126,7 @@ export function ProductForm({
 
   const [scanning, setScanning] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
+  const problem = useProblem();
 
   /*
    * Fill from props once the product arrives.
@@ -135,7 +137,6 @@ export function ProductForm({
    * opened a second time, so the seller edited the wrong record.
    */
   useEffect(() => {
-    setProblem(null);
     setName(product?.name ?? initialName);
     setSku(product?.sku ?? '');
     setBarcode(product?.barcode ?? '');
@@ -205,18 +206,17 @@ export function ProductForm({
   const save = async () => {
     const trimmed = name.trim();
     if (!trimmed) {
-      setProblem('Give the item a name.');
+      problem.show('Give the item a name.');
       return;
     }
 
     const wrong = unitProblems(units);
     if (wrong) {
-      setProblem(wrong);
+      problem.show(wrong);
       return;
     }
 
     setSaving(true);
-    setProblem(null);
     try {
       const supabase = getSupabase();
       let id = product?.id ?? '';
@@ -305,7 +305,7 @@ export function ProductForm({
 
       onSaved({ id, name: trimmed, row, created: !editing });
     } catch (e) {
-      setProblem(e instanceof Error ? e.message : 'That could not be saved.');
+      problem.show(messageOf(e, 'That could not be saved.'));
     } finally {
       setSaving(false);
     }
@@ -313,11 +313,13 @@ export function ProductForm({
 
   return (
     <>
-      {problem && (
-        <InfoPanel tone="danger" title="Not saved">
-          {problem}
-        </InfoPanel>
-      )}
+      {/*
+        A FAILURE INTERRUPTS; it does not sit on the page.
+
+        As a panel this was the first thing pushed off the top when a keyboard opened, so an action
+        that failed looked exactly like one that did nothing — and the button gets pressed again.
+      */}
+      <ProblemDialog problem={problem} title="Not saved" />
 
       {/*
         No heading over the first question.
