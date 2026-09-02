@@ -1,6 +1,5 @@
 'use client';
 
-import { useMemo } from 'react';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { InfoPanel } from '@/components/ui/Explain';
@@ -14,7 +13,13 @@ import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
 import { useStackBack } from '@/hooks/useStackBack';
 import { searchProducts, useProductList, type Product } from '@/lib/stacks/catalog-stack';
-import { alsoReadsAs, leadUnit, useSellingUnits, useUnitGaps } from '@/lib/stacks/selling-units';
+import {
+  alsoReadsAs,
+  leadUnit,
+  useSellingUnits,
+  useStockWorth,
+  useUnitGaps,
+} from '@/lib/stacks/selling-units';
 import { useListChannel } from '@/hooks/useListChannel';
 import { useInfiniteScroll } from '@/hooks/usePaginatedList';
 import { formatMoney, formatQty, pluralUnit } from '@/lib/format';
@@ -79,12 +84,15 @@ export default function StockPage() {
     enabled: browse.hasMore && !browse.loading,
   });
 
-  // Deliberately the value of what is LOADED, not of the whole catalogue: claiming a total while
-  // holding one page of it would be a confidently wrong number, which is worse than none.
-  const loadedValue = useMemo(
-    () => products.reduce((sum, p) => sum + Number(p.onHand) * Number(p.avgUnitCost), 0),
-    [products],
-  );
+  /*
+   * What the shelf is worth, asked of the shop.
+   *
+   * This used to add up the rows the page happened to be holding, labelled "Loaded so far, worth".
+   * Honest about being partial and useless as a figure — a shop with eight hundred lines would
+   * have to scroll the whole catalogue into memory to learn what its stock is worth, and would
+   * still be reading an accumulation of page loads rather than a statement.
+   */
+  const worth = useStockWorth(store?.id ?? null);
   const anyEstimated = products.some((p) => p.costIsEstimated);
 
   if (!store) return null;
@@ -221,12 +229,16 @@ export default function StockPage() {
         <>
           {(
             <div className={styles.summary}>
-              <span className={styles.summaryLabel}>
-                {browse.hasMore ? 'Loaded so far, worth' : 'Stock is worth'}
-              </span>
-              <span className={styles.summaryValue}>{formatMoney(loadedValue)}</span>
+              <span className={styles.summaryLabel}>Stock is worth</span>
+              <span className={styles.summaryValue}>{formatMoney(worth.total)}</span>
               <span className={styles.summaryNote}>
                 at what it cost you, not what you sell it for
+                {worth.estimated > 0 && (
+                  <>
+                    {' · '}
+                    {formatMoney(worth.estimated)} of it still estimated
+                  </>
+                )}
               </span>
             </div>
           )}

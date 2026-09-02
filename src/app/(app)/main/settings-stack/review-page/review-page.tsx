@@ -11,6 +11,7 @@ import { useDemandState } from '@academix-admin/state-stack';
 import { SETTINGS_SCOPE } from '@/lib/stacks/bank-accounts';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
+import { useNav } from '@academix-admin/navigation-stack';
 import { useStackBack } from '@/hooks/useStackBack';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatDateTime, formatQty, pluralUnit } from '@/lib/format';
@@ -65,6 +66,7 @@ const KIND_LABEL: Record<string, string> = {
  * word people click without knowing what they agreed to.
  */
 export default function ReviewPage() {
+  const nav = useNav();
   const goBack = useStackBack();
   const { store } = useAuth();
   const { can } = usePermission();
@@ -76,7 +78,7 @@ export default function ReviewPage() {
    * its life being pushed off and returned to. `!queue` renders a full-page "Loading", which meant
    * every single trip back through the queue put a spinner over a list that was already correct.
    */
-  const [snapshot, demand] = useDemandState<{ queue: Queue | null; error: string | null }>(
+  const [snapshot, demand, setSnapshot] = useDemandState<{ queue: Queue | null; error: string | null }>(
     { queue: null, error: null },
     {
       key: `review:${store?.id ?? 'none'}`,
@@ -125,12 +127,34 @@ export default function ReviewPage() {
     void load();
   }, [load]);
 
+  /**
+   * Take one row out of the queue, here, without asking for the queue again.
+   *
+   * `load()` re-read every pending record to learn that one had been dealt with — a round trip for
+   * something this device had just done, with the approved row still on screen until it landed,
+   * long enough to tap twice. A queue is exactly the list where that matters: the whole job is
+   * working down it.
+   */
+  const takeOut = (kind: 'products' | 'customers' | 'stock_entries', id: string) => {
+    const current = queueRef.current;
+    if (!current) return;
+    setSnapshot({
+      queue: {
+        products: current.products.filter((r) => kind !== 'products' || r.id !== id),
+        customers: current.customers.filter((r) => kind !== 'customers' || r.id !== id),
+        stock_entries: current.stock_entries.filter(
+          (r) => kind !== 'stock_entries' || r.id !== id,
+        ),
+      },
+      error: null,
+    });
+  };
+
   const run = async (key: string, fn: () => Promise<void>) => {
     setBusy(key);
     setActionError(null);
     try {
       await fn();
-      await load();
     } catch (e: unknown) {
       setActionError(e instanceof Error ? e.message : 'Could not do that');
     } finally {
@@ -208,21 +232,45 @@ export default function ReviewPage() {
                     {formatQty(p.on_hand)} {pluralUnit(p.base_unit, Number(p.on_hand))} in stock ·
                     added {formatDateTime(p.created_at)}
                   </p>
+
+                  {/*
+                    WHAT IS ACTUALLY MISSING, said plainly.
+
+                    Something added at a counter has the three things a seller had time for: a name,
+                    a unit, a price. What it arrives in, what it cost, a cheaper price for buying
+                    more — none of that is known, and approving it without filling any of it in
+                    leaves an item that cannot be received against or costed. "Looks right" alone
+                    invites exactly that, so the gap is named and the way to close it is beside it.
+                  */}
+                  <p className={styles.cardGap}>
+                    Nothing has been recorded about what it costs you, or what it arrives in.
+                  </p>
                 </div>
-                <Button
-                  size="small"
-                  busy={busy === p.id}
-                  onClick={() =>
-                    run(p.id, async () => {
-                      const { error: e } = await getSupabase().rpc('confirm_product', {
-                        p_product_id: p.id,
-                      });
-                      if (e) throw e;
-                    })
-                  }
-                >
-                  <CheckIcon /> Looks right
-                </Button>
+
+                <div className={styles.cardActions}>
+                  <Button
+                    size="small"
+                    variant="secondary"
+                    onClick={() => void nav.push('product_form_page', { id: p.id })}
+                  >
+                    Fill in the rest
+                  </Button>
+                  <Button
+                    size="small"
+                    busy={busy === p.id}
+                    onClick={() =>
+                      run(p.id, async () => {
+                        const { error: e } = await getSupabase().rpc('confirm_product', {
+                          p_product_id: p.id,
+                        });
+                        if (e) throw e;
+                        takeOut('products', p.id);
+                      })
+                    }
+                  >
+                    <CheckIcon /> Looks right
+                  </Button>
+                </div>
               </li>
             ))}
           </ul>
@@ -246,20 +294,31 @@ export default function ReviewPage() {
                     {c.phone} · added {formatDateTime(c.created_at)}
                   </p>
                 </div>
-                <Button
-                  size="small"
-                  busy={busy === c.id}
-                  onClick={() =>
-                    run(c.id, async () => {
-                      const { error: e } = await getSupabase().rpc('confirm_customer', {
-                        p_customer_id: c.id,
-                      });
-                      if (e) throw e;
-                    })
-                  }
-                >
-                  <CheckIcon /> Looks right
-                </Button>
+
+                <div className={styles.cardActions}>
+                  <Button
+                    size="small"
+                    variant="secondary"
+                    onClick={() => void nav.push('customer_form_page', { id: c.id })}
+                  >
+                    Check the details
+                  </Button>
+                  <Button
+                    size="small"
+                    busy={busy === c.id}
+                    onClick={() =>
+                      run(c.id, async () => {
+                        const { error: e } = await getSupabase().rpc('confirm_customer', {
+                          p_customer_id: c.id,
+                        });
+                        if (e) throw e;
+                        takeOut('customers', c.id);
+                      })
+                    }
+                  >
+                    <CheckIcon /> Looks right
+                  </Button>
+                </div>
               </li>
             ))}
           </ul>

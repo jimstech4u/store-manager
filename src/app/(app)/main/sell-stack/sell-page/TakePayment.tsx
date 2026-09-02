@@ -9,6 +9,7 @@ import { InfoPanel } from '@/components/ui/Explain';
 import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
 import { getSupabase } from '@/lib/supabase/client';
 import { accountsChanged } from '@/lib/stacks/customer-account';
+import { stockMoved } from '@/lib/stacks/catalog-stack';
 import { useListNotifier } from '@/hooks/useListChannel';
 import { formatMoney } from '@/lib/format';
 import { chargesTotal, lineTotal, type DraftOrder } from '@/lib/stacks/draft-orders';
@@ -252,6 +253,15 @@ export function TakePayment({
        * it happened; every screen guessing on a timer is the arrangement this replaced.
        */
       accountsChanged();
+
+      /*
+       * A SALE MOVES STOCK, and the stock screens were never told.
+       *
+       * `accountsChanged()` covers balances and empties. Nothing covered the shelf: what is on
+       * hand, what it is worth, the dearest layer a price is warned against. So a shop could sell
+       * all afternoon and read this morning's figures.
+       */
+      stockMoved();
 
       /*
        * Tell the sales list about THIS sale, rather than telling it to read everything again.

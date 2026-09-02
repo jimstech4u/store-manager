@@ -12,7 +12,7 @@ import { Explain, InfoPanel, WorkedExample } from '@/components/ui/Explain';
 import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
 import { useBuyingUnits } from '@/lib/stacks/selling-units';
 import { useAuth } from '@/providers/AuthProvider';
-import { catalogChanged, useProductList, type Product } from '@/lib/stacks/catalog-stack';
+import { stockMoved, useProductList, type Product } from '@/lib/stacks/catalog-stack';
 import { useListNotifier } from '@/hooks/useListChannel';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatMoney, formatQty, pluralUnit } from '@/lib/format';
@@ -261,7 +261,11 @@ export default function ReceivePage() {
        * items can now come in but never go out. Those the server computes from layers this device
        * cannot see, so this is a re-read that earns its round trip.
        */
-      catalogChanged();
+      /*
+       * The rows this page patched are its own; the VALUE of the shelf and the layers behind it
+       * are the server's, and a second till may have sold from the same stock meanwhile.
+       */
+      stockMoved();
 
       setDone(true);
     } catch (e: unknown) {

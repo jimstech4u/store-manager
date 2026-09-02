@@ -286,6 +286,26 @@ export function useProduct(productId: string | null) {
  */
 export const DERIVED_SCOPE = 'catalog_derived';
 
+/**
+ * Stock moved — a sale, a delivery, a count, a damage.
+ *
+ * This re-reads the product LIST as well as the derived figures, and that is a deliberate
+ * exception to "a change this device made is already known".
+ *
+ * An edit is this device's own: it renamed something, and asking the server what the name now is
+ * would be asking a question it just answered. A QUANTITY IS NOT. It is shared — another till is
+ * selling the same shelf, a delivery may have landed while this receipt was open — and it is
+ * derived from movements and FIFO layers a browser never sees. The client's arithmetic would be
+ * right until the moment two people sold at once, which in a real shop is most of the day.
+ *
+ * `refresh` rather than `reload`: the rows stay on screen and are corrected in place, so nobody
+ * loses their scroll position or watches the list blank.
+ */
+export function stockMoved() {
+  invalidate(DERIVED_SCOPE);
+  invalidate(CATALOG_SCOPE);
+}
+
 export function catalogChanged() {
   /*
    * Only what this device CANNOT work out for itself.

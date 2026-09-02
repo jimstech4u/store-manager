@@ -256,3 +256,61 @@ interface BuyingUnitRow {
   base_qty: string;
   is_default: boolean;
 }
+
+
+/**
+ * What the whole shelf is worth — asked of the shop, not added up from what is on screen.
+ *
+ * The stock screen summed the rows it happened to be holding and labelled it "Loaded so far,
+ * worth". Honest about being partial, and useless as a figure: a shop with eight hundred lines
+ * would have to scroll its entire catalogue into memory to learn what its stock is worth.
+ *
+ * The server is also the only party that CAN answer it — the value of the shelf is quantity times
+ * what that quantity cost, and cost lives in FIFO layers a browser never sees.
+ */
+export function useStockWorth(storeId: string | null) {
+  const [worth, demandWorth] = useDemandState<StockWorth>(
+    { total: 0, estimated: 0, items: 0, itemsInStock: 0 },
+    {
+      key: `stock-worth:${storeId ?? 'none'}`,
+      scope: DERIVED_SCOPE,
+      persist: true,
+      deps: [storeId ?? ''],
+      revalidateOnMount: false,
+    },
+  );
+
+  const load = useCallback(() => {
+    if (!storeId) return;
+    void demandWorth(async ({ set }) => {
+      const { data } = await getSupabase().rpc('stock_worth', { p_store_id: storeId });
+      const row = (data ?? [])[0] as
+        | { total_value: string; estimated_value: string; items: number; items_in_stock: number }
+        | undefined;
+      if (!row) return;
+      set(
+        {
+          total: Number(row.total_value),
+          estimated: Number(row.estimated_value),
+          items: Number(row.items),
+          itemsInStock: Number(row.items_in_stock),
+        },
+        { override: true },
+      );
+    });
+  }, [storeId, demandWorth]);
+
+  useEffect(load, [load]);
+  // A delivery, a sale or a count all move it, and all invalidate the derived scope.
+  useInvalidation(DERIVED_SCOPE, load);
+
+  return worth;
+}
+
+export interface StockWorth {
+  total: number;
+  /** The part still carried at a setup figure rather than one from a real delivery. */
+  estimated: number;
+  items: number;
+  itemsInStock: number;
+}
