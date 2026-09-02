@@ -5,10 +5,10 @@ import { SelectionViewer, useSelectionController } from '@academix-admin/selecti
 import { ViewerLoading } from '@/components/ui/ViewerState';
 import { InfoPanel } from '@/components/ui/Explain';
 import { Button } from '@/components/ui/Button';
-import { CameraIcon, CloseIcon, PlusIcon } from '@/components/ui/Icon';
+import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
 import { StateStack } from '@academix-admin/state-stack';
 import { useDebounced } from '@/components/ui/SearchField';
-import { useOverlayRoute } from '@/hooks/useOverlayRoute';
+import { useOverlayRoute } from '@academix-admin/navigation-stack';
 import { useTheme } from '@/context/ThemeContext';
 import { useProductSearch, type Product } from '@/lib/stacks/catalog-stack';
 import { formatMoney, formatQty, pluralUnit } from '@/lib/format';
@@ -43,7 +43,6 @@ export function ProductPicker({
    * of something the shop has never sold is a catalogue job, not a receiving job.
    */
   onAddNew,
-  onScan,
   /** What each row says beneath the name. Deliveries care about stock; sales care about price. */
   renderMeta,
   emptyHint = 'Try part of the name, or a category like “water”.',
@@ -55,13 +54,6 @@ export function ProductPicker({
   onPick: (product: Product) => void;
   title?: string;
   onAddNew?: (typedName: string) => void;
-  /**
-   * Offered beside the search when a shop can point a camera at the label instead.
-   *
-   * Handed over rather than done here: what a scan MEANS depends on the screen. At a till it puts
-   * the item on the receipt; on a delivery it adds a line to count in.
-   */
-  onScan?: () => void;
   renderMeta?: (product: Product) => ReactNode;
   emptyHint?: string;
   zIndex?: number;
@@ -148,7 +140,6 @@ export function ProductPicker({
             */}
             {onAddNew && (
               <Button
-                variant="secondary"
                 size="large"
                 fullWidth
                 onClick={() => onAddNew(query.trim())}
@@ -184,9 +175,17 @@ export function ProductPicker({
       }
       zIndex={zIndex}
     >
-      {onScan && (
-        <button type="button" className={styles.scanRow} onClick={onScan}>
-          <CameraIcon /> Scan a barcode instead
+      {/*
+        ADDING IS OFFERED BEFORE THE LIST, not only after it fails.
+
+        It used to live in the no-result view alone, so a seller had to search for something and be
+        told it does not exist before the way to add it appeared. The customer picker has always
+        put it at the top; this is the same list of the same kind of thing and should behave the
+        same way.
+      */}
+      {onAddNew && (
+        <button type="button" className={styles.addRow} onClick={() => onAddNew(query.trim())}>
+          <PlusIcon /> {query.trim() ? `Add "${query.trim()}"` : 'Add something new'}
         </button>
       )}
 

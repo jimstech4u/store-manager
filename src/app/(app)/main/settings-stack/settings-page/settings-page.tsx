@@ -19,6 +19,7 @@ import { useStackBack } from '@/hooks/useStackBack';
 import { ROLE_DESCRIPTION, ROLE_LABEL } from '@/lib/permissions';
 import { getSupabase } from '@/lib/supabase/client';
 import { useTheme } from '@/context/ThemeContext';
+import { NOTICE_NAMES, showNotice, useHiddenNotices } from '@/lib/hidden-notices';
 
 /** Common thermal roll widths, offered as shortcuts beside a free field — like a print dialog. */
 const PRESET_WIDTHS = [40, 58, 80, 100];
@@ -58,6 +59,7 @@ export default function SettingsPage() {
   const { store, user, signOut } = useAuth();
   const { can, role } = usePermission();
   const { theme, storedTheme, setTheme } = useTheme();
+  const hiddenNotices = useHiddenNotices();
 
   // The logo picker's hidden input, and the state around preparing one.
   const logoInput = useRef<HTMLInputElement | null>(null);
@@ -605,6 +607,33 @@ ${settings.transfer_account_name ?? ''}`.trim()
       <p className={styles.sectionNote}>
         Currently showing {theme}. This is per device, not shared with your staff.
       </p>
+
+      {/*
+        WHAT WAS PUT AWAY, AND THE WAY BACK.
+
+        A warning that can be dismissed and never recovered is a warning that has been deleted.
+        This sits under "This device" because that is what a dismissal is — the till stops
+        showing it, the owner's phone still does.
+      */}
+      {hiddenNotices.length > 0 && (
+        <>
+          <h3 className={styles.subsection}>Warnings you turned off</h3>
+          <ul className={styles.noticeList}>
+            {hiddenNotices.map((noticeId) => (
+              <li key={noticeId} className={styles.noticeRow}>
+                <span>{NOTICE_NAMES[noticeId] ?? noticeId}</span>
+                <button
+                  type="button"
+                  className={styles.noticeShow}
+                  onClick={() => showNotice(noticeId)}
+                >
+                  Show again
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
 
       <h2 className={styles.section}>You</h2>
       <div className={styles.you}>

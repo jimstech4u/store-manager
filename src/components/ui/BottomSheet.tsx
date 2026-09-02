@@ -2,7 +2,7 @@
 
 import { useId, type ReactNode } from 'react';
 import { BottomViewer } from '@academix-admin/bottom-viewer';
-import { useOverlayRoute } from '@/hooks/useOverlayRoute';
+import { useOverlayRoute } from '@academix-admin/navigation-stack';
 import styles from './BottomSheet.module.css';
 import { CloseIcon } from './Icon';
 

@@ -522,3 +522,12 @@
 .orderBox {
   min-height: calc(100dvh - 240px - var(--nav-height));
 }
+
+/* The two ways onto a receipt: search the list, or point the camera. Stacked, because both are
+   full-width targets and a seller is using one thumb. */
+.addRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}

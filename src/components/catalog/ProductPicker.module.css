@@ -44,9 +44,9 @@
   margin-top: 2px;
 }
 
-/* Point the camera at the label instead of typing. Sits above the results, because a shop that
-   means to scan wants it before it has finished reading the list. */
-.scanRow {
+/* Adding, offered before the list rather than only after a search fails — the customer picker has
+   always worked this way and this is the same kind of list. */
+.addRow {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -63,6 +63,6 @@
   cursor: pointer;
 }
 
-.scanRow:hover {
+.addRow:hover {
   background: var(--surface-sunken);
 }

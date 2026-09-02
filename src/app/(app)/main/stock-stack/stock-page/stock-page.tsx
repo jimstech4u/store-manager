@@ -244,7 +244,11 @@ export default function StockPage() {
           )}
 
           {gaps.length > 0 && (
-            <InfoPanel tone="warning" title="Some stock can come in but never go out">
+            <InfoPanel
+              tone="warning"
+              id="stock.gaps"
+              title={`${gaps.length} ${gaps.length === 1 ? 'item has' : 'items have'} stock that cannot be sold`}
+            >
               {gaps.slice(0, 3).map((g) => (
                 <p key={g.productId}>
                   <strong>{g.productName}</strong> is bought in {g.units.join(', ')}, and nothing is
@@ -261,7 +265,7 @@ export default function StockPage() {
           )}
 
           {anyEstimated && (
-            <InfoPanel tone="warning" title="Some costs are still estimates">
+            <InfoPanel tone="warning" id="stock.estimated" title="Some costs are still estimates">
               Items marked <strong>estimated</strong> use the figure entered at setup. The next
               delivery you record replaces it with the real cost, including fees.
             </InfoPanel>

@@ -123,6 +123,33 @@ keeping — the rule alone is forgettable, the bug behind it is not.
   "Close this tab without selling" — opening a dialog that then looked exactly like the bug being
   hunted. Mutation-test every probe by restoring the fault, and make the mutation faithful: a
   half-restored one passes and proves nothing.
+- **A sheet's back-gesture handling is a LIBRARY capability, not app code.** Seventy lines of it
+  lived in `src/hooks/useOverlayRoute.ts`, carrying three fixes that each cost a production bug.
+  It is now `@academix-admin/overlay-route` — `useOverlayRoute(name, open, onClose, {onRestore})` —
+  and the viewer packages take a `historyRoute` prop that wires it. Import it from
+  navigation-stack (which re-exports it and registers its pop ledger behind it) and the overlay's
+  history entry is counted by every pop. Never re-implement this in the app.
+- **An overlay the URL still names after a reload costs a Back press.** A fragment survives a
+  reload, so the shop comes back with `#ax=…` naming a picker that did not reopen — standing on
+  that picker's own history entry. The next Back spends itself closing a sheet that is not there,
+  so leaving one page takes two presses. The library settles this itself now: an overlay
+  on screen claims its name, and anything left unclaimed after the first frames is closed. A sheet
+  that CAN come back passes `onRestore` and a name that is stable across loads — store-manager's
+  are not (`picker:${useId()}`), so its sheets are transient by design.
+- **`history.go(-n)` counts the browser's entries, not yours.** navigation-stack keeps a log of
+  the entries it wrote so a pop can name its target rather than count. Two writers were not
+  declaring themselves to it — a tab switch (which restamps the current entry's serial) and an
+  overlay push (a picker, a sheet). From the first undeclared write the log could no longer find
+  where it was standing, so every pop silently fell back to counting, and the count was right
+  about the number and wrong about whose entries it was counting. Symptom: **Back on one tab
+  landed on another** — two tabs one page deep each is enough. Fixed in 0.15.1–0.15.3; the cases are
+  `test/group-reselect-pop.test.tsx`, `test/overlay-entry-ledger.test.tsx`,
+  `test/entry-log-edges.test.tsx`, `test/entry-log-epoch.test.tsx` and
+  `test/pop-lands-clean.test.tsx`, while `scripts/probe-tab-reselect.mjs` and
+  `scripts/probe-reload-overlay.mjs` hold the same ground in the app, browser Back included.
+  Serials are now scoped to the document that issued them, because the counter restarts at 0 on a
+  reload while the browser's entries keep their old numbers — the same number meaning two
+  different entries is how a log answers confidently and wrongly.
 - **Probes clean up after themselves.** `stock_movements` is append-only and refuses deletes, so a
   probe that received stock cannot remove its product — five "Cost probe" items sat in the shop's
   real picker, and ninety-three empty draft tabs accumulated in the customer bar. Retire what
@@ -145,6 +172,36 @@ like a sheet, a picker, a list, a dialog or a nav surface:
    is genuinely impossible without breaking the library.
 4. **A package never learns about store-manager.** That is the Library Charter, and it is what
    makes 2 and 3 safe to do.
+
+## Green is what adds
+
+Any control that turns what has been typed into a line — "Add charge", "Add payment", "Add this
+fee", "Add an item", "Add another item" — is the PRIMARY button. A grey outline reads as "the
+other option", the thing you press when you do NOT want the main one, and the seller who does not
+press it has typed an amount that will not count. One shape, learnt once, everywhere on the site.
+
+## A warning that cannot be turned off gets ignored
+
+`InfoPanel` given an `id` folds to a single line, remembers whether this device opened it, and
+offers **Stop showing me this**. The stock screen carried two open paragraphs above the list, so
+the shop scrolled past its own stock to reach it — and read neither, which is how the NEXT
+warning becomes furniture too.
+
+- The dismiss lives INSIDE the panel, under the reason. You decide to stop seeing a warning after
+  you have understood it, and it leaves the title the whole width.
+- Dismissals are per DEVICE (`src/lib/hidden-notices.ts`, localStorage). "Do not show this on the
+  till" is not "do not show this to the owner". Settings → This device lists what was put away and
+  gives it back; add the id to `NOTICE_NAMES` so it can be listed by name.
+
+## Nothing makes the shop leave what it is doing
+
+An item or a customer can be created wherever one is chosen — the till, a delivery, a count, a
+payment — and the flow carries on. The record lands unconfirmed for whoever may sign off. The
+alternative is abandoning a half-entered delivery to file something on another screen, which is
+how a load ends up on paper.
+
+The picker offers adding BEFORE the list, not only after a search fails: the customer picker
+always did, and the product picker made you fail first.
 
 ## One composer, not a wall of boxes
 

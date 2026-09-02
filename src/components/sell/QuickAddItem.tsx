@@ -21,17 +21,45 @@ import styles from './QuickAddItem.module.css';
  * The alternative — refusing until somebody with the right permission is found — is how a sale
  * ends up written on paper, which loses the sale AND the record.
  *
+ * USED WHEREVER AN ITEM IS THE THING BEING BLOCKED ON — a receipt, a delivery being written up,
+ * a shelf being counted. `purpose` only changes the words; what it creates is the same in all
+ * three, because the shop is describing the same object. Somebody counting a shelf and finding
+ * something the catalogue has never heard of has exactly the sell screen's problem: leave the
+ * count to go and file it, and come back to a count half done.
+ *
  * A SHEET, NOT A PAGE, and deliberately against the usual rule. A form is a page here because a
  * page survives a rotation and gets a back button; but this form exists to be answered in fifteen
  * seconds without losing sight of the receipt it is for, and pushing a page over a half-built
  * order is the thing sellers already complain about.
  */
+const PURPOSE = {
+  sale: {
+    title: 'Add it and carry on',
+    confirm: 'Add to this sale',
+    priceHint: 'You can still change it on this receipt.',
+    lands: 'This goes on the sale now.',
+  },
+  delivery: {
+    title: 'Add it and carry on',
+    confirm: 'Add to this delivery',
+    priceHint: 'What you SELL it for. What you paid is the next question, on the delivery itself.',
+    lands: 'This goes on the delivery now.',
+  },
+  count: {
+    title: 'Add it and count it',
+    confirm: 'Add and count it',
+    priceHint: 'You can change it later on the item.',
+    lands: 'This goes into your stock list now, ready to count.',
+  },
+} as const;
+
 export function QuickAddItem({
   open,
   onClose,
   storeId,
   initialName = '',
   onAdded,
+  purpose = 'sale',
 }: {
   open: boolean;
   onClose: () => void;
@@ -40,7 +68,10 @@ export function QuickAddItem({
   initialName?: string;
   /** Handed the new item's id, so the receipt can put it on immediately. */
   onAdded: (productId: string, name: string) => void;
+  /** What the shop is in the middle of. Changes the wording only. */
+  purpose?: 'sale' | 'delivery' | 'count';
 }) {
+  const words = PURPOSE[purpose];
   const [name, setName] = useState(initialName);
   const [unit, setUnit] = useState('');
   const [plural, setPlural] = useState('');
@@ -78,14 +109,14 @@ export function QuickAddItem({
     <BottomSheet
       open={open}
       onClose={onClose}
-      title="Add it and carry on"
+      title={words.title}
       footer={
         <div className={styles.actions}>
           <Button variant="secondary" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
           <Button busy={busy} disabled={!ready} onClick={() => void save()}>
-            Add to this sale
+            {words.confirm}
           </Button>
         </div>
       }
@@ -129,11 +160,11 @@ export function QuickAddItem({
         value={price}
         onChange={(e) => setPrice(e.target.value)}
         placeholder="0"
-        hint="You can still change it on this receipt."
+        hint={words.priceHint}
       />
 
       <InfoPanel tone="info" title="Somebody will check it">
-        This goes on the sale now. Unless you can sign off records yourself, a manager sees it under
+        {words.lands} Unless you can sign off records yourself, a manager sees it under
         <strong> Waiting to be checked</strong> and fills in the rest — what it arrives in, what it
         cost, a cheaper price for buying more.
       </InfoPanel>

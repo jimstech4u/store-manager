@@ -1,8 +1,12 @@
 'use client';
 
+import { useState } from 'react';
 import styles from './count-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
+import { Button } from '@/components/ui/Button';
+import { PlusIcon } from '@/components/ui/Icon';
+import { QuickAddItem } from '@/components/sell/QuickAddItem';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
 import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
@@ -36,6 +40,7 @@ export default function CountPage() {
 
   // Browsing here; searching happens in the sheet, where the results get the whole screen.
   const [searchId, searchOps, isSearchOpen] = useSearchController();
+  const [quickAdd, setQuickAdd] = useState<string | null>(null);
 
   const browse = useProductList(store?.id ?? null);
 
@@ -98,6 +103,32 @@ export default function CountPage() {
         onOpen={searchOps.open}
       />
 
+      {/*
+        FOUND ON THE SHELF, NOT IN THE CATALOGUE.
+
+        The commonest thing a count turns up is something nobody ever entered — a case a supplier
+        threw in, an old line still moving. Sending the counter to Stock to file it means coming
+        back to a count half done, so the item is created here and the count carries straight on to
+        it. Same sheet the till uses, same review queue afterwards.
+      */}
+      <div className={styles.addRow}>
+        <Button fullWidth onClick={() => setQuickAdd('')}>
+          <PlusIcon /> Something not on this list
+        </Button>
+      </div>
+
+      <QuickAddItem
+        open={quickAdd !== null}
+        onClose={() => setQuickAdd(null)}
+        storeId={store.id}
+        initialName={quickAdd ?? ''}
+        purpose="count"
+        onAdded={(productId) => {
+          setQuickAdd(null);
+          void nav.push('count_entry_page', { id: productId });
+        }}
+      />
+
       <SearchSheet<Product>
         id={searchId}
         isOpen={isSearchOpen}
@@ -140,7 +171,8 @@ export default function CountPage() {
 
       {products.length === 0 ? (
         <InfoPanel tone="info" title="Nothing to count yet">
-          Add what you sell under Stock first.
+          Add what you sell under Stock, or use the button above for something you are looking at
+          right now.
         </InfoPanel>
       ) : (
         <ul className={styles.list}>

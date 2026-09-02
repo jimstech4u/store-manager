@@ -1,6 +1,7 @@
 'use client';
 
 import { useId, useState, type ReactNode } from 'react';
+import { hideNotice, useNoticeHidden } from '@/lib/hidden-notices';
 import styles from './Explain.module.css';
 import { AlertIcon, CheckCircleIcon, HelpIcon, InfoIcon, WarningIcon } from './Icon';
 
@@ -75,15 +76,31 @@ const TONE_ICON: Record<PanelTone, typeof InfoIcon> = {
  * `title` is required rather than optional: a panel whose meaning depends on its colour fails
  * for colour-blind users and in bright sunlight, which is most of this product's working
  * conditions. The words have to carry it — the icon and colour only reinforce.
+ *
+ * GIVE IT AN `id` AND IT FOLDS ITSELF AWAY. A warning worth showing every time is still only
+ * worth READING once — the stock screen carried two open paragraphs above the list, so the shop
+ * scrolled past its own stock to reach it. With an id the panel shows its one-line title,
+ * remembers whether this device opened it, and offers to stop showing it at all; Settings brings
+ * back anything put away. Without an id nothing changes, which is why every existing panel is
+ * untouched.
  */
 export function InfoPanel({
   tone = 'info',
   title,
   children,
+  id,
+  defaultOpen = false,
 }: {
   tone?: PanelTone;
   title: string;
   children?: ReactNode;
+  /**
+   * Stable name for this warning. Turns the panel into one the shop can fold and dismiss, so it
+   * must not change between renders or releases — it is what a dismissal is remembered against.
+   * List it in NOTICE_NAMES so Settings can offer it back by name.
+   */
+  id?: string;
+  defaultOpen?: boolean;
 }) {
   const toneClass = {
     info: styles.panelInfo,
@@ -93,10 +110,19 @@ export function InfoPanel({
   }[tone];
 
   const ToneIcon = TONE_ICON[tone];
+  const bodyId = useId();
+
+  const [open, setOpen] = useState(defaultOpen);
+  const hidden = useNoticeHidden(id);
+
+  if (hidden) return null;
+
+  const foldable = Boolean(id) && Boolean(children);
+  const showBody = Boolean(children) && (!foldable || open);
 
   return (
     <div
-      className={`${styles.panel} ${toneClass}`}
+      className={`${styles.panel} ${toneClass} ${foldable ? styles.panelFoldable : ''}`}
       // Warnings and errors are announced when they appear; informational panels are not, so a
       // screen reader is not interrupted by something merely explanatory.
       role={tone === 'danger' || tone === 'warning' ? 'alert' : undefined}
@@ -105,8 +131,45 @@ export function InfoPanel({
         <ToneIcon />
       </span>
       <div className={styles.panelContent}>
-        <p className={styles.panelTitle}>{title}</p>
-        {children && <div className={styles.panelText}>{children}</div>}
+        {foldable ? (
+          /*
+            THE FOLDED STATE IS ONE LINE, and the title gets all of it.
+
+            The dismiss used to sit beside the title, which left the words about a third of the
+            width — "8 items have stock that cannot be sold" wrapped onto three lines and the
+            folded panel was taller than the paragraph it was hiding. Putting the way out INSIDE
+            the panel, where somebody reads the reason first, is also the right order: you decide
+            to stop seeing a warning after you have understood it, not before.
+          */
+          <button
+            type="button"
+            className={styles.panelToggle}
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            aria-controls={bodyId}
+          >
+            <span className={styles.panelTitle}>{title}</span>
+            <span className={styles.panelChevron} aria-hidden="true">
+              {open ? '−' : '+'}
+            </span>
+          </button>
+        ) : (
+          <p className={styles.panelTitle}>{title}</p>
+        )}
+        {showBody && (
+          <div className={styles.panelText} id={bodyId}>
+            {children}
+            {foldable && (
+              <button
+                type="button"
+                className={styles.panelDismiss}
+                onClick={() => hideNotice(id as string)}
+              >
+                Stop showing me this
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

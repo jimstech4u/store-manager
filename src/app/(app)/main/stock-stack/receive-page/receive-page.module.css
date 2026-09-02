@@ -262,3 +262,15 @@
   gap: var(--space-3);
   margin-top: var(--space-5);
 }
+
+/* ── Rebate ───────────────────────────────────────────────────────────────────────────
+   Separated above and below, and ruled off at the top, so it reads as a figure about the whole
+   load rather than a leftover field of the fee composer it followed.
+   ─────────────────────────────────────────────────────────────────────────────────── */
+
+.rebate {
+  margin-top: var(--space-5);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border);
+  margin-bottom: var(--space-5);
+}

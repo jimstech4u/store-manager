@@ -6,7 +6,7 @@ import { LoadingView } from './LoadingView';
 import { NoResultsView } from './NoResultsView';
 import { OfflineIcon } from './Icon';
 import { useTheme } from '@/context/ThemeContext';
-import { useOverlayRoute } from '@/hooks/useOverlayRoute';
+import { useOverlayRoute } from '@academix-admin/navigation-stack';
 
 /**
  * The app's one search surface, wrapping `@academix-admin/search-viewer`.

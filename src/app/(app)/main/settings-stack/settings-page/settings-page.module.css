@@ -158,3 +158,46 @@
   font-size: var(--text-base);
   font-weight: 600;
 }
+
+/* ── Warnings put away ────────────────────────────────────────────────────────────── */
+
+.subsection {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text-muted);
+  margin: var(--space-5) 0 var(--space-2);
+}
+
+.noticeList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.noticeRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+  background: var(--surface);
+}
+
+.noticeRow + .noticeRow { border-top: 1px solid var(--border); }
+
+.noticeShow {
+  flex: none;
+  /* A real tap target, not just underlined text: this is the only way back. */
+  min-height: 40px;
+  padding: 0 var(--space-3);
+  background: none;
+  border: 0;
+  color: var(--primary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}

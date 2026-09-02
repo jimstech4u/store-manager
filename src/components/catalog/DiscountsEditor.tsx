@@ -196,7 +196,7 @@ export function DiscountsEditor({
         }
       />
 
-      <Button variant="secondary" fullWidth disabled={!ready} onClick={add}>
+      <Button fullWidth disabled={!ready} onClick={add}>
         <PlusIcon /> Add this price
       </Button>
     </>

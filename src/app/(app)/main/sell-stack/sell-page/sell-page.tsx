@@ -4,12 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import styles from './sell-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { useStackBack } from '@/hooks/useStackBack';
-import { useOverlayRoute } from '@/hooks/useOverlayRoute';
+import { useOverlayRoute } from '@academix-admin/navigation-stack';
 import { useNav, scrollIntoViewBelow } from '@academix-admin/navigation-stack';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
-import { CloseIcon, MinusIcon, PlusIcon, ReceiptIcon } from '@/components/ui/Icon';
+import { CameraIcon, CloseIcon, MinusIcon, PlusIcon, ReceiptIcon } from '@/components/ui/Icon';
 import { CustomerPicker } from '@/components/customers/CustomerPicker';
 import { CustomerTabs } from '@/components/sell/CustomerTabs';
 import { ShareOrder } from '@/components/sell/ShareOrder';
@@ -1105,9 +1105,26 @@ export default function SellPage() {
           )}
 
           {/* ── Add an item ───────────────────────────────────────────────────── */}
-          <div style={{ marginBottom: 'var(--space-5)' }}>
-            <Button variant="secondary" size="large" fullWidth onClick={pickerOps.open}>
+          {/*
+            The two ways onto a receipt, side by side on the page.
+
+            Scanning was inside the picker, which meant opening a list to search in order to say
+            "I do not want to search". It belongs next to the button it is an alternative to.
+          */}
+          <div className={styles.addRow}>
+            <Button size="large" fullWidth onClick={pickerOps.open}>
               <PlusIcon /> Add an item
+            </Button>
+            <Button
+              variant="secondary"
+              size="large"
+              fullWidth
+              onClick={() => {
+                setScanProblem(null);
+                setScanning(true);
+              }}
+            >
+              <CameraIcon /> Scan a barcode
             </Button>
           </div>
 
@@ -1154,11 +1171,6 @@ export default function SellPage() {
           onAddNew={(typed) => {
             pickerOps.close();
             setQuickAdd(typed ?? '');
-          }}
-          onScan={() => {
-            pickerOps.close();
-            setScanProblem(null);
-            setScanning(true);
           }}
         />
       )}

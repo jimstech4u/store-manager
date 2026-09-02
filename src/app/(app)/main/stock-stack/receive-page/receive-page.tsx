@@ -8,11 +8,12 @@ import { useStackBack } from '@/hooks/useStackBack';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { ProductPicker } from '@/components/catalog/ProductPicker';
+import { QuickAddItem } from '@/components/sell/QuickAddItem';
 import { Explain, InfoPanel, WorkedExample } from '@/components/ui/Explain';
 import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
 import { useBuyingUnits } from '@/lib/stacks/selling-units';
 import { useAuth } from '@/providers/AuthProvider';
-import { stockMoved, useProductList, type Product } from '@/lib/stacks/catalog-stack';
+import { fetchProduct, stockMoved, useProductList, type Product } from '@/lib/stacks/catalog-stack';
 import { useListNotifier } from '@/hooks/useListChannel';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatMoney, formatQty, pluralUnit } from '@/lib/format';
@@ -101,6 +102,7 @@ export default function ReceivePage() {
   const notifyProducts = useListNotifier<Product>('products');
 
   const [picking, setPicking] = useState(false);
+  const [quickAdd, setQuickAdd] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -434,7 +436,7 @@ export default function ReceivePage() {
         })}
       </div>
 
-      <Button variant="secondary" size="large" fullWidth onClick={() => setPicking(true)}>
+      <Button size="large" fullWidth onClick={() => setPicking(true)}>
         <PlusIcon /> Add an item
       </Button>
 
@@ -493,7 +495,6 @@ export default function ReceivePage() {
           </div>
 
           <Button
-            variant="secondary"
             fullWidth
             disabled={!chargeLabel.trim() || !(Number(chargeAmount) > 0)}
             onClick={() => {
@@ -513,7 +514,12 @@ export default function ReceivePage() {
 
             Its own box rather than a fee typed as a negative: somebody one missed minus sign away
             from a delivery costing twenty thousand MORE than it did.
+
+            And its own SPACED block: it sat flush against the Add-this-fee button, so it read as
+            part of the fee composer above it — a third field of the thing you are adding, rather
+            than a separate figure for the whole load.
           */}
+          <div className={styles.rebate}>
           <Field
             label="Rebate or discount given back"
             optional
@@ -524,6 +530,7 @@ export default function ReceivePage() {
             placeholder="0"
             hint="Money the supplier gave back on this load. It lowers what the stock cost you."
           />
+          </div>
 
           <Explain label="Why do the fees change my cost?" defaultOpen={fees !== 0}>
             <p>
@@ -593,13 +600,47 @@ export default function ReceivePage() {
         storeId={store.id}
         title="What came in?"
         onPick={addProduct}
-        emptyHint="Only products you already sell can be received. Add it under Stock first."
+        /*
+          THE LOAD IS ALREADY OFF THE LORRY.
+
+          This used to say "add it under Stock first", which means abandoning a half-entered
+          delivery, filing the item on another screen, and coming back to start again — for a case
+          of something the supplier simply sent this week. The item gets created here and the line
+          lands on the delivery, exactly as the till does it; a manager checks it afterwards.
+        */
+        onAddNew={(typed) => {
+          setPicking(false);
+          setQuickAdd(typed ?? '');
+        }}
+        emptyHint="Nothing by that name yet — add it here and carry on with the delivery."
         renderMeta={(p) => (
           <>
             {formatQty(p.onHand)} {pluralUnit(p.baseUnit, Number(p.onHand))} in stock
             {p.categoryName ? ` · ${p.categoryName}` : ''}
           </>
         )}
+      />
+
+      <QuickAddItem
+        open={quickAdd !== null}
+        onClose={() => setQuickAdd(null)}
+        storeId={store.id}
+        initialName={quickAdd ?? ''}
+        purpose="delivery"
+        onAdded={(productId) => {
+          setQuickAdd(null);
+          /*
+            Read back before it becomes a line.
+
+            `addProduct` wants a whole product — its base unit, what is on hand, the units it is
+            bought in. Something created two seconds ago is in no list this page is holding, so
+            asking for it is not a round trip that could have been avoided; it is the only place
+            the answer exists.
+          */
+          void fetchProduct(productId).then((fresh) => {
+            if (fresh) addProduct(fresh);
+          });
+        }}
       />
 
       {/*

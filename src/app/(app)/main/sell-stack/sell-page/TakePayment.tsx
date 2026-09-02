@@ -440,7 +440,7 @@ export function TakePayment({
         />
 
         <Button
-          variant="secondary"
+         
           fullWidth
           disabled={!chargeLabel.trim() || !(Number(chargeAmount) > 0)}
           onClick={() => {
@@ -592,7 +592,6 @@ export function TakePayment({
         </div>
 
         <Button
-          variant="secondary"
           fullWidth
           disabled={!(Number(draftAmount) > 0)}
           onClick={() => {

@@ -107,6 +107,62 @@
   color: var(--text);
 }
 
+/* ── A panel that folds ───────────────────────────────────────────────────────────────
+   Tighter than a fixed panel, because folded it is a single line and the generous padding of a
+   block meant to be read makes one line look like an error. `panelContent` grows so the title
+   and the dismiss sit at opposite ends of the row.
+   ─────────────────────────────────────────────────────────────────────────────────── */
+
+.panelFoldable {
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-3);
+}
+
+.panelFoldable .panelContent { flex: 1; }
+
+.panelToggle {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  /* A full-height strip, so the tap lands anywhere on the line and not only on the words. */
+  min-height: 32px;
+  padding: 0;
+  background: none;
+  border: 0;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.panelToggle .panelTitle { margin-bottom: 0; }
+
+.panelChevron {
+  flex: none;
+  font-size: var(--text-lg);
+  line-height: 1;
+  opacity: 0.6;
+}
+
+.panelDismiss {
+  display: block;
+  /* Its own line under the reason, and a real tap target rather than underlined words. */
+  min-height: 40px;
+  margin-top: var(--space-2);
+  padding: 0;
+  background: none;
+  border: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.panelFoldable .panelText { margin-top: var(--space-2); }
+
 /* ── Worked example ───────────────────────────────────────────────────────────────── */
 
 .example {

@@ -188,3 +188,9 @@
 .pageAction {
   margin-top: var(--space-5);
 }
+
+/* ── Adding something the list has never heard of ─────────────────────────────────── */
+
+.addRow {
+  margin: var(--space-4) 0 var(--space-5);
+}

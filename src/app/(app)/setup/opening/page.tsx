@@ -258,7 +258,6 @@ export default function OpeningBalancesPage() {
 
         <div className={styles.addRow}>
           <Button
-            variant="secondary"
             fullWidth
             onClick={() => setStock((rows) => [...rows, emptyStock()])}
           >
@@ -318,7 +317,6 @@ export default function OpeningBalancesPage() {
 
         <div className={styles.addRow}>
           <Button
-            variant="secondary"
             fullWidth
             onClick={() => setDebtors((rows) => [...rows, emptyDebtor()])}
           >
