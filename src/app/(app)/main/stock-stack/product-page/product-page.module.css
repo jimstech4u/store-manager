@@ -120,7 +120,15 @@
 
 .emptiesList { list-style: none; margin: 0; padding: 0; }
 
+/* A button now, because the shape it comes back in is declared from here. */
 .emptiesRow {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -128,7 +136,7 @@
   padding: var(--space-3) 0;
 }
 
-.emptiesRow + .emptiesRow { border-top: 1px solid var(--border); }
+li + li .emptiesRow { border-top: 1px solid var(--border); }
 
 .emptiesName { display: block; font-size: var(--text-sm); font-weight: 600; }
 

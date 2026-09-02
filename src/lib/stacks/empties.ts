@@ -232,3 +232,53 @@ export function useProductEmpties(productId: string | null) {
 
   return { empties: state.rows, reload: load };
 }
+
+/**
+ * The shapes a pool comes back in.
+ *
+ * Declared on the POOL rather than the product, because the obligation is settled against the pool:
+ * "one NBL crate" is the shape a return takes whichever beer was in it. Hang it off a product and
+ * the same crate would mean different things depending on which one, which is the confusion
+ * `empties_categories` exists to end.
+ */
+export interface ReturnUnit {
+  id: string;
+  name: string;
+  base_qty: string;
+  is_default: boolean;
+}
+
+export async function returnUnitsFor(categoryId: string): Promise<ReturnUnit[]> {
+  const { data, error } = await getSupabase().rpc('return_units_for', {
+    p_category_id: categoryId,
+  });
+  if (error) throw error;
+  return (data ?? []) as ReturnUnit[];
+}
+
+export async function saveReturnUnits(
+  categoryId: string,
+  units: { name: string; base_qty: number; is_default: boolean }[],
+) {
+  const { error } = await getSupabase().rpc('save_return_units', {
+    p_category_id: categoryId,
+    p_units: units,
+  });
+  if (error) throw error;
+  accountsChanged();
+}
+
+/**
+ * Whether a quantity is a shape this pool comes back in.
+ *
+ * Asked on the client so the counter is told BEFORE it presses, and enforced again in
+ * `settle_empties` so a stale screen cannot get round it. Two checks of one rule, and the server's
+ * is the one that counts.
+ */
+export function returnIsAllowed(units: ReturnUnit[], qty: number): boolean {
+  if (units.length === 0) return true; // no rule declared is not the same as a rule of zero
+  return units.some((u) => {
+    const step = Number(u.base_qty);
+    return step > 0 && qty >= step && Math.abs(qty % step) < 1e-9;
+  });
+}

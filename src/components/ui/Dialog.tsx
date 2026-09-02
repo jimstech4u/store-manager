@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDialog } from '@academix-admin/dialog-viewer';
 import { useTheme } from '@/context/ThemeContext';
 
@@ -171,15 +171,19 @@ export function useProblem() {
   const clear = useCallback(() => setMessage(null), []);
 
   /*
-   * Memoised, because callers put this in dependency arrays.
+   * NOT STABLE, and no longer pretending to be.
    *
-   * A hook that returns a fresh object every render is a footgun: the honest thing for a caller to
-   * do is list it as a dependency, and doing so then re-runs the effect or rebuilds the callback on
-   * every render — so the lint rule's advice makes the code worse and the usual response is to
-   * silence the rule. `controller` comes from `useDialog`, and `message` genuinely changes; the
-   * rest are already stable.
+   * A first version wrapped this in `useMemo` so callers could safely list it as a dependency. It
+   * could not deliver that: `controller` comes from `useDialog`, which returns a fresh object every
+   * render, so the memo changed every render too — and an effect depending on it re-ran constantly.
+   * On the return-units page that effect FETCHED, so every keystroke reloaded from the server and
+   * overwrote the row just added. The composer cleared, the list stayed empty, and nothing saved.
+   *
+   * A memo that quietly does nothing is worse than none, because it invites exactly the dependency
+   * that breaks. So: DEPEND ON `problem.show`, bound to a local const — it is
+   * `useCallback(..., [])` and genuinely never changes.
    */
-  return useMemo(() => ({ controller, message, show, clear }), [controller, message, show, clear]);
+  return { controller, message, show, clear };
 }
 
 export function ProblemDialog({

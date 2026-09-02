@@ -13,7 +13,14 @@ import { useLocation, useNav, useObject } from '@academix-admin/navigation-stack
 import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatMoney, messageOf } from '@/lib/format';
-import { settleEmpties, suggestedDeposit, type ReceiptEmpties } from '@/lib/stacks/empties';
+import {
+  returnIsAllowed,
+  returnUnitsFor,
+  settleEmpties,
+  suggestedDeposit,
+  type ReceiptEmpties,
+  type ReturnUnit,
+} from '@/lib/stacks/empties';
 
 /**
  * Recording what came back.
@@ -34,6 +41,8 @@ export default function EmptiesSettlePage() {
   const location = useLocation();
   const { store } = useAuth();
   const problem = useProblem();
+  // See useProblem: the object is not stable, `show` is. Depend on the callback.
+  const showProblem = problem.show;
 
   const saleId = (location?.params?.id as string | undefined) ?? null;
 
@@ -66,7 +75,7 @@ export default function EmptiesSettlePage() {
         if (error) throw error;
         if (!cancelled) setReceipt(((data ?? [])[0] as ReceiptEmpties) ?? null);
       } catch (e) {
-        if (!cancelled) problem.show(messageOf(e, 'Could not read that receipt.'));
+        if (!cancelled) showProblem(messageOf(e, 'Could not read that receipt.'));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -74,7 +83,37 @@ export default function EmptiesSettlePage() {
     return () => {
       cancelled = true;
     };
-  }, [receipt, saleId, store, problem]);
+  }, [receipt, saleId, store, showProblem]);
+
+  /*
+   * What each pool comes back in.
+   *
+   * Loaded per pool because the rule lives on the pool. A pool with none declared keeps today's
+   * behaviour — any quantity — which is right: a shop that has not said "whole crates only" has not
+   * said anything, and refusing its returns would be inventing a rule it never made.
+   */
+  const [shapes, setShapes] = useState<Record<string, ReturnUnit[]>>({});
+
+  useEffect(() => {
+    if (!receipt) return;
+    let cancelled = false;
+    void (async () => {
+      const found: Record<string, ReturnUnit[]> = {};
+      for (const e of receipt.expected) {
+        try {
+          found[e.category_id] = await returnUnitsFor(e.category_id);
+        } catch {
+          // A pool whose shapes cannot be read is treated as having none: the server still checks,
+          // and a screen that refuses everything because a read failed is worse than one that asks.
+          found[e.category_id] = [];
+        }
+      }
+      if (!cancelled) setShapes(found);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [receipt]);
 
   const [busy, setBusy] = useState(false);
   const [back, setBack] = useState<Record<string, string>>({});
@@ -109,6 +148,18 @@ export default function EmptiesSettlePage() {
    * Nine of twelve bottles is an ordinary Tuesday.
    */
   const stillOut = Number(receipt.outstanding_units) - returned.reduce((t, r) => t + r.qty, 0);
+  /*
+   * Told BEFORE the button, not after the server refuses.
+   *
+   * The rule is enforced in `settle_empties` and must be — a stale screen must not get round it —
+   * but a counter finding out by way of a red dialog has already counted the bottles out onto the
+   * table. Two checks of one rule; the server's is the one that counts.
+   */
+  const wrongShape = receipt.expected.filter((e) => {
+    const qty = Number(back[e.category_id] ?? 0);
+    return qty > 0 && !returnIsAllowed(shapes[e.category_id] ?? [], qty);
+  });
+
   const accounted = (Number(apply) || 0) + (Number(refund) || 0);
   const overspent = accounted > held;
   const suggestion = suggestedDeposit(receipt.expected);
@@ -126,7 +177,7 @@ export default function EmptiesSettlePage() {
       });
       await nav.pop();
     } catch (e) {
-      problem.show(messageOf(e, 'That could not be recorded. Nothing has changed.'));
+      showProblem(messageOf(e, 'That could not be recorded. Nothing has changed.'));
     } finally {
       setBusy(false);
     }
@@ -150,6 +201,14 @@ export default function EmptiesSettlePage() {
                 ? ` · you usually hold ${formatMoney(Number(e.suggested_deposit))} each`
                 : ''}
             </p>
+            {(shapes[e.category_id] ?? []).length > 0 && (
+              <p className={styles.poolShapes}>
+                Comes back in{' '}
+                {(shapes[e.category_id] ?? [])
+                  .map((u) => `${u.name.toLowerCase()} of ${Number(u.base_qty)}`)
+                  .join(' or ')}
+              </p>
+            )}
           </div>
           <div className={styles.qtyBox}>
             <Field
@@ -168,6 +227,24 @@ export default function EmptiesSettlePage() {
           <span>Still out after this</span>
           <span className={styles.sumTotal}>{stillOut}</span>
         </div>
+
+        {/*
+          A CONDITION, so it stays on the page rather than interrupting: it is still true after any
+          acknowledgement, and it is being fixed in the box above it.
+        */}
+        {wrongShape.length > 0 && (
+          <InfoPanel tone="warning" title="That is not a shape these come back in">
+            {wrongShape.map((e) => (
+              <p key={e.category_id}>
+                <strong>{e.category}</strong> comes back in{' '}
+                {(shapes[e.category_id] ?? [])
+                  .map((u) => `${u.name.toLowerCase()} of ${Number(u.base_qty)}`)
+                  .join(' or ')}
+                . {Number(back[e.category_id])} does not make one.
+              </p>
+            ))}
+          </InfoPanel>
+        )}
 
         {held > 0 ? (
           <>
@@ -233,7 +310,7 @@ export default function EmptiesSettlePage() {
           fullWidth
           busy={busy}
           busyLabel="Recording"
-          disabled={overspent || (returned.length === 0 && accounted === 0)}
+          disabled={overspent || wrongShape.length > 0 || (returned.length === 0 && accounted === 0)}
           onClick={() => void save()}
         >
           Record it

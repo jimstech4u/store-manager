@@ -136,6 +136,14 @@ keeping — the rule alone is forgettable, the bug behind it is not.
   on screen claims its name, and anything left unclaimed after the first frames is closed. A sheet
   that CAN come back passes `onRestore` and a name that is stable across loads — store-manager's
   are not (`picker:${useId()}`), so its sheets are transient by design.
+- **A hook that returns a fresh object every render must not pretend otherwise.** `useProblem`
+  was wrapped in `useMemo` so callers could safely list it as a dependency — and it could not
+  deliver that, because its `controller` comes from `useDialog`, which returns a new object every
+  render. The memo changed every render too. On the return-units page the effect depending on it
+  FETCHED, so every keystroke reloaded from the server and overwrote the row just added: the
+  composer cleared, the list stayed empty, nothing saved, and nothing looked broken. Depend on
+  `problem.show` bound to a local const — `useCallback(..., [])`, genuinely stable. A memo that
+  quietly does nothing is worse than none, because it invites the dependency that breaks.
 - **`history.go(-n)` counts the browser's entries, not yours.** navigation-stack keeps a log of
   the entries it wrote so a pop can name its target rather than count. Two writers were not
   declaring themselves to it — a tab switch (which restamps the current entry's serial) and an

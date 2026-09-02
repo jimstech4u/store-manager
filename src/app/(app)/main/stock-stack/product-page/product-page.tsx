@@ -250,7 +250,20 @@ export default function ProductPage() {
           <h2 className={styles.emptiesTitle}>Containers out</h2>
           <ul className={styles.emptiesList}>
             {empties.map((e) => (
-              <li key={e.category_id} className={styles.emptiesRow}>
+              <li key={e.category_id}>
+                {/*
+                  TAPPABLE, because the shape it comes back in is declared per POOL.
+
+                  Reached from the product a shop happens to be looking at, since that is when it
+                  thinks about crates — not from a settings screen nobody visits. Changing it here
+                  changes it for every item sharing the pool, which is the whole point: one rule, so
+                  a Heineken crate settles a Gulder obligation. The note below says so.
+                */}
+                <button
+                  type="button"
+                  className={styles.emptiesRow}
+                  onClick={() => void nav.push('return_units_page', { id: e.category_id })}
+                >
                 <span>
                   <span className={styles.emptiesName}>{e.category}</span>
                   <span className={styles.emptiesMeta}>
@@ -268,12 +281,13 @@ export default function ProductPage() {
                     {Number(e.customers_out) === 1 ? '1 customer' : `${Number(e.customers_out)} customers`}
                   </span>
                 </span>
+                </button>
               </li>
             ))}
           </ul>
           <p className={styles.emptiesNote}>
             Across every product that shares these pools, not this item alone — that is what the
-            customer owes you back.
+            customer owes you back. Tap one to say what shape it comes back in.
           </p>
         </section>
       )}
