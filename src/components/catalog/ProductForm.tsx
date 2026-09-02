@@ -2,9 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
+import { CameraIcon } from '@/components/ui/Icon';
 import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
 import { UnitsEditor, unitProblems } from '@/components/catalog/UnitsEditor';
+import { BarcodeScanner } from '@/components/catalog/BarcodeScanner';
 import { DiscountsEditor, type Discount } from '@/components/catalog/DiscountsEditor';
 import { useNav } from '@academix-admin/navigation-stack';
 import {
@@ -120,6 +122,7 @@ export function ProductForm({
   const [units, setUnits] = useState<ProductUnit[]>([]);
   const [discounts, setDiscounts] = useState<Discount[]>([]);
 
+  const [scanning, setScanning] = useState(false);
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
 
@@ -342,6 +345,12 @@ export function ProductForm({
         hint="Anything short you use to find it quickly. Leave empty if you do not use codes."
       />
 
+      {/*
+        Thirteen digits off a curved label, at a counter.
+
+        Typed, that is the kind of task people abandon halfway — and a wrong barcode is worse than
+        none, because it will match the wrong thing later. The phone already has a scanner.
+      */}
       <Field
         label="Barcode"
         optional
@@ -349,6 +358,19 @@ export function ProductForm({
         onChange={(e) => setBarcode(e.target.value)}
         placeholder="5449000000996"
         hint="The number under the bars on the label, if it has one."
+      />
+
+      <Button variant="secondary" fullWidth onClick={() => setScanning(true)}>
+        <CameraIcon /> Scan it with the camera
+      </Button>
+
+      <BarcodeScanner
+        open={scanning}
+        onClose={() => setScanning(false)}
+        onRead={(code) => {
+          setBarcode(code);
+          setScanning(false);
+        }}
       />
 
 

@@ -43,3 +43,26 @@
   color: var(--text-muted);
   margin-top: 2px;
 }
+
+/* Point the camera at the label instead of typing. Sits above the results, because a shop that
+   means to scan wants it before it has finished reading the list. */
+.scanRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: var(--touch-comfortable, 52px);
+  margin-bottom: var(--space-3);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.scanRow:hover {
+  background: var(--surface-sunken);
+}

@@ -75,3 +75,26 @@ export async function countFromTill(productId: string, countedBase: number): Pro
   });
   if (error) throw error;
 }
+
+
+/**
+ * Find what a scanned barcode belongs to.
+ *
+ * `product_by_barcode` has existed since the barcode field did, and nothing ever called it — the
+ * form asked a shop to type thirteen digits and then never used them for anything. Returns null
+ * when the shop does not know that code, which is not an error: an item can be scanned before it
+ * has ever been entered, and that is the moment to offer to add it.
+ */
+export async function findByBarcode(
+  storeId: string,
+  barcode: string,
+): Promise<{ id: string; name: string } | null> {
+  const { data, error } = await getSupabase().rpc('product_by_barcode', {
+    p_store_id: storeId,
+    p_barcode: barcode.trim(),
+  });
+  if (error) throw error;
+
+  const row = data as { id?: string; name?: string } | null;
+  return row?.id ? { id: row.id, name: row.name ?? '' } : null;
+}

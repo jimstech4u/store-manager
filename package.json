@@ -20,6 +20,8 @@
     "@academix-admin/sidebar": "^0.1.1",
     "@academix-admin/state-stack": "^0.3.0",
     "@supabase/supabase-js": "^2.112.3",
+    "@zxing/browser": "^0.2.1",
+    "@zxing/library": "^0.23.0",
     "motion": "^13.1.1",
     "next": "^15.5.9",
     "react": "^18.2.0",

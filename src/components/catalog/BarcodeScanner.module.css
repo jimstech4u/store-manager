@@ -1,0 +1,32 @@
+/* The camera view, at a shape that suits a barcode: wide and short, so a hand holding a phone
+   over a shelf frames the label without having to aim. */
+.frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: var(--radius-lg, 14px);
+  background: #000;
+}
+
+.video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Something to aim at. Not a crop — the decoder reads the whole frame — but people aim better at
+   a box than at nothing, and a scanner that looks like a scanner needs no explaining. */
+.reticle {
+  position: absolute;
+  inset: 22% 12%;
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  border-radius: var(--radius);
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.35);
+}
+
+.hint {
+  margin: var(--space-3) 0 0;
+  text-align: center;
+  color: var(--text-muted);
+}

@@ -5,7 +5,7 @@ import { SelectionViewer, useSelectionController } from '@academix-admin/selecti
 import { ViewerLoading } from '@/components/ui/ViewerState';
 import { InfoPanel } from '@/components/ui/Explain';
 import { Button } from '@/components/ui/Button';
-import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
+import { CameraIcon, CloseIcon, PlusIcon } from '@/components/ui/Icon';
 import { StateStack } from '@academix-admin/state-stack';
 import { useDebounced } from '@/components/ui/SearchField';
 import { useOverlayRoute } from '@/hooks/useOverlayRoute';
@@ -43,6 +43,7 @@ export function ProductPicker({
    * of something the shop has never sold is a catalogue job, not a receiving job.
    */
   onAddNew,
+  onScan,
   /** What each row says beneath the name. Deliveries care about stock; sales care about price. */
   renderMeta,
   emptyHint = 'Try part of the name, or a category like “water”.',
@@ -54,6 +55,13 @@ export function ProductPicker({
   onPick: (product: Product) => void;
   title?: string;
   onAddNew?: (typedName: string) => void;
+  /**
+   * Offered beside the search when a shop can point a camera at the label instead.
+   *
+   * Handed over rather than done here: what a scan MEANS depends on the screen. At a till it puts
+   * the item on the receipt; on a delivery it adds a line to count in.
+   */
+  onScan?: () => void;
   renderMeta?: (product: Product) => ReactNode;
   emptyHint?: string;
   zIndex?: number;
@@ -176,6 +184,12 @@ export function ProductPicker({
       }
       zIndex={zIndex}
     >
+      {onScan && (
+        <button type="button" className={styles.scanRow} onClick={onScan}>
+          <CameraIcon /> Scan a barcode instead
+        </button>
+      )}
+
       <div className={styles.list}>
         {products.map((p) => (
           <button

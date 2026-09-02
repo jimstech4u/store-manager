@@ -18,7 +18,8 @@ import { useAsyncAction } from '@/components/ui/AsyncAction';
 import { ProductPicker } from '@/components/catalog/ProductPicker';
 import { QuickAddItem } from '@/components/sell/QuickAddItem';
 import { CountGate } from '@/components/sell/CountGate';
-import { whichNeedCount } from '@/lib/stacks/mid-sale';
+import { findByBarcode, whichNeedCount } from '@/lib/stacks/mid-sale';
+import { BarcodeScanner } from '@/components/catalog/BarcodeScanner';
 import type { ProductFormResult } from '@/components/catalog/ProductForm';
 import { useAuth } from '@/providers/AuthProvider';
 import { FloatingAmount } from '@/components/ui/FloatingAmount';
@@ -216,6 +217,16 @@ export default function SellPage() {
    * questions and both, asked as blocking ones, end with the seller writing the sale on paper.
    */
   const [quickAdd, setQuickAdd] = useState<string | null>(null);
+
+  /*
+   * Scanning, at the till.
+   *
+   * `scanProblem` is separate from the scanner's own errors: a camera that will not open is the
+   * scanner's business, while a code the shop does not know is the SELLER's — and the answer to it
+   * is an offer to add the thing, not an apology.
+   */
+  const [scanning, setScanning] = useState(false);
+  const [scanProblem, setScanProblem] = useState<string | null>(null);
   const [needCount, setNeedCount] = useState<string[]>([]);
 
   const [askCloseTab, setAskCloseTab] = useState(false);
@@ -1144,6 +1155,11 @@ export default function SellPage() {
             pickerOps.close();
             setQuickAdd(typed ?? '');
           }}
+          onScan={() => {
+            pickerOps.close();
+            setScanProblem(null);
+            setScanning(true);
+          }}
         />
       )}
 
@@ -1157,6 +1173,59 @@ export default function SellPage() {
       */}
       {activeOrder && activeOrder.lines.length > 0 && <div className={styles.floatSpacer} />}
 
+      {/*
+        A scan that found nothing, said where the seller is looking.
+        Dismissible, because the next scan is the answer to it.
+      */}
+      {scanProblem && (
+        <InfoPanel tone="warning" title="Not recognised">
+          {scanProblem}
+        </InfoPanel>
+      )}
+
+      {activeOrder && (
+        <BarcodeScanner
+          open={scanning}
+          onClose={() => setScanning(false)}
+          title="Scan what they are buying"
+          onRead={(code) => {
+            setScanning(false);
+            void (async () => {
+              try {
+                const found = await findByBarcode(store.id, code);
+                if (found) {
+                  /*
+                   * Read the product back before it goes on the receipt.
+                   *
+                   * The lookup answers with an id and a name; a line needs the unit it is sold in,
+                   * the price, and the cost the below-cost warning compares against.
+                   */
+                  const fresh = await fetchProduct(found.id);
+                  if (fresh) await addProductRef.current?.(fresh);
+                  return;
+                }
+
+                /*
+                 * A code the shop has never seen is not a failure — it is the moment to add it.
+                 *
+                 * The barcode is not carried into the quick-add sheet: that sheet asks the three
+                 * things a counter has time for, and a thirteen-digit code is not one of them. It
+                 * belongs on the item's own screen, where somebody can scan it again unhurried.
+                 */
+                setScanProblem(
+                  'Nothing in the shop has that barcode. Add it and it can be scanned next time.',
+                );
+                setQuickAdd('');
+              } catch (e) {
+                setScanProblem(
+                  e instanceof Error ? e.message : 'That barcode could not be looked up.',
+                );
+              }
+            })();
+          }}
+        />
+      )}
+
       {activeOrder && (
         <QuickAddItem
           open={quickAdd !== null}
@@ -1165,6 +1234,7 @@ export default function SellPage() {
           initialName={quickAdd ?? ''}
           onAdded={(productId) => {
             setQuickAdd(null);
+            setScanProblem(null);
             /*
              * Read back before it goes on the receipt.
              *
