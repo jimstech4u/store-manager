@@ -7,6 +7,15 @@ import ShareWhatsAppPage from './share-whatsapp-page/share-whatsapp-page';
 import ReceiptPage from './receipt-page/receipt-page';
 import TakePaymentPage from './take-payment-page/take-payment-page';
 /*
+ * What is still out, receipt by receipt.
+ *
+ * On the SELL stack because that is where the question arrives: a man walks up to the counter with
+ * crates in his hands while a sale is half-built, and the shop needs the stack they belong to
+ * without leaving the till.
+ */
+import EmptiesPage from './empties-page/empties-page';
+import EmptiesSettlePage from './empties-settle-page/empties-settle-page';
+/*
  * The catalogue form, registered in this stack too.
  *
  * A seller asked for something the shop has never entered adds it WITHOUT leaving the receipt, so
@@ -37,6 +46,8 @@ const navLink = {
   share_whatsapp_page: ShareWhatsAppPage,
   receipt_page: ReceiptPage,
   take_payment_page: TakePaymentPage,
+  empties_page: EmptiesPage,
+  empties_settle_page: EmptiesSettlePage,
   product_form_page: ProductFormPage,
   sales_page: SalesPage,
   customer_form_page: CustomerFormPage,

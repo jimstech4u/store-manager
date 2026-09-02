@@ -112,8 +112,16 @@ say('empties_by_receipt  ← for the page asked for', await rpcExists('empties_b
 say('open_stock_by_count ← start from the shelf', await rpcExists('open_stock_by_count', {
   p_store_id: storeId, p_product_id: fake, p_qty: 0, p_unit_id: fake, p_unit_cost: 0,
 }));
+// Called with the arguments it actually takes: PostgREST resolves an overload by NAME, so a call
+// missing a required parameter is indistinguishable from a function that does not exist.
 say('settle_empties      ← one receipt, short return', await rpcExists('settle_empties', {
-  p_store_id: storeId,
+  p_store_id: storeId, p_sale_id: fake, p_returned: [], p_apply_amount: 0,
+  p_refund_amount: 0, p_refund_mode: 'cash', p_note: null,
+  p_occurred_at: new Date().toISOString(),
+}));
+say('hold_receipt_deposit', await rpcExists('hold_receipt_deposit', {
+  p_store_id: storeId, p_sale_id: fake, p_amount: 0, p_note: null,
+  p_occurred_at: new Date().toISOString(),
 }));
 
 head('Where a shop can reach these (screens wired today)');

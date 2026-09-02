@@ -9,7 +9,7 @@ import { useNav, scrollIntoViewBelow } from '@academix-admin/navigation-stack';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
-import { CameraIcon, CloseIcon, MinusIcon, PlusIcon, ReceiptIcon } from '@/components/ui/Icon';
+import { CameraIcon, CloseIcon, MinusIcon, PlusIcon, ReceiptIcon, ReturnIcon } from '@/components/ui/Icon';
 import { CustomerPicker } from '@/components/customers/CustomerPicker';
 import { CustomerTabs } from '@/components/sell/CustomerTabs';
 import { ShareOrder } from '@/components/sell/ShareOrder';
@@ -671,6 +671,19 @@ export default function SellPage() {
           icon: <ReceiptIcon />,
           onClick: () => void nav.push('sales_page'),
           ariaLabel: 'All sales and receipts',
+        },
+        /*
+          WHAT IS STILL OUT, beside the till.
+
+          The question arrives here and nowhere else: somebody walks up with crates while a sale is
+          half-built. Pushed onto THIS stack rather than jumping to another tab, so one tap back is
+          the receipt that was being built.
+        */
+        {
+          key: 'empties',
+          icon: <ReturnIcon />,
+          onClick: () => void nav.push('empties_page'),
+          ariaLabel: 'Containers still to come back',
         },
       ]}
     >

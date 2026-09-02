@@ -1,0 +1,45 @@
+.poolRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+}
+
+.poolRow + .poolRow { border-top: 1px solid var(--border); }
+
+.poolName {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.poolOut {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.qtyBox { flex: none; width: 120px; }
+
+.summary {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.sumRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--text-sm);
+  padding: var(--space-1) 0;
+}
+
+.sumTotal {
+  font-weight: 700;
+  font-size: var(--text-base);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}

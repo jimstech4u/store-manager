@@ -18,6 +18,7 @@ import { useProduct, type Product } from '@/lib/stacks/catalog-stack';
 import { useListNotifier } from '@/hooks/useListChannel';
 import { useSellingUnits } from '@/lib/stacks/selling-units';
 import { unitGaps, useProductUnits } from '@/lib/stacks/product-units';
+import { useProductEmpties } from '@/lib/stacks/empties';
 import { formatMoney, formatQty, pluralUnit, messageOf } from '@/lib/format';
 import styles from './product-page.module.css';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
@@ -59,6 +60,7 @@ export default function ProductPage() {
    */
   const { byProduct } = useSellingUnits(store?.id ?? null);
   const { units: productUnits } = useProductUnits(productId);
+  const { empties } = useProductEmpties(productId);
   const sellingUnits = byProduct.get(productId ?? '') ?? [];
   const gapUnits = unitGaps(productUnits).map((u) => u.name.toLowerCase());
 
@@ -231,6 +233,50 @@ export default function ProductPage() {
           </div>
         )}
       </dl>
+
+      {/*
+        WHAT IS OUT IN CUSTOMERS' YARDS.
+
+        The shelf figure and the cost were the whole story here, so an item whose crates are all
+        out on loan looked identical to one whose crates are stacked out the back. For a shop whose
+        containers are worth more than a day's takings, that is the more urgent number.
+
+        Said in POOLS, because that is where the obligation lives — a Gulder bottle and a Star
+        bottle are the same NBL bottle to everyone involved. "How many Gulder bottles specifically"
+        is unanswerable once a pool is shared, and answering it anyway would be inventing a figure.
+      */}
+      {empties.length > 0 && (
+        <section className={styles.empties}>
+          <h2 className={styles.emptiesTitle}>Containers out</h2>
+          <ul className={styles.emptiesList}>
+            {empties.map((e) => (
+              <li key={e.category_id} className={styles.emptiesRow}>
+                <span>
+                  <span className={styles.emptiesName}>{e.category}</span>
+                  <span className={styles.emptiesMeta}>
+                    {e.kind === 'content'
+                      ? `${Number(e.qty_per_base_unit ?? 0)} per ${product.baseUnit}`
+                      : 'counted when one leaves with the goods'}
+                    {Number(e.suggested_deposit) > 0
+                      ? ` · you usually hold ${formatMoney(Number(e.suggested_deposit))} each`
+                      : ''}
+                  </span>
+                </span>
+                <span className={styles.emptiesQty}>
+                  {Number(e.units_out)}
+                  <span className={styles.emptiesWho}>
+                    {Number(e.customers_out) === 1 ? '1 customer' : `${Number(e.customers_out)} customers`}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className={styles.emptiesNote}>
+            Across every product that shares these pools, not this item alone — that is what the
+            customer owes you back.
+          </p>
+        </section>
+      )}
 
       {/*
         How this is bought and sold.

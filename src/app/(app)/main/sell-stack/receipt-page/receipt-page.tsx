@@ -1,11 +1,13 @@
 'use client';
 
 import { useLocation } from '@academix-admin/navigation-stack';
+import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { InfoPanel } from '@/components/ui/Explain';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { Receipt } from '../sell-page/Receipt';
+import { ReturnIcon } from '@/components/ui/Icon';
 
 /**
  * A receipt, as a page in the stack rather than a sheet.
@@ -21,6 +23,7 @@ import { Receipt } from '../sell-page/Receipt';
  * ordinary request and there was no way to answer it.
  */
 export default function ReceiptPage() {
+  const nav = useNav();
   const goBack = useStackBack();
   const location = useLocation();
   const { store } = useAuth();
@@ -45,6 +48,21 @@ export default function ReceiptPage() {
       onBack={goBack}
       title={fresh ? 'Sale recorded' : 'Receipt'}
       subtitle={store.name}
+      /*
+        THE SECOND WAY INTO THE EMPTIES LIST, and the more natural one.
+
+        Somebody reading back a sale is often reading it BECAUSE of the crates — "what went out on
+        this one, and has any of it come back?" The receipt already prints what is expected; this
+        is the way to act on it without hunting for the till's own action.
+      */
+      actions={[
+        {
+          key: 'empties',
+          icon: <ReturnIcon />,
+          onClick: () => void nav.push('empties_page'),
+          ariaLabel: 'Containers still to come back',
+        },
+      ]}
     >
       {fresh && (
         <InfoPanel tone="success" title="Saved">
