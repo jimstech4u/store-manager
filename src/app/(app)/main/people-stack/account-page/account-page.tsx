@@ -284,6 +284,23 @@ export default function AccountPage() {
                   : ''}
                 {` · ${h.actor}`}
               </p>
+
+              {/*
+                The receipt behind the line.
+
+                `customer_history` has returned `ref_table` and `ref_id` all along and the screen
+                used them only to build a React key. "Owes ₦21,500" and then no way to see what
+                for is the point at which somebody rings the shop — the answer is one join away.
+              */}
+              {h.ref_table === 'sales' && h.ref_id && (
+                <button
+                  type="button"
+                  className={styles.eventOpen}
+                  onClick={() => void nav.push('receipt_page', { id: h.ref_id })}
+                >
+                  See the receipt
+                </button>
+              )}
             </li>
           ))}
         </ol>

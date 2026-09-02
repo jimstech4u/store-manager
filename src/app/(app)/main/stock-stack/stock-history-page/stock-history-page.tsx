@@ -3,6 +3,7 @@
 import { useLocation } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
+import { useNav } from '@academix-admin/navigation-stack';
 import { StockHistory } from '@/components/stock/StockHistory';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useProduct } from '@/lib/stacks/catalog-stack';
@@ -22,6 +23,7 @@ import { useProduct } from '@/lib/stacks/catalog-stack';
  * app follows for pushed screens.
  */
 export default function StockHistoryPage() {
+  const nav = useNav();
   const goBack = useStackBack();
   const location = useLocation();
 
@@ -46,7 +48,17 @@ export default function StockHistoryPage() {
 
   return (
     <PageScaffold onBack={goBack} title="Stock history" subtitle={product.name}>
-      <StockHistory productId={product.id} unit={product.baseUnit} />
+      <StockHistory
+        productId={product.id}
+        unit={product.baseUnit}
+        onOpenRecord={(refTable, refId) => {
+          /*
+           * A sale opens its receipt. Anything else has no screen of its own yet — a delivery, a
+           * count — so nothing is offered rather than pushing a page that would say nothing.
+           */
+          if (refTable === 'sales') void nav.push('receipt_page', { id: refId });
+        }}
+      />
     </PageScaffold>
   );
 }

@@ -184,3 +184,18 @@
 .sheetActions > * {
   flex: 1;
 }
+
+/* The way to the receipt behind a line. "Owes ₦21,500" with no way to see what for is the point
+   at which somebody rings the shop. */
+.eventOpen {
+  min-height: var(--touch-min, 44px);
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  text-decoration: underline;
+  cursor: pointer;
+}

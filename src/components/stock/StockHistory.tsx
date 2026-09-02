@@ -33,6 +33,15 @@ interface Movement {
   note: string | null;
   actor_name: string | null;
   reverses_id: string | null;
+  /**
+   * The record this movement came from — a sale, a delivery, a count.
+   *
+   * The database has returned these all along and nothing read them, so the history said "Sold, 3"
+   * and stopped there. "Sold to whom, on what receipt?" is the next question every single time,
+   * and it was a dead end: the answer existed one join away and the screen would not take you.
+   */
+  ref_table: string | null;
+  ref_id: string | null;
 }
 
 /** What each kind of movement is called in the shop, rather than in the schema. */
@@ -57,7 +66,22 @@ function when(iso: string) {
   return sameDay ? time : `${at.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}, ${time}`;
 }
 
-export function StockHistory({ productId, unit }: { productId: string; unit: string }) {
+export function StockHistory({
+  productId,
+  unit,
+  onOpenRecord,
+}: {
+  productId: string;
+  unit: string;
+  /**
+   * Open whatever a movement came from — the receipt for a sale, the delivery for a purchase.
+   *
+   * Handed over rather than pushed from here: this component is rendered from more than one stack
+   * and a component reaching for a route by name breaks the moment it is reused somewhere that
+   * route does not exist.
+   */
+  onOpenRecord?: (refTable: string | null, refId: string) => void;
+}) {
   const [history, demandHistory] = useDemandState<Movement[]>([], {
     key: `product-history:${productId}`,
     scope: 'catalog_flow',
@@ -97,6 +121,15 @@ export function StockHistory({ productId, unit }: { productId: string; unit: str
       <ol className={styles.list}>
         {history.map((row, index) => {
           const up = row.qty_delta > 0;
+
+          /*
+           * Only where there is something to open, and somebody to open it.
+           *
+           * A count or an adjustment has no other record behind it, and a row that looks tappable
+           * and does nothing is worse than one that plainly is not.
+           */
+          const opens = onOpenRecord && row.ref_id ? () => onOpenRecord(row.ref_table, row.ref_id!) : null;
+
           return (
             <li className={styles.row} key={`${row.at}-${index}`}>
               <span className={`${styles.delta} ${up ? styles.up : styles.down}`}>
@@ -120,6 +153,12 @@ export function StockHistory({ productId, unit }: { productId: string; unit: str
               <span className={styles.balance}>
                 {formatQty(row.balance)} {unit}
               </span>
+
+              {opens && (
+                <button type="button" className={styles.open} onClick={opens}>
+                  {row.ref_table === 'sales' ? 'See the receipt' : 'See the record'}
+                </button>
+              )}
             </li>
           );
         })}
