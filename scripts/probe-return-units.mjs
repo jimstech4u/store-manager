@@ -78,7 +78,19 @@ try {
   // ══ Nothing declared: anything goes ═══════════════════════════════════════════════
   console.log('\n— a pool with no rule accepts anything —');
   const { data: none } = await shop.rpc('return_units_for', { p_category_id: pool.id });
-  check('it starts with no shapes declared', (none ?? []).length === 0, `${(none ?? []).length}`);
+  /*
+   * Names what it found, because this is the check that catches contamination.
+   *
+   * It fired once on a shape left behind by an earlier run and the message said only "1" — true,
+   * and useless. A probe that detects a dirty starting state has done its job; saying WHICH pool
+   * and WHICH shape is what makes the next person able to act on it in one step.
+   */
+  check(
+    `${pool.name} starts with no shapes declared`,
+    (none ?? []).length === 0,
+    (none ?? []).map((u) => `${u.name}=${Number(u.base_qty)}`).join(', ') ||
+      'none, as expected',
+  );
 
   const { data: any7 } = await shop.rpc('return_is_allowed', { p_category_id: pool.id, p_qty: 7 });
   check(
