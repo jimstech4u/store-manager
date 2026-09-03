@@ -69,7 +69,20 @@ try {
   await p.screenshot({ path: `${SHOTS}/1-wrong-password.png` });
 
   check('the failure stops the shop in a dialog', (await dialog().count()) > 0, await body().then((t) => t.slice(0, 90)));
-  check('and says what went wrong', /do not match|Could not sign/i.test(await body()));
+  /*
+   * ANY real reason, not one exact sentence.
+   *
+   * This probe signs in with a deliberately wrong password, and run often enough Supabase stops
+   * saying "invalid credentials" and starts saying "too many requests" — which is a different and
+   * equally true failure a shop can meet. Asserting the credentials wording made the probe fail
+   * for a reason that had nothing to do with the dialog, which is the thing under test.
+   */
+  const said = await body();
+  check(
+    'and says what went wrong',
+    /do not match|Could not sign|too many|rate|try again/i.test(said),
+    said.slice(0, 90),
+  );
 
   const ok = p.getByRole('button', { name: /^OK$/ }).first();
   check('with one way out', (await ok.count()) > 0);

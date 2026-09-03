@@ -38,6 +38,15 @@ export interface ProductUnit {
   /** What one costs a customer. Null while a unit is only ever bought in. */
   sellPrice: string;
   isReturnable: boolean;
+  /*
+   * The two roles a shape had, but only by inference.
+   *
+   * Every screen guessed differently — the stock page took "the largest sold unit", the deposit
+   * screens worked in the pool's base units — so the shop's actual answer ("we count crates, we
+   * hold deposits on crates") was nowhere, and each screen was right by accident or not at all.
+   */
+  isCounted: boolean;
+  isDeposit: boolean;
   wholeDigit: boolean;
   allowQuarter: boolean;
   allowHalf: boolean;
@@ -55,6 +64,8 @@ interface StoreUnitRow {
 
 interface ProductUnitRow {
   id: string;
+  is_counted?: boolean;
+  is_deposit?: boolean;
   store_unit_id: string;
   name: string;
   plural: string;
@@ -134,6 +145,8 @@ const toUnit = (r: ProductUnitRow, byId: Map<string, string>): ProductUnit => ({
   plural: r.plural,
   baseQty: Number(r.base_qty),
   isBought: r.is_bought,
+  isCounted: r.is_counted ?? false,
+  isDeposit: r.is_deposit ?? false,
   isSold: r.is_sold,
   sellPrice: r.sell_price === null ? '' : String(r.sell_price),
   isReturnable: r.is_returnable,
@@ -205,6 +218,8 @@ export async function saveProductUnits(productId: string, units: ProductUnit[]) 
       id: u.id,
       store_unit_id: u.storeUnitId,
       is_bought: u.isBought,
+      is_counted: u.isCounted,
+      is_deposit: u.isDeposit,
       is_sold: u.isSold,
       sell_price: u.isSold && u.sellPrice.trim() !== '' ? Number(u.sellPrice) : null,
       is_returnable: u.isReturnable,

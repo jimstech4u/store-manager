@@ -102,7 +102,9 @@ try {
   const body = await p.locator('body').innerText();
   check('no "How do you count it?"', !/How do you count it/i.test(body));
   check('no "Pack name"', !/Pack name/i.test(body));
-  check('it asks how you buy and sell it instead', /How you buy and sell it/i.test(body));
+  // The section is shapes-first now: define the shape once, then tick what it is for. The old
+  // heading described two lists that no longer exist.
+  check('it asks about the shapes it comes in instead', /The shapes it comes in/i.test(body));
   check('and about buying more', /Cheaper for buying more/i.test(body));
 
   console.log('\n— what it is —');
@@ -110,8 +112,8 @@ try {
   await p.waitForTimeout(500);
 
   console.log('\n— sold by the crate and by the bottle —');
-  await addUnit(/Add a unit you sell in/i, `FCrate${stamp}`);
-  await addUnit(/Add a unit you sell in/i, `FBottle${stamp}`);
+  await addUnit(/Add a shape/i, `FCrate${stamp}`);
+  await addUnit(/Add a shape/i, `FBottle${stamp}`);
 
   // Matched on the exact class: `[class*="UnitsEditor_card"]` also finds cardHead and cardName,
   // so two units counted as six.

@@ -136,6 +136,13 @@ keeping — the rule alone is forgettable, the bug behind it is not.
   on screen claims its name, and anything left unclaimed after the first frames is closed. A sheet
   that CAN come back passes `onRestore` and a name that is stable across loads — store-manager's
   are not (`picker:${useId()}`), so its sheets are transient by design.
+- **Copy the working function and add; do not tidy it.** 0080 needed two columns on
+  `save_product_units`. The copy "improved" the key its second pass reads from `defined_against` to
+  `defined_against_store_unit_id` — a name the client has never sent — so the null branch would
+  have fired for every shape on every save and silently erased every relationship in the shop.
+  Every crate would have forgotten how many bottles it holds, and nothing would have raised. This
+  rule was already written down, from 0058, and it still caught me. A round-trip test (save it back
+  unchanged, assert the tree survives) is the cheap way to know.
 - **A hook that returns a fresh object every render must not pretend otherwise.** `useProblem`
   was wrapped in `useMemo` so callers could safely list it as a dependency — and it could not
   deliver that, because its `controller` comes from `useDialog`, which returns a new object every
@@ -180,6 +187,29 @@ like a sheet, a picker, a list, a dialog or a nav surface:
    is genuinely impossible without breaking the library.
 4. **A package never learns about store-manager.** That is the Library Charter, and it is what
    makes 2 and 3 safe to do.
+
+## A shape is defined once, and then given roles
+
+A product's units are SHAPES: a crate, and the bottles inside it. `product_units` carries the tree —
+`defined_against_id` is the parent, `defined_qty` is how many to it, `base_qty` is derived by a
+trigger and never typed.
+
+Everything else **selects** a shape rather than redefining one. Four roles, all flags on the shape,
+all answered by the shop:
+
+| | |
+|---|---|
+| `is_bought` | deliveries arrive in it |
+| `is_sold` | customers buy in it, at `sell_price` |
+| `is_counted` | the shop counts the shelf in it — a distributor counts crates, not bottles |
+| `is_deposit` | deposits are held and given back in it — nobody holds money against one bottle |
+
+Quantities a customer may buy are `whole_digit` plus `allow_quarter` / `allow_half` /
+`allow_three_quarter` — ticking whole and half means 1, 1.5, 2, 2.5 and refuses the rest.
+
+The editor was two lists, "Sold in" and "Bought in", with a note under the second explaining that
+anything you also sell is "already above". That explanation was the design telling on itself. One
+list now.
 
 ## One form per record, and it is a page
 

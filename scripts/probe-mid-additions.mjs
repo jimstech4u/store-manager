@@ -56,7 +56,7 @@ MADE_UNITS.push(probeUnit);
 
 /** Fills the real product form's required answers and saves. */
 const fillProductForm = async (p, unitName) => {
-  const addUnit = p.getByRole('button', { name: /Add a unit you sell in/i }).first();
+  const addUnit = p.getByRole('button', { name: /Add a shape/i }).first();
   await addUnit.scrollIntoViewIfNeeded();
   await addUnit.click();
   await p.waitForTimeout(2500);

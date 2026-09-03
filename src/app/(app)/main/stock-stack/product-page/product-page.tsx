@@ -307,7 +307,7 @@ export default function ProductPage() {
           onClick={() => void nav.push('units_page', { id: product.id })}
         >
           <span className={styles.unitsMain}>
-            <span className={styles.unitsTitle}>How you buy and sell it</span>
+            <span className={styles.unitsTitle}>The shapes it comes in</span>
             <span className={styles.unitsNote}>
               {sellingUnits.length > 0
                 ? `Sold in ${sellingUnits.map((u) => u.plural.toLowerCase()).join(', ')}`
@@ -326,7 +326,7 @@ export default function ProductPage() {
       {gapUnits.length > 0 && (
         <InfoPanel tone="danger" title="Some of this can come in but never go out">
           You take delivery in {gapUnits.join(', ')}, and nothing is sold in{' '}
-          {gapUnits.length === 1 ? 'it' : 'them'}. Open <strong>How you buy and sell it</strong> and
+          {gapUnits.length === 1 ? 'it' : 'them'}. Open <strong>The shapes it comes in</strong> and
           say what one is worth in something you do sell.
         </InfoPanel>
       )}

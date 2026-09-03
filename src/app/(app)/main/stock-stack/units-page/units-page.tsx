@@ -100,7 +100,7 @@ export default function UnitsPage() {
   };
 
   return (
-    <PageScaffold onBack={goBack} title="How you buy and sell it" subtitle={product.name}>
+    <PageScaffold onBack={goBack} title="The shapes it comes in" subtitle={product.name}>
       <UnitsEditor
         units={units}
         setUnits={setUnits}

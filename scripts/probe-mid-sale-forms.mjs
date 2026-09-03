@@ -116,7 +116,7 @@ try {
    * reported "zero not accepted" when what had actually happened was the form correctly refusing
    * an item with no unit.
    */
-  const addUnitBtn = p.getByRole('button', { name: /Add a unit you sell in/i }).first();
+  const addUnitBtn = p.getByRole('button', { name: /Add a shape/i }).first();
   await addUnitBtn.scrollIntoViewIfNeeded();
   await addUnitBtn.click();
   await p.waitForTimeout(2500);

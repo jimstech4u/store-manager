@@ -188,7 +188,7 @@ try {
     if (await opener.count()) {
       await opener.click();
       await p.waitForTimeout(4500);
-      await p.getByRole('button', { name: /Add a unit you sell in/i }).first().click();
+      await p.getByRole('button', { name: /Add a shape/i }).first().click();
       await measure('3-unit-picker');
     } else {
       console.log('  (no units screen reachable on this item)');

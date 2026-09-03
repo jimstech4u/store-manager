@@ -107,7 +107,7 @@ try {
   await p.waitForTimeout(4000);
   await p.getByLabel(/What is it called/i).fill(NAME);
 
-  await p.getByRole('button', { name: /Add a unit you sell in/i }).first().click();
+  await p.getByRole('button', { name: /Add a shape/i }).first().click();
   await p.waitForTimeout(3000);
 
   const NEWUNIT = `RKeg${stamp}`;
@@ -123,7 +123,7 @@ try {
   await p.screenshot({ path: `${SHOTS}/1-back-on-form.png` });
 
   // Re-open the picker and look for the word that was just invented.
-  await p.getByRole('button', { name: /Add a unit you sell in/i }).first().click();
+  await p.getByRole('button', { name: /Add a shape/i }).first().click();
   await p.waitForTimeout(3000);
   const offered = await p.locator('[class*="UnitPicker_name"]').allInnerTexts();
   await p.screenshot({ path: `${SHOTS}/2-picker.png` });

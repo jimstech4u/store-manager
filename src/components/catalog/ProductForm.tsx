@@ -556,9 +556,10 @@ export function ProductForm({
         not the same money — and one figure per product is what produced a receipt reading
         "1 piece, ₦4,500" for something sold by the pack.
       */}
-      <h2 className={styles.section}>How you buy and sell it</h2>
+      <h2 className={styles.section}>The shapes it comes in</h2>
       <p className={styles.sectionNote}>
-        The shapes it arrives in and the shapes a customer can buy, with a price on each.
+        A crate, and the bottles inside it. Say what each holds once, then tick what it is for —
+        buying, selling, counting, deposits. Everything else on this item reads these.
       </p>
       <UnitsEditor
         units={units}

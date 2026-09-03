@@ -81,8 +81,18 @@ export function UnitsEditor({
         name: unit.name,
         plural: unit.plural,
         baseQty: 1,
-        isBought: side === 'bought',
-        isSold: side === 'sold',
+        /*
+         * A NEW SHAPE STARTS SOLD, and is otherwise unassigned.
+         *
+         * There is one list now, so "which side did they press" no longer means anything — a shape
+         * is added, then the shop says what it is for. Sold is the one role a product cannot do
+         * without (nothing reaches a receipt otherwise), so it is the honest default; counting and
+         * deposits are answers only the shop has.
+         */
+        isBought: false,
+        isSold: true,
+        isCounted: false,
+        isDeposit: false,
         sellPrice: '',
         isReturnable: false,
         wholeDigit: true,
@@ -154,8 +164,9 @@ export function UnitsEditor({
 
   const smallest = measuringUnit(units);
   const gaps = unitGaps(units);
+  // `sold` still guards the "nothing is sold yet" warning; the old `bought` list had no reader
+  // left once the two lists became one.
   const sold = units.filter((u) => u.isSold);
-  const bought = units.filter((u) => u.isBought);
 
   const unitRow = (u: ProductUnit) => (
     <li key={u.storeUnitId} className={styles.card}>
@@ -171,6 +182,14 @@ export function UnitsEditor({
         </button>
       </div>
 
+      {/*
+        WHAT THIS SHAPE IS FOR — four answers, all about the same shape.
+
+        Two lists became one. A crate a shop both buys and sells used to be a row under "Sold in"
+        plus a note under "Bought in" explaining that anything you also sell is "already above" —
+        an explanation the design needed because the design was wrong. Define the shape once; say
+        what it does.
+      */}
       <div className={styles.checks}>
         <label className={styles.check}>
           <input
@@ -187,6 +206,30 @@ export function UnitsEditor({
             onChange={(e) => patch(u.storeUnitId, { isSold: e.target.checked })}
           />
           <span>Customers buy this</span>
+        </label>
+        <label className={styles.check}>
+          <input
+            type="checkbox"
+            checked={u.isCounted}
+            onChange={(e) => patch(u.storeUnitId, { isCounted: e.target.checked })}
+          />
+          {/*
+            A distributor counts crates, not bottles, even when it sells both. Asking for the wrong
+            one on a count screen gets a guess instead of a figure.
+          */}
+          <span>You count the shelf in this</span>
+        </label>
+        <label className={styles.check}>
+          <input
+            type="checkbox"
+            checked={u.isDeposit}
+            onChange={(e) => patch(u.storeUnitId, { isDeposit: e.target.checked })}
+          />
+          {/*
+            Nobody holds money against a single bottle. Offering one on a deposit screen invites an
+            amount nobody agreed.
+          */}
+          <span>Deposits are held in this</span>
         </label>
       </div>
 
@@ -344,28 +387,29 @@ export function UnitsEditor({
         </InfoPanel>
       )}
 
-      <h2 className={styles.heading}>Sold in</h2>
-      <ul className={styles.list}>{sold.map(unitRow)}</ul>
-      <button type="button" className={styles.add} onClick={() => setPicking('sold')}>
-        <PlusIcon /> Add a unit you sell in
-      </button>
-
-      <h2 className={styles.heading}>Bought in</h2>
+      <h2 className={styles.heading}>Shapes</h2>
       <p className={styles.headingNote}>
-        Only what arrives in a shape you do not sell. Anything you buy and sell the same way is
-        already above.
+        Every shape this comes in — a crate, and the bottles inside it. Say what each holds, then
+        tick what it is for. Everything else on this item reads these.
       </p>
-      <ul className={styles.list}>{bought.filter((u) => !u.isSold).map(unitRow)}</ul>
-      <button type="button" className={styles.add} onClick={() => setPicking('bought')}>
-        <PlusIcon /> Add a unit it arrives in
+      <ul className={styles.list}>{units.map(unitRow)}</ul>
+      <button type="button" className={styles.add} onClick={() => setPicking('sold')}>
+        <PlusIcon /> Add a shape
       </button>
 
       <UnitPicker
         open={picking !== null}
         onClose={() => setPicking(null)}
         units={storeUnits}
-        taken={units.filter((u) => u.isBought && u.isSold).map((u) => u.storeUnitId)}
-        title={picking === 'bought' ? 'What does it arrive in?' : 'What do customers buy?'}
+        /*
+          Everything already on the item, because there is one list now.
+
+          It used to exclude only shapes that were BOTH bought and sold — correct when the two
+          lists were separate and a shape could legitimately appear in each. With one list, offering
+          a shape the item already has is offering a duplicate.
+        */
+        taken={units.map((u) => u.storeUnitId)}
+        title="What shape does this come in?"
         onPick={(unit) => addUnit(unit, picking ?? 'sold')}
         onCreate={(name) => {
           setPicking(null);
