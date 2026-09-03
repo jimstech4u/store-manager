@@ -9,10 +9,11 @@ import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { Explain, InfoPanel } from '@/components/ui/Explain';
-import { CheckIcon, RefreshIcon } from '@/components/ui/Icon';
+import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
+import { CheckIcon, PlusIcon, RefreshIcon } from '@/components/ui/Icon';
 import { useNav } from '@academix-admin/navigation-stack';
 import { useDemandState } from '@academix-admin/state-stack';
-import { SETTINGS_SCOPE } from '@/lib/stacks/bank-accounts';
+import { SETTINGS_SCOPE, useBankAccounts } from '@/lib/stacks/bank-accounts';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -35,9 +36,15 @@ interface Settings {
   printer_width_mm: string;
   receipt_header: string | null;
   receipt_footer: string | null;
+  /*
+   * DEAD as of 0083 — the receipt reads the shop's accounts through `receipt_bank_account_id`.
+   * Still selected so an existing row round-trips unchanged; nothing writes them.
+   */
   transfer_bank_name: string | null;
   transfer_account_no: string | null;
   transfer_account_name: string | null;
+  /** Which of the shop's accounts prints. Null means whichever is marked default. */
+  receipt_bank_account_id: string | null;
   show_transfer_details: boolean;
   receipt_logo_path: string | null;
   receipt_logo_width_pct: number;
@@ -61,6 +68,8 @@ export default function SettingsPage() {
   const { can, role } = usePermission();
   const { theme, storedTheme, setTheme } = useTheme();
   const hiddenNotices = useHiddenNotices();
+  const accounts = useBankAccounts(store?.id ?? null);
+
 
   // The logo picker's hidden input, and the state around preparing one.
   const logoInput = useRef<HTMLInputElement | null>(null);
@@ -97,6 +106,19 @@ export default function SettingsPage() {
   );
 
   const settings = snapshot.settings;
+
+  /*
+   * Which account prints — resolved the same way `settle_sale` resolves it, so the preview and the
+   * receipt cannot disagree: the chosen one, or the shop's default when nothing has been chosen.
+   *
+   * BELOW `settings`, not beside `accounts`. Above it, this is a temporal dead zone that only fires
+   * once the list is non-empty, because the reference sits inside a `.find` callback — so the page
+   * worked until the shop added its first account and then white-screened.
+   */
+  const receiptAccount =
+    accounts.find((a) => a.id === settings?.receipt_bank_account_id) ??
+    accounts.find((a) => a.is_default) ??
+    null;
   const shop = snapshot.shop;
   const pending = snapshot.pending;
   const error = snapshot.error;
@@ -110,6 +132,11 @@ export default function SettingsPage() {
   const setShop = (next: StoreRow | null) => {
     setSnapshot((prev) => ({ ...prev, shop: next }));
   };
+  const saveProblem = useProblem();
+  // Bound to a local const: `useProblem` returns a fresh object every render, so the hook itself is
+  // never a safe dependency — `show` is.
+  const showSaveProblem = saveProblem.show;
+
   const setError = (next: string | null) => {
     setSnapshot((prev) => ({ ...prev, error: next }));
   };
@@ -208,9 +235,8 @@ export default function SettingsPage() {
           printer_width_mm: Number(settings.printer_width_mm) || 80,
           receipt_header: settings.receipt_header,
           receipt_footer: settings.receipt_footer,
-          transfer_bank_name: settings.transfer_bank_name,
-          transfer_account_no: settings.transfer_account_no,
-          transfer_account_name: settings.transfer_account_name,
+          // The three text columns are no longer written — the receipt reads the accounts list.
+          receipt_bank_account_id: settings.receipt_bank_account_id,
           show_transfer_details: settings.show_transfer_details,
           receipt_logo_path: settings.receipt_logo_path,
           receipt_logo_width_pct: settings.receipt_logo_width_pct,
@@ -219,7 +245,13 @@ export default function SettingsPage() {
       if (err) throw err;
       setSaved(true);
     } catch (e: unknown) {
-      setError(messageOf(e, 'Could not save your settings'));
+      /*
+        A FAILURE INTERRUPTS. This set the same `error` the LOAD failure uses, so a save that failed
+        appeared under the heading "Could not load your settings" — near the top of a long page,
+        already scrolled past by anyone who pressed Save at the bottom. Nothing changes, so Save
+        gets pressed again.
+      */
+      showSaveProblem(messageOf(e, 'Could not save your settings'));
     } finally {
       setBusy(false);
     }
@@ -255,6 +287,10 @@ export default function SettingsPage() {
           : undefined
       }
     >
+      <ProblemDialog problem={saveProblem} title="Not saved" />
+
+      {/* The LOAD failure stays a panel: there is cached content behind it, and it describes the
+          state the page is in rather than something that was just attempted. */}
       {error && (
         <InfoPanel tone="danger" title="Could not load your settings">
           {error}
@@ -490,11 +526,23 @@ export default function SettingsPage() {
             logoPath={settings.receipt_logo_path}
             logoWidthPct={settings.receipt_logo_width_pct}
             shopName={store?.name ?? 'Your shop'}
+            /*
+              THE ACCOUNT THAT WILL ACTUALLY PRINT.
+
+              This read the three text columns 0083 retired, so the preview would have shown a blank
+              where the receipt shows an account — and the preview is exactly where somebody checks
+              instead of printing one to find out. Same resolution the receipt uses: the chosen
+              account, or failing that the one marked default.
+            */
             transfer={
-              settings.show_transfer_details && settings.transfer_account_no
-                ? `${settings.transfer_bank_name ?? ''}
-${settings.transfer_account_no}
-${settings.transfer_account_name ?? ''}`.trim()
+              settings.show_transfer_details && receiptAccount
+                ? [
+                    receiptAccount.bank_name,
+                    receiptAccount.account_number,
+                    receiptAccount.account_name,
+                  ]
+                    .filter(Boolean)
+                    .join('\n')
                 : null
             }
           />
@@ -516,28 +564,63 @@ ${settings.transfer_account_name ?? ''}`.trim()
 
           {settings.show_transfer_details && (
             <>
-              <Field
-                label="Bank"
-                value={settings.transfer_bank_name ?? ''}
-                onChange={(e) => patch({ transfer_bank_name: e.target.value })}
-                disabled={!editable}
-                placeholder="First Bank"
-              />
-              <Field
-                label="Account number"
-                numeric
-                value={settings.transfer_account_no ?? ''}
-                onChange={(e) => patch({ transfer_account_no: e.target.value })}
-                disabled={!editable}
-                placeholder="0123456789"
-              />
-              <Field
-                label="Account name"
-                value={settings.transfer_account_name ?? ''}
-                onChange={(e) => patch({ transfer_account_name: e.target.value })}
-                disabled={!editable}
-                placeholder={store.name}
-              />
+              {/*
+                CHOSEN FROM THE SHOP'S ACCOUNTS, not typed again.
+
+                This was three text boxes — bank, number, name — typed once and checked against
+                nothing. The shop already keeps its accounts under Money, and the payment screen
+                already picks from them when somebody pays by transfer; having a second copy here
+                meant a shop that closed an account had receipts still asking customers to pay into
+                it, with no reason to think anything was wrong because the boxes still had text.
+              */}
+              {accounts.length === 0 ? (
+                <InfoPanel tone="warning" title="No accounts yet">
+                  <p>
+                    Receipts can only show an account you have added. Add one and it will be
+                    offered here.
+                  </p>
+                  <Button onClick={() => void nav.push('bank_form_page')}>
+                    <PlusIcon /> Add a bank account
+                  </Button>
+                </InfoPanel>
+              ) : (
+                <>
+                  <ul className={styles.accountList}>
+                    {accounts.map((a) => {
+                      const chosen =
+                        settings.receipt_bank_account_id === a.id ||
+                        (!settings.receipt_bank_account_id && a.is_default);
+                      return (
+                        <li key={a.id}>
+                          <button
+                            type="button"
+                            className={`${styles.accountRow} ${chosen ? styles.accountChosen : ''}`}
+                            disabled={!editable}
+                            onClick={() => patch({ receipt_bank_account_id: a.id })}
+                            aria-pressed={chosen}
+                          >
+                            <span>
+                              <span className={styles.accountBank}>{a.bank_name}</span>
+                              <span className={styles.accountNo}>
+                                {a.account_number} · {a.account_name}
+                              </span>
+                            </span>
+                            {chosen && <CheckIcon />}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <button
+                    type="button"
+                    className={styles.accountAdd}
+                    onClick={() => void nav.push('bank_form_page')}
+                  >
+                    <PlusIcon /> Add another account
+                  </button>
+                </>
+              )}
+
               <InfoPanel tone="info" title="Old receipts keep their old details">
                 Changing these does not alter receipts already issued — each one keeps the account
                 it was printed with.
