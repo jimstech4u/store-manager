@@ -165,6 +165,11 @@ keeping — the rule alone is forgettable, the bug behind it is not.
   Serials are now scoped to the document that issued them, because the counter restarts at 0 on a
   reload while the browser's entries keep their old numbers — the same number meaning two
   different entries is how a log answers confidently and wrongly.
+- **A section must not delete itself as it is filled in.** "Where are the 9 pieces?" was gated on
+  the shortfall still being non-zero. Typing the write-off balanced the count, the gate went false,
+  and the whole block unmounted — taking the money box with it, so the one question it existed to
+  ask could never be answered. Gate a form on whether it has been STARTED, not on whether the
+  condition that raised it is still true.
 - **A cleanup that does not check is worse than none.** The deposit probe snapshotted the shop's
   draft ids, diffed afterwards, and printed "nothing left behind" — while leaving an order every
   run. PostgREST caps a response at **1,000 rows**, this shop has 1,057 drafts, and both reads were
@@ -286,6 +291,30 @@ count.
 **Register a pushed route in EVERY stack that can push it.** The product form is reachable from
 four; the unit form it offers to push was registered in two. The symptom is navigation-stack's own
 "Missing route" screen, on the one journey nobody walked.
+
+## Three things happen to a container, and all three are recordable
+
+It came back. It is still owed. Or it is GONE. The settle screen could record the first, records the
+second by doing nothing — which is right, and must stay one keystroke of nothing — and had no answer
+at all for the third unless the shop happened to be holding a deposit against it.
+
+On trust, broken, paid for at the counter is the commonest case in this trade. With nowhere to put
+it the containers stayed outstanding for ever against a customer who had already settled, so a
+shop's "still out" list filled with obligations nobody owed and nobody could clear.
+`deposit_forfeits` has existed since 0004 for exactly this — table, trigger, RLS policy, no writer.
+0090 is its writer. The money is NOT recorded as a payment: it was handed over for broken bottles,
+and allocating it would pay down whatever sale happened to be oldest.
+
+**Returns are counted in SHAPES, one box each.** "Five crates and three bottles" is what somebody
+says while stacking them by the door. One box in the pool's smallest unit made the seller multiply
+by twelve and add, at a counter, and then told them the answer was not a shape the pool accepts. The
+multiplication is said back on the page, because arithmetic nobody can see is arithmetic nobody
+checks.
+
+**Over-returning is a condition, caught before the button.** `settle_empties` refuses more than the
+receipt sent out, and must — but a seller finding out from a red dialog has already counted the
+bottles onto the counter. Usually it means the customer brought another receipt's worth too, which
+is a real thing, settled receipt by receipt.
 
 ## A failure interrupts. A condition stays on the page.
 

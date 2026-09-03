@@ -51,3 +51,43 @@
   color: var(--primary);
   font-weight: 600;
 }
+
+/* One box per shape, side by side: "5 crates, 3 bottles" is read across, not down. They wrap on a
+   narrow screen rather than shrinking, because a number box you cannot hit is worse than a scroll. */
+.shapeBoxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.shapeBoxes .qtyBox {
+  flex: 1 1 7rem;
+  min-width: 7rem;
+}
+
+/* The arithmetic said back, so the multiplication is visible rather than trusted. */
+.poolCounted {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* The question about what is missing. A question, not a warning: short is the normal case. */
+.missing {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+}
+
+.missingHead {
+  margin: 0;
+  font-weight: 700;
+}
+
+.missingNote {
+  margin: var(--space-1) 0 var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}

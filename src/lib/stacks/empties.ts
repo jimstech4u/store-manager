@@ -145,6 +145,14 @@ export async function settleEmpties(args: {
   storeId: string;
   saleId: string;
   returned: { category_id: string; qty: number }[];
+  /**
+   * Containers that will not be coming back, and what was paid for them.
+   *
+   * Separate from `returned` because they are a different event: one closes an obligation by
+   * receiving the thing, the other closes it by agreeing it is gone. `deposit_forfeits` keeps both
+   * the count and the money, which is why it is a table and not a subtraction.
+   */
+  paidFor?: { category_id: string; qty: number; amount: number }[];
   applyAmount: number;
   refundAmount: number;
   refundMode: 'cash' | 'credit' | 'none';
@@ -154,6 +162,7 @@ export async function settleEmpties(args: {
     p_store_id: args.storeId,
     p_sale_id: args.saleId,
     p_returned: args.returned,
+    p_paid_for: args.paidFor ?? [],
     p_apply_amount: args.applyAmount,
     p_refund_amount: args.refundAmount,
     p_refund_mode: args.refundMode,
@@ -164,6 +173,8 @@ export async function settleEmpties(args: {
   accountsChanged();
   return data as {
     returned_units: string;
+    written_off_units: string;
+    paid_for: string;
     applied: string;
     refunded: string;
     still_held: string;
