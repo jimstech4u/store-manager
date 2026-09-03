@@ -29,6 +29,17 @@ export interface DraftLine {
   unitPrice: string;
   containersOut: string;
   /**
+   * Money taken against this line's containers — NOT a rate, and not a price.
+   *
+   * Deposits in this trade have no fixed rate: N125 a crate for one customer, nothing for the one
+   * who has been buying here for ten years, a round figure for a load. So what is kept is the sum
+   * actually collected, and the server works the per-container figure out from it.
+   *
+   * Empty means nobody has said. `0` means it went out on trust, which is a different fact and a
+   * real one.
+   */
+  depositCharged: string;
+  /**
    * The configured shape this is being sold in — "Half pack", "1kg". When set, `saleUnitBaseQty`
    * is what one of them is worth in base units, which is NOT derivable from the pack: half a
    * 12-pack is 6, and no pack multiple expresses that.
@@ -155,6 +166,7 @@ export function makeDraftLine(partial: Partial<DraftLine> = {}): DraftLine {
     packQty: null,
     unitPrice: '',
     containersOut: '',
+    depositCharged: '',
     saleUnitId: null,
     saleUnitName: null,
     saleUnitBaseQty: null,
@@ -175,6 +187,47 @@ export function draftSubtotal(order: DraftOrder): number {
   return order.lines.reduce((sum, l) => sum + lineTotal(l), 0);
 }
 
+/**
+ * Money held against containers on this order.
+ *
+ * Deliberately NOT part of `draftSubtotal`: the subtotal is what the goods cost, and a deposit is
+ * not a cost. It is added into `draftTotal` because the customer does hand it over, and it stays
+ * its own figure everywhere it is shown so that it can be handed back without anybody having to
+ * work out which part of a total it was.
+ */
+export function depositTotal(order: DraftOrder): number {
+  return order.lines.reduce((sum, l) => {
+    const n = Number(l.depositCharged);
+    return sum + (Number.isFinite(n) ? n : 0);
+  }, 0);
+}
+
+/**
+ * A money figure rounded to the kobo.
+ *
+ * Deposits are the one place on this screen where a figure is DERIVED and then shown back as
+ * something to type over — a line total divided by the containers it covers. Without this the till
+ * offers "41.666666666666664" as a rate somebody is meant to read out loud.
+ */
+export function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+/**
+ * How many containers this line is sending out, which is what a deposit is charged per.
+ *
+ * `containersOut` empty means nobody has said otherwise, so the quantity stands — the till states
+ * it rather than asking, because on a beer sale the answer was the quantity every single time. An
+ * explicit '0' is the customer who brought their own.
+ */
+export function containersGoingOut(line: DraftLine): number {
+  if (line.containersOut === '0') return 0;
+  const stated = Number(line.containersOut);
+  if (line.containersOut !== '' && Number.isFinite(stated)) return stated;
+  const qty = Number(line.qty);
+  return Number.isFinite(qty) ? qty : 0;
+}
+
 export function chargesTotal(order: DraftOrder): number {
   return (order.charges ?? []).reduce((sum, c) => {
     const n = Number(c.amount);
@@ -186,7 +239,14 @@ export function draftTotal(order: DraftOrder): number {
   // `feeAmount` is still counted for an order that was started by an older build and has not been
   // re-saved since. Dropping it would quietly lower a bill someone is part-way through.
   const fee = Number(order.feeAmount);
-  return draftSubtotal(order) + chargesTotal(order) + (Number.isFinite(fee) ? fee : 0);
+  // The deposit is in the total because the customer pays it, and named separately everywhere
+  // because the shop owes it back. `record_sale` adds it to the settled sale the same way.
+  return (
+    draftSubtotal(order) +
+    chargesTotal(order) +
+    depositTotal(order) +
+    (Number.isFinite(fee) ? fee : 0)
+  );
 }
 
 /**
@@ -290,6 +350,7 @@ export function useDraftOrders(storeId: string | null) {
               unit_price: Number(l.unitPrice) || 0,
               line_total: lineTotal(l),
               containers_out: Number(l.containersOut) || 0,
+              deposit_charged: Number(l.depositCharged) || 0,
             })),
         });
         if (err) throw err;
@@ -479,7 +540,7 @@ export function useDraftOrders(storeId: string | null) {
           .from('draft_order_lines')
           .select(
             'id, product_id, entered_qty, entered_pack_id, sale_unit_id, unit_price,' +
-              ' containers_out, position, products(name, base_unit),' +
+              ' containers_out, deposit_charged, position, products(name, base_unit),' +
               ' product_packs(name, base_unit_qty),' +
               ' product_units(base_qty, store_units(name))',
           )
@@ -494,6 +555,7 @@ export function useDraftOrders(storeId: string | null) {
           sale_unit_id: string | null;
           unit_price: string;
           containers_out: string;
+          deposit_charged: string;
           products: { name: string; base_unit: string } | null;
           product_packs: { name: string; base_unit_qty: string } | null;
           product_units: { base_qty: string; store_units: { name: string } | null } | null;
@@ -523,6 +585,9 @@ export function useDraftOrders(storeId: string | null) {
             packQty: l.product_packs?.base_unit_qty ?? null,
             unitPrice: String(l.unit_price),
             containersOut: String(l.containers_out ?? 0),
+            // Money already taken from this customer. Losing it on a claim would have the till ask
+            // for it a second time, or hand back what was never collected.
+            depositCharged: l.deposit_charged != null ? String(l.deposit_charged) : '',
             /*
               THE SHAPE COMES BACK.
 

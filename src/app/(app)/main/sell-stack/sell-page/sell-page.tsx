@@ -29,12 +29,13 @@ import {
   type SaleUnit,
 } from '@/lib/stacks/catalog-stack';
 import {
-  draftTotal,
   baseUnitsPerSaleUnit,
+  draftTotal,
   lineTotal,
   makeDraftLine,
-  useDraftOrders,
+  round2,
   type DraftLine,
+  useDraftOrders,
 } from '@/lib/stacks/draft-orders';
 import { formatMoney, formatQty, messageOf } from '@/lib/format';
 import { partsFor, snapQty, startingQty } from '@/lib/quantity-rules';
@@ -139,9 +140,18 @@ export default function SellPage() {
     pickerOps.close();
   });
 
-  /** Which empties pools each product on the receipt belongs to, keyed by product id. */
+  /**
+   * Which empties pools each product on the receipt belongs to, keyed by product id.
+   *
+   * `depositPerUnit` is the pool's own figure, carried so the line can OFFER it. It is a starting
+   * point and never a default: a deposit is agreed at the counter and filling one in for the shop
+   * would have the till collect money nobody asked for.
+   */
   const [returnables, setReturnables] = useState<
-    Record<string, { categoryId: string; categoryName: string; kind: string }[]>
+    Record<
+      string,
+      { categoryId: string; categoryName: string; kind: string; depositPerUnit: number | null }[]
+    >
   >({});
   /*
    * Three dialogs, because three of the four customer actions ask something first.
@@ -394,10 +404,12 @@ export default function SellPage() {
           empties_category_id: string;
           category_name: string;
           kind: string;
+          deposit_per_unit: string | number | null;
         }[]).map((r) => ({
           categoryId: r.empties_category_id,
           categoryName: r.category_name,
           kind: r.kind,
+          depositPerUnit: r.deposit_per_unit == null ? null : Number(r.deposit_per_unit) || null,
         })),
       }));
     }
@@ -990,26 +1002,97 @@ export default function SellPage() {
                         const own = line.containersOut === '0';
                         const going = own ? 0 : due;
 
+                        const held = Number(line.depositCharged) || 0;
+                        const each = going > 0 ? held / going : 0;
+
+                        /*
+                         * Everything this line owes back, not just the crate.
+                         *
+                         * A crate of beer sends out the bottles as well, and the shop's own pools
+                         * say so. The deposit is one figure covering the lot, and the server splits
+                         * it across them in proportion to what each is worth — so the screen has to
+                         * say that rather than let "per crate" imply the whole sum sits there.
+                         */
+                        const alsoBack = (returnables[line.productId] ?? [])
+                          .filter((r) => r.categoryId !== container.categoryId)
+                          .map((r) => r.categoryName.toLowerCase());
+
                         return (
-                          <div className={styles.emptiesLine}>
-                            <span>
-                              {going > 0
-                                ? `${formatQty(going)} ${container.categoryName.toLowerCase()} going out`
-                                : `No ${container.categoryName.toLowerCase()} going out`}
-                            </span>
-                            <button
-                              type="button"
-                              className={styles.emptiesToggle}
-                              aria-pressed={own}
-                              onClick={() =>
-                                updateLine(activeOrder.clientUuid, line.key, {
-                                  containersOut: own ? '' : '0',
-                                })
-                              }
-                            >
-                              {own ? 'No — ours are going out' : 'They brought their own'}
-                            </button>
-                          </div>
+                          <>
+                            <div className={styles.emptiesLine}>
+                              <span>
+                                {going > 0
+                                  ? `${formatQty(going)} ${container.categoryName.toLowerCase()} going out`
+                                  : `No ${container.categoryName.toLowerCase()} going out`}
+                              </span>
+                              <button
+                                type="button"
+                                className={styles.emptiesToggle}
+                                aria-pressed={own}
+                                onClick={() =>
+                                  updateLine(activeOrder.clientUuid, line.key, {
+                                    containersOut: own ? '' : '0',
+                                    // Nothing is going out, so nothing is held against it. Leaving
+                                    // the money behind would charge a customer a deposit on
+                                    // containers they brought themselves.
+                                    ...(own ? {} : { depositCharged: '' }),
+                                  })
+                                }
+                              >
+                                {own ? 'No — ours are going out' : 'They brought their own'}
+                              </button>
+                            </div>
+
+                            {/*
+                              WHAT IS BEING TAKEN AGAINST THEM.
+
+                              A rate, not a price, and it has no fixed value: N125 a crate for one
+                              customer, nothing for the one who has bought here for ten years. The
+                              pool's own figure is offered as a starting point and nothing more —
+                              filling it in automatically would have the till collect money nobody
+                              agreed to.
+
+                              Blank and zero are DIFFERENT here and both are kept: blank is nobody
+                              asked, zero is "on trust", and a shop chasing a crate months later
+                              needs to know which of those happened.
+                            */}
+                            {going > 0 && (
+                              <div className={styles.depositLine}>
+                                <Field
+                                  label={`Deposit per ${container.categoryName.toLowerCase()}`}
+                                  numeric
+                                  prefix="₦"
+                                  value={line.depositCharged === '' ? '' : String(round2(each))}
+                                  placeholder={
+                                    container.depositPerUnit != null
+                                      ? String(container.depositPerUnit)
+                                      : '0'
+                                  }
+                                  hint={
+                                    line.depositCharged === ''
+                                      ? container.depositPerUnit != null
+                                        ? `Usually ₦${formatQty(container.depositPerUnit)} — leave blank if none was taken`
+                                        : 'Leave blank if none was taken'
+                                      : held === 0
+                                        ? 'On trust — nothing collected'
+                                        : alsoBack.length > 0
+                                          ? `${formatMoney(held)} held, covering the ${alsoBack.join(' and ')} as well`
+                                          : `${formatMoney(held)} held on this line`
+                                  }
+                                  onChange={(e) => {
+                                    const v = e.target.value.trim();
+                                    const rate = Number(v);
+                                    updateLine(activeOrder.clientUuid, line.key, {
+                                      depositCharged:
+                                        v === '' || !Number.isFinite(rate)
+                                          ? ''
+                                          : String(round2(rate * going)),
+                                    });
+                                  }}
+                                />
+                              </div>
+                            )}
+                          </>
                         );
                       })()}
 

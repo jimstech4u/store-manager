@@ -11,8 +11,15 @@ import { getSupabase } from '@/lib/supabase/client';
 import { accountsChanged } from '@/lib/stacks/customer-account';
 import { stockMoved } from '@/lib/stacks/catalog-stack';
 import { useListNotifier } from '@/hooks/useListChannel';
-import { formatMoney, messageOf } from '@/lib/format';
-import { chargesTotal, lineTotal, type DraftOrder } from '@/lib/stacks/draft-orders';
+import { formatMoney, formatQty, messageOf } from '@/lib/format';
+import {
+  chargesTotal,
+  containersGoingOut,
+  depositTotal,
+  lineTotal,
+  round2,
+  type DraftOrder,
+} from '@/lib/stacks/draft-orders';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 
 type Method = 'cash' | 'transfer' | 'pos';
@@ -178,11 +185,52 @@ export function TakePayment({
   /*
    * The goods alone, and the sale as a whole.
    *
-   * `total` arrives with the charges already in it, so the items figure is that less the charges
-   * rather than a second sum over the lines — one arithmetic, one answer, and the two lines on
-   * screen can never disagree.
+   * `total` arrives with the charges AND the deposit already in it, so the items figure is that
+   * less both rather than a second sum over the lines — one arithmetic, one answer, and the lines
+   * on screen can never disagree.
+   *
+   * Subtracting the deposit matters more than it looks. It is money the customer hands over and
+   * the shop owes back; left inside "Items" it reads as what the drinks cost, which is exactly the
+   * misreading that makes a shop think its prices are higher than they are.
    */
-  const itemsTotal = Math.max(0, total - chargesTotal(order));
+  const held = depositTotal(order);
+  const itemsTotal = Math.max(0, total - chargesTotal(order) - held);
+
+  /** How many containers the whole order is sending out — what a flat deposit is spread over. */
+  const containersOut = order.lines.reduce((sum, l) => sum + containersGoingOut(l), 0);
+
+  /*
+   * Spread a single figure back across the lines.
+   *
+   * In proportion to what each line already holds, so a shop that set N2,500 on one line and
+   * N1,500 on another keeps that judgement when it rounds the total down. With nothing set yet,
+   * by container, which is the only other measure that does not invent an opinion.
+   *
+   * The last line takes the rounding, so the parts always add back to the figure that was typed.
+   * A deposit that does not reconcile to the money in the drawer is worse than no deposit.
+   */
+  const spreadDeposit = (want: number) => {
+    const lines = order.lines.filter((l) => containersGoingOut(l) > 0);
+    if (lines.length === 0) return;
+
+    const weights = lines.map((l) => {
+      const own = Number(l.depositCharged);
+      return held > 0 && Number.isFinite(own) ? own : containersGoingOut(l);
+    });
+    const sum = weights.reduce((a, b) => a + b, 0);
+    if (sum <= 0) return;
+
+    let left = want;
+    const next = order.lines.map((l) => {
+      const i = lines.indexOf(l);
+      if (i < 0) return l;
+      const isLast = i === lines.length - 1;
+      const part = isLast ? left : round2((want * weights[i]) / sum);
+      left = round2(left - part);
+      return { ...l, depositCharged: String(part) };
+    });
+    onUpdateOrder({ lines: next });
+  };
 
   const remaining = Math.max(total - paid, 0);
 
@@ -376,6 +424,42 @@ export function TakePayment({
           <span>Items</span>
           <span>{formatMoney(itemsTotal)}</span>
         </div>
+
+        {/*
+          THE DEPOSIT, NAMED AND EDITABLE.
+
+          It is in the total because the customer hands it over, and on its own line because the
+          shop owes it back. Typed here it spreads across the lines that are sending containers out,
+          so the two ways a deposit gets agreed — a rate per crate at the till, a round figure at
+          the counter — end in the same place.
+
+          Only shown when something is actually going out. A deposit box on a sale of sachet water
+          is a question with no answer.
+        */}
+        {containersOut > 0 && (
+          <div className={styles.deposit}>
+            <span className={styles.depositLabel}>
+              Deposit on {formatQty(containersOut)} container{containersOut === 1 ? '' : 's'}
+            </span>
+            <Field
+              label=""
+              numeric
+              prefix="₦"
+              value={held ? String(round2(held)) : ''}
+              placeholder="0"
+              hint={
+                held > 0
+                  ? `${formatMoney(round2(held / containersOut))} each — comes back when they do`
+                  : 'Blank or 0 means the containers went out on trust'
+              }
+              onChange={(e) => {
+                const v = e.target.value.trim();
+                const want = Number(v);
+                spreadDeposit(v === '' || !Number.isFinite(want) ? 0 : want);
+              }}
+            />
+          </div>
+        )}
 
         {/*
           Charges sit with the goods, under their total.

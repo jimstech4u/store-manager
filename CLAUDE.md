@@ -165,6 +165,12 @@ keeping — the rule alone is forgettable, the bug behind it is not.
   Serials are now scoped to the document that issued them, because the counter restarts at 0 on a
   reload while the browser's entries keep their old numbers — the same number meaning two
   different entries is how a log answers confidently and wrongly.
+- **A cleanup that does not check is worse than none.** The deposit probe snapshotted the shop's
+  draft ids, diffed afterwards, and printed "nothing left behind" — while leaving an order every
+  run. PostgREST caps a response at **1,000 rows**, this shop has 1,057 drafts, and both reads were
+  silently truncated, so the new order fell outside the window. No error, no empty result, just a
+  window that quietly stopped covering the thing being looked for. Keep the id when you write the
+  row rather than searching for it after, and finish by READING what is still there and saying so.
 - **Probes clean up after themselves.** `stock_movements` is append-only and refuses deletes, so a
   probe that received stock cannot remove its product — five "Cost probe" items sat in the shop's
   real picker, and ninety-three empty draft tabs accumulated in the customer bar. Retire what
