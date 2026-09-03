@@ -75,6 +75,15 @@ export default function CustomerFormPage() {
   const [phone, setPhone] = useState('');
   const [business, setBusiness] = useState('');
   const [busy, setBusy] = useState(false);
+
+  /*
+   * Whether there is anybody for the rest of the form to be about.
+   *
+   * Everything below the name asks about a PERSON — what they already owe, what containers they are
+   * holding. Trimmed, so whitespace is not a name; not otherwise validated, because a form that
+   * hides itself again when somebody backspaces to fix a typo is worse than one that shows early.
+   */
+  const named = name.trim() !== '';
   const problem = useProblem();
 
   /*
@@ -308,6 +317,23 @@ export default function CustomerFormPage() {
         a fact somebody checked; a blank is a question nobody asked, and the two look identical a
         month later.
       */}
+      {/*
+        NOTHING BELOW THIS UNTIL SOMEBODY IS NAMED.
+
+        What they already owe, and what containers they are holding, are questions about a person.
+        With the name still empty they are questions about nobody — and when this form is pushed
+        from a counter they are marked REQUIRED, so the quickest way through it asked for answers it
+        had not yet made answerable.
+      */}
+      {!named && (
+        <p className={styles.waiting}>
+          Give them a name first. What they already owe, and anything of yours they are holding,
+          will appear here.
+        </p>
+      )}
+
+      {named && (
+      <>
       <h2 className={styles.section}>Before you started here</h2>
       <p className={styles.sectionNote}>
         From your book, if you have been trading with them already. Dated before today, so your
@@ -428,6 +454,9 @@ export default function CustomerFormPage() {
             <span>None are out with them</span>
           </label>
         </>
+      )}
+
+      </>
       )}
 
       <Field

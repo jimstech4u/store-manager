@@ -156,6 +156,16 @@ export function ProductForm({
   const { units: existingUnits } = useProductUnits(product?.id ?? null);
   const { units: storeUnits, add: addStoreUnit } = useStoreUnits(storeId);
   const [units, setUnits] = useState<ProductUnit[]>([]);
+
+  /*
+   * Whether the rest of the form has anything to attach itself to.
+   *
+   * NOT `unitProblems(units) === null`, which is the save rule and is stricter — it wants a sold
+   * shape and every measurement filled in. Gating on that makes the sections below flicker out
+   * while somebody is halfway through typing "12" into a crate, which is worse than showing them
+   * early. One named shape is enough for "how many on the shelf?" to have an answer.
+   */
+  const hasAShape = units.some((u) => u.name.trim() !== '');
   const [discounts, setDiscounts] = useState<Discount[]>([]);
 
   const [scanning, setScanning] = useState(false);
@@ -579,7 +589,26 @@ export function ProductForm({
         form refuses to conflate them: a shop that has run out is worth recording, a shop that never
         looked is a number nobody should trust.
       */}
-      {!editing && (
+      {/*
+        NOTHING BELOW THIS UNTIL THERE IS A SHAPE.
+
+        Every question under here is ABOUT a shape. "On the shelf right now" is a number in one of
+        them, and twelve means nothing until the form knows twelve of what; the container question
+        asks about a shape nobody has named. Both used to sit there from the first keystroke, and in
+        `minimum` mode they were marked required — so the fastest path through the form demanded
+        answers it had not yet made answerable.
+
+        A line rather than nothing at all, because a form that silently grows as you type it is
+        unsettling. Say what is waiting and why.
+      */}
+      {!hasAShape && (
+        <p className={styles.waiting}>
+          Say what it comes in first. What is on the shelf, and whether the container comes back,
+          are both about a shape — they will appear here once there is one.
+        </p>
+      )}
+
+      {!editing && hasAShape && (
         <>
           <h2 className={styles.section}>What you have now</h2>
           <p className={styles.sectionNote}>

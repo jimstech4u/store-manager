@@ -367,6 +367,25 @@ warning becomes furniture too.
   till" is not "do not show this to the owner". Settings → This device lists what was put away and
   gives it back; add the id to `NOTICE_NAMES` so it can be listed by name.
 
+## A form asks what it can answer for, and nothing else yet
+
+The product form asked "On the shelf right now" before any shape was named — twelve of what? — and
+the customer form asked "They already owe you" before anybody was named. In `minimum` mode, the one
+a counter uses with somebody waiting, both were marked REQUIRED, so the fastest path through the
+form demanded answers it had not made answerable.
+
+Everything below the shapes is ABOUT a shape; everything below the name is about a person. Both wait
+now, and say what they are waiting for — a form that silently grows as you type it is unsettling,
+and a dashed line naming what unlocks the rest costs nothing.
+
+- **Gate on the loosest honest signal.** The product form gates on one shape having a NAME, not on
+  `unitProblems` returning null — that is the save rule and is stricter, and gating on it makes the
+  sections flicker out while somebody is halfway through typing "12" into a crate. The customer form
+  gates on the name being non-empty, not valid, so backspacing to fix a typo does not hide the form.
+- **Gate on whether it was STARTED, not on whether the condition still holds.** See the empties
+  screen: "Where are the 9 pieces?" was gated on the shortfall being non-zero, so filling in the
+  write-off balanced the count and deleted the section — taking the money box with it.
+
 ## Nothing makes the shop leave what it is doing
 
 An item or a customer can be created wherever one is chosen — the till, a delivery, a count, a

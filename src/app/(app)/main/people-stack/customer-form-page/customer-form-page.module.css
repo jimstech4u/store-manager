@@ -99,3 +99,14 @@
 }
 
 .toggleRow input { width: 18px; height: 18px; flex: none; }
+
+/* What is waiting, and why — in the place the rest of the form will appear. A form that silently
+   grows as you type it is unsettling; one that says what unlocks it is not. */
+.waiting {
+  margin: var(--space-4) 0 0;
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  border: 1px dashed var(--border);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
