@@ -173,3 +173,9 @@
   font-weight: 700;
   color: var(--warning);
 }
+
+/* The heading over what the customer is still holding. Bold rather than a real heading element:
+   a receipt is one column of text and an <h> in the middle of it prints as a gap. */
+.emptiesHead {
+  font-weight: 600;
+}

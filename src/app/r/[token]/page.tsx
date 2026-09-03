@@ -30,11 +30,22 @@ interface SharedReceipt {
     product_name: string;
     base_unit: string;
     entered_qty: string;
-    pack_name: string | null;
+    /** The shape it was sold in, already pluralised by the shop's own word for it. */
+    unit_name: string | null;
     unit_price: string;
     line_total: string;
+    containers_out: string;
+    deposit: string;
   }[];
-  payments: { amount: string; method: string; occurred_at: string }[];
+  /** Every extra billed, by name — "what was this ₦2,000 for?" is asked weeks later. */
+  charges: { label: string; amount: string; note: string | null }[];
+  /** Money held against containers. Not payment for anything: it comes back when they do. */
+  deposit_total: string;
+  /** What is still out, grouped the way a shop counts it — by category, not by brand. */
+  empties: { category: string; qty: string; deposit: string }[];
+  /** Grouped by method, because that is what somebody checks against their own record. */
+  payments: { amount: string; method: string }[];
+  paid_total: string;
 }
 
 /**
@@ -124,7 +135,17 @@ export default function SharedReceiptPage({
   }
 
   const { shop, sale, customer, lines, payments } = receipt;
-  const paid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
+  const charges = receipt.charges ?? [];
+  const empties = receipt.empties ?? [];
+  const depositHeld = Number(receipt.deposit_total ?? 0);
+  /*
+   * The server's figure, not a sum of what this page happened to be sent.
+   *
+   * Adding up the payments on the page meant the receipt and the shop's books could disagree the
+   * moment the two lists differed for any reason — a payment allocated elsewhere, a rounding, a
+   * partial. `paid_total` is computed from the allocations by the same query that lists them.
+   */
+  const paid = Number(receipt.paid_total ?? 0);
   const owing = Number(sale.total) - paid;
   const width = Number(shop.printer_width_mm) || 80;
   const narrow = width < 58;
@@ -157,9 +178,17 @@ export default function SharedReceiptPage({
             <div className={styles.line} key={l.id}>
               <p className={styles.lineName}>{l.product_name}</p>
               <div className={styles.lineDetail} style={narrow ? { display: 'block' } : undefined}>
+                {/*
+                  THE SHAPE, as the seller said it.
+
+                  `pack_name` came from `product_packs`, the one-pack-per-product model 0061
+                  replaced. A shop that defined its shapes on this software has no pack, so this
+                  fell through to the base unit and a customer who bought three crates was handed
+                  a receipt for thirty-six pieces.
+                */}
                 <span>
                   {formatQty(l.entered_qty)}{' '}
-                  {l.pack_name ?? pluralUnit(l.base_unit, Number(l.entered_qty))} ×{' '}
+                  {l.unit_name ?? pluralUnit(l.base_unit, Number(l.entered_qty))} ×{' '}
                   {formatMoney(l.unit_price)}
                 </span>
                 <span className={styles.lineTotal}>{formatMoney(l.line_total)}</span>
@@ -169,10 +198,46 @@ export default function SharedReceiptPage({
         </div>
 
         <div className={styles.totals}>
-          {Number(sale.fee_amount) > 0 && (
+          {/*
+            EVERY CHARGE, BY NAME.
+
+            The receipt showed one `fee_amount` under whatever label the till happened to carry, so
+            a bill with a delivery fee AND a loading charge showed one of them and quietly added
+            the other to the total. `sale_charges` has held them separately since 0042; this page
+            had never read it.
+
+            The order-level fee is written into `sale_charges` too (0074), so listing both would
+            bill the customer twice on paper. The named list wins where there is one.
+          */}
+          {charges.length > 0
+            ? charges.map((c, i) => (
+                <div className={styles.row} key={i}>
+                  <span>
+                    {c.label}
+                    {c.note ? ` — ${c.note}` : ''}
+                  </span>
+                  <span className={styles.value}>{formatMoney(c.amount)}</span>
+                </div>
+              ))
+            : Number(sale.fee_amount) > 0 && (
+                <div className={styles.row}>
+                  <span>{sale.fee_label || 'Extra charge'}</span>
+                  <span className={styles.value}>{formatMoney(sale.fee_amount)}</span>
+                </div>
+              )}
+
+          {/*
+            THE DEPOSIT, said as its own line.
+
+            It is inside the total the customer paid, and it is not payment for anything — it comes
+            back when the containers do. Folded into the total and named nowhere, the receipt read
+            as though the drinks cost that much more, and the customer had nothing in writing
+            saying the shop owes it.
+          */}
+          {depositHeld > 0 && (
             <div className={styles.row}>
-              <span>{sale.fee_label || 'Extra charge'}</span>
-              <span className={styles.value}>{formatMoney(sale.fee_amount)}</span>
+              <span>Deposit on containers</span>
+              <span className={styles.value}>{formatMoney(depositHeld)}</span>
             </div>
           )}
 
@@ -181,6 +246,8 @@ export default function SharedReceiptPage({
             <span className={styles.value}>{formatMoney(sale.total)}</span>
           </div>
 
+          {/* Grouped by method by the reader: "Cash ₦20,000, Transfer ₦9,950" is what somebody
+              checks against their own record, rather than nine rows of the same word. */}
           {payments.map((p, i) => (
             <div className={styles.row} key={i}>
               <span>Paid ({p.method})</span>
@@ -195,6 +262,33 @@ export default function SharedReceiptPage({
             </div>
           )}
         </div>
+
+        {/*
+          WHAT THE CUSTOMER IS HOLDING.
+
+          Grouped the way a shop counts it — two Gulder and two Star are four NBL crates, because
+          that is what goes on the pallet. Netted, so somebody who has already brought some back
+          sees what is left rather than the number they originally left with, and the deposit
+          against it only where one was actually taken: containers sent out on trust are still owed
+          back, and saying "₦0 held" beside them reads like nothing is owed at all.
+        */}
+        {empties.length > 0 && (
+          <div className={styles.totals}>
+            <div className={styles.row}>
+              <span className={styles.emptiesHead}>Still to come back</span>
+            </div>
+            {empties.map((e, i) => (
+              <div className={styles.row} key={i}>
+                <span>
+                  {formatQty(e.qty)} {e.category}
+                </span>
+                {Number(e.deposit) > 0 && (
+                  <span className={styles.value}>{formatMoney(e.deposit)} held</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
         {sale.note && <p className={styles.foot}>{sale.note}</p>}
         {sale.transfer_details && <div className={styles.transfer}>{sale.transfer_details}</div>}

@@ -280,6 +280,12 @@ export function useDraftOrders(storeId: string | null) {
               product_id: l.productId,
               qty: Number(l.qty),
               pack_id: l.packId,
+              /*
+               * THE SHAPE. `pack_id` is the retired one-pack-per-product id and is still sent so
+               * old rows keep reading; this is what the seller actually chose, and the server
+               * refuses one that does not belong to the product.
+               */
+              sale_unit_id: l.saleUnitId,
               base_qty: lineBaseQty(l),
               unit_price: Number(l.unitPrice) || 0,
               line_total: lineTotal(l),
@@ -472,8 +478,10 @@ export function useDraftOrders(storeId: string | null) {
         const { data: lineRows } = await supabase
           .from('draft_order_lines')
           .select(
-            'id, product_id, entered_qty, entered_pack_id, unit_price, containers_out, position,' +
-              ' products(name, base_unit), product_packs(name, base_unit_qty)',
+            'id, product_id, entered_qty, entered_pack_id, sale_unit_id, unit_price,' +
+              ' containers_out, position, products(name, base_unit),' +
+              ' product_packs(name, base_unit_qty),' +
+              ' product_units(base_qty, store_units(name))',
           )
           .eq('draft_order_id', draftId)
           .order('position');
@@ -483,10 +491,12 @@ export function useDraftOrders(storeId: string | null) {
           product_id: string;
           entered_qty: string;
           entered_pack_id: string | null;
+          sale_unit_id: string | null;
           unit_price: string;
           containers_out: string;
           products: { name: string; base_unit: string } | null;
           product_packs: { name: string; base_unit_qty: string } | null;
+          product_units: { base_qty: string; store_units: { name: string } | null } | null;
         };
 
         const claimed: DraftOrder = {
@@ -513,9 +523,18 @@ export function useDraftOrders(storeId: string | null) {
             packQty: l.product_packs?.base_unit_qty ?? null,
             unitPrice: String(l.unit_price),
             containersOut: String(l.containers_out ?? 0),
-            saleUnitId: null,
-            saleUnitName: null,
-            saleUnitBaseQty: null,
+            /*
+              THE SHAPE COMES BACK.
+
+              These were three nulls with no comment, which read as "a claimed order has no shape"
+              rather than "we could not store one". A crate claimed on another till returned as a
+              piece — same price each, so the bill quietly fell by twelve and so did the stock
+              taken off the shelf. Nothing on screen looked wrong, which is what made it costly.
+            */
+            saleUnitId: l.sale_unit_id,
+            saleUnitName: l.product_units?.store_units?.name ?? null,
+            saleUnitBaseQty:
+              l.product_units?.base_qty != null ? String(l.product_units.base_qty) : null,
           })),
         };
 

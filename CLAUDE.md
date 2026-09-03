@@ -211,6 +211,53 @@ The editor was two lists, "Sold in" and "Bought in", with a note under the secon
 anything you also sell is "already above". That explanation was the design telling on itself. One
 list now.
 
+**A quantity is DECOMPOSED, never divided.** 1,196 bottles is "99 crates 8 bottles" — not "99.67
+crates", which no shop has ever said and nobody can check against a shelf: the eight loose bottles,
+the entire reason the figure is not round, vanish into a decimal. `stockInShapes` in
+`src/lib/shape-quantities.ts` — pure, no imports, so it is testable as arithmetic — walks the tree
+largest-first, drops shapes that divide to nothing, and says a sub-smallest remainder as a fraction
+of the smallest shape the shop names. Stock below zero is said as ONE signed figure and not
+decomposed, because "minus 1 crate 4 bottles" reads like something somebody could go and find.
+
+The reader behind it (`product_selling_units`, 0084) returns every shape with ANY role, not only
+sold ones: a shop selling Malta only in packs of 24 has no sold shape below a pack, so 250 cans read
+"10 packs 0.42 packs". A shape's role is exactly the evidence that the shop has a word for it.
+
+**A shape has to survive the whole chain, and it did not.** The till asked which shape and then
+threw the answer away: `save_draft_order` was sent `pack_id` — the retired one-pack-per-product id
+from before 0061 — and nothing else. So the draft could not store it, `settle_draft_order` could not
+pass it on, the sale line had nowhere to keep it, and both public pages named quantities through
+`product_packs`. Four places, one missing column, and the symptom in each was a different-looking
+bug.
+
+The costly one was not the receipt. Claiming an order read the shape back as null, so three crates
+returned as three pieces at the same price each: the bill and the stock movement both fell by twelve
+and nothing on screen looked wrong. A shop whose shapes were migrated from packs in 0061 still had a
+pack for `to_base_qty` to multiply by and never saw it; a shop that DEFINED its shapes on this
+software had no pack at all and got it on every sale.
+
+`sale_unit_id` on `draft_order_lines` and `sale_lines` (0085), carried through settling (0086), read
+by both public pages (0087). The server checks the shape belongs to the product rather than trusting
+a client-authored id, and derives the base quantity from it when the caller did not send one.
+`scripts/probe-shape-through-the-chain.mjs` writes a draft, reads it back the way a claiming till
+does, and cancels it — it settles nothing, because a settled sale moves stock and nothing here can
+move it back.
+
+**Check what a reader RETURNS, not just that it ran.** The same probe found that
+`deposit_ledger.direction` is `('collected','paid')` while `public_track_token` had been testing it
+against `'out'` since 0064 — never true, so every empties figure on the customer's tracking page has
+been negative for as long as the page has existed: "-10 NBL crate", with "-₦1,250" beside it. It was
+caught because the block was copied into the new receipt reader and the first live call was read
+rather than merely checked for an error.
+
+**And it has to reach every screen that says it.** Four do — the stock list, a product, the count
+screen, and the picker on a delivery — and after the list was fixed the other three were still
+dividing or showing base units, importing the corrected function without calling it. The function
+being right is not the claim; the screen saying it is. `scripts/probe-shape-read-ui.mjs` clicks all
+four, and SUPPLIES the shelf by intercepting the read rather than writing one: no product in the
+sample shop has two shapes and a remainder, and a round number reads identically either way, so the
+same probe against the shop as it stands passes while proving nothing.
+
 ## One form per record, and it is a page
 
 There is ONE product form and ONE customer form, and mid-sale reaches them by pushing the real
@@ -310,6 +357,19 @@ summed into a total — "loading" and "union levy" mean something to the person 
 Click-through with Playwright is the standard of proof — `tsc` passing is not evidence a screen
 works. Probes are `scripts/probe-*.mjs`, dev server on port 3100. Write probes that can actually
 fail: mutation-test them by removing the fix. See INSTRUCTIONS.md §6 for the harness traps.
+
+**Port 3100 runs `next start`, not `next dev` — a BUILD, so an edit is not on it until you rebuild.**
+A probe run against it after changing a screen tests the previous version, and says so in the
+language of a defect: three screens were reported as still speaking in base units for twenty minutes
+after they had been fixed, and the debug line added to find out why never appeared either. Rebuild
+and restart before believing a UI probe, either way round — a PASS on a stale build is the worse
+half of this, because nothing looks wrong.
+
+Restarting means freeing the port, not launching another one. `next start` on a taken port logs
+`EADDRINUSE` and exits while the OLD server keeps answering — on a `.next` the rebuild has already
+replaced, so it serves HTML naming chunks that no longer exist and the page renders nothing a
+locator can find. Kill the listener by port (`Get-NetTCPConnection -LocalPort 3100`), confirm it is
+free, then start.
 
 Before saying it is done: `npx tsc --noEmit`, `npx next lint`, `npx next build`, and the probes
 for the areas touched.

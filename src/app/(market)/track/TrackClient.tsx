@@ -40,7 +40,14 @@ interface TrackedOrder {
     unit_price: string;
     line_total: string;
   }[];
-  charges: { label: string; amount: string }[];
+  charges: { label: string; amount: string; note?: string | null }[];
+  /**
+   * Money held against containers. Inside the total, and not payment for anything — it comes back
+   * when the crates do, which is precisely why it has to be named rather than absorbed.
+   */
+  deposit_total?: string;
+  /** What is still out, grouped the way a shop counts it: by category, not by brand. */
+  empties?: { category: string; qty: string; deposit: string }[];
   total: string;
 }
 
@@ -319,10 +326,28 @@ export function TrackClient({ initialToken }: { initialToken?: string } = {}) {
 
             {order.charges.map((c, i) => (
               <div className={styles.line} key={`${c.label}-${i}`}>
-                <span className={styles.lineName}>{c.label}</span>
+                {/* The note as well as the label: "Transport" answers less than "Transport —
+                    Ojoo to Sango", and the second is what the shop actually typed. */}
+                <span className={styles.lineName}>
+                  {c.label}
+                  {c.note ? ` — ${c.note}` : ''}
+                </span>
                 <span className={styles.lineTotal}>{formatMoney(c.amount)}</span>
               </div>
             ))}
+
+            {/*
+              THE DEPOSIT, ON ITS OWN LINE.
+
+              It was inside the total and named nowhere, so the order read as though the drinks cost
+              that much more and the customer had nothing saying the shop owes it back.
+            */}
+            {Number(order.deposit_total ?? 0) > 0 && (
+              <div className={styles.line}>
+                <span className={styles.lineName}>Deposit on containers</span>
+                <span className={styles.lineTotal}>{formatMoney(order.deposit_total ?? 0)}</span>
+              </div>
+            )}
 
             {order.status !== 'cancelled' && (
               <div className={styles.grand}>
@@ -350,6 +375,32 @@ export function TrackClient({ initialToken }: { initialToken?: string } = {}) {
                     <span>{formatMoney(Number(order.total) - Number(order.paid ?? 0))}</span>
                   </div>
                 )}
+                {/*
+                  WHAT THE CUSTOMER IS STILL HOLDING.
+
+                  Netted, so somebody who has already brought some back sees what is left rather
+                  than the number they originally left with. The deposit is shown only where one
+                  was actually taken — containers sent out on trust are still owed back, and "₦0
+                  held" beside them reads like nothing is owed at all.
+                */}
+                {(order.empties ?? []).length > 0 && (
+                  <>
+                    <div className={styles.line}>
+                      <span className={styles.lineName}>Still to come back</span>
+                    </div>
+                    {(order.empties ?? []).map((e, i) => (
+                      <div className={styles.line} key={`${e.category}-${i}`}>
+                        <span className={styles.lineName}>
+                          {formatQty(e.qty)} {e.category}
+                        </span>
+                        {Number(e.deposit) > 0 && (
+                          <span className={styles.lineTotal}>{formatMoney(e.deposit)} held</span>
+                        )}
+                      </div>
+                    ))}
+                  </>
+                )}
+
                 <p className={styles.settled}>
                   Paid for on {new Date(order.updated_at).toLocaleDateString()}. This is your
                   receipt — keep the link.
