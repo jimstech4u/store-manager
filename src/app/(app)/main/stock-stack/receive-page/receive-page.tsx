@@ -10,7 +10,7 @@ import { Field } from '@/components/ui/Field';
 import { ProductPicker } from '@/components/catalog/ProductPicker';
 import { Explain, InfoPanel, WorkedExample } from '@/components/ui/Explain';
 import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
-import { useBuyingUnits } from '@/lib/stacks/selling-units';
+import { stockInShapes, useBuyingUnits, useSellingUnits } from '@/lib/stacks/selling-units';
 import { useAuth } from '@/providers/AuthProvider';
 import { fetchProduct, stockMoved, useProductList, type Product } from '@/lib/stacks/catalog-stack';
 import { useListNotifier } from '@/hooks/useListChannel';
@@ -91,6 +91,8 @@ export default function ReceivePage() {
    * request per row is fine with eight products and painful with eight hundred.
    */
   const { byProduct: buyUnits } = useBuyingUnits(store?.id ?? null);
+  // Every shape with stock on it, for the "what is already here" line in the picker.
+  const { byProduct: shelfShapes } = useSellingUnits(store?.id ?? null);
 
   /*
    * The stock list, so a delivery can say what it changed.
@@ -648,12 +650,22 @@ export default function ReceivePage() {
           });
         }}
         emptyHint="Nothing by that name yet — add it here and carry on with the delivery."
-        renderMeta={(p) => (
-          <>
-            {formatQty(p.onHand)} {pluralUnit(p.baseUnit, Number(p.onHand))} in stock
-            {p.categoryName ? ` · ${p.categoryName}` : ''}
-          </>
-        )}
+        renderMeta={(p) => {
+          /*
+            READ WHILE DECIDING HOW MUCH MORE TO TAKE. "1196 bottles in stock" makes somebody do a
+            division standing at a lorry; "99 crates 8 bottles" is the answer they were after.
+          */
+          const shapes = shelfShapes.get(p.id);
+          return (
+            <>
+              {shapes && shapes.length > 0
+                ? stockInShapes(shapes)
+                : `${formatQty(p.onHand)} ${pluralUnit(p.baseUnit, Number(p.onHand))}`}{' '}
+              in stock
+              {p.categoryName ? ` · ${p.categoryName}` : ''}
+            </>
+          );
+        }}
       />
 
 

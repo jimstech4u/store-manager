@@ -16,6 +16,8 @@ import { searchProducts, useProductList, type Product } from '@/lib/stacks/catal
 import {
   alsoReadsAs,
   leadUnit,
+  stockInShapes,
+  pricedUnit,
   useSellingUnits,
   useStockWorth,
   useUnitGaps,
@@ -202,13 +204,12 @@ export default function StockPage() {
             </div>
             <div className={styles.itemQty}>
               {(() => {
-                const lead = leadUnit(byProduct.get(p.id));
-                const qty = lead ? lead.onHand : Number(p.onHand);
-                const unit = lead
-                  ? qty === 1
-                    ? lead.name
-                    : lead.plural
-                  : pluralUnit(p.baseUnit, Number(p.onHand));
+                const shapes = byProduct.get(p.id);
+                if (shapes && shapes.length > 0) {
+                  return <span className={styles.qtyShapes}>{stockInShapes(shapes)}</span>;
+                }
+                const qty = Number(p.onHand);
+                const unit = pluralUnit(p.baseUnit, qty);
                 return (
                   <>
                     <span className={styles.qtyValue}>{formatQty(qty)}</span>
@@ -293,8 +294,8 @@ export default function StockPage() {
                       {lead
                         ? `${formatMoney(lead.cost, 2)} per ${lead.name.toLowerCase()} cost`
                         : `${formatMoney(p.avgUnitCost, 2)} per ${p.baseUnit} cost`}
-                      {lead?.price != null && (
-                        <span>· sells for {formatMoney(lead.price)}</span>
+                      {pricedUnit(sellingUnits)?.price != null && (
+                        <span>· sells for {formatMoney(pricedUnit(sellingUnits)!.price!)}</span>
                       )}
                       {p.categoryName && <span>· {p.categoryName}</span>}
                       {p.costIsEstimated && <span className={styles.estimate}>estimated</span>}
@@ -313,17 +314,28 @@ export default function StockPage() {
                       <p className={styles.itemMeta}>{alsoReadsAs(sellingUnits, lead)}</p>
                     )}
                   </div>
+                  {/*
+                    WHAT IS ON THE SHELF, SAID IN SHAPES.
+
+                    This read "99.67 crates" — a division of 1,196 bottles by twelve. No shop says
+                    that, and nobody can check it against a shelf: the eight loose bottles, which
+                    are the whole reason the figure is not round, disappeared into a decimal.
+                  */}
                   <div className={styles.itemQty}>
-                    <span className={`${styles.qtyValue} ${out ? styles.qtyLow : ''}`}>
-                      {formatQty(onHand)}
-                    </span>
-                    <span className={styles.qtyUnit}>
-                      {lead
-                        ? onHand === 1
-                          ? lead.name
-                          : lead.plural
-                        : pluralUnit(p.baseUnit, Number(p.onHand))}
-                    </span>
+                    {sellingUnits.length > 0 ? (
+                      <span className={`${styles.qtyShapes} ${out ? styles.qtyLow : ''}`}>
+                        {stockInShapes(sellingUnits)}
+                      </span>
+                    ) : (
+                      <>
+                        <span className={`${styles.qtyValue} ${out ? styles.qtyLow : ''}`}>
+                          {formatQty(onHand)}
+                        </span>
+                        <span className={styles.qtyUnit}>
+                          {pluralUnit(p.baseUnit, Number(p.onHand))}
+                        </span>
+                      </>
+                    )}
                   </div>
                   <ChevronRightIcon className={styles.itemChevron} />
                   </button>

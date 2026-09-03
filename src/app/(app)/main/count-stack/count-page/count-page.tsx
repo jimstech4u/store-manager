@@ -16,7 +16,7 @@ import { useStackBack } from '@/hooks/useStackBack';
 import { searchProducts, useProductList, type Product } from '@/lib/stacks/catalog-stack';
 import { useListChannel } from '@/hooks/useListChannel';
 import { formatQty, pluralUnit } from '@/lib/format';
-import { leadUnit, useSellingUnits } from '@/lib/stacks/selling-units';
+import { stockInShapes, useSellingUnits } from '@/lib/stacks/selling-units';
 
 /**
  * The stock count — CRODS.
@@ -49,12 +49,18 @@ export default function CountPage() {
   const { byProduct } = useSellingUnits(store?.id ?? null);
 
   const saidAs = (p: { id: string; onHand: string | number; baseUnit: string }) => {
-    const unit = leadUnit(byProduct.get(p.id));
-    const base = Number(p.onHand);
-    if (!unit) return `${formatQty(base)} ${pluralUnit(p.baseUnit, base)}`;
+    /*
+     * DECOMPOSED, not divided.
+     *
+     * This divided into the leading shape, so a shelf of 1,596 pieces read "133.08 packs" — and the
+     * twelve loose pieces that are the entire reason it is not 133 vanished into a decimal. The one
+     * thing a count has to do is let somebody standing at the shelf say yes or no.
+     */
+    const shapes = byProduct.get(p.id);
+    if (shapes && shapes.length > 0) return stockInShapes(shapes);
 
-    const n = base / unit.baseQty;
-    return `${formatQty(n)} ${n === 1 ? unit.name : unit.plural}`;
+    const base = Number(p.onHand);
+    return `${formatQty(base)} ${pluralUnit(p.baseUnit, base)}`;
   };
 
   /*

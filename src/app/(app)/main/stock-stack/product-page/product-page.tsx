@@ -16,7 +16,7 @@ import { usePermission } from '@/hooks/usePermission';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useProduct, type Product } from '@/lib/stacks/catalog-stack';
 import { useListNotifier } from '@/hooks/useListChannel';
-import { useSellingUnits } from '@/lib/stacks/selling-units';
+import { stockInShapes, useSellingUnits } from '@/lib/stacks/selling-units';
 import { unitGaps, useProductUnits } from '@/lib/stacks/product-units';
 import { useProductEmpties } from '@/lib/stacks/empties';
 import { formatMoney, formatQty, pluralUnit, messageOf } from '@/lib/format';
@@ -181,7 +181,14 @@ export default function ProductPage() {
       <ProblemDialog problem={removeError} title="Not removed" />
 
         {onHand !== 0 && (
-          <InfoPanel tone="warning" title={`There are still ${formatQty(product.onHand)} on the shelf`}>
+          <InfoPanel
+            tone="warning"
+            title={`There ${onHand === 1 ? 'is' : 'are'} still ${
+              sellingUnits.length > 0
+                ? stockInShapes(sellingUnits)
+                : `${formatQty(product.onHand)} ${pluralUnit(product.baseUnit, onHand)}`
+            } on the shelf`}
+          >
             Removing it now takes that stock out of what your shop is worth. Do this only if the
             item is finished, written off, or was never really there.
           </InfoPanel>
@@ -197,8 +204,21 @@ export default function ProductPage() {
         <div className={styles.fact}>
           <dt className={styles.factLabel}>On the shelf</dt>
           <dd className={`${styles.factValue} ${onHand <= 0 ? styles.low : ''}`}>
-            {formatQty(product.onHand)}{' '}
-            <span className={styles.factUnit}>{pluralUnit(product.baseUnit, onHand)}</span>
+            {/*
+              IN THE SHAPES THE SHOP NAMES.
+
+              This said "1196 bottles" — true, and not what a distributor keeps in their head or
+              can check against a wall of crates. The base unit is the unit the ARITHMETIC is done
+              in; it was never meant to be the unit the shop is spoken to in.
+            */}
+            {sellingUnits.length > 0 ? (
+              stockInShapes(sellingUnits)
+            ) : (
+              <>
+                {formatQty(product.onHand)}{' '}
+                <span className={styles.factUnit}>{pluralUnit(product.baseUnit, onHand)}</span>
+              </>
+            )}
           </dd>
         </div>
 
@@ -309,8 +329,11 @@ export default function ProductPage() {
           <span className={styles.unitsMain}>
             <span className={styles.unitsTitle}>The shapes it comes in</span>
             <span className={styles.unitsNote}>
-              {sellingUnits.length > 0
-                ? `Sold in ${sellingUnits.map((u) => u.plural.toLowerCase()).join(', ')}`
+              {sellingUnits.filter((u) => u.isSold).length > 0
+                ? `Sold in ${sellingUnits
+                    .filter((u) => u.isSold)
+                    .map((u) => u.plural.toLowerCase())
+                    .join(', ')}`
                 : 'Not set up yet — say what a customer can buy'}
             </span>
           </span>

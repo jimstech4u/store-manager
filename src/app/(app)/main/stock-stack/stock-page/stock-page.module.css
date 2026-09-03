@@ -122,3 +122,11 @@
   color: var(--text-muted);
   min-height: var(--touch-min);
 }
+
+/* Stock said in shapes — "99 crates 8 bottles" is a sentence, not a figure and a label. */
+.qtyShapes {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  text-align: right;
+  line-height: var(--leading-tight);
+}

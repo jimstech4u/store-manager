@@ -36,6 +36,24 @@ export interface SellingUnit {
   avgCost: number;
   price: number | null;
   isReturnable: boolean;
+  /**
+   * The shop's whole position for this product, in base units, undivided.
+   *
+   * `onHand` is this divided by `baseQty`, which is where "99.6667 crates" comes from. The raw
+   * figure is what lets the shape tree decompose it into a sentence somebody can check.
+   */
+  onHandBase: number;
+  isCounted: boolean;
+  isDeposit: boolean;
+  /**
+   * Whether a customer can buy in this shape.
+   *
+   * The reader hands back every shape the shop has a ROLE for, not only sellable ones — a shop that
+   * sells Malta by the pack of 24 still needs the can to say what is on the shelf. A screen that
+   * offers something for sale must filter on this.
+   */
+  isSold: boolean;
+  isBought: boolean;
   wholeDigit: boolean;
   allowQuarter: boolean;
   allowHalf: boolean;
@@ -54,6 +72,11 @@ interface Row {
   avg_cost_per_unit: string;
   price_per_unit: string | null;
   is_returnable: boolean;
+  on_hand_base?: string | number;
+  is_counted?: boolean;
+  is_deposit?: boolean;
+  is_sold?: boolean;
+  is_bought?: boolean;
   whole_digit: boolean;
   allow_quarter: boolean;
   allow_half: boolean;
@@ -72,6 +95,11 @@ const toUnit = (r: Row): SellingUnit => ({
   avgCost: Number(r.avg_cost_per_unit),
   price: r.price_per_unit === null ? null : Number(r.price_per_unit),
   isReturnable: r.is_returnable,
+  onHandBase: Number(r.on_hand_base ?? 0),
+  isCounted: Boolean(r.is_counted),
+  isDeposit: Boolean(r.is_deposit),
+  isSold: r.is_sold !== false,
+  isBought: Boolean(r.is_bought),
   wholeDigit: r.whole_digit,
   allowQuarter: r.allow_quarter,
   allowHalf: r.allow_half,
@@ -142,6 +170,20 @@ export function alsoReadsAs(units: SellingUnit[] | undefined, lead: SellingUnit 
 export function leadUnit(units: SellingUnit[] | undefined): SellingUnit | null {
   if (!units || units.length === 0) return null;
   return units.find((u) => u.isDefault) ?? units[0];
+}
+
+/**
+ * The shape a price should be read from.
+ *
+ * `leadUnit` answers "what does the shop count in", which since 0084 can be a shape it never sells
+ * — a wholesaler counting cartons it only ever breaks open. Asking that one for a price gets null,
+ * and a product that plainly has prices looks as though it has none.
+ */
+export function pricedUnit(units: SellingUnit[] | undefined): SellingUnit | null {
+  if (!units) return null;
+  const sold = units.filter((u) => u.isSold);
+  if (sold.length === 0) return null;
+  return sold.find((u) => u.isDefault) ?? sold.find((u) => u.price != null) ?? sold[0];
 }
 
 /**
@@ -314,3 +356,10 @@ export interface StockWorth {
   items: number;
   itemsInStock: number;
 }
+
+/*
+ * The stock sentence lives in `shape-quantities.ts` — pure, importable without React, and testable
+ * on its own. Re-exported here so every screen keeps one place to import from.
+ */
+export { stockInShapes } from '@/lib/shape-quantities';
+export type { ShapeQuantity } from '@/lib/shape-quantities';
