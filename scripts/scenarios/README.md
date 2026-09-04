@@ -39,6 +39,8 @@ Each of these was live, and none of them was visible from any single screen.
 | **A cancelled receipt said nothing** | scenario 11 | The link the customer holds read as a live bill — items, total, what is owed, the shop's bank account — for a sale the shop had cancelled. (0095) |
 | **A product must be LINKED to a pool** | scenario 5 | Ticking `is_returnable` says a shape comes back. It does not say into what, and without the link four crates went out and the ledger recorded none of them. |
 | **A delivery line says `base_factor`** | scenario 2 | Not `base_qty`. Twenty crates arrived as twenty bottles and the whole ₦94,000 landed on them. |
+| **A deposit taken on a sale could not be given back** | scenario 24 | `record_sale` wrote the rate onto the ledger but never a `deposit_holdings` row, and settling reads that table. So the settle screen said "Nothing was held for these" on a receipt that had taken ₦500 — the shop had taken money it had no way to return. `hold_receipt_deposit` was added in 0076 for exactly this and had no caller anywhere. (0096) |
+| **Two gaps hiding each other** | scenario 24 | `void_sale` released a holding with the reason `'sale_voided'`, which the column's check constraint did not allow. It had never failed because a sale had never written a holding at all. (0096) |
 
 ---
 
@@ -57,6 +59,11 @@ ledgers put back and the money left alone · 9 the permission, and the refusal o
 started coming back · 10 a shared receipt in shapes, an older receipt settled by a later payment,
 and a link taken back · 11 a voided sale on the customer's own copy
 
+**Money on an account** — 21 a payment, stamped by the shop and off the balance · 22 a deposit
+taken over the counter and given back, held without becoming a debt · 23 two broken, part of the
+deposit kept, and the difference between a refund and income · 24 a deposit taken on a SALE, findable
+from the receipt · 25 the statement, with the voided sale on it and not charging
+
 **Edges** — 12 half a crate · 13 a third of one, refused · 14 overselling, and honest negative
 stock · 15 the same order settled twice from two devices · 16 paying more than the bill · 17 an
 empty sale and a line of nothing · 18 a price below cost, with the loss visible · 19 two customers
@@ -70,8 +77,6 @@ Next, roughly in the order a shop would miss them.
 
 - [ ] **A delivery corrected or reversed.** The same question as scenario 8, on the buying side.
       There is no `void_purchase`, and a mis-keyed delivery moves both stock and cost.
-- [ ] **Money in and out of an account** — a payment, a charge, a credit, a refund, and a statement
-      that adds up afterwards. `account-action-page` reaches five RPCs and none is in the benchmark.
 - [ ] **Two shops.** Nothing here proves a reader is scoped to one: `is_store_member` is on
       everything, and a benchmark with a second shop and a second owner would prove it rather than
       assume it.
