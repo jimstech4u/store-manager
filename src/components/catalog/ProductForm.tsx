@@ -160,9 +160,11 @@ export function ProductForm({
   /*
    * WHICH GROUPS THIS IS IN — several, on purpose.
    *
-   * Goldberg is a Beer, it comes in a PET bottle, and it is an NBL product. Three groupings that
-   * answer different questions, and a distributor uses all three: which crate it goes back in is an
-   * NBL question, what shelf it sits on is a Beer question.
+   * Goldberg is a beer, it comes in a PET bottle, and Nigerian Breweries made it. Three groupings
+   * answering three different questions, and a distributor uses all of them — because the EMPTIES
+   * belong to the brewery and are interchangeable across everything bought from it. An NBL crate
+   * takes any NBL bottle, so "who made it" is what the lorry asks when it comes to collect, and
+   * "what shelf does it sit on" is a different question entirely.
    */
   const { groups } = useProductGroups(storeId ?? null);
   const [groupIds, setGroupIds] = useState<string[]>([]);
@@ -677,7 +679,7 @@ export function ProductForm({
             Somebody typing "NBL" is usually about to find out it does not exist yet, and sending
             them to a settings screen to make one means abandoning the product they are half way
             through entering. The server returns the existing id if there is one, so a shop that
-            forgot it already had an NBL group gets that group rather than a telling-off.
+            forgot it already had a Nigerian Breweries group gets that group, not a telling-off.
           */
           if (!storeId || !typed.trim()) return;
           setMakingGroup(true);

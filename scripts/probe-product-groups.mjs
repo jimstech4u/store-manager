@@ -10,7 +10,7 @@
  * it looks answered.
  *
  * The half a scan could never have found is the SHAPE: one category per product cannot say what a
- * shop means. Goldberg is a Beer, it comes in a PET bottle, and it is an NBL product — three
+ * shop means. Goldberg is a beer, it comes in a PET bottle, and Nigerian Breweries made it — three
  * groupings answering three different questions, and a distributor uses all of them.
  *
  * WRITES a group and links, and cleans both up: `product_category_links` is an ordinary table, not

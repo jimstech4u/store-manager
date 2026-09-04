@@ -2,9 +2,13 @@
  * The groups a shop sorts its products into — NBL, Guinness, Beer, PET.
  *
  * MANY per product, and that is the whole point. One category per product cannot say what a shop
- * means: Goldberg is a Beer, it comes in a PET bottle, and it is an NBL product. Three groupings
- * that answer different questions, and a distributor uses all three — which crate it goes back in
- * is an NBL question, what shelf it sits on is a Beer question.
+ * means: Goldberg is a beer, it comes in a PET bottle, and NIGERIAN BREWERIES made it.
+ *
+ * The maker is the one that earns its keep, because the empties belong to the brewery and are
+ * interchangeable across everything bought from it — an NBL crate takes any NBL bottle, a Guinness
+ * crate any Guinness bottle. That is why `empties_categories` names its pools "NBL crate" and
+ * "NBL bottle" rather than one per brand, and why "who made it" is worth recording next to "what
+ * shelf does it sit on", which is a different question with a different answer.
  *
  * `product_categories` held three rows since the shop was seeded and every product form sent
  * `p_category_id: null`, so the column was read and never written. 0093 gave it a join table, a way

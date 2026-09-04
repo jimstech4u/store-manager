@@ -10,9 +10,13 @@
 -- There is also no function to make one, so the three that exist are the three there will ever be.
 --
 -- The other half is the shape of it. One category per product cannot say what a shop actually
--- means: Goldberg is a BEER, it comes in a PET bottle, and it is an NBL product — three groupings
--- that answer different questions, and a distributor uses all three. Which crate it goes back in is
--- an NBL question; what shelf it sits on is a Beer question.
+-- means: Goldberg is a BEER, it comes in a PET bottle, and NIGERIAN BREWERIES made it.
+--
+-- The maker is the grouping that earns its keep. The empties belong to the brewery and are
+-- interchangeable across everything bought from it — an NBL crate takes any NBL bottle, whether it
+-- held Star, Gulder or Goldberg — which is exactly why `empties_categories` names its pools
+-- "NBL crate" and "NBL bottle" rather than one per brand. "Who made it" is what the lorry asks when
+-- it comes to collect; "what shelf does it sit on" is a different question with a different answer.
 --
 -- So: many-to-many, a writer for each verb, and groups a shop can name for itself.
 
@@ -36,9 +40,10 @@ create table if not exists public.product_category_links (
 
 comment on table public.product_category_links is
   'Which groups a product belongs to. Many-to-many because a shop means several things at once by '
-  '"what is this": Goldberg is a Beer, a PET, and an NBL product, and each answers a different '
-  'question. ON DELETE CASCADE both ways — a link is not a fact about anything once either end is '
-  'gone, unlike a ledger row.';
+  '"what is this": Goldberg is a beer, it comes in a PET bottle, and Nigerian Breweries made it. '
+  'The maker is the one that earns its keep, because a brewery''s empties come back interchangeably '
+  'across everything bought from it. ON DELETE CASCADE both ways — a link is not a fact about '
+  'anything once either end is gone, unlike a ledger row.';
 
 create index if not exists product_category_links_by_category
   on public.product_category_links (category_id);
