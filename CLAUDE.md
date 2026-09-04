@@ -406,6 +406,27 @@ tries has ten empty fields on it for the nine that do not apply this time.
 The shop names each one as it adds it. That is also why the fees are stored by name rather than
 summed into a total — "loading" and "union levy" mean something to the person reading it back.
 
+## Permission in a store says nothing about the ids you were handed
+
+`has_permission(p_store_id, 'deposits.manage')` answers "may this person act in this shop". It does
+not answer "is this customer theirs" or "is this pool theirs", and all four deposit writers trusted
+both. A member of one shop could write rows into another shop's ledger, against another shop's
+customer, into another shop's pool — and every READ is scoped by `is_store_member`, so the shop
+being written to could not see how the rows got there.
+
+`take_deposit` is the one worth remembering. It DID look the pool up by `(id, store_id)` — inside a
+`coalesce`, to find a default rate:
+
+    v_per := coalesce(p_per_unit, (select deposit from empties_categories
+                                    where id = p_category_id and store_id = p_store_id));
+
+Supply `p_per_unit` and the subquery never runs, so the check never happens. **A guard that only
+fires when an optional argument is missing is not a guard.** It reads like one, which is why it
+survived — and it took a benchmark with two shops in it to notice, because with one shop every id
+belongs to you.
+
+`assert_deposit_target` (0097) is called first thing, where no argument can skip it.
+
 ## The benchmark never stops growing
 
 `node scripts/run-scenarios.mjs` puts a week of trade through a shop it creates and drops. It is not
