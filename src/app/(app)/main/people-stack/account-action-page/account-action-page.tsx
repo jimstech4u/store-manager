@@ -108,7 +108,6 @@ export default function AccountActionPage() {
           p_amount: Number(amount),
           p_method: method,
           p_reference: note.trim() || null,
-          p_occurred_at: now,
           p_client_uuid: crypto.randomUUID(),
           p_bank_account_id: null,
         });
@@ -119,7 +118,6 @@ export default function AccountActionPage() {
           p_customer_id: customerId,
           p_category_id: poolId,
           p_qty: Number(qty),
-          p_occurred_at: now,
           p_client_uuid: crypto.randomUUID(),
           p_refund_mode: refundMode,
         });
@@ -132,7 +130,6 @@ export default function AccountActionPage() {
           p_qty: Number(qty),
           p_per_unit: amount.trim() === '' ? null : Number(amount),
           p_note: note.trim() || null,
-          p_occurred_at: now,
         });
         if (error) throw error;
       } else if (kind === 'refund') {
@@ -142,7 +139,6 @@ export default function AccountActionPage() {
           p_category_id: poolId,
           p_qty: Number(qty),
           p_note: note.trim() || null,
-          p_occurred_at: now,
         });
         if (error) throw error;
       } else if (kind === 'breakage') {
@@ -153,7 +149,6 @@ export default function AccountActionPage() {
           p_qty: Number(qty),
           p_amount: Number(amount),
           p_note: note.trim() || null,
-          p_occurred_at: now,
         });
         if (error) throw error;
       } else {

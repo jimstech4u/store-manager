@@ -127,6 +127,25 @@ export const scenarios = [
         },
       ]);
 
+      /*
+       * AND WHERE THE CRATES GO BACK TO.
+       *
+       * Ticking `is_returnable` on the crate says this shape comes back. It does not say into WHAT,
+       * and those are different facts: the crate comes back into the NBL pool, where it is
+       * interchangeable with every other NBL crate. Without the link `returnables_for_sale` returns
+       * nothing, so containers leave and the ledger records none of them — the shop believes it is
+       * owed nothing and the customer keeps the crates.
+       */
+      const { error: linkErr } = await shop.rpc('set_product_returnable', {
+        p_store_id: storeId,
+        p_product_id: id,
+        p_category_name: 'NBL crate',
+        p_kind: 'container',
+        p_qty_per_base_unit: 1,
+        p_deposit: 1500,
+      });
+      check('the crate is linked to the pool it comes back into', !linkErr, linkErr?.message ?? '');
+
       const { data: shapes } = await shop.rpc('product_selling_units', { p_store_id: storeId });
       const mine = (shapes ?? []).filter((u) => u.product_id === id);
       expectQty('both shapes are saved', mine.length, 2);
@@ -177,7 +196,6 @@ export const scenarios = [
         // Transport is its own argument, not a line: it belongs to the whole load and is spread
         // across it, which is the entire reason a landed cost differs from an invoice price.
         p_delivery: 6000,
-        p_occurred_at: new Date().toISOString(),
       });
       check('a delivery can be recorded', !recvErr, recvErr?.message ?? '');
       ctx.purchase = purchaseId;

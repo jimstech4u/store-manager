@@ -406,6 +406,25 @@ tries has ten empty fields on it for the nine that do not apply this time.
 The shop names each one as it adds it. That is also why the fees are stored by name rather than
 summed into a total — "loading" and "union levy" mean something to the person reading it back.
 
+## The clock belongs to the shop, not to the phone
+
+A money event is stamped by the server. Every RPC that records one defaults `p_occurred_at` to
+`now()`, and the app sends nothing — so it does not matter what a till phone thinks the time is.
+
+The benchmark found this by tripping over it. The machine running it was **eight seconds** behind
+the database, and eight seconds was enough to put a delivery and a sale outside the counting period
+that should have contained them: the count read "you are 147 over", demanded a reason for a
+discrepancy that was entirely the system's own arithmetic, and on closing wrote 147 bottles into
+stock that had never existed.
+
+The sale and delivery paths were already innocent. Five money writers were not — every action on a
+customer's account, and settling empties — and a shop phone is routinely minutes out and not rarely
+hours. The day a payment lands on is how a shop checks its drawer against its takings.
+
+Backdating stays where it is meant to be: `backfill_debtor` and `backfill_empties` take an `p_as_of`
+DATE, separately and on purpose, because "this is from the old book" is a thing somebody says
+deliberately.
+
 ## Verification
 
 Click-through with Playwright is the standard of proof — `tsc` passing is not evidence a screen

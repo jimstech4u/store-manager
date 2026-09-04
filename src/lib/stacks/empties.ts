@@ -167,7 +167,6 @@ export async function settleEmpties(args: {
     p_refund_amount: args.refundAmount,
     p_refund_mode: args.refundMode,
     p_note: args.note ?? null,
-    p_occurred_at: new Date().toISOString(),
   });
   if (error) throw error;
   accountsChanged();

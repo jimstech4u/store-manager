@@ -21,13 +21,14 @@
 
 import { closeShop, openShop, results } from './scenarios/harness.mjs';
 import { scenarios as opening } from './scenarios/01-a-shop-opens.mjs';
+import { scenarios as trading } from './scenarios/02-a-week-of-trade.mjs';
 
 /*
  * In order, because they build on each other. A scenario that needs a customer uses the one made in
  * scenario 1 — which is the point: a benchmark of isolated units would not find the failures that
  * only appear when a deposit taken on Monday meets a return on Thursday.
  */
-const ALL = [...opening];
+const ALL = [...opening, ...trading];
 
 const wanted = process.argv.slice(2).map(Number).filter((n) => !Number.isNaN(n));
 

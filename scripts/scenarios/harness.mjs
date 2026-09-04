@@ -11,6 +11,13 @@
  *
  * Every helper here goes through the SAME RPCs the app calls. A harness that writes rows directly
  * would pass while the app was broken, which is the one thing a benchmark must never do.
+ *
+ * AND IT SENDS WHAT THE APP SENDS — including, crucially, no `p_occurred_at`. The first trading run
+ * stamped every write with this machine's clock, which is eight seconds behind the database, and
+ * eight seconds put a delivery and a sale outside the counting period that should have contained
+ * them. The count then read "you are 147 over" and closing it wrote 147 bottles into stock that had
+ * never existed. The app was innocent — it lets the server stamp a sale — and the harness was
+ * testing a shop nobody runs. Let the server say when something happened.
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -291,7 +298,6 @@ export async function sell(storeId, { customerId = null, lines, payments = [], c
   const { data: saleId, error: settleErr } = await shop.rpc('settle_draft_order', {
     p_draft_id: draftId,
     p_payments: payments,
-    p_occurred_at: new Date().toISOString(),
     p_client_uuid: clientUuid,
   });
   if (settleErr) throw new Error(`settling: ${settleErr.message}`);
