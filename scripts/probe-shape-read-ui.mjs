@@ -39,8 +39,41 @@ const env = Object.fromEntries(
 const shop = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
   auth: { persistSession: false },
 });
+const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+  auth: { persistSession: false },
+});
 await shop.auth.signInWithPassword({ email: env.SAMPLE_EMAIL, password: env.SAMPLE_PASSWORD });
 const storeId = (await shop.rpc('my_membership')).data[0].store_id;
+
+/*
+ * ANY DRAFT THIS RUN OPENED, closed again.
+ *
+ * Visiting the Sell tab starts a customer, so a probe that only reads still leaves an empty tab
+ * behind — and three of them left twenty in one evening. Bounded by when this run started rather
+ * than by an id snapshot, because there are over a thousand drafts in this shop and PostgREST caps
+ * a response at a thousand rows: the snapshot silently truncates and the new ones fall outside it.
+ */
+const closeOpenedDrafts = async (startedAt) => {
+  const { data } = await admin
+    .from('draft_orders')
+    .select('id')
+    .eq('store_id', storeId)
+    .eq('status', 'open')
+    .gte('created_at', startedAt);
+
+  for (const r of data ?? []) await shop.rpc('cancel_draft_order', { p_draft_id: r.id });
+
+  const { data: left } = await admin
+    .from('draft_orders')
+    .select('id')
+    .eq('store_id', storeId)
+    .eq('status', 'open')
+    .gte('created_at', startedAt);
+  return { closed: (data ?? []).length, left: (left ?? []).length };
+};
+
+const runStartedAt = new Date(Date.now() - 1000).toISOString();
+
 
 let failed = 0;
 const check = (what, ok, detail = '') => {
@@ -263,6 +296,13 @@ try {
   check('no page errors along the way', errors.length === 0, errors.slice(0, 3).join(' | '));
 } finally {
   await browser.close();
+  const tidy = await closeOpenedDrafts(runStartedAt);
+  console.log(
+    tidy.left === 0
+      ? `  ok  ${tidy.closed} draft tab(s) opened by this run, all closed`
+      : `  FAIL  ${tidy.left} draft tab(s) left open in the shop`,
+  );
+  if (tidy.left > 0) failed += 1;
 }
 
 console.log(failed === 0 ? '\nall passed' : `\n${failed} failed`);
