@@ -40,6 +40,7 @@ Each of these was live, and none of them was visible from any single screen.
 | **A product must be LINKED to a pool** | scenario 5 | Ticking `is_returnable` says a shape comes back. It does not say into what, and without the link four crates went out and the ledger recorded none of them. |
 | **A delivery line says `base_factor`** | scenario 2 | Not `base_qty`. Twenty crates arrived as twenty bottles and the whole ₦94,000 landed on them. |
 | **A deposit taken on a sale could not be given back** | scenario 24 | `record_sale` wrote the rate onto the ledger but never a `deposit_holdings` row, and settling reads that table. So the settle screen said "Nothing was held for these" on a receipt that had taken ₦500 — the shop had taken money it had no way to return. `hold_receipt_deposit` was added in 0076 for exactly this and had no caller anywhere. (0096) |
+| **One shop could write into another's ledger** | scenario 26 | All four deposit writers checked permission in the store they were NAMED and then trusted the customer id and pool id handed to them. `take_deposit` did look the pool up by `(id, store_id)` — inside a coalesce, to find a default rate — so supplying `p_per_unit` skipped the check entirely. A guard that only fires when an optional argument is missing is not a guard. It took a benchmark with TWO shops to see it. (0097) |
 | **Two gaps hiding each other** | scenario 24 | `void_sale` released a holding with the reason `'sale_voided'`, which the column's check constraint did not allow. It had never failed because a sale had never written a holding at all. (0096) |
 
 ---
@@ -64,6 +65,11 @@ taken over the counter and given back, held without becoming a debt · 23 two br
 deposit kept, and the difference between a refund and income · 24 a deposit taken on a SALE, findable
 from the receipt · 25 the statement, with the voided sale on it and not charging
 
+**Two shops, and money that does not divide** — 26 a second shop that can see none of the first
+one's business, and cannot write into it · 27 seven sachets to a bag at ₦1,000, to the kobo through
+line, sale, balance and receipt · 28 a quarter, where the shape allows quarters · 29 one shelf asked
+three ways
+
 **Edges** — 12 half a crate · 13 a third of one, refused · 14 overselling, and honest negative
 stock · 15 the same order settled twice from two devices · 16 paying more than the bill · 17 an
 empty sale and a line of nothing · 18 a price below cost, with the loss visible · 19 two customers
@@ -77,9 +83,6 @@ Next, roughly in the order a shop would miss them.
 
 - [ ] **A delivery corrected or reversed.** The same question as scenario 8, on the buying side.
       There is no `void_purchase`, and a mis-keyed delivery moves both stock and cost.
-- [ ] **Two shops.** Nothing here proves a reader is scoped to one: `is_store_member` is on
-      everything, and a benchmark with a second shop and a second owner would prove it rather than
-      assume it.
 - [ ] **A staff member actually acting.** Scenario 3 checks what a role MAY do; nothing signs in as
       one and is refused.
 - [ ] **The tracking link while an order is still open**, and after it settles — the customer
@@ -91,5 +94,9 @@ Next, roughly in the order a shop would miss them.
 - [ ] **A deposit refunded in cash, and one left on account** — `refund_deposit` and
       `forfeit_deposit` are reached by the app and not by this.
 - [ ] **A product archived while it has stock**, and restored.
-- [ ] **Rounding.** A crate of seven at a price that does not divide, checked to the kobo through
-      the whole chain: line, sale, balance, receipt.
+- [ ] **The other writers, asked the same question 0097 asked.** `record_sale`, `record_purchase`,
+      `settle_empties` and `save_product_units` all take ids alongside a store id. The deposit four
+      trusted theirs; nothing has checked whether these do.
+- [ ] **A second OWNER, not just a second shop.** Scenario 26 uses one person owning both, which is
+      the harder read-side case and the easier write-side one. A different owner entirely would
+      close it.
