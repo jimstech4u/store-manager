@@ -406,6 +406,31 @@ tries has ten empty fields on it for the nine that do not apply this time.
 The shop names each one as it adds it. That is also why the fees are stored by name rather than
 summed into a total — "loading" and "union levy" mean something to the person reading it back.
 
+## The benchmark never stops growing
+
+`node scripts/run-scenarios.mjs` puts a week of trade through a shop it creates and drops. It is not
+a test suite that gets finished — **every session adds to it**, and the rule is simple: anything that
+could cost a shop money, stock, a container or a customer's trust gets a scenario, and the scenario
+goes in whether it passes or not. A red scenario naming a real gap is worth more than no scenario.
+
+It has already earned it several times over:
+
+- **The clock.** Eight seconds of skew put a delivery outside the period that should have contained
+  it; the count then wrote 147 phantom bottles into stock.
+- **A sale had no correction path at all.** `sales.status`, `sales.revision`, `sales.amend_reason`
+  and the `sales.amend` permission all existed; the function did not. 0094.
+- **A cancelled receipt said nothing** on the copy the customer is holding — it read as a live bill,
+  with the shop's bank account on it. 0095.
+- **A product must be LINKED to a pool.** Ticking `is_returnable` says a shape comes back; it does
+  not say into what, and without the link the containers leave and the ledger records nothing.
+
+Two rules for writing one:
+
+1. **Go through the RPCs the app calls, with the arguments it sends.** A harness that writes rows
+   directly passes while the app is broken, which is the one thing a benchmark must never do.
+2. **Assert the FIGURE, not that the call returned.** "A delivery can be recorded" passed while
+   twenty crates came in as twenty bottles. "The landed cost is ₦370.83" did not.
+
 ## The clock belongs to the shop, not to the phone
 
 A money event is stamped by the server. Every RPC that records one defaults `p_occurred_at` to

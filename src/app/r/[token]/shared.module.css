@@ -179,3 +179,23 @@
 .emptiesHead {
   font-weight: 600;
 }
+
+/* A cancelled receipt, said at the top.
+   Bordered rather than tinted, because this prints — and a colour that carries no meaning on a
+   black-and-white thermal roll is a notice that disappears exactly where it is most needed. */
+.cancelled {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0;
+  padding: 8px;
+  border: 2px solid currentColor;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cancelledNote {
+  text-transform: none;
+  letter-spacing: normal;
+  opacity: 0.8;
+}

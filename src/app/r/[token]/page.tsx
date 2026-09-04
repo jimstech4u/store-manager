@@ -23,6 +23,9 @@ interface SharedReceipt {
     fee_label: string | null;
     note: string | null;
     transfer_details: string | null;
+    /** 'posted' is a live receipt. 'voided' is one the shop has cancelled. */
+    status?: string;
+    cancelled_reason?: string | null;
   };
   customer: { name: string } | null;
   lines: {
@@ -162,6 +165,26 @@ export default function SharedReceiptPage({
           {shop.header && <p className={styles.headLine}>{shop.header}</p>}
         </div>
 
+        {/*
+          CANCELLED, SAID FIRST.
+
+          Found by the benchmark: void a sale and open the link the customer is holding, and it read
+          as a live bill — items, total, what is owed, the shop's bank account. Everything somebody
+          needs to go and pay for a sale that no longer exists.
+
+          At the top because a receipt is read from the top and put down. Everything else stays: it
+          is a record of what was nearly done, and somebody will ask about it.
+        */}
+        {sale.status === 'voided' && (
+          <div className={styles.cancelled} role="status">
+            <strong>This receipt was cancelled</strong>
+            {sale.cancelled_reason && <span> — {sale.cancelled_reason}</span>}
+            <span className={styles.cancelledNote}>
+              Nothing is owed on it. Ask the shop if you were expecting a different receipt.
+            </span>
+          </div>
+        )}
+
         <div className={styles.meta}>
           <span>{formatDateTime(sale.occurred_at)}</span>
           <span>#{sale.id.slice(0, 8).toUpperCase()}</span>
@@ -255,7 +278,7 @@ export default function SharedReceiptPage({
             </div>
           ))}
 
-          {owing > 0 && (
+          {owing > 0 && sale.status !== 'voided' && (
             <div className={`${styles.row} ${styles.owing}`}>
               <span>Balance</span>
               <span className={styles.value}>{formatMoney(owing)}</span>
