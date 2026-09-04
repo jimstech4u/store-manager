@@ -161,7 +161,10 @@ export function alsoReadsAs(units: SellingUnit[] | undefined, lead: SellingUnit 
       // Trimmed rather than rounded: a shop holding 12.5 kg should read 12.5, and 12.4999 is noise
       // from the division, not a fact about the drum.
       const qty = Number(u.onHand.toFixed(2));
-      return `${qty} ${qty === 1 ? u.name : u.plural}`;
+      // ABSOLUTE value for the plural: minus one bottle is still one bottle, and "-1 Bottles" is
+      // how the stock list read it. Lower-cased for the same reason every other quantity is —
+      // "Bottles" mid-sentence is a label that escaped from a form.
+      return `${qty} ${Math.abs(qty) === 1 ? u.name.toLowerCase() : u.plural.toLowerCase()}`;
     })
     .join(', ')}`;
 }

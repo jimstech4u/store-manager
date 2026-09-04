@@ -129,14 +129,28 @@ check('a fraction of a litre survives', stockInShapes(oil(50.5)), '2 drums 0.5 l
 
 console.log('\n— stock below zero, which is a real state —');
 /*
- * An offline sale, or a count still to be resolved. Said as one signed figure in the leading shape,
- * NOT decomposed — "minus 1 crate 4 bottles" reads like a quantity somebody could go and find.
+ * An offline sale, or a count still to be resolved. NOT decomposed — "minus 1 crate 4 bottles"
+ * reads like a quantity somebody could go and find.
+ *
+ * Said in the SMALLEST shape, which the page-by-page walk corrected: leading with the counting
+ * shape gave "-0.08 packs" on a real product, which is true, unactionable, and one bottle.
  */
 const short = [
   shape('Crate', 'Crates', 12, -16, { isCounted: true }),
   shape('Bottle', 'Bottles', 1, -16),
 ];
-check('said plainly, not decomposed', stockInShapes(short), '-1.33 crates');
+check('said in a shape somebody can act on', stockInShapes(short), '-16 bottles');
+
+// And a big shortfall reads in the big shape, because 124 crates short is what somebody chases.
+const shortLots = [
+  shape('Crate', 'Crates', 12, -1488, { isCounted: true }),
+  shape('Bottle', 'Bottles', 1, -1488),
+];
+check('a big one in the big shape', stockInShapes(shortLots), '-124 crates');
+
+// One of the smallest thing, not a hundredth of the biggest.
+const shortOne = [shape('Pack', 'Packs', 24, -1, { isCounted: true }), shape('Bottle', 'Bottles', 1, -1)];
+check('and one is one', stockInShapes(shortOne), '-1 bottle');
 
 console.log('\n— and against the live shop —');
 const shop = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {

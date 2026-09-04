@@ -196,8 +196,8 @@ export default function StockPage() {
                 {(() => {
                   const lead = leadUnit(byProduct.get(p.id));
                   return lead
-                    ? `${formatMoney(lead.cost, 2)} per ${lead.name.toLowerCase()} cost`
-                    : `${formatMoney(p.avgUnitCost, 2)} per ${p.baseUnit} cost`;
+                    ? `cost ${formatMoney(lead.cost, 2)} a ${lead.name.toLowerCase()}`
+                    : `cost ${formatMoney(p.avgUnitCost, 2)} a ${p.baseUnit}`;
                 })()}
                 {p.categoryName && <span>· {p.categoryName}</span>}
               </p>
@@ -292,8 +292,8 @@ export default function StockPage() {
                     <p className={styles.itemName}>{p.name}</p>
                     <p className={styles.itemMeta}>
                       {lead
-                        ? `${formatMoney(lead.cost, 2)} per ${lead.name.toLowerCase()} cost`
-                        : `${formatMoney(p.avgUnitCost, 2)} per ${p.baseUnit} cost`}
+                        ? `cost ${formatMoney(lead.cost, 2)} a ${lead.name.toLowerCase()}`
+                        : `cost ${formatMoney(p.avgUnitCost, 2)} a ${p.baseUnit}`}
                       {pricedUnit(sellingUnits)?.price != null && (
                         <span>· sells for {formatMoney(pricedUnit(sellingUnits)!.price!)}</span>
                       )}

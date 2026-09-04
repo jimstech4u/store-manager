@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect } from 'react';
 import styles from './money-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
@@ -14,6 +14,9 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useListChannel } from '@/hooks/useListChannel';
 import { useNav } from '@academix-admin/navigation-stack';
+import { useDemandState } from '@academix-admin/state-stack';
+import { useInvalidation } from '@/lib/stacks/invalidation';
+import { ACCOUNT_DERIVED_SCOPE } from '@/lib/stacks/customer-account';
 import { usePaginatedList, useInfiniteScroll } from '@/hooks/usePaginatedList';
 import { useProvideCustomers } from '@/lib/stacks/customer-directory';
 import { getSupabase } from '@/lib/supabase/client';
@@ -35,6 +38,14 @@ interface CustomerRow {
  * itself. A number you cannot trace is exactly what people distrust about accounting software —
  * and why they keep a paper book beside it.
  */
+/** What the whole shop is owed, and what it is holding — `store_money_owed`, 0091. */
+interface OwedSummary {
+  owed: string;
+  owed_by: number;
+  in_credit: string;
+  credit_to: number;
+}
+
 export default function MoneyPage() {
   const goBack = useStackBack();
   const nav = useNav();
@@ -114,10 +125,39 @@ export default function MoneyPage() {
     enabled: list.hasMore && !list.loading,
   });
 
-  const owed = useMemo(
-    () => list.items.reduce((sum, c) => sum + Math.max(Number(c.balance), 0), 0),
-    [list.items],
-  );
+  /*
+   * THE WHOLE SHOP'S RECEIVABLES, computed where the rows are.
+   *
+   * This was a sum over `list.items` — whatever pages of a PAGED list were in memory — so the
+   * headline grew as somebody scrolled and settled on a different answer each time. It read
+   * ₦7,492,810 against a real ₦23,254,747.50. The label said "loaded so far", which is honest about
+   * a figure that should not have been on the screen at all: it is the first and largest thing on
+   * it, which is to say it is the one somebody writes down.
+   *
+   * Not persisted and revalidated on mount: it is a headline figure that must be right when the
+   * screen is looked at, and it is one small row.
+   */
+  const [owedRow, demandOwed] = useDemandState<OwedSummary | null>(null, {
+    key: `money-owed:${store?.id ?? 'none'}`,
+    scope: ACCOUNT_DERIVED_SCOPE,
+    deps: [store?.id ?? ''],
+  });
+
+  const loadOwed = useCallback(() => {
+    if (!store) return;
+    void demandOwed(async ({ set }: { set: (v: OwedSummary, o?: { override?: boolean }) => void }) => {
+      const { data } = await getSupabase().rpc('store_money_owed', { p_store_id: store.id });
+      const row = ((data ?? []) as OwedSummary[])[0];
+      if (row) set(row, { override: true });
+    });
+  }, [store, demandOwed]);
+
+  useEffect(loadOwed, [loadOwed]);
+  // A payment recorded anywhere in the app changes this figure, so it re-reads rather than sitting
+  // on a total that was true when the screen was opened.
+  useInvalidation(ACCOUNT_DERIVED_SCOPE, loadOwed);
+
+  const owed = owedRow ? Number(owedRow.owed) : null;
 
   if (!store) return null;
 
@@ -174,9 +214,30 @@ export default function MoneyPage() {
     >
       <div className={styles.summary}>
         <span className={styles.summaryLabel}>
-          {list.hasMore ? 'Owed by those loaded so far' : 'Owed to you'}
+          Owed to you
+          {owedRow && Number(owedRow.owed_by) > 0 && (
+            <span className={styles.summaryBy}>
+              {' '}
+              by {owedRow.owed_by} {Number(owedRow.owed_by) === 1 ? 'customer' : 'customers'}
+            </span>
+          )}
         </span>
-        <span className={styles.summaryValue}>{formatMoney(owed)}</span>
+        <span className={styles.summaryValue}>
+          {owed == null ? '—' : formatMoney(owed)}
+        </span>
+
+        {/*
+          AND WHAT THE SHOP OWES BACK, on its own line rather than netted off.
+
+          A customer in credit is money the shop is holding. It cannot be spent covering somebody
+          else's debt, so subtracting it would understate the debt and hide the deposit at once.
+        */}
+        {owedRow && Number(owedRow.in_credit) > 0 && (
+          <span className={styles.summaryCredit}>
+            {formatMoney(owedRow.in_credit)} in credit to {owedRow.credit_to}{' '}
+            {Number(owedRow.credit_to) === 1 ? 'customer' : 'customers'}
+          </span>
+        )}
       </div>
 
       <SearchLauncher

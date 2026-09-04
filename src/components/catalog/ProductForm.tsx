@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
-import { CameraIcon } from '@/components/ui/Icon';
+import { CameraIcon, CloseIcon, PlusIcon } from '@/components/ui/Icon';
 import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
 import { UnitsEditor, unitProblems } from '@/components/catalog/UnitsEditor';
+import { GroupPicker } from '@/components/catalog/GroupPicker';
+import { createGroup, groupsFor, setProductGroups, useProductGroups } from '@/lib/stacks/product-groups';
 import { BarcodeScanner } from '@/components/catalog/BarcodeScanner';
 import { DiscountsEditor, type Discount } from '@/components/catalog/DiscountsEditor';
 import { useNav } from '@academix-admin/navigation-stack';
@@ -155,7 +157,42 @@ export function ProductForm({
    */
   const { units: existingUnits } = useProductUnits(product?.id ?? null);
   const { units: storeUnits, add: addStoreUnit } = useStoreUnits(storeId);
+  /*
+   * WHICH GROUPS THIS IS IN — several, on purpose.
+   *
+   * Goldberg is a Beer, it comes in a PET bottle, and it is an NBL product. Three groupings that
+   * answer different questions, and a distributor uses all three: which crate it goes back in is an
+   * NBL question, what shelf it sits on is a Beer question.
+   */
+  const { groups } = useProductGroups(storeId ?? null);
+  const [groupIds, setGroupIds] = useState<string[]>([]);
+  const [pickingGroups, setPickingGroups] = useState(false);
+  const [makingGroup, setMakingGroup] = useState(false);
+  const groupPickerId = useId();
+
   const [units, setUnits] = useState<ProductUnit[]>([]);
+
+  /*
+   * The groups this product is already in.
+   *
+   * Only when editing: a new product has none, and asking the server about an id that does not
+   * exist yet is a round trip whose answer is always empty.
+   */
+  useEffect(() => {
+    if (!product) return;
+    let cancelled = false;
+    void groupsFor(product.id)
+      .then((rows) => {
+        if (!cancelled) setGroupIds(rows.map((g) => g.id));
+      })
+      .catch(() => {
+        /* A product whose groups cannot be read still saves; it just starts with none shown, and
+           the form would then overwrite them. So it is left ALONE rather than cleared. */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [product]);
 
   /*
    * Whether the rest of the form has anything to attach itself to.
@@ -352,6 +389,16 @@ export function ProductForm({
           });
         }
       }
+
+      /*
+       * WHAT KIND OF THING IT IS, saved against the id.
+       *
+       * After the product exists, because a new one has no id until `create_product` answers.
+       * `set_product_groups` also keeps `products.category_id` pointing at the first group — the
+       * stock list and the receipt still read that column, and it has exactly one writer so it
+       * cannot drift.
+       */
+      await setProductGroups(id, groupIds);
 
       /*
        * Units before discounts, because a discount points at a unit.
@@ -566,6 +613,83 @@ export function ProductForm({
         not the same money — and one figure per product is what produced a receipt reading
         "1 piece, ₦4,500" for something sold by the pack.
       */}
+      {/*
+        WHAT KIND OF THING THIS IS.
+
+        The form sent `p_category_id: null` on every save since it was written, so the stock list
+        showed a category nothing could set — a field that cannot change anything, which is worse
+        than a missing one because it looks answered.
+
+        Above the shapes because a group says WHAT this is and a shape says how it is handled, and
+        because the shapes gate everything below them: anything that does not depend on a shape
+        belongs before that gate.
+      */}
+      <h2 className={styles.section}>What kind of thing is it?</h2>
+      <p className={styles.sectionNote}>
+        Groups are yours to name. A distributor usually wants the brewery — NBL, Guinness — and a
+        shopkeeper usually wants the shelf. A product can be in as many as it needs.
+      </p>
+
+      <div className={styles.groups}>
+        {groupIds.length > 0 && (
+          <ul className={styles.groupChips}>
+            {groupIds.map((id) => {
+              const g = groups.find((x) => x.id === id);
+              return (
+                <li key={id}>
+                  <button
+                    type="button"
+                    className={styles.groupChip}
+                    onClick={() => setGroupIds((prev) => prev.filter((x) => x !== id))}
+                    aria-label={`Take it out of ${g?.name ?? 'this group'}`}
+                  >
+                    {g?.name ?? 'A group'} <CloseIcon size="0.9em" />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
+        <button
+          type="button"
+          className={styles.groupAdd}
+          onClick={() => setPickingGroups(true)}
+        >
+          <PlusIcon /> {groupIds.length > 0 ? 'Add another group' : 'Choose its groups'}
+        </button>
+      </div>
+
+      <GroupPicker
+        id={groupPickerId}
+        isOpen={pickingGroups}
+        close={() => setPickingGroups(false)}
+        groups={groups}
+        chosen={groupIds}
+        busy={makingGroup}
+        onToggle={(id) =>
+          setGroupIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+        }
+        onAddNew={(typed) => {
+          /*
+            MADE WITHOUT LEAVING THE FORM, the way the customer and product pickers work.
+
+            Somebody typing "NBL" is usually about to find out it does not exist yet, and sending
+            them to a settings screen to make one means abandoning the product they are half way
+            through entering. The server returns the existing id if there is one, so a shop that
+            forgot it already had an NBL group gets that group rather than a telling-off.
+          */
+          if (!storeId || !typed.trim()) return;
+          setMakingGroup(true);
+          void createGroup(storeId, typed.trim())
+            .then((id) => setGroupIds((prev) => (prev.includes(id) ? prev : [...prev, id])))
+            .catch(() => {
+              /* The picker stays open and the shop can try a different name. */
+            })
+            .finally(() => setMakingGroup(false));
+        }}
+      />
+
       <h2 className={styles.section}>The shapes it comes in</h2>
       <p className={styles.sectionNote}>
         A crate, and the bottles inside it. Say what each holds once, then tick what it is for —

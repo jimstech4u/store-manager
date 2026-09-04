@@ -166,3 +166,19 @@
   font-size: var(--text-sm);
   color: var(--text-muted);
 }
+
+/* How many people that is. Beside the label rather than under the figure: it qualifies the words,
+   not the money. */
+.summaryBy {
+  font-weight: 400;
+  opacity: 0.75;
+}
+
+/* What the shop owes BACK, kept separate from what it is owed — netting them would understate the
+   debt and hide the deposit in one stroke. */
+.summaryCredit {
+  display: block;
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}

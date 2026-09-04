@@ -35,13 +35,30 @@ export function stockInShapes(units: ShapeQuantity[] | undefined): string {
 
   /*
    * Negative stock is a real state — an offline sale, a count still to be resolved — and it must
-   * not be dressed up. Said as one figure in the leading shape, with its sign, rather than
-   * decomposed into a sentence that would read as a quantity somebody could go and find.
+   * not be dressed up. NOT decomposed, because "minus 1 crate 4 bottles" reads like a quantity
+   * somebody could go and find.
+   *
+   * Said in the SMALLEST shape, which is the correction the walk found: leading with the counting
+   * shape produced "−0.08 packs", which is true, unactionable, and one bottle. In the smallest
+   * shape the same figure is a whole number and an instruction — "−1 bottle" — and the sign still
+   * makes it unmistakable for something on the shelf.
    */
   if (left < 0) {
-    const lead = shapes.find((u) => u.isCounted) ?? shapes[0];
-    const qty = Number((left / lead.baseQty).toFixed(2));
-    return `${qty} ${Math.abs(qty) === 1 ? lead.name.toLowerCase() : lead.plural.toLowerCase()}`;
+    /*
+     * The biggest shape it comes out whole in — largest first, so a shortfall of 1,488 bottles is
+     * "-124 crates" and a shortfall of one is "-1 bottle". Both were got wrong in turn by fixing
+     * the shape rather than the rule: the counting shape gave "-0.08 packs", the smallest gave
+     * "-1488 pieces", and each is true and unactionable.
+     *
+     * Nothing divides only when the shortfall is genuinely fractional, and then the smallest shape
+     * with a decimal is the honest answer rather than a tidy lie.
+     */
+    const readsWhole = shapes.find(
+      (u) => u.baseQty > 0 && Math.abs(left / u.baseQty - Math.round(left / u.baseQty)) < 1e-9,
+    );
+    const unit = readsWhole ?? shapes[shapes.length - 1];
+    const qty = Number((left / unit.baseQty).toFixed(2));
+    return `${qty} ${Math.abs(qty) === 1 ? unit.name.toLowerCase() : unit.plural.toLowerCase()}`;
   }
 
   const parts: string[] = [];

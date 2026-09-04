@@ -167,3 +167,47 @@ li + li .emptiesRow { border-top: 1px solid var(--border); }
   color: var(--text-muted);
   line-height: var(--leading-normal);
 }
+
+/* What each shape costs and sells for.
+   A table rather than a stack of facts, because the whole point is reading DOWN a column: the shop
+   compares a crate's cost with a crate's price, and then a bottle's with a bottle's. */
+.shapeMoney {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: var(--space-3);
+}
+
+.shapeRow {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr;
+  gap: var(--space-2);
+  align-items: baseline;
+  padding: var(--space-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.shapeRow + .shapeRow {
+  border-top: 1px solid var(--border);
+}
+
+.shapeHead {
+  background: var(--surface-sunken);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  font-variant-numeric: normal;
+}
+
+.shapeName {
+  font-weight: 600;
+}
+
+/* How many of the base unit one of these is — quiet, because it is a definition and not a figure. */
+.shapeOf {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.shapePrice {
+  font-weight: 600;
+}

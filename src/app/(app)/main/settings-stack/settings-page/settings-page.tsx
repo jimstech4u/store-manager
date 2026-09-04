@@ -317,6 +317,27 @@ export default function SettingsPage() {
               </span>
             </span>
           </button>
+
+          {/*
+            THE POOLS, AND WHAT IS HELD AGAINST THEM.
+
+            "NBL crate" holds N1,500 in this shop and "NBL bottle" N125. Both were put there by a
+            migration and nothing could change either: `save_empties_category` was written in 0082
+            for a screen nobody built, and it edits only — so there was no way to make the first
+            pool either. Under Money because a deposit is money the shop is holding.
+          */}
+          <button
+            type="button"
+            className={styles.linkRow}
+            onClick={() => nav.push('pools_page')}
+          >
+            <span className={styles.linkMain}>
+              <span className={styles.linkName}>Crates and bottles</span>
+              <span className={styles.sectionNote}>
+                What comes back to you, and what you usually hold against it
+              </span>
+            </span>
+          </button>
         </>
       )}
 

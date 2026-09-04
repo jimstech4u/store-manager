@@ -64,6 +64,9 @@ export default function ProductPage() {
   const sellingUnits = byProduct.get(productId ?? '') ?? [];
   const gapUnits = unitGaps(productUnits).map((u) => u.name.toLowerCase());
 
+  /** Every shape, largest first — the order a shop names them in. */
+  const shapes = [...sellingUnits].sort((a, b) => b.baseQty - a.baseQty);
+
   const [removing, setRemoving] = useState(false);
   const removeError = useProblem();
   const [busy, setBusy] = useState(false);
@@ -222,20 +225,51 @@ export default function ProductPage() {
           </dd>
         </div>
 
-        <div className={styles.fact}>
-          <dt className={styles.factLabel}>What it cost you</dt>
-          <dd className={styles.factValue}>
-            {formatMoney(product.avgUnitCost, 2)}
-            <span className={styles.factUnit}> per {product.baseUnit}</span>
-          </dd>
-        </div>
+        {/*
+          IN A SHAPE THE SHOP NAMED.
 
-        {product.listPrice && (
+          This read "₦422.40 per piece" three inches under "Sold in packs, bottles" — "piece" being
+          the base unit, which this product has no shape for and nobody here says. The stock list one
+          tap earlier says "cost ₦5,068.80 a pack", and the two screens are about the same item.
+        */}
+        {/*
+          WHAT EACH SHAPE COSTS AND SELLS FOR, in one table.
+
+          This was two separate facts that each picked their own shape — cost in the counting shape,
+          price in whichever shape carried one — so a product could read "₦422.40 per piece" above
+          "You sell 1 pack for ₦5,200" and look like a shop that buys pieces and sells packs.
+
+          A product has no single cost or price. A crate costs what twelve bottles cost and sells
+          for what the shop charges for a crate, and saying both against each shape is the only
+          version of this that cannot contradict itself.
+        */}
+        {shapes.length > 0 ? (
+          <div className={styles.shapeMoney}>
+            <div className={`${styles.shapeRow} ${styles.shapeHead}`}>
+              <span>Shape</span>
+              <span>Cost</span>
+              <span>You sell for</span>
+            </div>
+            {shapes.map((u) => (
+              <div className={styles.shapeRow} key={u.productUnitId}>
+                <span className={styles.shapeName}>
+                  {u.name}
+                  {u.baseQty > 1 && <span className={styles.shapeOf}> of {u.baseQty}</span>}
+                </span>
+                <span>{u.avgCost > 0 ? formatMoney(u.avgCost, 2) : '—'}</span>
+                <span className={styles.shapePrice}>
+                  {u.isSold ? (u.price != null ? formatMoney(u.price) : 'no price yet') : 'not sold'}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
           <div className={styles.fact}>
-            <dt className={styles.factLabel}>
-              You sell {product.packName ? `1 ${product.packName}` : 'it'} for
-            </dt>
-            <dd className={styles.factValue}>{formatMoney(product.listPrice)}</dd>
+            <dt className={styles.factLabel}>What it cost you</dt>
+            <dd className={styles.factValue}>
+              {formatMoney(product.avgUnitCost, 2)}
+              <span className={styles.factUnit}> a {product.baseUnit}</span>
+            </dd>
           </div>
         )}
 

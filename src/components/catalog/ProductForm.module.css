@@ -126,3 +126,54 @@
   color: var(--text-muted);
   font-size: var(--text-sm);
 }
+
+/* ── What kind of thing this is ──────────────────────────────────────────────────────
+   Chips rather than a list: a product is usually in two or three groups, and three lines of list
+   for three words reads as more work than it is. Each chip removes itself, because taking one off
+   is the other half of putting it on and should not need a different screen. */
+
+.groups {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.groupChips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.groupChip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--touch-min, 44px);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--primary);
+  border-radius: 999px;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.groupAdd {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: start;
+  min-height: var(--touch-min, 44px);
+  padding: 0 var(--space-3);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}

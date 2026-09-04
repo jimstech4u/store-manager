@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { Button } from '@/components/ui/Button';
@@ -12,7 +12,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
 import { useProduct } from '@/lib/stacks/catalog-stack';
 import { describeVariance, formatMoney, formatQty, pluralUnit, messageOf } from '@/lib/format';
-import { leadUnit, useSellingUnits } from '@/lib/stacks/selling-units';
+import { leadUnit, stockInShapes, useSellingUnits, type SellingUnit } from '@/lib/stacks/selling-units';
 import styles from '../count-page/count-page.module.css';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 
@@ -83,6 +83,21 @@ export default function CountEntryPage() {
    * the way in, and every figure shown is divided on the way out.
    */
   const { byProduct } = useSellingUnits(store?.id ?? null);
+
+  /*
+   * EVERY SHAPE THE SHOP KEEPS THIS IN, largest first — the order somebody counts in.
+   *
+   * `product_selling_units` returns each shape the shop has given a role, so this is the shop's own
+   * answer to "what do you count this in?" rather than a guess. One shape is the common case and
+   * still gets one box.
+   */
+  const shapes = useMemo(
+    () =>
+      [...(byProduct.get(productId ?? '') ?? [])].sort(
+        (a: SellingUnit, b: SellingUnit) => b.baseQty - a.baseQty,
+      ),
+    [byProduct, productId],
+  );
   const unit = leadUnit(byProduct.get(productId ?? ''));
   const per = unit?.baseQty ?? 1;
 
@@ -93,7 +108,24 @@ export default function CountEntryPage() {
   const unitName = (n: number) =>
     unit ? (n === 1 ? unit.name : unit.plural) : pluralUnit(active?.baseUnit ?? 'piece', n);
 
-  const [counted, setCounted] = useState('');
+  /*
+   * What was counted, per shape. Keyed by the shape's id so adding or retiring one does not
+   * silently move a figure onto a different shape.
+   */
+  const [byShape, setByShape] = useState<Record<string, string>>({});
+
+  /** The whole count in base units — what the server is told, and what the comparison is made in. */
+  const countedBase = useMemo(
+    () =>
+      shapes.reduce((sum: number, u: SellingUnit) => {
+        const n = Number(byShape[u.productUnitId]);
+        return sum + (Number.isFinite(n) ? n * u.baseQty : 0);
+      }, 0),
+    [byShape, shapes],
+  );
+
+  /** Whether anybody has said anything at all. Blank and nought are different answers. */
+  const anySaid = shapes.some((u) => (byShape[u.productUnitId] ?? '').trim() !== '');
   const [state, setState] = useState<CountState | null>(null);
   const [busy, setBusy] = useState(false);
   /*
@@ -136,7 +168,9 @@ export default function CountEntryPage() {
       const { error: cErr } = await supabase.rpc('enter_stock_count', {
         p_period_id: periodId,
         // Back into base units, which is the only language the ledger speaks.
-        p_counted: Number(counted) * per,
+        // In base units, added up from every shape — the multiplication is the app's job, not
+        // something to do in your head in front of a shelf.
+        p_counted: countedBase,
       });
       if (cErr) throw cErr;
 
@@ -224,23 +258,63 @@ export default function CountEntryPage() {
       ) : state === null ? (
         <>
           {/* Only the input. The expected figure is deliberately not shown yet. */}
-          <Field
-            label="How many are on the shelf?"
-            numeric
-            required
-            autoFocus
-            suffix={unitName(Number(counted) || 0)}
-            value={counted}
-            onChange={(e) => setCounted(e.target.value)}
-            hint="Count it yourself. We will show you what the records expect afterwards."
-            help={
-              <Explain label="Why not show the expected number first?">
-                Because then it stops being a count. Seeing “should be 857” makes it very easy
-                to write 857 and move on — and the whole value of doing this is catching the days
-                when the shelf and the records disagree.
-              </Explain>
-            }
-          />
+          {/*
+            A BOX PER SHAPE, because that is how a shelf is counted.
+
+            One box fixed to the counting shape meant a shelf of three packs and five loose bottles
+            had to be entered as 3.208 packs — worked out in somebody's head, in front of the shelf,
+            on the one screen whose whole purpose is that what you see can be compared with what the
+            records say.
+          */}
+          {/*
+            The question the screen exists to ask.
+
+            It was the single field's label, and replacing that field with one box per shape took it
+            with it — leaving two boxes headed "Packs" and "Bottles" and nothing asking anything.
+          */}
+          <h2 className={styles.countAsk}>How many are on the shelf?</h2>
+
+          <div className={styles.shapeBoxes}>
+            {shapes.map((u) => (
+              <div className={styles.shapeBox} key={u.productUnitId}>
+                <Field
+                  label={u.plural}
+                  numeric
+                  required={shapes.length === 1}
+                  value={byShape[u.productUnitId] ?? ''}
+                  onChange={(e) =>
+                    setByShape((prev) => ({ ...prev, [u.productUnitId]: e.target.value }))
+                  }
+                  placeholder="0"
+                  hint={u.baseQty > 1 ? `one is ${u.baseQty}` : undefined}
+                />
+              </div>
+            ))}
+          </div>
+
+          <p className={styles.countHint}>
+            Count it yourself. We will show you what the records expect afterwards.
+          </p>
+
+          {/*
+            The reason the screen is shaped this way, kept with the boxes.
+
+            It was the `help` on the single field this replaced, and it explains the one thing about
+            this screen somebody would otherwise think is a bug.
+          */}
+          <Explain label="Why not show the expected number first?">
+            Because then it stops being a count. Seeing “should be 857” makes it very easy to write
+            857 and move on — and the whole value of doing this is catching the days when the shelf
+            and the records disagree.
+          </Explain>
+
+          {/* The arithmetic said back. Nobody should have to trust a multiplication they cannot see. */}
+          {anySaid && shapes.length > 1 && (
+            <p className={styles.countedSoFar}>
+              That is {stockInShapes(shapes.map((u) => ({ ...u, onHandBase: countedBase })))} on the
+              shelf
+            </p>
+          )}
         </>
       ) : (
         <>
@@ -370,7 +444,7 @@ export default function CountEntryPage() {
             fullWidth
             busy={busy}
             busyLabel="Saving"
-            disabled={counted.trim() === ''}
+            disabled={!anySaid}
             onClick={submitCount}
           >
             Save my count

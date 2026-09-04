@@ -189,3 +189,35 @@
   margin-top: var(--space-5);
 }
 
+
+/* One box per shape, read across: "3 packs, 5 bottles" is how somebody says it looking at a shelf.
+   They wrap rather than shrink, because a number box too small to hit is worse than a scroll. */
+.shapeBoxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.shapeBox {
+  flex: 1 1 7rem;
+  min-width: 7rem;
+}
+
+.countHint {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* The multiplication, said back. Nobody should have to trust arithmetic they cannot see. */
+.countedSoFar {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* The question, above the boxes that answer it. */
+.countAsk {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-lg);
+}
