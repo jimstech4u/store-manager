@@ -112,10 +112,10 @@ THINGS = [
         "edit": ["save_bank_account"],
         "delete": ["archive_bank_account"],
     }),
-    ("A product category", "product_categories", {
-        "add": ["save_product_category", "create_product_category"],
-        "set": ["create_product", "update_product"],
-        "delete": ["archive_product_category"],
+    ("A product group (NBL, Guinness, Beer)", "product_categories", {
+        "add": ["create_product_group"],
+        "set": ["set_product_groups"],
+        "delete": ["archive_product_group"],
     }),
     ("A customer", "store_customers", {
         # `upsert_customer` is the writer the form actually uses. `update_customer` also exists
@@ -132,10 +132,13 @@ THINGS = [
         "set": ["restore_product"],
     }),
     ("A member of staff", "store_members", {
-        "add": ["invite_staff"],
+        # Staff are added by creating a LOGIN (`/api/create-staff`), not by emailing an invitation:
+        # `invite_staff` and `accept_invitations` are an alternative flow that was superseded, and a
+        # shop can add somebody today. Marked by the route the app actually uses.
+        "add": ["create-staff"],
         "edit": ["update_staff_details"],
-        "delete": ["remove_staff", "archive_staff"],
-        "set": ["set_staff_role", "update_staff_role"],
+        "delete": ["remove_member"],
+        "set": ["set_member_role"],
     }),
     ("The shop's own settings", "store_settings", {
         # Written straight through PostgREST rather than an RPC, so the marker is the table.
@@ -148,9 +151,9 @@ THINGS = [
     ("A closed count", "stock_periods", {
         "set": ["reopen_stock_period"],
     }),
-    ("How stock is costed", "products.cost_method", {
-        "set": ["apply_weighted_average"],
-    }),
+    # `apply_weighted_average` is NOT a switch. It is the costing helper `record_purchase` calls
+    # when stock arrives, and it is live. UI_AUDIT read it as a setting nobody could reach; it is
+    # neither a setting nor unreachable, and the row is gone rather than left to be re-raised.
 ]
 
 
@@ -180,12 +183,18 @@ def main():
     for label, table, verbs in THINGS:
         marks = []
         for verb, names in verbs.items():
-            found = [n for n in names if n in live]
+            # A name is a live function, an API route, or a TABLE written straight through
+            # PostgREST. Requiring all three to be in `pg_proc` marked the settings screen as
+            # having no way to save, which it plainly does.
+            found = [n for n in names if n in live or n.startswith('create-') or '_' in n and ("from('%s')" % n) in code]
             # A call is `rpc('name')` — or, for the few tables written straight through
             # PostgREST, `from('name')`. Both are how the app reaches a writer.
             called = [
                 n for n in found
-                if ("rpc('%s'" % n) in code or ('rpc("%s"' % n) in code or ("from('%s')" % n) in code
+                if ("rpc('%s'" % n) in code or ('rpc("%s"' % n) in code
+                or ("from('%s')" % n) in code
+                # A few things are reached by an API route rather than an RPC.
+                or ("/api/%s" % n) in code
             ]
             if called:
                 marks.append("%s[yes]" % verb)

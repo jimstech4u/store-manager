@@ -93,6 +93,15 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
   const [sharing, setSharing] = useState(false);
   const nav = useNav();
   const [shareNote, setShareNote] = useState<string | null>(null);
+  /*
+   * The link this screen made, so it can be taken back.
+   *
+   * You cannot revoke a token you did not keep, and the shop has no other way to see it — the token
+   * is the link. Held per screen rather than fetched: the only link worth withdrawing in a hurry is
+   * the one just sent to the wrong number.
+   */
+  const [sharedToken, setSharedToken] = useState<string | null>(null);
+  const [revoking, setRevoking] = useState(false);
   const [sharingWhatsApp, setSharingWhatsApp] = useState(false);
   const [makingPdf, setMakingPdf] = useState(false);
 
@@ -337,6 +346,44 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
         </p>
       )}
 
+      {/*
+        TAKING IT BACK.
+
+        `revoke_share_link` has existed since 0019 and nothing has ever called it. A shop that sent
+        a receipt to the wrong number — one digit out, the commonest mistake there is — could not
+        withdraw it, and that page shows what was bought, what was paid, what is still owed and the
+        shop's own bank account.
+
+        Only after a link has been made on this screen, because there is nothing to withdraw before
+        that and a button that does nothing is a button somebody presses to find out what it does.
+      */}
+      {sharedToken && (
+        <button
+          type="button"
+          className={styles.revoke}
+          data-print-no-print
+          disabled={revoking}
+          onClick={async () => {
+            setRevoking(true);
+            setShareNote(null);
+            try {
+              const { error: err } = await getSupabase().rpc('revoke_share_link', {
+                p_token: sharedToken,
+              });
+              if (err) throw err;
+              setSharedToken(null);
+              setShareNote('That link no longer opens. Share again to send a new one.');
+            } catch (e: unknown) {
+              setShareNote(messageOf(e, 'Could not take that link back'));
+            } finally {
+              setRevoking(false);
+            }
+          }}
+        >
+          {revoking ? 'Taking it back…' : 'Sent to the wrong person? Take the link back'}
+        </button>
+      )}
+
       <div className={styles.actions} data-print-no-print>
         <Button
           fullWidth
@@ -354,6 +401,7 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
                 p_ref_id: saleId,
               });
               if (err) throw err;
+              setSharedToken(token as string);
 
               const url = appUrl(`/r/${token}`);
               const result = await shareLink(url, `Receipt from ${shopName}`);
@@ -394,6 +442,7 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
                 p_ref_id: saleId,
               });
               if (err) throw err;
+              setSharedToken(token as string);
 
               const url = appUrl(`/r/${token}`);
               void nav.push('share_whatsapp_page', {
