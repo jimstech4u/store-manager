@@ -114,7 +114,98 @@ export const scenarios = [
   },
 
   {
-    name: '27. A price that does not divide, followed to the kobo',
+    name: '27. Selling and buying cannot reach across shops either',
+    async run(ctx) {
+      const { storeId, customer, product } = ctx;
+
+      const second = await openShop('the reaching shop');
+      try {
+        const theirCustomer = await makeCustomer(second.storeId, 'Their own', '08036660002');
+        const theirProduct = await makeProduct(second.storeId, 'Their own item', 'piece');
+
+        const shelfBefore = await onHand(product);
+        const owedBefore = await balanceOf(customer);
+
+        /*
+         * SELLING THE FIRST SHOP'S PRODUCT FROM THE SECOND SHOP.
+         *
+         * `record_sale` checks `sales.record` in the store it is NAMED and then trusts every
+         * product id in the payload. If it takes this, stock comes off a shelf in a shop the seller
+         * has nothing to do with — and the shop it was taken from cannot see who did it, because
+         * every read is scoped by membership.
+         */
+        let sold = null;
+        try {
+          await sell(second.storeId, {
+            customerId: theirCustomer,
+            lines: [
+              { product_id: product, qty: 1, pack_id: null, sale_unit_id: null, base_qty: 12,
+                unit_price: 5200, line_total: 5200, containers_out: 0, deposit_charged: 0 },
+            ],
+            payments: [{ amount: 5200, method: 'cash' }],
+          });
+        } catch (e) {
+          sold = e;
+        }
+        check(
+          'another shop’s product cannot be sold',
+          sold != null,
+          sold ? String(sold.message).slice(0, 60) : 'it SOLD, off somebody else’s shelf',
+        );
+        expectQty('and that shelf did not move', await onHand(product), shelfBefore);
+
+        /*
+         * AND BILLING THE FIRST SHOP'S CUSTOMER.
+         *
+         * The other half: the goods are the second shop's, the debt lands on somebody who has never
+         * been in it.
+         */
+        let billed = null;
+        try {
+          await sell(second.storeId, {
+            customerId: customer,
+            lines: [
+              { product_id: theirProduct, qty: 1, pack_id: null, sale_unit_id: null, base_qty: 1,
+                unit_price: 100, line_total: 100, containers_out: 0, deposit_charged: 0 },
+            ],
+            payments: [],
+          });
+        } catch (e) {
+          billed = e;
+        }
+        check(
+          'and another shop’s customer cannot be billed',
+          billed != null,
+          billed ? String(billed.message).slice(0, 60) : 'it BILLED somebody else’s customer',
+        );
+        expectMoney('so their balance is untouched', await balanceOf(customer), owedBefore);
+
+        /*
+         * AND RECEIVING INTO SOMEBODY ELSE'S STOCK, which is the same hole from the buying side —
+         * and worse, because it silently moves the cost basis every margin is computed from.
+         */
+        const { error: received } = await shop.rpc('record_purchase', {
+          p_store_id: second.storeId,
+          p_lines: [
+            { product_id: product, qty: 5, free_qty: 0, base_factor: 12, pack_id: null,
+              unit_cost: 1 },
+          ],
+          p_supplier: 'not theirs',
+        });
+        check(
+          'and stock cannot be received into another shop’s product',
+          received != null,
+          received ? received.message.slice(0, 60) : 'it RECEIVED into somebody else’s shelf',
+        );
+        expectQty('leaving that shelf alone too', await onHand(product), shelfBefore);
+      } finally {
+        await closeShop(second.storeId);
+      }
+    },
+  },
+
+  {
+    name: '28. A price that does not divide, followed to the kobo',
     async run(ctx) {
       const { storeId } = ctx;
 
@@ -196,7 +287,7 @@ export const scenarios = [
   },
 
   {
-    name: '28. A third of a bag, where the shape allows a third',
+    name: '29. A third of a bag, where the shape allows a third',
     async run(ctx) {
       const { storeId } = ctx;
 
@@ -244,7 +335,7 @@ export const scenarios = [
   },
 
   {
-    name: '29. Every figure the shop shows about one product agrees',
+    name: '30. Every figure the shop shows about one product agrees',
     async run(ctx) {
       const { storeId, product } = ctx;
 

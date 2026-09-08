@@ -425,7 +425,16 @@ fires when an optional argument is missing is not a guard.** It reads like one, 
 survived — and it took a benchmark with two shops in it to notice, because with one shop every id
 belongs to you.
 
-`assert_deposit_target` (0097) is called first thing, where no argument can skip it.
+`assert_deposit_target` (0097) is called first thing, where no argument can skip it. The same
+question asked of the two writers that move stock (0098) had a worse answer: a member of one shop
+could SELL another shop's product off their shelf, BILL another shop's customer, and RECEIVE stock
+into another shop's item — the last of those silently moving the average cost every margin of theirs
+is computed from.
+
+**A function that DERIVES the store cannot be lied to about it.** `settle_empties` checks the sale
+against the store it was given and `save_product_units` reads the store off the product, and neither
+needed fixing. That is the shape to copy: taking `p_store_id` as an argument and trusting the rest of
+the payload is what created both holes.
 
 ## The benchmark never stops growing
 
