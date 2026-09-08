@@ -4,7 +4,6 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { CameraIcon, CloseIcon, PlusIcon } from '@/components/ui/Icon';
 import { Field } from '@/components/ui/Field';
-import { InfoPanel } from '@/components/ui/Explain';
 import { UnitsEditor, unitProblems } from '@/components/catalog/UnitsEditor';
 import { GroupPicker } from '@/components/catalog/GroupPicker';
 import { createGroup, groupsFor, setProductGroups, useProductGroups } from '@/lib/stacks/product-groups';
@@ -25,6 +24,7 @@ import type { Product } from '@/lib/stacks/catalog-stack';
 import styles from './ProductForm.module.css';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 import { messageOf } from '@/lib/format';
+import { baseQtyByShape, stockInShapes } from '@/lib/shape-quantities';
 
 /**
  * Add a product, or change one. The BODY of a page — see `product-form-page`.
@@ -139,14 +139,32 @@ export function ProductForm({
    *
    * So the form insists on an answer and accepts 0 as one.
    */
-  const [openingCount, setOpeningCount] = useState('');
-  const [returnable, setReturnable] = useState(false);
-  const [poolName, setPoolName] = useState('');
-  const [poolKind, setPoolKind] = useState<'content' | 'container'>('content');
-  const [poolPerUnit, setPoolPerUnit] = useState('1');
-  const [poolDeposit, setPoolDeposit] = useState('');
-  const [emptiesOut, setEmptiesOut] = useState('');
-  const [pools, setPools] = useState<{ id: string; name: string; kind: string; deposit: string }[]>([]);
+  /*
+   * A BOX PER SHAPE, keyed by the shape.
+   *
+   * One box could only ever be one shape's figure, and the form never said which — a shop counting
+   * Goldberg has crates on the shelf AND loose bottles, and was being asked for a single number.
+   * The count screen learnt this already: a shelf of three packs and five bottles had to be entered
+   * as 3.208 packs, worked out in somebody's head in front of the shelf.
+   */
+  const [shelfByShape, setShelfByShape] = useState<Record<string, string>>({});
+
+  /*
+   * AND THE EMPTIES THE SHOP ITSELF IS HOLDING, per shape that comes back.
+   *
+   * This box used to ask "Containers already out with customers", which is a different question
+   * with a different owner: what a customer owes is entered against THAT CUSTOMER, on the customer
+   * form, through `backfill_empties` — which takes a customer id, because an obligation without
+   * one belongs to nobody. Asked here it had no customer to attach to, and the answer was
+   * accordingly written nowhere: a required field, guarded on save, whose value never left the
+   * component. A field that cannot change anything is worse than a missing one, because it looks
+   * answered.
+   *
+   * What the product form CAN answer for is the empty crates and bottles stacked in the shop's own
+   * yard on the day it starts.
+   */
+  const [emptiesByShape, setEmptiesByShape] = useState<Record<string, string>>({});
+
 
   /*
    * What it is bought and sold in, and the cheaper prices for buying more.
@@ -173,6 +191,38 @@ export function ProductForm({
   const groupPickerId = useId();
 
   const [units, setUnits] = useState<ProductUnit[]>([]);
+
+  /*
+   * THE SHAPES THE SHELF IS COUNTED IN — the shop's own answer, not a guess about size.
+   *
+   * `is_counted` exists for exactly this: a distributor counts crates, not bottles, even when it
+   * sells both. Falling back to every shape when nothing is ticked, because a form that asks for
+   * nothing on an item whose shapes are all untick ed cannot record any opening stock at all, and
+   * silently having no stock is the failure this section exists to prevent.
+   */
+  const countedShapes = units.some((u) => u.isCounted)
+    ? units.filter((u) => u.isCounted)
+    : units;
+
+  /** And the shapes that come back empty — a crate and a bottle answer separately. */
+  const returnableShapes = units.filter((u) => u.isReturnable);
+
+  /*
+   * WHAT EACH SHAPE IS WORTH, worked out here rather than read off the shape.
+   *
+   * `baseQty` is derived by a trigger on save, so every shape on an item being added still says 1
+   * — including the crate the shop has just said holds twelve bottles. Multiplying by it would
+   * record twelve crates as twelve bottles.
+   */
+  const baseOf = baseQtyByShape(units);
+  const totalFrom = (typed: Record<string, string>, shapes: ProductUnit[]) =>
+    shapes.reduce((sum, u) => {
+      const said = Number(typed[u.storeUnitId]);
+      return sum + (Number.isFinite(said) ? said : 0) * (baseOf[u.storeUnitId] ?? 0);
+    }, 0);
+
+  const shelfBase = totalFrom(shelfByShape, countedShapes);
+  const anyShelfSaid = countedShapes.some((u) => (shelfByShape[u.storeUnitId] ?? '').trim() !== '');
 
   /*
    * The groups this product is already in.
@@ -286,25 +336,6 @@ export function ProductForm({
     return match?.code ?? 'piece';
   };
 
-  /*
-   * The pools this shop already has.
-   *
-   * Offered rather than typed, because "NBL crate" and "NBL Crate" are one pool to a shop and two
-   * rows to a database. The seller can still name a new one — `set_product_returnable` matches
-   * case-insensitively and creates it only when nothing matches.
-   */
-  useEffect(() => {
-    if (editing) return;
-    let cancelled = false;
-    void getSupabase()
-      .rpc('store_empties_categories', { p_store_id: storeId })
-      .then(({ data }) => {
-        if (!cancelled) setPools((data ?? []) as typeof pools);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [storeId, editing]);
 
   const save = async () => {
     const trimmed = name.trim();
@@ -321,16 +352,48 @@ export function ProductForm({
      * a figure nobody should trust. Only in `minimum` mode, because that is the moment somebody is
      * standing in front of the shelf.
      */
-    if (minimum && openingCount.trim() === '') {
-      problem.show('How many are on the shelf right now? Put 0 if there are none.');
+    const shelfBlank = countedShapes.filter(
+      (u) => (shelfByShape[u.storeUnitId] ?? '').trim() === '',
+    );
+    if (minimum && shelfBlank.length > 0) {
+      problem.show(
+        `How many ${shelfBlank.map((u) => u.plural.toLowerCase()).join(' and ')} are on the shelf ` +
+          'right now? Put 0 where there are none.',
+      );
       return;
     }
-    if (minimum && returnable && !poolName.trim()) {
-      problem.show('What comes back — a crate, a bottle? Name it, or turn off "comes back".');
+    /*
+     * A CONTAINER THAT COMES BACK NEEDS A MAKER TO COME BACK TO.
+     *
+     * The pool is the maker plus the shape — "Nigerian Breweries (NBL) crate" — which is how the
+     * shop's own pools are named and why any NBL crate settles any other. Both halves are already
+     * on the form, so nothing is asked twice; what cannot be worked out is a product in no group at
+     * all, and that is asked once here rather than per shape, because the answer is the same for
+     * every shape on the item.
+     */
+    if (units.some((u) => u.isReturnable) && groupIds.length === 0) {
+      problem.show(
+        'Say who makes this before saying its containers come back. Empties go back to whoever ' +
+          'made them, so a crate needs a maker to go back to.',
+      );
       return;
     }
-    if (minimum && returnable && emptiesOut.trim() === '') {
-      problem.show('How many are already out with customers? Put 0 if none are.');
+
+    /*
+     * Required with ZERO ACCEPTED at a counter. Blank and nought are different facts, and a form
+     * that takes a blank makes every new item silently claim it is holding nothing.
+     *
+     * Asked of each shape that comes back, because a shop holding forty empty crates and no loose
+     * bottles has two different answers and one box could carry neither honestly.
+     */
+    const emptiesBlank = returnableShapes.filter(
+      (u) => (emptiesByShape[u.storeUnitId] ?? '').trim() === '',
+    );
+    if (minimum && emptiesBlank.length > 0) {
+      problem.show(
+        `How many empty ${emptiesBlank.map((u) => u.plural.toLowerCase()).join(' and ')} are you ` +
+          'holding? Put 0 where you have none.',
+      );
       return;
     }
 
@@ -418,27 +481,109 @@ export function ProductForm({
        * still has an item it can sell, and the failure says so. The reverse — a returnable pool
        * pointing at a product whose units never saved — is a row nobody can read.
        */
-      if (!editing && openingCount.trim() !== '') {
+      /*
+       * SUMMED INTO BASE UNITS, with each shape's worth taken from the TREE.
+       *
+       * `open_stock_by_count` counts in base units, and the shapes were just saved, so their own
+       * `baseQty` is still the placeholder 1 this device started them at. `baseQtyByShape` walks
+       * what the shop actually said — twelve bottles to a crate — which is the only figure here
+       * that is not a guess.
+       */
+      if (!editing && anyShelfSaid) {
         const { error } = await supabase.rpc('open_stock_by_count', {
           p_store_id: storeId,
           p_product_id: id,
-          p_qty: Number(openingCount) || 0,
+          p_qty: shelfBase,
           p_unit_cost: null,
           p_note: 'Counted when the item was added',
         });
         if (error) throw error;
       }
 
-      if (!editing && returnable && poolName.trim()) {
-        const { error } = await supabase.rpc('set_product_returnable', {
+      /*
+       * ONE POOL PER SHAPE THAT COMES BACK, and the pool's name is worked out.
+       *
+       * Maker plus shape: "Nigerian Breweries (NBL) crate". That is how the shop's pools are
+       * already named, and it is the reason an NBL crate settles any other NBL crate whatever was
+       * in it. `set_product_returnable` matches case-insensitively and creates only when nothing
+       * matches, so a product whose maker and shape line up with an existing pool joins that one.
+       *
+       * `kind` follows the tree. A shape that goes inside something bigger is what was INSIDE the
+       * container — the bottles — and one that goes inside nothing is the container itself. That is
+       * the distinction `returnables_for_sale` branches on, and getting it wrong owes the customer
+       * the wrong quantity for ever.
+       */
+      const maker = groups.find((g) => g.id === groupIds[0])?.name ?? '';
+
+      /*
+       * THE SHAPES AS SAVED, because a new one has no id until the shop has it.
+       *
+       * `saveProductUnits` replaces the list and does not hand the rows back, so the ids in local
+       * state are blank for anything added on this visit. Naming a pool against a blank id would
+       * store no shape at all and put the obligation back to a row per pool — four crates owing
+       * four crates AND forty-eight bottles.
+       */
+      const { data: savedShapes } = await supabase.rpc('product_units_for', { p_product_id: id });
+      const idOf = (storeUnitId: string) =>
+        ((savedShapes ?? []) as { id: string; store_unit_id: string }[]).find(
+          (r) => r.store_unit_id === storeUnitId,
+        )?.id ?? null;
+      /*
+       * Keyed by shape, because the count of what is in the yard needs the same pool.
+       *
+       * `set_product_returnable` RETURNS the pool id — it is the thing that creates or finds it —
+       * so keeping the answer costs nothing. Reading it back afterwards would be a second round
+       * trip to learn something this device was just told, and the first attempt at it called an
+       * RPC that does not exist.
+       */
+      const poolByShape: Record<string, string> = {};
+
+      for (const u of units.filter((x) => x.isReturnable)) {
+        const goesInsideSomething = units.some((x) => x.definedAgainst === u.storeUnitId);
+        const { data: poolId, error } = await supabase.rpc('set_product_returnable', {
           p_store_id: storeId,
           p_product_id: id,
-          p_category_name: poolName.trim(),
-          p_kind: poolKind,
-          p_qty_per_base_unit: Number(poolPerUnit) || 1,
-          p_deposit: Number(poolDeposit) || 0,
+          p_category_name: `${maker} ${u.name}`.trim(),
+          p_kind: goesInsideSomething ? 'content' : 'container',
+          p_qty_per_base_unit: 1,
+          p_deposit: 0,
+          /*
+            WHICH SHAPE this pool is for, so a sale can owe in the shape it sold.
+            Four crates out owes four crates — not four crates and forty-eight bottles, which is
+            what a pool with no shape against it produces.
+          */
+          p_product_unit_id: idOf(u.storeUnitId),
         });
         if (error) throw error;
+        if (poolId) poolByShape[u.storeUnitId] = poolId as string;
+      }
+
+      /*
+       * AND WHAT IS IN THE SHOP'S OWN YARD, counted per pool.
+       *
+       * After the pools, not with them: the count points at a pool, and `set_product_returnable`
+       * is what creates or finds it. Read back rather than assumed, for the same reason the shapes
+       * are — the pool may be one this shop already had, under an id this device has never seen.
+       *
+       * A shape left blank writes nothing. Zero is an answer and is recorded as one; a blank is
+       * "nobody looked", and inventing a nought for it would put a figure on the yard that nobody
+       * ever counted.
+       */
+      if (!editing && returnableShapes.length > 0) {
+        for (const u of returnableShapes) {
+          const said = (emptiesByShape[u.storeUnitId] ?? '').trim();
+          if (said === '') continue;
+          const pool = poolByShape[u.storeUnitId];
+          if (!pool) continue;
+
+          const { error } = await supabase.rpc('count_empties_on_hand', {
+            p_store_id: storeId,
+            p_category_id: pool,
+            p_qty: Number(said) || 0,
+            p_note: 'Counted when the item was added',
+          });
+          if (error) throw error;
+        }
       }
 
       /*
@@ -741,114 +886,94 @@ export function ProductForm({
             Counted on the shelf, not worked out from deliveries. Most shops starting here have
             stock and no delivery history, and an invented delivery invents a cost.
           </p>
-          <Field
-            label="On the shelf right now"
-            numeric
-            required={minimum}
-            value={openingCount}
-            onChange={(e) => setOpeningCount(e.target.value)}
-            placeholder="0"
-            hint={
-              minimum
-                ? 'Put 0 if there are none. "None" and "did not look" are different answers.'
-                : 'Leave it blank if you would rather count later.'
-            }
-          />
-
-          <h2 className={styles.section}>Does the container come back?</h2>
-          <p className={styles.sectionNote}>
-            Crates and bottles a customer returns. Say so now and every sale tracks them for you.
-          </p>
-
-          <label className={styles.toggleRow}>
-            <input
-              type="checkbox"
-              checked={returnable}
-              onChange={(e) => setReturnable(e.target.checked)}
-            />
-            <span>Yes — something comes back with this</span>
-          </label>
-
-          {returnable && (
-            <>
+          {/*
+            A BOX PER COUNTED SHAPE. "Crates on the shelf" and "Bottles on the shelf", not one
+            number that never said which it meant.
+          */}
+          <div className={styles.shapeBoxes}>
+            {countedShapes.map((u) => (
               <Field
-                label="What comes back"
+                key={u.storeUnitId}
+                label={u.plural}
+                numeric
                 required={minimum}
-                value={poolName}
-                onChange={(e) => setPoolName(e.target.value)}
-                placeholder="NBL crate"
-                list="empties-pools"
+                value={shelfByShape[u.storeUnitId] ?? ''}
+                onChange={(e) =>
+                  setShelfByShape((prev) => ({ ...prev, [u.storeUnitId]: e.target.value }))
+                }
+                placeholder="0"
                 hint={
-                  pools.length > 0
-                    ? `Pick one you already use, or name a new one. You have: ${pools
-                        .map((p) => p.name)
-                        .join(', ')}.`
-                    : 'Name the pool. Products that share a pool settle each other — a Star bottle pays back a Gulder bottle.'
+                  (baseOf[u.storeUnitId] ?? 1) > 1
+                    ? `one is ${baseOf[u.storeUnitId]}`
+                    : undefined
                 }
               />
-              <datalist id="empties-pools">
-                {pools.map((p) => (
-                  <option key={p.id} value={p.name} />
+            ))}
+          </div>
+
+          <p className={styles.sectionNote}>
+            {minimum
+              ? 'Put 0 where there are none. "None" and "did not look" are different answers.'
+              : 'Leave them blank if you would rather count later.'}
+          </p>
+
+          {/*
+            The arithmetic said back, because nobody should have to trust a multiplication they
+            cannot see. The count screen says the same thing for the same reason.
+          */}
+          {anyShelfSaid && countedShapes.length > 1 && (
+            <p className={styles.saidBack}>
+              That is{' '}
+              {stockInShapes(
+                countedShapes.map((u) => ({
+                  name: u.name,
+                  plural: u.plural,
+                  baseQty: baseOf[u.storeUnitId] ?? 1,
+                  onHandBase: shelfBase,
+                })),
+              )}{' '}
+              on the shelf.
+            </p>
+          )}
+
+          {/*
+            AND THE EMPTIES IN THE SHOP'S OWN YARD, one box per shape that comes back.
+
+            Not "already out with customers" — that is a fact about a CUSTOMER, entered against
+            that customer on the customer form, and the answer given here was written nowhere at
+            all. This is the other half a shop can actually see on day one: the stack of empty
+            crates and loose empty bottles it is holding before it has sold anything.
+          */}
+          {returnableShapes.length > 0 && (
+            <>
+              <h2 className={styles.section}>Empties you are holding</h2>
+              <p className={styles.sectionNote}>
+                Empty {returnableShapes.map((u) => u.plural.toLowerCase()).join(' and ')} stacked in
+                your own yard right now — not the ones customers still have. What a customer owes
+                you is entered on that customer.
+              </p>
+
+              <div className={styles.shapeBoxes}>
+                {returnableShapes.map((u) => (
+                  <Field
+                    key={u.storeUnitId}
+                    label={`Empty ${u.plural.toLowerCase()}`}
+                    numeric
+                    required={minimum}
+                    value={emptiesByShape[u.storeUnitId] ?? ''}
+                    onChange={(e) =>
+                      setEmptiesByShape((prev) => ({ ...prev, [u.storeUnitId]: e.target.value }))
+                    }
+                    placeholder="0"
+                  />
                 ))}
-              </datalist>
-
-              <div className={styles.toggleRow}>
-                <label>
-                  <input
-                    type="radio"
-                    checked={poolKind === 'content'}
-                    onChange={() => setPoolKind('content')}
-                  />
-                  <span>A bottle — counted from how much is sold</span>
-                </label>
-              </div>
-              <div className={styles.toggleRow}>
-                <label>
-                  <input
-                    type="radio"
-                    checked={poolKind === 'container'}
-                    onChange={() => setPoolKind('container')}
-                  />
-                  {/*
-                    A container's count cannot be derived and is declared at the till: six loose
-                    bottles may or may not go out in a crate, and only the person handing them over
-                    knows which.
-                  */}
-                  <span>A crate — counted when one actually leaves</span>
-                </label>
               </div>
 
-              {poolKind === 'content' && (
-                <Field
-                  label="How many come back per unit sold"
-                  numeric
-                  value={poolPerUnit}
-                  onChange={(e) => setPoolPerUnit(e.target.value)}
-                  placeholder="1"
-                  hint="One bottle per bottle sold, usually."
-                />
-              )}
-
-              <Field
-                label="What you usually hold as deposit, each"
-                optional
-                numeric
-                prefix="₦"
-                value={poolDeposit}
-                onChange={(e) => setPoolDeposit(e.target.value)}
-                placeholder="0"
-                hint="A suggestion the till offers you. You still decide the figure on the day."
-              />
-
-              <Field
-                label="Already out with customers"
-                numeric
-                required={minimum}
-                value={emptiesOut}
-                onChange={(e) => setEmptiesOut(e.target.value)}
-                placeholder="0"
-                hint="From before you started here. Put 0 if none are out."
-              />
+              <p className={styles.sectionNote}>
+                {minimum
+                  ? 'Put 0 where you have none. "None" and "nobody looked" are different answers.'
+                  : 'Leave them blank if you would rather count them later.'}
+              </p>
             </>
           )}
         </>
@@ -863,14 +988,6 @@ export function ProductForm({
         setDiscounts={setDiscounts}
         soldUnits={units.filter((u) => u.isSold)}
       />
-
-      {!editing && (
-        <InfoPanel tone="info" title="Stock comes later">
-          Adding an item does not put any on the shelf. Record a delivery under{' '}
-          <strong>Stock</strong> when it arrives, and the cost is worked out from what you actually
-          paid.
-        </InfoPanel>
-      )}
 
       {/*
         The actions sit at the end of the page, not pinned to its foot.

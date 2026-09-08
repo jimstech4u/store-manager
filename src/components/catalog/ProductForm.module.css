@@ -177,3 +177,24 @@
   font-weight: 600;
   cursor: pointer;
 }
+
+/* One box per shape, read across: "3 crates, 5 bottles" is how somebody says it looking at a shelf.
+   They wrap rather than shrink — a number box too small to hit is worse than a wrapped row. The
+   same shape as the count screen's, because it is the same question asked in the same place. */
+.shapeBoxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.shapeBoxes > * {
+  flex: 1 1 7rem;
+  min-width: 7rem;
+}
+
+/* The multiplication, said back. Nobody should have to trust arithmetic they cannot see. */
+.saidBack {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}

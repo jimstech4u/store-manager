@@ -16,6 +16,57 @@ export interface ShapeQuantity {
   isCounted?: boolean;
 }
 
+
+/** A shape as the FORM holds it, before anything has been saved and derived. */
+export interface ShapeLink {
+  storeUnitId: string;
+  /** What it goes inside, or null when it is the thing everything else is measured in. */
+  definedAgainst: string | null;
+  /** How many of it fit in that container, as typed. */
+  definedQty: string;
+}
+
+/**
+ * How many of the smallest shape each shape is worth, worked out from the tree alone.
+ *
+ * NEEDED BECAUSE `baseQty` IS THE SERVER'S ANSWER. A trigger derives it on save and the client
+ * only ever reads it back, so on an item being added for the first time every shape still says
+ * `1` — the crate the shop just said holds twelve bottles included. Multiplying a count by that
+ * records twelve crates as twelve bottles: a shop's whole opening stock divided by twelve, silently,
+ * with nothing on screen looking wrong. It is the same defect that cost a sale its shape before
+ * 0085, arriving from the other direction.
+ *
+ * Walked upward from each shape to the one measured against nothing, multiplying as it goes, so a
+ * pallet of crates of bottles works at any depth. A shape whose count is missing or not yet typed
+ * contributes nothing rather than guessing at one, and a cycle — which the builder prevents, but
+ * which arithmetic should not depend on being prevented — stops rather than spins.
+ */
+export function baseQtyByShape(units: ShapeLink[]): Record<string, number> {
+  const by = new Map(units.map((u) => [u.storeUnitId, u]));
+  const out: Record<string, number> = {};
+
+  for (const u of units) {
+    let factor = 1;
+    let at: ShapeLink | undefined = u;
+    const seen = new Set<string>();
+
+    while (at && at.definedAgainst !== null && !seen.has(at.storeUnitId)) {
+      seen.add(at.storeUnitId);
+      const said = Number(at.definedQty);
+      if (!Number.isFinite(said) || said <= 0) {
+        factor = 0;
+        break;
+      }
+      factor *= said;
+      at = by.get(at.definedAgainst);
+    }
+
+    out[u.storeUnitId] = factor;
+  }
+
+  return out;
+}
+
 /**
  * What is on the shelf, said in shapes: "99 crates 8 bottles".
  *

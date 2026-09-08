@@ -176,6 +176,33 @@ keeping — the rule alone is forgettable, the bug behind it is not.
   silently truncated, so the new order fell outside the window. No error, no empty result, just a
   window that quietly stopped covering the thing being looked for. Keep the id when you write the
   row rather than searching for it after, and finish by READING what is still there and saying so.
+- **A fix in the handler is not a fix if an EFFECT re-does it.** `addUnit` was corrected to add a
+  shape linked to nothing; the shape builder still ticked "crates go inside something bigger" on the
+  crate, and the box could not be unticked — unticking cleared the link and a normalising
+  `useEffect` re-made it on the next render. The effect was written when a shape declared what it
+  was MADE OF, where "the first unit measures everything else" is arguable; once a shape declared
+  what it GOES INSIDE, the same write meant the opposite. **Grep for every writer of the field
+  before believing a fix**, and reread the effects a model change leaves behind — one that is merely
+  redundant under the old meaning is actively wrong under the new one.
+- **A probe must target the shop it signs INTO.** `admin.from('stores').select('id').limit(1)` is
+  whichever row the database hands back first, and stopped being the sample account's shop the day a
+  second shop existed. The units were created somewhere the browser could not see, so the picker
+  answered "No unit by that name" and it read like a broken search. Take the store from
+  `my_membership` on the signed-in client.
+- **`fullPage` is the document, and these pages scroll inside a container.** Every screenshot came
+  back the same 844px of viewport with the card being asserted about off the bottom. Screenshot the
+  ELEMENT — `locator.screenshot()` after `scrollIntoViewIfNeeded` — which is also how a shape
+  builder is read: one card at a time.
+- **Measure a clipped control against something that did NOT move.** The parent row overflowed the
+  card, so the delete button sat 99px off a 390px phone with nothing to scroll to reach it. The
+  first check compared it to the ROW's right edge — and an overflowing row is wider, so its edge
+  moved out to wherever the clipped controls ended up and everything was inside it by definition.
+  It passed with the fault restored. Compare against the card, or the viewport.
+- **`1fr` is `minmax(auto, 1fr)`.** A grid column holding a `<select>` is floored at its LONGEST
+  OPTION, so the row grew with the shop's own words: short names fitted, real ones pushed the
+  controls off the screen. `min-width: 0` on the item, or a wrapping flex row, and mutation-test it
+  by removing BOTH — leaving the zero minimum in place while reverting the display made the fault
+  un-restorable and the test meaningless.
 - **Probes clean up after themselves.** `stock_movements` is append-only and refuses deletes, so a
   probe that received stock cannot remove its product — five "Cost probe" items sat in the shop's
   real picker, and ninety-three empty draft tabs accumulated in the customer bar. Retire what

@@ -339,6 +339,8 @@ export interface SaleUnit {
   allowHalf: boolean;
   allowThreeQuarter: boolean;
   isReturnable: boolean;
+  /** Whether the shop holds money against this shape. A crate and a bottle answer separately. */
+  isDeposit: boolean;
   id: string;
   name: string;
   baseQty: string;
@@ -355,6 +357,7 @@ interface SaleUnitRow {
   allow_half: boolean;
   allow_three_quarter: boolean;
   is_returnable: boolean;
+  is_deposit: boolean;
 }
 
 /** Fetch the configured sale units for a product. Empty means "sell in base units". */
@@ -372,6 +375,8 @@ export async function fetchSaleUnits(productId: string): Promise<SaleUnit[]> {
     allowHalf: Boolean(r.allow_half),
     allowThreeQuarter: Boolean(r.allow_three_quarter),
     isReturnable: Boolean(r.is_returnable),
+    /** Whether the shop holds money against this shape. A crate and a bottle answer separately. */
+    isDeposit: Boolean(r.is_deposit),
     price: r.price,
   }));
 }

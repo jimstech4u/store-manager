@@ -211,3 +211,87 @@
   font-weight: 500;
   text-decoration: none;
 }
+
+/* ── What a shape goes inside ────────────────────────────────────────────────────────
+   Several containers are allowed, so this is a list rather than one sentence: a bottle can be in a
+   crate and in a pack, and each needs its own count. */
+
+.parents {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-left: 2px solid var(--border);
+}
+
+/* How many, what it goes in, and a way to say it does not. The count comes first because it is the
+   part being typed; the container is usually already right. */
+/* Read as one sentence: "12 bottles — fit inside one — crate". The count first because it is what
+   is being typed, and the joining words in the middle so the row cannot be read backwards. */
+.parentRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-2);
+}
+
+/*
+ * THE COUNT AND THE CONTAINER SHRINK; THE DELETE BUTTON DOES NOT MOVE.
+ *
+ * This was `grid-template-columns: 1fr auto 1fr auto`, and a `1fr` column is `minmax(auto, 1fr)` —
+ * floored at its content's minimum. The dropdown's minimum is its LONGEST OPTION, so a shop whose
+ * words are longer than "crate" widened the row past the screen: the container select was clipped
+ * at the right edge and the button that says these do not go inside it was off the phone entirely,
+ * with nothing to scroll to reach it.
+ *
+ * Wrapping instead, with a real zero minimum. Where the sentence fits it stays on one line; where
+ * it does not, the container and the delete drop together onto the next — which still reads as the
+ * sentence, because the joining words stay with the count.
+ */
+.parentRow > *:first-child,
+.parentRow .select {
+  flex: 1 1 7rem;
+  min-width: 0;
+}
+
+.parentRow .remove {
+  flex: 0 0 auto;
+}
+
+/* The words that fix the direction. Aligned to the baseline of the boxes either side rather than
+   their tops, so it sits in the sentence rather than above it. */
+.parentJoin {
+  padding-bottom: 12px;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* The reason a shown control cannot be pressed yet. Under it, not beside it, so the button keeps
+   its full width and the sentence is read as the answer to pressing it. */
+/* Shown but not yet pressable. Muted rather than hidden, because the reason sits under it. */
+.addParent:disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.addParentWhy {
+  margin: 0;
+  padding-left: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.addParent {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: start;
+  min-height: var(--touch-min, 44px);
+  padding: 0 var(--space-2);
+  border: none;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}

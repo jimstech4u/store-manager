@@ -67,12 +67,3 @@
   gap: var(--space-3);
   padding: var(--space-3);
 }
-
-/* Multi-select needs a way to say "finished" that is not the close cross. */
-.doneRow {
-  position: sticky;
-  bottom: 0;
-  padding: var(--space-3);
-  background: var(--surface);
-  border-top: 1px solid var(--border);
-}

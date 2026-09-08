@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { InfoPanel, Explain } from '@/components/ui/Explain';
 import { Field } from '@/components/ui/Field';
 import { UnitPicker } from '@/components/catalog/UnitPicker';
@@ -61,6 +61,17 @@ export function UnitsEditor({
 }) {
   const [picking, setPicking] = useState<null | 'bought' | 'sold'>(null);
 
+  /*
+   * Shapes whose container has been asked for and not yet chosen.
+   *
+   * The link is stored ON the container — the crate records that it is twelve bottles — so until a
+   * container is picked there is nothing to write anywhere. A question half answered belongs in the
+   * component, not in the data.
+   */
+  const [awaitingParent, setAwaitingParent] = useState<string[]>([]);
+  /** And the count typed into a row whose container has not been chosen yet. */
+  const [pendingQty, setPendingQty] = useState<Record<string, string>>({});
+
   const patch = (storeUnitId: string, change: Partial<ProductUnit>) =>
     setUnits(units.map((u) => (u.storeUnitId === storeUnitId ? { ...u, ...change } : u)));
 
@@ -100,41 +111,43 @@ export function UnitsEditor({
         allowHalf: false,
         allowThreeQuarter: false,
         /*
-         * The first unit measures everything else; anything after it has to say what it is worth.
-         * Left blank rather than guessed at — a wrong conversion nobody was asked about is worse
-         * than a question, because it silently misprices every delivery.
+         * NOT LINKED TO ANYTHING. The shop says what goes inside what.
+         *
+         * This used to point a new shape at the first one — "the first unit measures everything
+         * else" — which was true when each shape declared what it was MADE OF. It is exactly
+         * backwards now that a shape declares what it GOES INSIDE: adding a crate and then a bottle
+         * wrote "one bottle is N crates", so the crate's card ticked "crates go inside something
+         * bigger" and offered the bottle as the thing it goes in.
+         *
+         * A guess about which of two shapes contains the other is not one the form can make. Adding
+         * a bottle to a crate and adding a crate to a bottle are the same two shapes in the same
+         * two orders, and only the shop knows which way round it goes.
          */
-        definedAgainst: units.length === 0 ? null : (units[0]?.storeUnitId ?? null),
+        definedAgainst: null,
         definedQty: '',
       },
     ]);
   };
 
   /*
-   * A unit with no relationship, which is not the measuring one, is measured against it.
+   * NOTHING LINKS A SHAPE ON THE SHOP'S BEHALF.
    *
-   * WITHOUT THIS THE FORM IS A TRAP. The select shows its first option because a browser has to
-   * show something for a value of null, so the sentence reads "One bag is [ ] litres" while the
-   * state behind it still says the bag is measured against nothing. Typing 24 then fills the box,
-   * changes nothing that matters, and leaves Save greyed out with the screen insisting the
-   * question has been answered.
+   * An effect here used to measure every unlinked shape against the ruler — the first one added —
+   * and it is what put the tick back on the crate. Fixing `addUnit` was not enough: the effect
+   * re-made the link on the next render, so the box could not be unticked either. Unticking
+   * cleared the relationship, the effect saw a stray shape, and pointed it straight back.
+   *
+   * It was written when a shape declared what it was MADE OF, where "the first unit measures
+   * everything else" is at least arguable. A shape now declares what it GOES INSIDE, so the same
+   * link read backwards: adding a crate then a bottle wrote "one bottle is N crates", and the
+   * crate's card ticked itself and offered the bottle as the thing a crate goes inside.
+   *
+   * Its stated reason was a select showing its first option while the state behind it said null —
+   * a form that looks answered and saves nothing. That is now handled where it belongs: an
+   * unlinked shape renders no select at all, and the row being answered carries an explicit
+   * "choose one…" that writes the link the moment it is picked.
    */
-  useEffect(() => {
-    const ruler = measuringUnit(units);
-    if (!ruler) return;
-    const stray = units.filter(
-      (u) => u.storeUnitId !== ruler.storeUnitId && u.definedAgainst === null,
-    );
-    if (stray.length === 0) return;
 
-    setUnits(
-      units.map((u) =>
-        u.storeUnitId !== ruler.storeUnitId && u.definedAgainst === null
-          ? { ...u, definedAgainst: ruler.storeUnitId }
-          : u,
-      ),
-    );
-  }, [units, setUnits]);
 
   /*
    * "One bottle is 12 crates" is what the form asked, and it is backwards.
@@ -147,22 +160,50 @@ export function UnitsEditor({
    * the unit that was doing the measuring becomes the measured one, and the sentence reads the
    * way somebody would say it out loud.
    */
-  const swapDirection = (u: ProductUnit) => {
-    const other = units.find((x) => x.storeUnitId === u.definedAgainst);
-    if (!other) return;
 
-    setUnits(
-      units.map((x) => {
-        if (x.storeUnitId === u.storeUnitId) return { ...x, definedAgainst: null, definedQty: '' };
-        if (x.storeUnitId === other.storeUnitId) {
-          return { ...x, definedAgainst: u.storeUnitId, definedQty: u.definedQty };
-        }
-        return x;
-      }),
+  /*
+   * WHO HOLDS THIS SHAPE, and who could.
+   *
+   * The table records a container declaring what it is made of — a crate IS twelve bottles — so the
+   * bottle's containers are simply the shapes pointing at it. Reading it this way round costs a
+   * filter and lets the shop say the sentence it actually says.
+   */
+  const parentsOf = (u: ProductUnit) => units.filter((x) => x.definedAgainst === u.storeUnitId);
+
+  /** Everything this shape could go inside — not itself, not already holding it, and no circle. */
+  const candidateParents = (u: ProductUnit) => {
+    // What u is (transitively) made of. A crate made of bottles cannot then go inside a bottle.
+    const below = new Set<string>();
+    let walk: string | null = u.definedAgainst;
+    while (walk && !below.has(walk)) {
+      below.add(walk);
+      walk = units.find((x) => x.storeUnitId === walk)?.definedAgainst ?? null;
+    }
+    return units.filter(
+      (x) =>
+        x.storeUnitId !== u.storeUnitId &&
+        x.definedAgainst !== u.storeUnitId &&
+        !below.has(x.storeUnitId),
     );
   };
 
+  /** Say that `holderId` holds `qty` of `insideId` — or, with a null inside, that it holds nothing. */
+  const setParent = (holderId: string, insideId: string | null, qty: string) =>
+    setUnits(
+      units.map((x) =>
+        x.storeUnitId === holderId ? { ...x, definedAgainst: insideId, definedQty: qty } : x,
+      ),
+    );
+
+  const clearParents = (insideId: string) =>
+    setUnits(
+      units.map((x) =>
+        x.definedAgainst === insideId ? { ...x, definedAgainst: null, definedQty: '' } : x,
+      ),
+    );
+
   const smallest = measuringUnit(units);
+  const anythingLinked = units.some((u) => u.definedAgainst !== null);
   const gaps = unitGaps(units);
   // `sold` still guards the "nothing is sold yet" warning; the old `bought` list had no reader
   // left once the two lists became one.
@@ -234,70 +275,184 @@ export function UnitsEditor({
       </div>
 
       {/*
-        What one of these IS.
+        WHAT THIS GOES INSIDE, said as the sentence a shop says.
 
-        Missing from every screen before this one, and the reason stock could strand. Written the
-        way somebody would say it out loud — "One Bag is 24 Litres" — rather than as a number in a
-        box called base quantity, which is a figure nobody in a shop has any means of checking.
+        The card you are on is always the CHILD — the thing that goes in — and the dropdown is
+        always the container. Written out because "How many fit" beside a dropdown does not say
+        which way round it goes, and on the crate's card it cheerfully offered "bottle" as the thing
+        a crate goes inside.
+
+        The table stores the other end of the same sentence: the crate records that it IS twelve
+        bottles. So this asks the shop's way and writes the table's way, and every trigger and reader
+        is untouched.
+
+        SEVERAL containers are allowed and need nothing new — a bottle in a crate and in a pack is
+        just the crate and the pack each recording what they hold.
       */}
-      {smallest && u.storeUnitId !== smallest.storeUnitId && (
-        <div className={styles.sentence}>
-          <span className={styles.sentencePart}>One {u.name.toLowerCase()} is…</span>
-          <Field
-            label="How many"
-            aria-label={`One ${u.name.toLowerCase()} is how many ${(units.find((x) => x.storeUnitId === u.definedAgainst)?.plural ?? '').toLowerCase()}`}
-            numeric
-            value={u.definedQty}
-            onChange={(e) => patch(u.storeUnitId, { definedQty: e.target.value })}
-            error={
-              u.definedQty.trim() === '' || Number(u.definedQty) <= 0
-                ? 'Say how many, or this stock can never be sold'
-                : null
-            }
-          />
-          <select
-            className={styles.select}
-            aria-label={`What one ${u.name.toLowerCase()} is measured in`}
-            value={u.definedAgainst ?? ''}
-            onChange={(e) => patch(u.storeUnitId, { definedAgainst: e.target.value })}
-          >
-            {units
-              // Not itself, and not something already measured against it: those two together are
-              // a circle, which the database refuses and the shop should never be offered.
-              .filter((x) => x.storeUnitId !== u.storeUnitId && x.definedAgainst !== u.storeUnitId)
-              .map((x) => (
-                <option key={x.storeUnitId} value={x.storeUnitId}>
-                  {x.plural}
-                </option>
-              ))}
-          </select>
-
-          {/*
-            Which way round the sentence goes.
-
-            It was a bare link reading "Say it the other way round", which says what the control
-            does to ITSELF and nothing about why anybody would press it. Written out, the shop can
-            see both sentences and pick the one that is true — and the one with a whole number in
-            it is almost always the one they mean.
-          */}
-          <button
-            type="button"
-            className={styles.swap}
-            onClick={() => swapDirection(u)}
-          >
-            <span className={styles.swapLead}>Wrong way round?</span>
-            <span className={styles.swapDetail}>
-              Say “one {units.find((x) => x.storeUnitId === u.definedAgainst)?.name.toLowerCase() ?? 'unit'} is
-              … {u.plural.toLowerCase()}” instead
-            </span>
-          </button>
-        </div>
-      )}
-
-      {smallest && u.storeUnitId === smallest.storeUnitId && (
+      {/*
+        Said only once something IS measured in it. With nothing linked yet, `measuringUnit` still
+        has to answer, and it answers with whichever shape was added first — so an item one shape
+        old announced that everything else was measured in crates before a shop had said anything
+        of the kind.
+      */}
+      {anythingLinked && smallest && u.storeUnitId === smallest.storeUnitId && (
         <p className={styles.smallest}>
           Everything else on this item is measured in {u.plural.toLowerCase()}.
         </p>
+      )}
+
+      {units.length > 1 && (
+        <label className={styles.check}>
+          <input
+            type="checkbox"
+            checked={parentsOf(u).length > 0 || awaitingParent.includes(u.storeUnitId)}
+            onChange={(e) => {
+              if (e.target.checked) {
+                // An EMPTY row. Which container it goes in is the question; picking one for them
+                // is a guess written into the tree.
+                setAwaitingParent((prev) => [...prev, u.storeUnitId]);
+              } else {
+                setAwaitingParent((prev) => prev.filter((x) => x !== u.storeUnitId));
+                clearParents(u.storeUnitId);
+              }
+            }}
+            disabled={candidateParents(u).length === 0 && parentsOf(u).length === 0}
+          />
+          <span>{u.plural} go inside something bigger</span>
+        </label>
+      )}
+
+      {(parentsOf(u).length > 0 || awaitingParent.includes(u.storeUnitId)) && (
+        <div className={styles.parents}>
+          {parentsOf(u).map((p) => (
+            <div className={styles.parentRow} key={p.storeUnitId}>
+              <Field
+                label={`How many ${u.plural.toLowerCase()}`}
+                aria-label={`How many ${u.plural.toLowerCase()} fit inside one ${p.name.toLowerCase()}`}
+                numeric
+                value={p.definedQty}
+                onChange={(e) => setParent(p.storeUnitId, u.storeUnitId, e.target.value)}
+                error={
+                  p.definedQty.trim() === '' || Number(p.definedQty) <= 0
+                    ? 'Say how many, or this stock can never be sold'
+                    : null
+                }
+              />
+
+              <span className={styles.parentJoin}>fit inside one</span>
+
+              <select
+                className={styles.select}
+                aria-label={`What ${u.plural.toLowerCase()} go inside`}
+                value={p.storeUnitId}
+                onChange={(e) => {
+                  // Moved to a different container: the old one stops holding these.
+                  setParent(p.storeUnitId, null, '');
+                  setParent(e.target.value, u.storeUnitId, p.definedQty);
+                }}
+              >
+                {[p, ...candidateParents(u)].map((x) => (
+                  <option key={x.storeUnitId} value={x.storeUnitId}>
+                    {x.name.toLowerCase()}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                className={styles.remove}
+                aria-label={`${u.plural} do not go inside a ${p.name.toLowerCase()}`}
+                onClick={() => setParent(p.storeUnitId, null, '')}
+              >
+                <TrashIcon />
+              </button>
+            </div>
+          ))}
+
+          {/*
+            Another container, when a shape goes in more than one — a bottle in a crate and in a
+            pack. Only offered while there is something left to choose.
+          */}
+          {/*
+            The row being answered: a count, and a container not yet chosen.
+            It becomes real — and moves into the data — the moment a container is picked.
+          */}
+          {awaitingParent.includes(u.storeUnitId) && (
+            <div className={styles.parentRow}>
+              <Field
+                label={`How many ${u.plural.toLowerCase()}`}
+                numeric
+                value={pendingQty[u.storeUnitId] ?? ''}
+                onChange={(e) =>
+                  setPendingQty((prev) => ({ ...prev, [u.storeUnitId]: e.target.value }))
+                }
+              />
+
+              <span className={styles.parentJoin}>fit inside one</span>
+
+              <select
+                className={styles.select}
+                aria-label={`What ${u.plural.toLowerCase()} go inside`}
+                value=""
+                onChange={(e) => {
+                  if (!e.target.value) return;
+                  setParent(e.target.value, u.storeUnitId, pendingQty[u.storeUnitId] ?? '');
+                  setAwaitingParent((prev) => prev.filter((x) => x !== u.storeUnitId));
+                  setPendingQty((prev) => ({ ...prev, [u.storeUnitId]: '' }));
+                }}
+              >
+                <option value="">choose one…</option>
+                {candidateParents(u).map((x) => (
+                  <option key={x.storeUnitId} value={x.storeUnitId}>
+                    {x.name.toLowerCase()}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                className={styles.remove}
+                aria-label="Cancel this one"
+                onClick={() =>
+                  setAwaitingParent((prev) => prev.filter((x) => x !== u.storeUnitId))
+                }
+              >
+                <TrashIcon />
+              </button>
+            </div>
+          )}
+
+          {/*
+            ANOTHER CONTAINER — a bottle in a crate AND in a pack.
+
+            Shown whenever this shape is already in something, INCLUDING when there is nothing left
+            to put it in. Gated on having a candidate, it was invisible on exactly the item where a
+            shop would go looking for it: a crate and a bottle, linked, leaves the crate already
+            holding the bottles and nothing else on the item — so the button appeared only AFTER a
+            third shape had been added, which is the thing the shop would have needed the button to
+            know it could do.
+
+            Disabled says the capability exists and what it is waiting for. A missing control says
+            neither, and reads as the form refusing.
+          */}
+          {parentsOf(u).length > 0 && !awaitingParent.includes(u.storeUnitId) && (
+            <>
+              <button
+                type="button"
+                className={styles.addParent}
+                disabled={candidateParents(u).length === 0}
+                onClick={() => setAwaitingParent((prev) => [...prev, u.storeUnitId])}
+              >
+                <PlusIcon /> They also go inside another
+              </button>
+              {candidateParents(u).length === 0 && (
+                <p className={styles.addParentWhy}>
+                  Add the shape first — anything else on this item can hold {u.plural.toLowerCase()}.
+                </p>
+              )}
+            </>
+          )}
+        </div>
       )}
 
       {u.isSold && (
@@ -314,36 +469,58 @@ export function UnitsEditor({
           <div className={styles.howSold}>
             <span className={styles.howSoldLabel}>How much can somebody buy at a time?</span>
             {/*
-              A step, not three separate buttons.
+              SEVERAL AT ONCE, because a shop sells several at once.
 
-              Saying quarters means a quarter, a half and three-quarters are all sellable, because
-              they are all quarters. Whole numbers stay sellable whatever is chosen — somebody who
-              sells three-quarter bags certainly sells one bag.
+              These were four buttons and one choice, so a beer shop that sells whole crates AND
+              half crates could say only one of them — picking halves silently unpicked whole. Ticked
+              together they mean 1, 1.5, 2, 2.5, which is what the crate actually sells as.
+
+              "Any amount" is the exception and clears the rest: a thing that is weighed has no
+              steps at all, and saying "weighed, and also halves" describes nothing.
             */}
             {(
               [
-                ['Whole ones only', { wholeDigit: true, allowQuarter: false, allowHalf: false, allowThreeQuarter: false }],
-                ['Halves too', { wholeDigit: true, allowQuarter: false, allowHalf: true, allowThreeQuarter: false }],
-                ['Quarters too', { wholeDigit: true, allowQuarter: true, allowHalf: false, allowThreeQuarter: false }],
-                ['Any amount — it is weighed', { wholeDigit: false, allowQuarter: false, allowHalf: false, allowThreeQuarter: false }],
-              ] as [string, Partial<ProductUnit>][]
-            ).map(([label, change]) => {
-              const on =
-                u.wholeDigit === change.wholeDigit &&
-                u.allowQuarter === change.allowQuarter &&
-                u.allowHalf === change.allowHalf;
+                ['Whole ones only', 'wholeDigit'],
+                ['Halves too', 'allowHalf'],
+                ['Quarters too', 'allowQuarter'],
+                ['Three-quarters too', 'allowThreeQuarter'],
+              ] as [string, 'wholeDigit' | 'allowHalf' | 'allowQuarter' | 'allowThreeQuarter'][]
+            ).map(([label, key]) => {
+              const on = Boolean(u[key]);
               return (
                 <button
                   key={label}
                   type="button"
                   className={`${styles.choice} ${on ? styles.choiceOn : ''}`}
                   aria-pressed={on}
-                  onClick={() => patch(u.storeUnitId, change)}
+                  onClick={() =>
+                    patch(u.storeUnitId, {
+                      [key]: !on,
+                      // Ticking any step means this is counted, not weighed.
+                      ...(on ? {} : { wholeDigit: key === 'wholeDigit' ? true : u.wholeDigit }),
+                    } as Partial<ProductUnit>)
+                  }
                 >
                   {label}
                 </button>
               );
             })}
+
+            <button
+              type="button"
+              className={`${styles.choice} ${!u.wholeDigit ? styles.choiceOn : ''}`}
+              aria-pressed={!u.wholeDigit}
+              onClick={() =>
+                patch(u.storeUnitId, {
+                  wholeDigit: !u.wholeDigit,
+                  allowHalf: false,
+                  allowQuarter: false,
+                  allowThreeQuarter: false,
+                })
+              }
+            >
+              Any amount — it is weighed
+            </button>
           </div>
 
           <label className={styles.check}>
@@ -354,6 +531,7 @@ export function UnitsEditor({
             />
             <span>The {u.name.toLowerCase()} comes back empty</span>
           </label>
+
         </>
       )}
     </li>

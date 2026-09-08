@@ -38,6 +38,14 @@ export interface ProductUnit {
   /** What one costs a customer. Null while a unit is only ever bought in. */
   sellPrice: string;
   isReturnable: boolean;
+  /**
+   * Where this shape's container comes back to — the empties pool, by name.
+   *
+   * On the SHAPE, because a crate and a bottle come back into different pools. Held as a name
+   * rather than an id: `set_product_returnable` matches case-insensitively and creates the pool
+   * only when nothing matches, so a shop can name a new one without leaving the form.
+   */
+  poolName?: string;
   /*
    * The two roles a shape had, but only by inference.
    *
