@@ -1,0 +1,123 @@
+/*
+ * The words a shop measures in.
+ *
+ * A card each rather than a table row, for the same reason the pools have one: two editable fields
+ * and a retire action per row, and a table of inputs on a 390px phone is a row of boxes nobody can
+ * hit.
+ */
+
+.list {
+  list-style: none;
+  margin: var(--space-4) 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.item {
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.itemHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+/* How many products are measured in it — what decides whether putting it away is safe, and what the
+   server refuses on. Quiet, because it is a fact rather than a control. */
+.used {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.retire {
+  min-width: var(--touch-min, 44px);
+  min-height: var(--touch-min, 44px);
+  display: grid;
+  place-items: center;
+  border: none;
+  background: none;
+  color: var(--danger);
+  cursor: pointer;
+}
+
+/* ── Adding one ───────────────────────────────────────────────────────────────────── */
+
+.adder {
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  display: grid;
+  gap: var(--space-3);
+}
+
+.adderTitle {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+.adderActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+
+/* ── Which kind ───────────────────────────────────────────────────────────────────── */
+
+.kindPick {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.kindLabel {
+  font-weight: 600;
+}
+
+/* Two cards rather than a select: the difference between them decides how much a customer is owed
+   back, so it is worth the room to say what each one means. */
+.kindRow {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.kindOption {
+  display: grid;
+  gap: 2px;
+  padding: var(--space-3);
+  min-height: var(--touch-min, 44px);
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.kindOn {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.kindWhy {
+  font-weight: 400;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* The singular and the plural, side by side: they are one answer given twice and reading them apart
+   from each other is how a shop ends up with "Crate" and "Crate" as its two forms. */
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}

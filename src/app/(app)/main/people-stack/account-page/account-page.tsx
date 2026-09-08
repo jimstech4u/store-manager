@@ -1,21 +1,27 @@
 'use client';
 
+import { useState } from 'react';
+
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
 import { Explain, InfoPanel } from '@/components/ui/Explain';
-import { CashIcon, HistoryIcon, RefreshIcon, ReturnIcon } from '@/components/ui/Icon';
+import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/components/ui/Dialog';
+import { CashIcon, HistoryIcon, RefreshIcon, ReturnIcon, TrashIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { usePermission } from '@/hooks/usePermission';
 import { useAuth } from '@/providers/AuthProvider';
 import {
+  accountsChanged,
+  type EmptiesPool,
   useCustomerAccount,
   useEmptiesPools,
-  type EmptiesPool,
 } from '@/lib/stacks/customer-account';
-import { formatMoney, formatQty } from '@/lib/format';
+import { formatMoney, formatQty, messageOf } from '@/lib/format';
+import { getSupabase } from '@/lib/supabase/client';
+import { useListNotifier } from '@/hooks/useListChannel';
 import styles from './account-page.module.css';
 
 /**
@@ -47,6 +53,20 @@ export default function AccountPage() {
   const pools = useEmptiesPools(store?.id ?? null);
 
   const nav = useNav();
+
+  /*
+   * Taking somebody off the list.
+   *
+   * `useProblem` returns a fresh object every render, so `show` is bound to a local const — the
+   * hook itself is never a safe dependency and a memo over it quietly does nothing.
+   */
+  const removeDialog = useConfirm();
+  const removeProblem = useProblem();
+  const showRemoveProblem = removeProblem.show;
+  const [removing, setRemoving] = useState(false);
+
+  // Told which customer went, so the People list loses them without being re-read.
+  const notifyCustomers = useListNotifier('customers');
   // Same staleness problem as the statement page, same answer — see the hook for why a single
   // lifecycle signal was not enough.
   /*
@@ -91,6 +111,8 @@ export default function AccountPage() {
   const poolName = (id: string | null) =>
     pools.find((p: EmptiesPool) => p.id === id)?.name ?? account.empties.find((e) => e.category_id === id)?.category ?? '';
 
+  const owes = Number(account.balance) !== 0;
+
   return (
     <PageScaffold
       onBack={goBack}
@@ -103,8 +125,74 @@ export default function AccountPage() {
           onClick: () => void reload(),
           ariaLabel: 'Check for changes',
         },
+        /*
+          TAKING SOMEBODY OFF THE LIST.
+
+          `archive_customer` has existed since the customer work and nothing has ever called it, so
+          a duplicate or a typo stays in the People list and in every picker for ever and the shop's
+          answer is to scroll past it.
+
+          Behind the permission that owns customers, because it takes somebody out of everybody
+          else's picker too.
+        */
+        ...(can('customers.manage')
+          ? [
+              {
+                key: 'archive',
+                icon: <TrashIcon />,
+                onClick: () => setRemoving(true),
+                ariaLabel: `Stop showing ${account.customer.name}`,
+              },
+            ]
+          : []),
       ]}
     >
+      <ProblemDialog problem={removeProblem} title="Not removed" />
+
+      {/*
+        Mounted only while the question is being asked — the dialog package leaves its overlay in
+        the page after closing, and that overlay swallows taps meant for what is behind it.
+      */}
+      {removing && (
+        <ConfirmDialog
+          controller={removeDialog}
+          title={`Stop showing ${account.customer.name}?`}
+          message={
+            owes
+              ? `They still have ${formatMoney(account.balance)} running with you. Taking them off ` +
+                `the list does not clear it — the history stays and the money is still owed.`
+              : 'They come off the People list and out of the pickers. Everything they have already ' +
+                'bought stays exactly where it is.'
+          }
+          confirmText={owes ? 'Take them off anyway' : 'Take them off'}
+          tone="danger"
+          onDismiss={() => setRemoving(false)}
+          onConfirm={() => {
+            void (async () => {
+              try {
+                /*
+                  `p_force` because the server refuses somebody with a balance unless it is asked
+                  twice — a customer who owes you money is not one to lose track of. The screen has
+                  just said so in as many words, so the second asking is honest.
+                */
+                const { error: err } = await getSupabase().rpc('archive_customer', {
+                  p_customer_id: account.customer.id,
+                  p_force: owes,
+                });
+                if (err) throw err;
+                notifyCustomers({ type: 'remove', id: account.customer.id });
+                accountsChanged();
+                await nav.pop();
+              } catch (e) {
+                showRemoveProblem(messageOf(e, 'That customer could not be taken off the list.'));
+              } finally {
+                setRemoving(false);
+              }
+            })();
+          }}
+        />
+      )}
+
       <Explain label="How to read this page">
         This customer has up to three separate things running with you, and they are kept apart on
         purpose.

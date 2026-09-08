@@ -326,6 +326,27 @@ export default function SettingsPage() {
             for a screen nobody built, and it edits only — so there was no way to make the first
             pool either. Under Money because a deposit is money the shop is holding.
           */}
+          {/*
+            THE SHOP'S OWN VOCABULARY.
+
+            `create_store_unit` existed and the app called it; nothing renamed one and nothing put
+            one away, so a shop that typed "Crat" had it on every product measured in it, every
+            receipt they print, and every picker — the most visible text a shop owns and the only
+            piece it could not fix.
+          */}
+          <button
+            type="button"
+            className={styles.linkRow}
+            onClick={() => nav.push('words_page')}
+          >
+            <span className={styles.linkMain}>
+              <span className={styles.linkName}>Words you measure in</span>
+              <span className={styles.sectionNote}>
+                Crate, bottle, dirica, paint — correct one here and it changes everywhere
+              </span>
+            </span>
+          </button>
+
           <button
             type="button"
             className={styles.linkRow}

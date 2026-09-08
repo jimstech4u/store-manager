@@ -168,10 +168,10 @@ What it found still open, worst first:
 
 | | Value | What is missing |
 |---|---|---|
-| `[ ]` | A unit's name (Crate, Bottle, Dirica) | Can be added, never renamed or retired. A typo is permanent AND spreads: the name is on every product using that unit. |
+| `[x]` | A unit's name (Crate, Bottle, Dirica) | **Built.** 0099 renames and retires; 0100 stops offering retired ones and returns the usage count. `settings → Words you measure in`. Renaming is safe (every row points at the same unit, so a typo fixed once is fixed on every product, receipt and picker); retiring one that products are measured in is refused with the count, because their shapes would name something no picker offers. |
 | `[ ]` | A member of staff | `invite_staff` and `update_staff_details` both exist and nothing calls either. No way to remove somebody or change their role at all. |
-| `[ ]` | A customer | `archive_customer` and `restore_customer` exist, dead. A mis-tap is permanent from the screen's point of view. |
-| `[ ]` | A shared receipt link | `revoke_share_link` exists, dead. A link, once sent, cannot be withdrawn. |
+| `[x]` | A customer — archive | **Built.** The account page can take somebody off the list. `p_force` is passed only when they have a balance, and the dialog says so first — a customer who owes you money is not one to lose track of. `restore_customer` still has no door; the People list has no "put away" filter to reach it from. |
+| `[x]` | A shared receipt link | **Built.** "Sent to the wrong person? Take the link back" on the receipt, after a link has been made. |
 | `[ ]` | A closed count | `reopen_stock_period` exists, dead. A count closed by mistake is final. |
 | `[ ]` | A price agreed with one customer | No writer at all, though `resolve_price` already honours them and the till says "this customer's agreed price". |
 | `[ ]` | A bulk price band | No writer at all. |
