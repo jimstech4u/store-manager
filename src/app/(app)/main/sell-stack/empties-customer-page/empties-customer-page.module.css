@@ -1,0 +1,193 @@
+.section {
+  margin: var(--space-6) 0 var(--space-2);
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+
+.sub {
+  margin: var(--space-5) 0 var(--space-2);
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* The sentence a shop says out loud. Big, because this is the figure two people are talking about
+   across a counter. */
+.said {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.whole,
+.part {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+/* A part-load is the remainder of one product and never merges — shown quieter so the whole
+   crates, which are what actually settle, read first. */
+.part {
+  border-style: dashed;
+  background: none;
+}
+
+.saidQty {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.saidWhat {
+  font-size: var(--text-base);
+}
+
+.saidFrom {
+  flex-basis: 100%;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.shapes {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.shapeRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  background: var(--surface-2, var(--surface));
+}
+
+.shapeName {
+  display: flex;
+  flex-direction: column;
+}
+
+.shapeGroup {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.shapeQty {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* The two actions END the page's first block rather than being pinned — see CLAUDE.md. */
+.actions {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.ledger {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.move {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Which way the containers went, at a glance. Colour is the second signal — the words say it too,
+   because a colour alone is no use to somebody who cannot tell these two apart. */
+.dot {
+  flex: none;
+  width: 0.6rem;
+  height: 0.6rem;
+  margin-top: 0.45rem;
+  border-radius: 50%;
+}
+
+.out {
+  background: var(--warning, #c47d1a);
+}
+
+.returned {
+  background: var(--primary);
+}
+
+.damaged {
+  background: var(--danger, #c0392b);
+}
+
+.moveBody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.moveWhat {
+  font-weight: 600;
+}
+
+.moveWho,
+.moveWhy {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.moveWhen {
+  flex: none;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.none {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.pickLabel {
+  display: block;
+  margin-bottom: var(--space-2);
+  font-weight: 600;
+}
+
+.pick {
+  width: 100%;
+  min-height: var(--touch-comfortable, 52px);
+  margin-bottom: var(--space-3);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+/* A sheet's own actions belong at its foot — the exception the no-pinned-footer rule names. */
+.sheetActions {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.sheetActions > * {
+  flex: 1;
+}

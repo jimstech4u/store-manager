@@ -5,7 +5,6 @@ import SettingsPage from './settings-page/settings-page';
 import ReviewPage from './review-page/review-page';
 import StaffPage from './staff-page/staff-page';
 import BankPage from './bank-page/bank-page';
-import PoolsPage from './pools-page/pools-page';
 import WordsPage from './words-page/words-page';
 import BankFormPage from './bank-form-page/bank-form-page';
 import StaffInvitePage from './staff-invite-page/staff-invite-page';
@@ -39,7 +38,6 @@ const navLink = {
   review_page: ReviewPage,
   staff_page: StaffPage,
   bank_page: BankPage,
-  pools_page: PoolsPage,
   words_page: WordsPage,
   bank_form_page: BankFormPage,
   staff_invite_page: StaffInvitePage,

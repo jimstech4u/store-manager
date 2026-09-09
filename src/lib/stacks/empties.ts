@@ -292,3 +292,36 @@ export function returnIsAllowed(units: ReturnUnit[], qty: number): boolean {
     return step > 0 && qty >= step && Math.abs(qty % step) < 1e-9;
   });
 }
+
+
+/**
+ * What is out of THIS product, in THIS product's own shapes.
+ *
+ * `useProductEmpties` above answers in pools, which is a different question with a different
+ * answer: "NBL crate" is shared by eight beers, so on a page about Goldberg it shows a figure for
+ * all of them and the note underneath has to admit it. A shop reads the number on the page it is
+ * looking at as being about the item it is looking at, and it was not.
+ */
+export interface ShapeOut {
+  productUnitId: string;
+  unitName: string;
+  unitPlural: string;
+  baseQty: number;
+  outNow: number;
+  customersOut: number;
+}
+
+export async function productEmptiesOut(productId: string): Promise<ShapeOut[]> {
+  const { data, error } = await getSupabase().rpc('product_empties_out', {
+    p_product_id: productId,
+  });
+  if (error) throw error;
+  return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+    productUnitId: String(r.product_unit_id),
+    unitName: String(r.unit_name ?? ''),
+    unitPlural: String(r.unit_plural ?? ''),
+    baseQty: Number(r.base_qty) || 1,
+    outNow: Number(r.out_now) || 0,
+    customersOut: Number(r.customers_out) || 0,
+  }));
+}

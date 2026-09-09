@@ -110,3 +110,136 @@
   color: var(--text-muted);
   font-size: var(--text-sm);
 }
+
+/* Two ways a shop knows what somebody is holding: by the item, or by the maker. A switcher rather
+   than two separate sections, because only one of them is the answer for any given line. */
+.tabs {
+  display: flex;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+  padding: var(--space-1);
+  border-radius: var(--radius);
+  background: var(--surface-2, var(--surface));
+}
+
+.tab {
+  flex: 1;
+  min-height: var(--touch-min, 44px);
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tabOn {
+  background: var(--surface);
+  color: var(--primary);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+}
+
+.addEmpties {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: var(--touch-comfortable, 52px);
+  margin-bottom: var(--space-3);
+  padding: 0 var(--space-3);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.addEmpties:disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+/* Once something is chosen: a box per shape, on the page rather than in the sheet. */
+.composer {
+  display: grid;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.composerWho {
+  margin: 0;
+  font-weight: 700;
+}
+
+.composerWhy {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.composerActions {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.composerActions > * {
+  flex: 1;
+}
+
+/* One box per shape, read across — "3 crates, 4 bottles" is how somebody says it. */
+.shapeBoxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.shapeBoxes > * {
+  flex: 1 1 7rem;
+  min-width: 0;
+}
+
+.pickList {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pickRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: 100%;
+  min-height: var(--touch-comfortable, 52px);
+  padding: var(--space-3);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pickName {
+  font-weight: 600;
+}
+
+.pickMeta {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.none {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--touch-min, 44px);
+}

@@ -485,3 +485,28 @@
   font-size: var(--text-sm);
   color: var(--text-muted);
 }
+
+/* The deposit composer, beside the charge one and plainly apart from it. A charge is the shop's
+   money; a deposit is the customer's and the shop is only holding it. */
+.deposits {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+.depositWhy {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.depositList {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

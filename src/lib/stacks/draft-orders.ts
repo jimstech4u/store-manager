@@ -64,6 +64,25 @@ export interface DraftLine {
   priceReason?: string | null;
 }
 
+/**
+ * A deposit taken on this sale.
+ *
+ * A LIST, and on the order rather than per line, because a deposit is not a property of a line. It
+ * used to live as `depositCharged` on each line, and a figure typed at the counter was SPREAD
+ * across the lines sending containers out, in proportion to whatever each already held — so that a
+ * round sum could be re-expressed as a quantity of containers at a rate.
+ *
+ * It is a round sum two people agree. It comes back, or the shop keeps it and says why, and none of
+ * that depends on which line the crates came from. `depositCharged` is still read on the way in so
+ * an order saved by an older build still totals correctly.
+ */
+export interface DraftDeposit {
+  key: string;
+  amount: string;
+  /** What it was taken against, in the seller's words. Optional — often it is just "crates". */
+  note?: string;
+}
+
 export interface DraftCharge {
   key: string;
   /** What this charge was for, in the seller's words. One note per charge, not one per sale. */
@@ -114,6 +133,8 @@ export interface DraftOrder {
    * weeks later: what each was for.
    */
   charges: DraftCharge[];
+  /** Deposits taken on this sale. Added to whatever the shop already holds, never replacing it. */
+  deposits: DraftDeposit[];
   note: string;
   /** False while there are edits the server has not accepted yet. */
   synced: boolean;
@@ -149,6 +170,7 @@ export function makeDraft(): DraftOrder {
     feeAmount: '',
     feeLabel: '',
     charges: [],
+    deposits: [],
     note: '',
     synced: false,
   };
@@ -196,10 +218,24 @@ export function draftSubtotal(order: DraftOrder): number {
  * work out which part of a total it was.
  */
 export function depositTotal(order: DraftOrder): number {
-  return order.lines.reduce((sum, l) => {
+  /*
+   * BOTH SHAPES, because an order saved by an older build has its deposit on the lines.
+   *
+   * Dropping the line figures would quietly lower a bill somebody is part-way through — the same
+   * reason `feeAmount` is still counted in `draftTotal`. New deposits go in `deposits`; anything
+   * found on a line is still money the customer handed over.
+   */
+  const onLines = order.lines.reduce((sum, l) => {
     const n = Number(l.depositCharged);
     return sum + (Number.isFinite(n) ? n : 0);
   }, 0);
+
+  const onOrder = (order.deposits ?? []).reduce((sum, d) => {
+    const n = Number(d.amount);
+    return sum + (Number.isFinite(n) ? n : 0);
+  }, 0);
+
+  return onLines + onOrder;
 }
 
 /**
@@ -572,6 +608,8 @@ export function useDraftOrders(storeId: string | null) {
           feeAmount: '',
           feeLabel: '',
           charges: [],
+          // A claimed order's deposits come back on its lines, which `depositTotal` still reads.
+          deposits: [],
           note: '',
           synced: true,
           lines: ((lineRows ?? []) as unknown as LineRow[]).map((l) => ({

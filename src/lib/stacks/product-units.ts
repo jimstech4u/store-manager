@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useDemandState } from '@academix-admin/state-stack';
 import { getSupabase } from '@/lib/supabase/client';
 import { catalogChanged } from '@/lib/stacks/catalog-stack';
@@ -192,23 +192,50 @@ export function useProductUnits(productId: string | null) {
     deps: [productId ?? ''],
   });
 
+  /*
+   * WHETHER THIS IS STILL WORKING, AND WHETHER IT FAILED.
+   *
+   * The read used to be `const { data } = await ...` with no error check at all, so a request that
+   * failed set an empty list — indistinguishable from a product with no shapes. Opening Goldberg
+   * on a bad connection showed a blank section with no spinner, no message and no way to try again,
+   * and the honest reading of that screen was "this item has no shapes", which is a lie about the
+   * shop's own catalogue.
+   */
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const load = useCallback(() => {
     if (!productId) return;
+    setBusy(true);
     void demandUnits(async ({ set }) => {
-      const { data } = await getSupabase().rpc('product_units_for', { p_product_id: productId });
+      const { data, error: err } = await getSupabase().rpc('product_units_for', {
+        p_product_id: productId,
+      });
+      if (err) {
+        /*
+         * The cached list is KEPT and only the error is set — a loader must never blank before it
+         * fetches. A pushed-under page has not remounted, so emptying it on a failed refresh looks
+         * exactly like data that was lost.
+         */
+        setError(err.message);
+        setBusy(false);
+        return;
+      }
       const rows = (data ?? []) as ProductUnitRow[];
       const byId = new Map(rows.map((r) => [r.id, r.store_unit_id]));
       set(
         rows.map((r) => toUnit(r, byId)),
         { override: true },
       );
+      setError(null);
+      setBusy(false);
     });
     void demandLoaded(async ({ set }) => set(true, { override: true }));
   }, [productId, demandUnits, demandLoaded]);
 
   useEffect(load, [load]);
 
-  return { units, setUnits, loaded, setLoaded, reload: load };
+  return { units, setUnits, loaded, setLoaded, loading: busy, error, reload: load };
 }
 
 /**

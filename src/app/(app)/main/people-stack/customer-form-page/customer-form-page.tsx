@@ -13,6 +13,19 @@ import { getSupabase } from '@/lib/supabase/client';
 import { useListNotifier } from '@/hooks/useListChannel';
 import styles from './customer-form-page.module.css';
 import { messageOf } from '@/lib/format';
+import { BottomSheet } from '@/components/ui/BottomSheet';
+import { productEmptiesOut, type ShapeOut } from '@/lib/stacks/empties';
+import {
+  groupsWithReturnables,
+  productsWithReturnables,
+  recordEmpties,
+  recordGroupEmpties,
+  takeDeposit,
+  type ReturnableGroup,
+  type ReturnableProduct,
+  type GroupUnit,
+  groupReturnUnits,
+} from '@/lib/stacks/customer-ledgers';
 import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
 
 /**
@@ -40,6 +53,24 @@ import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
  * The alternative — a callback per caller — cannot work while the name is session-wide, and
  * making the form guess from which stack it was pushed is exactly the guessing this avoids.
  */
+/**
+ * One line of "what they are holding", ready to be written.
+ *
+ * Either a product's SHAPE or a maker plus a shape-word — the two things `customer_empties` accepts
+ * since 0118, and the two ways a shop actually knows this. `what` is the sentence a person reads
+ * back on the form, which is not the same as what the writer needs.
+ */
+interface OpeningEmpty {
+  key: string;
+  what: string;
+  qty: string;
+  productUnitId?: string;
+  categoryId?: string;
+  storeUnitId?: string;
+}
+
+const newLineKey = () => Math.random().toString(36).slice(2, 10);
+
 export default function CustomerFormPage() {
   const nav = useNav();
   const goBack = useStackBack();
@@ -104,8 +135,23 @@ export default function CustomerFormPage() {
    */
   const [owes, setOwes] = useState('');
   const [owedThem, setOwedThem] = useState('');
-  const [pool, setPool] = useState('');
-  const [poolQty, setPoolQty] = useState('');
+  const [deposit, setDeposit] = useState('');
+  /** Which way the shop is entering it: by the item, or by the maker. */
+  const [tab, setTab] = useState<'product' | 'group'>('product');
+  /** Which picker is open, if any — the same tab names, so one piece of state cannot disagree. */
+  const [picking, setPicking] = useState<null | 'product' | 'group'>(null);
+
+  /*
+   * The item or maker chosen, and the quantities being typed against it.
+   *
+   * Held here rather than added straight to the list, because a shape's box can be left blank —
+   * "three crates and no bottles" is one answer, and it is entered by filling one box of two.
+   */
+  const [chosenItem, setChosenItem] = useState<ReturnableProduct | null>(null);
+  const [itemShapes, setItemShapes] = useState<ShapeOut[]>([]);
+  const [chosenMaker, setChosenMaker] = useState<ReturnableGroup | null>(null);
+  const [makerUnits, setMakerUnits] = useState<GroupUnit[]>([]);
+  const [byShape, setByShape] = useState<Record<string, string>>({});
   /*
    * The lines added so far, and the shop's explicit "none".
    *
@@ -113,24 +159,86 @@ export default function CustomerFormPage() {
    * accepted — lines, or "none are out". What is refused is neither, because a blank list and an
    * unanswered question look identical afterwards and only one of them is a fact.
    */
-  const [openingEmpties, setOpeningEmpties] = useState<{ id: string; name: string; qty: string }[]>(
+  /*
+   * WHAT THEY ARE HOLDING, as lines ready to be written.
+   *
+   * Each carries the ids the writer needs and the words the seller reads, because the two are
+   * different: `record_customer_empties` wants a shape id, and the person checking the form wants
+   * "3 Goldberg crates".
+   */
+  const [openingEmpties, setOpeningEmpties] = useState<OpeningEmpty[]>(
     [],
   );
   const [noEmpties, setNoEmpties] = useState(false);
-  const [openingNote, setOpeningNote] = useState('');
-  const [pools, setPools] = useState<{ id: string; name: string; kind: string }[]>([]);
+  /*
+   * WHAT CAN BE OWED, read once when the form opens.
+   *
+   * Products with at least one shape ticked "comes back", and makers with at least one such
+   * product. Both are answers the shop has already given on the product form — this asks nothing
+   * new, which is the point: the pools were a second vocabulary that could disagree with the first.
+   */
+  const [items, setItems] = useState<ReturnableProduct[]>([]);
+  const [makers, setMakers] = useState<ReturnableGroup[]>([]);
 
   useEffect(() => {
+    if (!store) return;
     let cancelled = false;
-    void getSupabase()
-      .rpc('store_empties_categories', { p_store_id: store?.id })
-      .then(({ data }) => {
-        if (!cancelled) setPools((data ?? []) as typeof pools);
-      });
+    void (async () => {
+      try {
+        const [ps, gs] = await Promise.all([
+          productsWithReturnables(store.id),
+          groupsWithReturnables(store.id),
+        ]);
+        if (cancelled) return;
+        setItems(ps);
+        setMakers(gs);
+      } catch {
+        /*
+         * Left empty and NOT treated as "nothing comes back".
+         *
+         * The composer below is guarded on `items.length`, so a failed read shows no picker rather
+         * than an empty one — and the required-answer guard only fires when there is something to
+         * answer about, so a shop is never blocked by a request that did not arrive.
+         */
+      }
+    })();
     return () => {
       cancelled = true;
     };
-  }, [store?.id]);
+  }, [store]);
+
+  /** Every returnable shape of the chosen item — a box each, the way the count screen asks. */
+  useEffect(() => {
+    if (!chosenItem) return;
+    let cancelled = false;
+    void (async () => {
+      const rows = await productEmptiesOut(chosenItem.productId).catch(() => []);
+      if (!cancelled) {
+        setItemShapes(rows);
+        setByShape({});
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [chosenItem]);
+
+  /** And the shape-words a maker's containers come back in, so "24 NBL" says 24 of what. */
+  useEffect(() => {
+    if (!chosenMaker) return;
+    let cancelled = false;
+    void (async () => {
+      const rows = await groupReturnUnits(chosenMaker.id).catch(() => []);
+      if (!cancelled) {
+        setMakerUnits(rows);
+        setByShape({});
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [chosenMaker]);
+
 
   if (!store) return null;
 
@@ -146,9 +254,9 @@ export default function CustomerFormPage() {
       problem.show('Do they already owe you anything? Put 0 if they do not.');
       return;
     }
-    if (minimum && pools.length > 0 && openingEmpties.length === 0 && !noEmpties) {
+    if (minimum && items.length > 0 && openingEmpties.length === 0 && !noEmpties) {
       problem.show(
-        'Are any containers already out with them? Add them, or tick that none are.',
+        'Is anything of yours out with them? Add it, or tick that there is nothing.',
       );
       return;
     }
@@ -187,7 +295,7 @@ export default function CustomerFormPage() {
           p_customer_id: customer.id,
           p_amount: Number(owes),
           p_as_of: asOf,
-          p_note: openingNote.trim() || 'What they owed before we started here',
+          p_note: 'What they owed before we started here',
         });
         if (e1) throw e1;
       }
@@ -201,7 +309,7 @@ export default function CustomerFormPage() {
           // as what they owe, or the two can disagree.
           p_amount: -Number(owedThem),
           p_as_of: asOf,
-          p_note: openingNote.trim() || 'What we owed them before we started here',
+          p_note: 'What we owed them before we started here',
         });
         if (e2) throw e2;
       }
@@ -214,14 +322,51 @@ export default function CustomerFormPage() {
        */
       for (const line of openingEmpties) {
         if (!(Number(line.qty) > 0)) continue;
-        const { error: e3 } = await getSupabase().rpc('backfill_empties', {
-          p_store_id: store.id,
-          p_customer_id: customer.id,
-          p_category_id: line.id,
-          p_qty: Number(line.qty),
-          p_as_of: asOf,
-        });
-        if (e3) throw e3;
+
+        /*
+         * A LINE KNOWS WHICH KIND IT IS, and there are only two.
+         *
+         * A product's shape when the shop named the item, a maker plus a shape-word when it did
+         * not. `backfill_empties` wrote to the pool ledger and is not called here any more — pools
+         * are the vocabulary 0108 replaced, and writing to both would leave two answers to
+         * "what are they holding" that drift apart from the first sale onwards.
+         */
+        if (line.productUnitId) {
+          await recordEmpties({
+            storeId: store.id,
+            customerId: customer.id,
+            productUnitId: line.productUnitId,
+            direction: 'out',
+            qty: Number(line.qty),
+            reason: 'What they already had when the account opened',
+          });
+        } else if (line.categoryId && line.storeUnitId) {
+          await recordGroupEmpties({
+            storeId: store.id,
+            customerId: customer.id,
+            categoryId: line.categoryId,
+            storeUnitId: line.storeUnitId,
+            qty: Number(line.qty),
+            reason: 'What they already had when the account opened',
+          });
+        }
+      }
+
+      /*
+       * AND THE DEPOSIT, which is money and has nothing to do with the containers.
+       *
+       * Its own ledger, on purpose: the old model made a deposit a quantity of containers at a
+       * rate, so a shop holding a round twenty thousand could not say so. Zero writes nothing —
+       * "we hold none" is recorded by the absence of a row, and a nought would be a movement that
+       * never happened.
+       */
+      if (Number(deposit) > 0) {
+        await takeDeposit(
+          store.id,
+          customer.id,
+          Number(deposit),
+          'Held when the account opened',
+        );
       }
 
       /*
@@ -353,120 +498,211 @@ export default function CustomerFormPage() {
 
       <Field
         label="You owe them"
-        optional
         numeric
         prefix="₦"
+        required={minimum}
         value={owedThem}
         onChange={(e) => setOwedThem(e.target.value)}
         placeholder="0"
         hint="An overpayment, or a load they brought back. Rarer, and it still belongs on the account."
       />
 
-      {pools.length > 0 && (
-        <>
-          <h3 className={styles.subsection}>Containers already out with them</h3>
+      {/*
+        MONEY YOU ARE HOLDING, which is not money they owe and not empties.
+        
+        The three are settled separately and by different people at different times, so they are
+        asked separately here. A deposit is the shop's to give back or to keep against breakage;
+        it is not a payment and must never be netted off what is owed.
+      */}
+      <Field
+        label="Deposit you are holding"
+        numeric
+        prefix="₦"
+        required={minimum}
+        value={deposit}
+        onChange={(e) => setDeposit(e.target.value)}
+        placeholder="0"
+        hint="Money of theirs you are keeping against what they take away. Put 0 if you hold none."
+      />
 
-          {/*
-            ONE COMPOSER, and what has been added listed above it — the rule this project already
-            follows for fees and payments. A customer can owe crates AND bottles at once, and a
-            single select with a single quantity can only ever record the first of them.
-          */}
-          {openingEmpties.length > 0 && (
-            <ul className={styles.lineList}>
-              {openingEmpties.map((line) => (
-                <li key={line.id} className={styles.lineRow}>
-                  <span>
-                    {Number(line.qty)} {line.name}
-                  </span>
-                  <button
-                    type="button"
-                    className={styles.lineRemove}
-                    onClick={() =>
-                      setOpeningEmpties((prev) => prev.filter((l) => l.id !== line.id))
-                    }
-                    aria-label={`Remove ${line.name}`}
-                  >
-                    <CloseIcon />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+      <h3 className={styles.subsection}>What of yours are they holding?</h3>
 
-          <div className={styles.poolPick}>
-            <label className={styles.poolLabel} htmlFor="opening-pool">
-              Which kind
-            </label>
-            <select
-              id="opening-pool"
-              className={styles.poolSelect}
-              value={pool}
-              onChange={(e) => setPool(e.target.value)}
-              disabled={noEmpties}
-            >
-              <option value="">Choose one</option>
-              {pools
-                .filter((x) => !openingEmpties.some((l) => l.id === x.id))
-                .map((x) => (
-                  <option key={x.id} value={x.id}>
-                    {x.name}
-                  </option>
-                ))}
-            </select>
-          </div>
+      {/*
+        TWO TABS, because a shop knows this two ways.
 
-          <Field
-            label="How many"
-            numeric
-            value={poolQty}
-            onChange={(e) => setPoolQty(e.target.value)}
-            placeholder="0"
-            disabled={noEmpties}
-          />
+        By PRODUCT when it remembers the item — three Goldberg crates and four bottles, a box per
+        returnable shape, the way the count screen asks. By MAKER when it does not: twenty-four NBL
+        crates carried across from a book, where nobody recorded which beer they were.
 
-          <Button
-            fullWidth
-            disabled={noEmpties || !pool || !(Number(poolQty) > 0)}
-            onClick={() => {
-              const chosen = pools.find((x) => x.id === pool);
-              if (!chosen) return;
-              setOpeningEmpties((prev) => [...prev, { id: chosen.id, name: chosen.name, qty: poolQty }]);
-              setPool('');
-              setPoolQty('');
-            }}
-          >
-            <PlusIcon /> Add these
-          </Button>
+        The second is not a lesser answer. It is what the shop actually knows, and forcing it into a
+        product would put twenty-four crates against Goldberg because Goldberg sells most — a fact
+        nobody stated.
+      */}
+      <div className={styles.tabs} role="tablist" aria-label="How to enter what they are holding">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'product'}
+          className={`${styles.tab} ${tab === 'product' ? styles.tabOn : ''}`}
+          onClick={() => setTab('product')}
+        >
+          By item
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'group'}
+          className={`${styles.tab} ${tab === 'group' ? styles.tabOn : ''}`}
+          onClick={() => setTab('group')}
+        >
+          By maker
+        </button>
+      </div>
 
-          {/*
-            The other answer, and it has to be as easy to give as the first.
-            A shop that ticks this has ANSWERED; a shop that leaves the list empty has not.
-          */}
-          <label className={styles.toggleRow}>
-            <input
-              type="checkbox"
-              checked={noEmpties}
-              onChange={(e) => {
-                setNoEmpties(e.target.checked);
-                if (e.target.checked) setOpeningEmpties([]);
-              }}
-            />
-            <span>None are out with them</span>
-          </label>
-        </>
+      {openingEmpties.length > 0 && (
+        <ul className={styles.lineList}>
+          {openingEmpties.map((line) => (
+            <li key={line.key} className={styles.lineRow}>
+              <span>
+                {line.qty} {line.what}
+              </span>
+              <button
+                type="button"
+                className={styles.lineRemove}
+                onClick={() => setOpeningEmpties((prev) => prev.filter((l) => l.key !== line.key))}
+                aria-label={`Remove ${line.what}`}
+              >
+                <CloseIcon />
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
+
+      <button
+        type="button"
+        className={styles.addEmpties}
+        disabled={noEmpties}
+        onClick={() => setPicking(tab)}
+      >
+        <PlusIcon /> {tab === 'product' ? 'Add an item they have' : 'Add a maker they owe'}
+      </button>
+
+      {/*
+        THE QUANTITIES, once something is chosen — a box per shape, on the page.
+
+        Not in the sheet. The sheet's job was choosing, and it closed when the choice was made; a
+        form put inside one fights the keyboard and loses everything typed on a rotation.
+      */}
+      {chosenItem && (
+        <div className={styles.composer}>
+          <p className={styles.composerWho}>{chosenItem.productName}</p>
+          <div className={styles.shapeBoxes}>
+            {itemShapes.map((sh) => (
+              <Field
+                key={sh.productUnitId}
+                label={sh.unitPlural}
+                numeric
+                value={byShape[sh.productUnitId] ?? ''}
+                onChange={(e) =>
+                  setByShape((prev) => ({ ...prev, [sh.productUnitId]: e.target.value }))
+                }
+                placeholder="0"
+                hint={sh.baseQty > 1 ? `one is ${sh.baseQty}` : undefined}
+              />
+            ))}
+          </div>
+          <div className={styles.composerActions}>
+            <Button variant="secondary" onClick={() => setChosenItem(null)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!itemShapes.some((sh) => Number(byShape[sh.productUnitId]) > 0)}
+              onClick={() => {
+                setOpeningEmpties((prev) => [
+                  ...prev,
+                  ...itemShapes
+                    .filter((sh) => Number(byShape[sh.productUnitId]) > 0)
+                    .map((sh) => ({
+                      key: newLineKey(),
+                      what: `${chosenItem.productName} ${sh.unitPlural.toLowerCase()}`,
+                      qty: byShape[sh.productUnitId],
+                      productUnitId: sh.productUnitId,
+                    })),
+                ]);
+                setChosenItem(null);
+              }}
+            >
+              Add
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {chosenMaker && (
+        <div className={styles.composer}>
+          <p className={styles.composerWho}>{chosenMaker.name}</p>
+          <div className={styles.shapeBoxes}>
+            {makerUnits.map((u) => (
+              <Field
+                key={u.storeUnitId}
+                label={u.plural}
+                numeric
+                value={byShape[u.storeUnitId] ?? ''}
+                onChange={(e) =>
+                  setByShape((prev) => ({ ...prev, [u.storeUnitId]: e.target.value }))
+                }
+                placeholder="0"
+              />
+            ))}
+          </div>
+          <p className={styles.composerWhy}>
+            For containers you know are theirs but cannot say which item they came from — what a
+            book carries across.
+          </p>
+          <div className={styles.composerActions}>
+            <Button variant="secondary" onClick={() => setChosenMaker(null)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!makerUnits.some((u) => Number(byShape[u.storeUnitId]) > 0)}
+              onClick={() => {
+                setOpeningEmpties((prev) => [
+                  ...prev,
+                  ...makerUnits
+                    .filter((u) => Number(byShape[u.storeUnitId]) > 0)
+                    .map((u) => ({
+                      key: newLineKey(),
+                      what: `${chosenMaker.name} ${u.plural.toLowerCase()}`,
+                      qty: byShape[u.storeUnitId],
+                      categoryId: chosenMaker.id,
+                      storeUnitId: u.storeUnitId,
+                    })),
+                ]);
+                setChosenMaker(null);
+              }}
+            >
+              Add
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <label className={styles.none}>
+        <input
+          type="checkbox"
+          checked={noEmpties}
+          onChange={(e) => {
+            setNoEmpties(e.target.checked);
+            if (e.target.checked) setOpeningEmpties([]);
+          }}
+        />
+        <span>They are holding nothing of yours</span>
+      </label>
+
 
       </>
       )}
-
-      <Field
-        label="Where this came from"
-        optional
-        value={openingNote}
-        onChange={(e) => setOpeningNote(e.target.value)}
-        placeholder="Blue book, page 14"
-        hint="For whoever reads the account later and wonders where the figure came from."
-      />
 
       <div className={styles.actions}>
         <Button variant="secondary" onClick={() => void nav.pop()} disabled={busy}>
@@ -476,6 +712,66 @@ export default function CustomerFormPage() {
           Save customer
         </Button>
       </div>
+
+      {/*
+        A CHOICE IS A SHEET — the other half of the rule. Picking one of a list is exactly what a
+        selection viewer is for, and it closes the moment something is chosen.
+      */}
+      <BottomSheet
+        open={picking === 'product'}
+        onClose={() => setPicking(null)}
+        title="Which of your items?"
+      >
+        <ul className={styles.pickList}>
+          {items.map((it) => (
+            <li key={it.productId}>
+              <button
+                type="button"
+                className={styles.pickRow}
+                onClick={() => {
+                  setChosenItem(it);
+                  setChosenMaker(null);
+                  setPicking(null);
+                }}
+              >
+                <span className={styles.pickName}>{it.productName}</span>
+                <span className={styles.pickMeta}>
+                  {it.groupName ?? 'no maker set'} · {it.shapes}{' '}
+                  {it.shapes === 1 ? 'shape' : 'shapes'} come back
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </BottomSheet>
+
+      <BottomSheet
+        open={picking === 'group'}
+        onClose={() => setPicking(null)}
+        title="Whose containers?"
+      >
+        <ul className={styles.pickList}>
+          {makers.map((m) => (
+            <li key={m.id}>
+              <button
+                type="button"
+                className={styles.pickRow}
+                onClick={() => {
+                  setChosenMaker(m);
+                  setChosenItem(null);
+                  setPicking(null);
+                }}
+              >
+                <span className={styles.pickName}>{m.name}</span>
+                <span className={styles.pickMeta}>
+                  {m.products} {m.products === 1 ? 'item' : 'items'} come back
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </BottomSheet>
+
     </PageScaffold>
   );
 }

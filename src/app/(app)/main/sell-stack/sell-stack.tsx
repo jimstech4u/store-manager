@@ -14,6 +14,11 @@ import TakePaymentPage from './take-payment-page/take-payment-page';
  * without leaving the till.
  */
 import EmptiesPage from './empties-page/empties-page';
+import EmptiesCustomerPage from './empties-customer-page/empties-customer-page';
+import DepositsPage from './deposits-page/deposits-page';
+import DepositCustomerPage from './deposit-customer-page/deposit-customer-page';
+import EmptiesRecordPage from './empties-record-page/empties-record-page';
+import DepositMovePage from './deposit-move-page/deposit-move-page';
 import EmptiesSettlePage from './empties-settle-page/empties-settle-page';
 /*
  * The catalogue form, registered in this stack too.
@@ -57,6 +62,11 @@ const navLink = {
   receipt_page: ReceiptPage,
   take_payment_page: TakePaymentPage,
   empties_page: EmptiesPage,
+  empties_customer_page: EmptiesCustomerPage,
+  deposits_page: DepositsPage,
+  deposit_customer_page: DepositCustomerPage,
+  empties_record_page: EmptiesRecordPage,
+  deposit_move_page: DepositMovePage,
   empties_settle_page: EmptiesSettlePage,
   product_form_page: ProductFormPage,
   unit_form_page: UnitFormPage,

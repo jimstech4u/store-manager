@@ -1,133 +1,152 @@
 'use client';
 
-
-import styles from './empties-page.module.css';
+import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
-import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { InfoPanel } from '@/components/ui/Explain';
+import { SearchLauncher } from '@/components/ui/SearchLauncher';
+import { SearchSheet } from '@/components/ui/SearchSheet';
+import { useSearchController } from '@academix-admin/search-viewer';
 import { useStackBack } from '@/hooks/useStackBack';
-import { useLocation, useNav } from '@academix-admin/navigation-stack';
-import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { useAuth } from '@/providers/AuthProvider';
-import { formatMoney } from '@/lib/format';
-import { useReceiptEmpties } from '@/lib/stacks/empties';
+import { useEmptiesCustomers, type EmptiesCustomer } from '@/lib/stacks/customer-ledgers';
+import { formatQty } from '@/lib/format';
+import styles from './empties-page.module.css';
 
 /**
- * What is still out, receipt by receipt.
+ * Who is holding the shop's containers.
  *
- * The shop's question is not "how many NBL bottles does Irekanmi owe" — the account page answers
- * that. It is "he took these out on Tuesday; what has come back?" A man walks in with crates in the
- * boot of a car and the shop needs the stack they belong to, not a pool total.
+ * A LIST OF CUSTOMERS, not of receipts — and that is the change. It used to list every receipt with
+ * something still out, which is how the obligation was RECORDED but not how anybody thinks about
+ * it: a customer who took crates on four visits owes one pile of crates, and settling it receipt by
+ * receipt made a seller find the right receipt before they could count what was on the floor in
+ * front of them.
  *
- * Reached from the till's own actions and from a receipt, because those are the two moments the
- * question comes up: someone standing at the counter with empties, and someone reading back the
- * sale they came from.
+ * Cleared accounts stay on the list. "Did Daniel bring those crates back?" is a question somebody
+ * arrives with, and a list of only the outstanding ones cannot answer it.
  */
 export default function EmptiesPage() {
   const nav = useNav();
   const goBack = useStackBack();
-  const location = useLocation();
   const { store } = useAuth();
-
-  // Optionally narrowed to one customer, when opened from their account or their receipt.
-  const customerId = (location?.params?.customerId as string | undefined) ?? null;
-
-  const { rows, error, loading, reload } = useReceiptEmpties(store?.id ?? null, customerId);
+  const { rows } = useEmptiesCustomers(store?.id ?? null);
   /*
-    Re-read when the shop comes back to this page.
+   * SEARCHING HAPPENS IN THE VIEWER, not in a box on the page.
+   *
+   * This had a plain `SearchField` filtering the list in place, which is the arrangement every
+   * other list here moved away from: an in-page box is cramped on a phone, has nowhere to put a
+   * "nothing matched" state, and cannot page a result set. `search-viewer` is the shop's own
+   * component and brings all three — the stock screen has worked this way for a while.
+   */
+  const [searchId, searchOps, isSearchOpen] = useSearchController();
 
-    Settling from another screen — the account, a receipt — moves these figures, and `onResume` is
-    how this page learns without polling. `useLiveRefresh` keeps what is on screen while the
-    request is in flight, so returning here never shows a spinner over rows that were nearly right.
-  */
-  useLiveRefresh(nav, reload);
+  /** Matched here so the first keystroke is answered from what is already loaded. */
+  const matching = (text: string) => {
+    const q = text.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) => r.name.toLowerCase().includes(q) || (r.phone ?? '').includes(q));
+  };
 
-  if (!store) return null;
-
-  if (loading) {
-    return <FullPageMessage title="Reading what is still out" tone="loading" />;
-  }
+  const stillOut = rows.filter((r) => r.stillOut > 0);
 
   return (
-    <PageScaffold
-      onBack={goBack}
-      title="Empties out"
-      subtitle={customerId ? 'For this customer' : 'Receipts with containers still to come back'}
-    >
+    <PageScaffold onBack={goBack} title="Empties" subtitle="Who is holding your containers">
+      <InfoPanel
+        id="empties.list"
+        tone="info"
+        title={
+          stillOut.length === 0
+            ? 'Nothing is out'
+            : `${stillOut.length} ${stillOut.length === 1 ? 'customer has' : 'customers have'} containers`
+        }
+      >
+        Counted in the shape they left in — crates as crates, bottles as bottles. Open somebody to
+        record what came back, or to write off what will not.
+      </InfoPanel>
+
+      <SearchLauncher label="Search who is holding your containers" placeholder="Search a name or a number" onOpen={searchOps.open} />
+
       {/*
-        A LOAD that failed is the state of the page, not an event — it stays here rather than
-        interrupting, per the rule. A failed SETTLE interrupts, and does so from the sheet.
+        The whole list browses; searching happens in the viewer's own sheet, which owns the empty
+        state and the paging. The page does not switch itself between "browse" and "results".
       */}
-      {error && rows.length === 0 && (
-        <InfoPanel tone="danger" title="Could not read what is still out">
-          {error}
-        </InfoPanel>
-      )}
+      <SearchSheet<EmptiesCustomer>
+        id={searchId}
+        isOpen={isSearchOpen}
+        onClose={searchOps.close}
+        placeholder="Search a name or a number"
+        onInitialData={matching}
+        localDataDeps={[rows]}
+        queryData={async (_cursor, text) => ({ data: matching(text) })}
+        keyOf={(r) => r.customerId}
+        emptyText="Try part of the name, or the number they are saved under."
+        renderRow={(r) => (
+          <button
+            type="button"
+            className={styles.row}
+            onClick={async () => {
+              // Navigate first, then close — see money-page for why the order matters.
+              await nav.push('empties_customer_page', { id: r.customerId });
+              searchOps.close();
+            }}
+          >
+            <span className={styles.who}>
+              <span className={styles.name}>{r.name}</span>
+              {r.phone ? <span className={styles.phone}>{r.phone}</span> : null}
+            </span>
+            <span className={styles.owed}>
+              {r.stillOut > 0 ? (
+                <span className={styles.owedQty}>{formatQty(r.stillOut)}</span>
+              ) : (
+                <span className={styles.clear}>all back</span>
+              )}
+            </span>
+          </button>
+        )}
+      />
 
       {rows.length === 0 ? (
-        <InfoPanel tone="success" title="Nothing is out">
-          Every returnable this shop has sold has come back, or was sold to a walk-in who paid a
-          deposit instead.
-        </InfoPanel>
+        <p className={styles.empty}>
+          No containers have gone out yet. They will appear here as soon as somebody takes some.
+        </p>
       ) : (
-        <>
-          <InfoPanel
-            tone="info"
-            id="empties.how"
-            title={`${rows.length} ${rows.length === 1 ? 'receipt has' : 'receipts have'} containers out`}
-          >
-            <p>
-              Tap one to record what came back. You can settle part of it — a customer who brings
-              nine of twelve bottles is the normal case, not an error.
-            </p>
-            <p>
-              If you are holding a deposit, you decide there and then how much of it to keep for
-              what did not come back. There is no fixed rate, because you did not agree one.
-            </p>
-          </InfoPanel>
+        <ul className={styles.list}>
+          {rows.map((r) => (
+            <li key={r.customerId}>
+              <button
+                type="button"
+                className={styles.row}
+                onClick={() =>
+                  /*
+                   * An id and an intent. The record itself is read on the page that shows it — it
+                   * is a ledger, it changes as the seller works, and handing over a snapshot taken
+                   * on this screen is how somebody settles against a figure that has moved.
+                   */
+                  void nav.push('empties_customer_page', { id: r.customerId })
+                }
+              >
+                <span className={styles.who}>
+                  <span className={styles.name}>{r.name}</span>
+                  {r.phone ? <span className={styles.phone}>{r.phone}</span> : null}
+                </span>
 
-          <ul className={styles.list}>
-            {rows.map((r) => (
-              <li key={r.sale_id}>
-                <button
-                  type="button"
-                  className={styles.card}
-                  onClick={() => {
-                    /*
-                      The ROW travels as an object; the push carries only its id.
-
-                      `nav.push` never carries a record — the settle page reads it back from the
-                      database when nothing was provided, which is what makes a reload and a deep
-                      link work.
-                    */
-                    nav.provideObject('receiptEmpties', () => r, { global: true, scope: 'sell' });
-                    void nav.push('empties_settle_page', { id: r.sale_id });
-                  }}
-                >
-                  <span className={styles.head}>
-                    <span className={styles.who}>{r.customer_name}</span>
-                    <span className={styles.when}>
-                      {new Date(r.occurred_at).toLocaleDateString()}
-                    </span>
-                  </span>
-                  <span className={styles.pools}>
-                    {r.expected
-                      .map((e) => `${Number(e.units)} ${e.category}`)
-                      .join(' · ')}
-                  </span>
-                  <br />
-                  {Number(r.held) > 0 ? (
-                    <span className={styles.held}>Holding {formatMoney(Number(r.held))}</span>
+                <span className={styles.owed}>
+                  {r.stillOut > 0 ? (
+                    <>
+                      <span className={styles.owedQty}>{formatQty(r.stillOut)}</span>
+                      <span className={styles.owedNote}>
+                        across {r.shapesOut} {r.shapesOut === 1 ? 'shape' : 'shapes'}
+                      </span>
+                    </>
                   ) : (
-                    <span className={styles.trust}>No deposit taken — on trust</span>
+                    /* Said rather than left blank: a cleared account is an answer, not an absence. */
+                    <span className={styles.clear}>all back</span>
                   )}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
-
     </PageScaffold>
   );
 }

@@ -18,7 +18,9 @@ import { useProduct, type Product } from '@/lib/stacks/catalog-stack';
 import { useListNotifier } from '@/hooks/useListChannel';
 import { stockInShapes, useSellingUnits } from '@/lib/stacks/selling-units';
 import { unitGaps, useProductUnits } from '@/lib/stacks/product-units';
-import { useProductEmpties } from '@/lib/stacks/empties';
+import { productEmptiesOut, type ShapeOut } from '@/lib/stacks/empties';
+import { LoadArea, useLoadArea } from '@/components/ui/LoadArea';
+import { saidAsPart } from '@/lib/empties-rollup';
 import { formatMoney, formatQty, pluralUnit, messageOf } from '@/lib/format';
 import styles from './product-page.module.css';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
@@ -60,7 +62,16 @@ export default function ProductPage() {
    */
   const { byProduct } = useSellingUnits(store?.id ?? null);
   const { units: productUnits } = useProductUnits(productId);
-  const { empties } = useProductEmpties(productId);
+  /*
+   * Read into its own area, so a failure says so.
+   *
+   * The pool reader swallowed its error and returned an empty list, which on this screen reads as
+   * "nothing is out" — a statement about the shop made on the strength of a request that never
+   * arrived.
+   */
+  const outArea = useLoadArea<ShapeOut[]>(() => productEmptiesOut(productId!), [productId], {
+    whenNot: !productId,
+  });
   const sellingUnits = byProduct.get(productId ?? '') ?? [];
   const gapUnits = unitGaps(productUnits).map((u) => u.name.toLowerCase());
 
@@ -289,62 +300,59 @@ export default function ProductPage() {
       </dl>
 
       {/*
-        WHAT IS OUT IN CUSTOMERS' YARDS.
+        WHAT IS OUT, IN THIS ITEM'S OWN SHAPES.
 
-        The shelf figure and the cost were the whole story here, so an item whose crates are all
-        out on loan looked identical to one whose crates are stacked out the back. For a shop whose
-        containers are worth more than a day's takings, that is the more urgent number.
+        This read `product_empties`, which answers in POOLS — so a page about Goldberg showed
+        "NBL bottle 2940 · 60 customers", a figure covering eight beers, and the note underneath
+        had to admit it: "across every product that shares these pools, not this item alone". A
+        shop reads the number on the page it is looking at as being about the item it is looking
+        at, and it was not.
 
-        Said in POOLS, because that is where the obligation lives — a Gulder bottle and a Star
-        bottle are the same NBL bottle to everyone involved. "How many Gulder bottles specifically"
-        is unanswerable once a pool is shared, and answering it anyway would be inventing a figure.
+        It also said "you usually hold ₦125 each" and offered a tap through to declare the pool's
+        return shapes. Both are gone: a deposit is a round sum against a customer rather than a
+        rate per container (0109), and which shapes come back is a tick on the shape, asked on the
+        product form where the shapes are defined.
       */}
-      {empties.length > 0 && (
-        <section className={styles.empties}>
-          <h2 className={styles.emptiesTitle}>Containers out</h2>
-          <ul className={styles.emptiesList}>
-            {empties.map((e) => (
-              <li key={e.category_id}>
-                {/*
-                  TAPPABLE, because the shape it comes back in is declared per POOL.
-
-                  Reached from the product a shop happens to be looking at, since that is when it
-                  thinks about crates — not from a settings screen nobody visits. Changing it here
-                  changes it for every item sharing the pool, which is the whole point: one rule, so
-                  a Heineken crate settles a Gulder obligation. The note below says so.
-                */}
-                <button
-                  type="button"
-                  className={styles.emptiesRow}
-                  onClick={() => void nav.push('return_units_page', { id: e.category_id })}
-                >
-                <span>
-                  <span className={styles.emptiesName}>{e.category}</span>
-                  <span className={styles.emptiesMeta}>
-                    {e.kind === 'content'
-                      ? `${Number(e.qty_per_base_unit ?? 0)} per ${product.baseUnit}`
-                      : 'counted when one leaves with the goods'}
-                    {Number(e.suggested_deposit) > 0
-                      ? ` · you usually hold ${formatMoney(Number(e.suggested_deposit))} each`
-                      : ''}
-                  </span>
-                </span>
-                <span className={styles.emptiesQty}>
-                  {Number(e.units_out)}
-                  <span className={styles.emptiesWho}>
-                    {Number(e.customers_out) === 1 ? '1 customer' : `${Number(e.customers_out)} customers`}
-                  </span>
-                </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-          <p className={styles.emptiesNote}>
-            Across every product that shares these pools, not this item alone — that is what the
-            customer owes you back. Tap one to say what shape it comes back in.
-          </p>
-        </section>
-      )}
+      <section className={styles.empties}>
+        <h2 className={styles.emptiesTitle}>Containers out</h2>
+        <LoadArea area={outArea} what="what is out with customers">
+          {(shapes) =>
+            shapes.length === 0 ? (
+              <p className={styles.emptiesNote}>
+                Nothing on this item is marked as coming back. Tick a shape on the item to start
+                counting its containers.
+              </p>
+            ) : (
+              <>
+                <ul className={styles.emptiesList}>
+                  {shapes.map((sh) => (
+                    <li key={sh.productUnitId} className={styles.emptiesRow}>
+                      <span>
+                        <span className={styles.emptiesName}>{sh.unitPlural}</span>
+                        <span className={styles.emptiesMeta}>
+                          {sh.baseQty > 1
+                            ? `one is ${sh.baseQty} ${product.baseUnit}`
+                            : `one ${product.baseUnit}`}
+                        </span>
+                      </span>
+                      <span className={styles.emptiesQty}>
+                        {saidAsPart(sh.outNow)}
+                        <span className={styles.emptiesWho}>
+                          {sh.customersOut === 1 ? '1 customer' : `${sh.customersOut} customers`}
+                        </span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className={styles.emptiesNote}>
+                  This item only, counted in the shapes it goes out in. Settle them on whoever has
+                  them.
+                </p>
+              </>
+            )
+          }
+        </LoadArea>
+      </section>
 
       {/*
         How this is bought and sold.

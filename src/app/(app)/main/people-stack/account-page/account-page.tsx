@@ -280,64 +280,83 @@ export default function AccountPage() {
 
       {/* ── Actions ─────────────────────────────────────────────────────────── */}
 
-      {can('payments.record') && (
-        <div className={styles.actions}>
-          <Button size="large" fullWidth onClick={() =>
-              void nav.push('account_action_page', {
-                id: customerId,
-                kind: 'payment',
-              })
-            }>
+      {/*
+        FIVE THINGS A SHOP DOES ON AN ACCOUNT, and each is one kind of record.
+
+        The old set was six buttons across three different models pretending to be one. "They
+        brought empties back", "Take a deposit instead", "Give a deposit back" and "Keep some for
+        breakage" all wrote to a ledger that recorded a QUANTITY OF CONTAINERS at a rate — so a
+        return moved money and a deposit had to be expressed in crates. "Enter what they already
+        owed" was an opening balance masquerading as an action anybody might take on a Tuesday.
+
+        What is left says what each is:
+
+          MONEY THEY OWE     a payment reduces it, a charge adds to it.
+          MONEY WE OWE       an excess — an overpayment, a load brought back.
+          MONEY WE HOLD      a deposit. Not theirs to spend and not ours to count as takings.
+          CONTAINERS         counted in the product's own shape, settled on their own screen.
+
+        The last two are deep screens rather than a single action, because both are ledgers with a
+        history somebody needs to read before deciding anything.
+      */}
+      <div className={styles.actions}>
+        {can('payments.record') && (
+          <Button
+            size="large"
+            fullWidth
+            onClick={() =>
+              void nav.push('account_action_page', { id: customerId, kind: 'payment' })
+            }
+          >
             <CashIcon /> Record a payment
           </Button>
-          <Button variant="secondary" fullWidth onClick={() =>
-              void nav.push('account_action_page', {
-                id: customerId,
-                kind: 'return',
-              })
-            }>
-            <ReturnIcon /> They brought empties back
+        )}
+
+        {can('payments.record') && (
+          <Button
+            variant="secondary"
+            fullWidth
+            onClick={() =>
+              void nav.push('account_action_page', { id: customerId, kind: 'charge' })
+            }
+          >
+            Record a charge
           </Button>
-          <Button variant="secondary" fullWidth onClick={() =>
-              void nav.push('account_action_page', {
-                id: customerId,
-                kind: 'deposit',
-              })
-            }>
-            Take a deposit instead
+        )}
+
+        {can('payments.record') && (
+          <Button
+            variant="secondary"
+            fullWidth
+            onClick={() =>
+              void nav.push('account_action_page', { id: customerId, kind: 'excess' })
+            }
+          >
+            Record what you owe them
           </Button>
-          {can('customers.manage') && (
-            <Button variant="ghost" fullWidth onClick={() =>
-              void nav.push('account_action_page', {
-                id: customerId,
-                kind: 'opening',
-              })
-            }>
-              Enter what they already owed
-            </Button>
-          )}
-          {heldTotal !== 0 && (
-            <>
-              <Button variant="secondary" fullWidth onClick={() =>
-              void nav.push('account_action_page', {
-                id: customerId,
-                kind: 'refund',
-              })
-            }>
-                Give a deposit back
-              </Button>
-              <Button variant="secondary" fullWidth onClick={() =>
-              void nav.push('account_action_page', {
-                id: customerId,
-                kind: 'breakage',
-              })
-            }>
-                Keep some for breakage
-              </Button>
-            </>
-          )}
-        </div>
-      )}
+        )}
+
+        {/*
+          Both of these PUSH ONTO A LEDGER SCREEN rather than opening a one-shot form. A deposit and
+          a pile of crates are running accounts: what matters first is what is there and how it got
+          that way, and only then what to do about it.
+        */}
+        <Button
+          variant="secondary"
+          fullWidth
+          onClick={() => void nav.push('empties_customer_page', { id: customerId })}
+        >
+          <ReturnIcon /> Empties
+        </Button>
+
+        <Button
+          variant="secondary"
+          fullWidth
+          onClick={() => void nav.push('deposit_customer_page', { id: customerId })}
+        >
+          Deposit
+        </Button>
+      </div>
 
       {/* ── History ─────────────────────────────────────────────────────────── */}
 

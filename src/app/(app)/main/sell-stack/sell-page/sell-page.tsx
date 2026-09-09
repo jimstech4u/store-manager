@@ -9,7 +9,8 @@ import { useNav, scrollIntoViewBelow } from '@academix-admin/navigation-stack';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
-import { CameraIcon, CloseIcon, MinusIcon, PlusIcon, ReceiptIcon, ReturnIcon } from '@/components/ui/Icon';
+import { CameraIcon, CloseIcon, MinusIcon, PlusIcon, ReceiptIcon, CashIcon,
+  ReturnIcon } from '@/components/ui/Icon';
 import { CustomerPicker } from '@/components/customers/CustomerPicker';
 import { CustomerTabs } from '@/components/sell/CustomerTabs';
 import { ShareOrder } from '@/components/sell/ShareOrder';
@@ -694,6 +695,19 @@ export default function SellPage() {
           icon: <ReturnIcon />,
           onClick: () => void nav.push('empties_page'),
           ariaLabel: 'Containers still to come back',
+        },
+        /*
+          MONEY BEING HELD, beside the containers and separate from them.
+
+          The same conversation reaches this counter both ways — somebody arrives with crates, and
+          somebody arrives wanting their deposit back — and they are no longer the same record, so
+          they are no longer the same door.
+        */
+        {
+          key: 'deposits',
+          icon: <CashIcon />,
+          onClick: () => void nav.push('deposits_page'),
+          ariaLabel: 'Deposits you are holding',
         },
       ]}
     >

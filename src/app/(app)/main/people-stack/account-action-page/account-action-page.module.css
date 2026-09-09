@@ -33,6 +33,13 @@
 
 /* The action sits at the end of the form, in the flow — not pinned. On a page the whole screen
    scrolls, so it is reached by finishing the form rather than by being covered by it. */
+/* Cancel and commit, side by side, ending the page. */
 .actions {
+  display: flex;
+  gap: var(--space-3);
   margin-top: var(--space-5);
+}
+
+.actions > * {
+  flex: 1;
 }

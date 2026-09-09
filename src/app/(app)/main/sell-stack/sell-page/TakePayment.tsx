@@ -11,13 +11,11 @@ import { getSupabase } from '@/lib/supabase/client';
 import { accountsChanged } from '@/lib/stacks/customer-account';
 import { stockMoved } from '@/lib/stacks/catalog-stack';
 import { useListNotifier } from '@/hooks/useListChannel';
-import { formatMoney, formatQty, messageOf } from '@/lib/format';
+import { formatMoney, messageOf } from '@/lib/format';
 import {
   chargesTotal,
-  containersGoingOut,
   depositTotal,
   lineTotal,
-  round2,
   type DraftOrder,
 } from '@/lib/stacks/draft-orders';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
@@ -103,6 +101,41 @@ export function TakePayment({
   const [chargeLabel, setChargeLabel] = useState('');
   const [chargeAmount, setChargeAmount] = useState('');
   const [chargeNote, setChargeNote] = useState('');
+  // The deposit being composed, held here for the same reason a charge is: an abandoned half-typed
+  // figure must never reach the shop.
+  const [depositAmount, setDepositAmount] = useState('');
+  const [depositNote, setDepositNote] = useState('');
+
+  /*
+   * WHAT IS ALREADY HELD FOR THIS CUSTOMER, read from the deposit ledger.
+   *
+   * Said out loud because the two add up: a shop taking two thousand today when it already holds
+   * twenty is holding twenty-two, and a screen that shows only the new figure invites somebody to
+   * type the total instead.
+   */
+  const [alreadyHeld, setAlreadyHeld] = useState(0);
+
+  useEffect(() => {
+    const customerId = order.customerId;
+    if (!customerId) {
+      setAlreadyHeld(0);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const { data } = await getSupabase().rpc('customer_deposit_ledger', {
+        p_store_customer_id: customerId,
+      });
+      if (cancelled) return;
+      const rows = (data ?? []) as { running: string | number }[];
+      // The reader returns newest first and carries the running balance, so the first row is what
+      // is held now. No arithmetic here: a balance the screen computes is one that disagrees.
+      setAlreadyHeld(rows.length > 0 ? Number(rows[0].running) || 0 : 0);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [order.customerId]);
 
   // Told about the one sale this screen creates. Unhandled when nobody is showing that list, which
   // is the correct outcome — it will read the truth the next time it loads.
@@ -196,42 +229,6 @@ export function TakePayment({
   const held = depositTotal(order);
   const itemsTotal = Math.max(0, total - chargesTotal(order) - held);
 
-  /** How many containers the whole order is sending out — what a flat deposit is spread over. */
-  const containersOut = order.lines.reduce((sum, l) => sum + containersGoingOut(l), 0);
-
-  /*
-   * Spread a single figure back across the lines.
-   *
-   * In proportion to what each line already holds, so a shop that set N2,500 on one line and
-   * N1,500 on another keeps that judgement when it rounds the total down. With nothing set yet,
-   * by container, which is the only other measure that does not invent an opinion.
-   *
-   * The last line takes the rounding, so the parts always add back to the figure that was typed.
-   * A deposit that does not reconcile to the money in the drawer is worse than no deposit.
-   */
-  const spreadDeposit = (want: number) => {
-    const lines = order.lines.filter((l) => containersGoingOut(l) > 0);
-    if (lines.length === 0) return;
-
-    const weights = lines.map((l) => {
-      const own = Number(l.depositCharged);
-      return held > 0 && Number.isFinite(own) ? own : containersGoingOut(l);
-    });
-    const sum = weights.reduce((a, b) => a + b, 0);
-    if (sum <= 0) return;
-
-    let left = want;
-    const next = order.lines.map((l) => {
-      const i = lines.indexOf(l);
-      if (i < 0) return l;
-      const isLast = i === lines.length - 1;
-      const part = isLast ? left : round2((want * weights[i]) / sum);
-      left = round2(left - part);
-      return { ...l, depositCharged: String(part) };
-    });
-    onUpdateOrder({ lines: next });
-  };
-
   const remaining = Math.max(total - paid, 0);
 
   /*
@@ -290,6 +287,36 @@ export function TakePayment({
         p_client_uuid: order.clientUuid,
       });
       if (err) throw err;
+
+      /*
+       * THE DEPOSIT GOES TO ITS OWN LEDGER, after the sale and only for a named customer.
+       *
+       * After, because a deposit taken against a sale that failed to settle is money the shop is
+       * recorded as holding for goods that never left. And only for a named customer, because a
+       * deposit is an obligation to somebody — a walk-in handing over crate money is taking their
+       * change back at the counter, not opening an account.
+       *
+       * It ADDS to whatever is already held. The two are rows in one ledger, never a replacement,
+       * which is the whole reason this is a ledger and not a column.
+       */
+      const takenNow = (order.deposits ?? []).reduce((sum, d) => {
+        const n = Number(d.amount);
+        return sum + (Number.isFinite(n) ? n : 0);
+      }, 0);
+
+      if (takenNow > 0 && order.customerId && storeId) {
+        const { error: depErr } = await getSupabase().rpc('take_customer_deposit', {
+          p_store_id: storeId,
+          p_customer_id: order.customerId,
+          p_amount: takenNow,
+          p_reason:
+            (order.deposits ?? [])
+              .map((d) => d.note?.trim())
+              .filter(Boolean)
+              .join(', ') || null,
+        });
+        if (depErr) throw depErr;
+      }
 
       /*
        * A settled sale moves a customer's balance, their empties and the debtor list — so say so
@@ -426,38 +453,21 @@ export function TakePayment({
         </div>
 
         {/*
-          THE DEPOSIT, NAMED AND EDITABLE.
+          THE DEPOSIT, on its own line in the total because the customer hands it over.
 
-          It is in the total because the customer hands it over, and on its own line because the
-          shop owes it back. Typed here it spreads across the lines that are sending containers out,
-          so the two ways a deposit gets agreed — a rate per crate at the till, a round figure at
-          the counter — end in the same place.
+          A READOUT NOW, not a box. It used to be typed here and SPREAD across the lines sending
+          containers out, in proportion to whatever each already held — a hundred lines of
+          arithmetic to turn one figure into per-line `deposit_charged` values, so that a deposit
+          could be expressed as a quantity of containers at a rate.
 
-          Only shown when something is actually going out. A deposit box on a sale of sachet water
-          is a question with no answer.
+          A deposit is not a quantity of containers. It is a round sum two people agree, and it
+          comes back or is kept whatever happens to the crates. It is composed below, beside the
+          charges, and lives in its own ledger.
         */}
-        {containersOut > 0 && (
+        {held > 0 && (
           <div className={styles.deposit}>
-            <span className={styles.depositLabel}>
-              Deposit on {formatQty(containersOut)} container{containersOut === 1 ? '' : 's'}
-            </span>
-            <Field
-              label=""
-              numeric
-              prefix="₦"
-              value={held ? String(round2(held)) : ''}
-              placeholder="0"
-              hint={
-                held > 0
-                  ? `${formatMoney(round2(held / containersOut))} each — comes back when they do`
-                  : 'Blank or 0 means the containers went out on trust'
-              }
-              onChange={(e) => {
-                const v = e.target.value.trim();
-                const want = Number(v);
-                spreadDeposit(v === '' || !Number.isFinite(want) ? 0 : want);
-              }}
-            />
+            <span className={styles.depositLabel}>Deposit held</span>
+            <span>{formatMoney(held)}</span>
           </div>
         )}
 
@@ -550,6 +560,93 @@ export function TakePayment({
         >
           <PlusIcon /> Add charge
         </Button>
+      </section>
+
+      {/*
+        THE DEPOSIT, COMPOSED THE SAME WAY AND KEPT PLAINLY APART.
+
+        Beside the charges because it is entered in the same breath, and separated because it is
+        the opposite kind of money: a charge is the shop's, a deposit is the customer's and the
+        shop is only holding it. Netting them into one figure is how a shop ends up unable to say
+        what it actually earned.
+
+        The old deposit and this one add up rather than replace each other — they are rows in one
+        ledger — which is why what is already held is said here rather than assumed to be nothing.
+      */}
+      <section className={styles.deposits}>
+        <span className={styles.chargesLabel}>Take a deposit</span>
+        <p className={styles.depositWhy}>
+          Money of theirs you will be holding. Not a payment — it comes back, or you keep it and
+          say why.
+          {alreadyHeld > 0 && (
+            <> You are already holding {formatMoney(alreadyHeld)} for them.</>
+          )}
+        </p>
+
+        <div className={styles.chargeForm}>
+          <Field
+            label="Amount"
+            numeric
+            prefix="₦"
+            value={depositAmount}
+            onChange={(e) => setDepositAmount(e.target.value)}
+            placeholder="0"
+          />
+          <Field
+            label="What for"
+            optional
+            value={depositNote}
+            onChange={(e) => setDepositNote(e.target.value)}
+            placeholder="Crates and bottles"
+          />
+        </div>
+
+        <Button
+          fullWidth
+          disabled={!(Number(depositAmount) > 0)}
+          onClick={() => {
+            onUpdateOrder({
+              deposits: [
+                ...(order.deposits ?? []),
+                {
+                  key: newChargeKey(),
+                  amount: depositAmount,
+                  note: depositNote.trim(),
+                },
+              ],
+            });
+            setDepositAmount('');
+            setDepositNote('');
+          }}
+        >
+          <PlusIcon /> Add deposit
+        </Button>
+
+        {(order.deposits ?? []).length > 0 && (
+          <ul className={styles.depositList}>
+            {(order.deposits ?? []).map((d) => (
+              <li key={d.key} className={styles.charge}>
+                <button
+                  type="button"
+                  className={styles.chargeRemove}
+                  onClick={() =>
+                    onUpdateOrder({
+                      deposits: (order.deposits ?? []).filter((x) => x.key !== d.key),
+                    })
+                  }
+                  aria-label="Remove this deposit"
+                >
+                  <CloseIcon />
+                </button>
+                <span className={styles.chargeBody}>
+                  <span className={styles.chargeName}>Deposit</span>
+                  {d.note ? <span className={styles.chargeNote}>{d.note}</span> : null}
+                </span>
+                <span className={styles.chargeAmount}>{formatMoney(d.amount)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
 

@@ -1,0 +1,119 @@
+.headline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.headlineLabel {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.headlineValue {
+  font-size: var(--text-2xl, 1.75rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The actions END this block rather than being pinned to the page's foot — see CLAUDE.md. */
+.actions {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-4) 0;
+}
+
+.section {
+  margin: var(--space-6) 0 var(--space-2);
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+
+.ledger {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.move {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Which way the money went. Colour is the second signal; the words carry it too. */
+.dot {
+  flex: none;
+  width: 0.6rem;
+  height: 0.6rem;
+  margin-top: 0.45rem;
+  border-radius: 50%;
+}
+
+.taken {
+  background: var(--primary);
+}
+
+.given {
+  background: var(--warning, #c47d1a);
+}
+
+.retained {
+  background: var(--danger, #c0392b);
+}
+
+.moveBody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.moveWhat {
+  font-weight: 600;
+}
+
+.moveWhy {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.moveAfter {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.moveWhen {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* What was held after this row, so the history reconciles line by line rather than only at the top. */
+.moveRunning {
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.none {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.sheetActions {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.sheetActions > * {
+  flex: 1;
+}

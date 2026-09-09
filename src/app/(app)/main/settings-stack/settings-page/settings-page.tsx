@@ -368,18 +368,6 @@ export default function SettingsPage() {
             </span>
           </button>
 
-          <button
-            type="button"
-            className={styles.linkRow}
-            onClick={() => nav.push('pools_page')}
-          >
-            <span className={styles.linkMain}>
-              <span className={styles.linkName}>Crates and bottles</span>
-              <span className={styles.sectionNote}>
-                What comes back to you, and what you usually hold against it
-              </span>
-            </span>
-          </button>
         </>
       )}
 
