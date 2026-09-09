@@ -133,3 +133,41 @@
     flex: 1;
   }
 }
+
+/* Which shop this is setting up. Emphasised inside the heading rather than added as a line above
+   it, because the sentence is the thing being read and the shop's name is the part that was
+   missing from it. */
+.whose {
+  color: var(--primary);
+}
+
+/* The way out, when the account has another shop. A half-made shop must not be able to hold a
+   session it never asked for — see AuthProvider, which now prefers a shop that trades. */
+.elsewhere {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-4) 0;
+  padding: var(--space-3);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+.elsewhereSaid {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.elsewhereGo {
+  justify-self: start;
+  min-height: var(--touch-min, 44px);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--primary);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}

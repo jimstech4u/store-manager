@@ -146,7 +146,10 @@ try {
   await p.locator('input[type="email"]').first().fill(env.SAMPLE_EMAIL);
   await p.locator('input[type="password"]').first().fill(env.SAMPLE_PASSWORD);
   await p.locator('button[type="submit"]').first().click();
-  await p.waitForTimeout(12000);
+  // Waited FOR, not waited out: the nav bar appearing is what "signed in" means, and a cold dev
+  // server compiles /main for longer than any fixed number worth writing down.
+  await p.locator('.nav-item').first().waitFor({ state: 'visible', timeout: 180000 });
+  await p.waitForTimeout(3000);
 
   await p.mouse.wheel(0, -3000);
   await p.waitForTimeout(800);

@@ -31,6 +31,19 @@ const cspHeaderName = process.env.CSP_ENFORCE === 'true'
   : 'Content-Security-Policy-Report-Only';
 
 const nextConfig: NextConfig = {
+  /*
+   * NO DEV BADGE. It is a click target on a phone-sized viewport.
+   *
+   * Next's dev indicator renders into a `nextjs-portal` fixed to the bottom-left corner, which on
+   * the 390px viewport every probe runs at sits over the page's own controls. Playwright reports it
+   * honestly — "<nextjs-portal> intercepts pointer events" — after retrying for thirty seconds, and
+   * the run fails in a way that reads exactly like a broken button.
+   *
+   * It costs nothing: it is dev-only chrome, `next build` never emits it, and a probe that cannot
+   * reach a control it can see is worse than no probe.
+   */
+  devIndicators: false,
+
   eslint: { ignoreDuringBuilds: true },
   output: 'standalone',
   poweredByHeader: false,

@@ -20,7 +20,6 @@
 import { useCallback, useEffect } from 'react';
 import { useDemandState } from '@academix-admin/state-stack';
 import { getSupabase } from '@/lib/supabase/client';
-import { CATALOG_SCOPE } from '@/lib/stacks/customer-account';
 import { useInvalidation, invalidate } from '@/lib/stacks/invalidation';
 
 export interface ProductGroup {
@@ -33,14 +32,15 @@ export interface ProductGroup {
 /**
  * Every group in the shop.
  *
- * In `CATALOG_SCOPE`, with the pools and the units: this is the shop's own vocabulary, and it
+ * In its own scope rather than the catalogue's, which is where the product LIST lives: a group
+ * changing must not re-read every product in the shop. This is the shop's own vocabulary, and it
  * changes about never. Putting it in the account scope would have leaving a customer's account
  * delete it, which is exactly the bug that scope separation exists to prevent.
  */
 export function useProductGroups(storeId: string | null) {
-  const [groups, demandGroups] = useDemandState<ProductGroup[]>([], {
+  const [groups, demandGroups, setGroups] = useDemandState<ProductGroup[]>([], {
     key: `product-groups:${storeId ?? 'none'}`,
-    scope: CATALOG_SCOPE,
+    scope: GROUPS_SCOPE,
     persist: true,
     deps: [storeId ?? ''],
     revalidateOnMount: false,
@@ -65,9 +65,25 @@ export function useProductGroups(storeId: string | null) {
   }, [storeId, demandGroups]);
 
   useEffect(load, [load]);
-  useInvalidation(CATALOG_SCOPE, load);
+  useInvalidation(GROUPS_SCOPE, load);
 
-  return { groups, reload: load };
+  /*
+   * THE WRITER KNOWS THE ROW.
+   *
+   * A group made on the form that pushed over this one lands here directly rather than through a
+   * refetch. The page underneath never unmounts while that form sits on top of it, so without this
+   * nothing tells the picker the shop has a new group — and it was missing until somebody reloaded.
+   * A brand-new group has no products in it, which is a fact, not a guess.
+   */
+  const add = useCallback(
+    (group: ProductGroup) => {
+      if (groups.some((g) => g.id === group.id)) return;
+      setGroups([...groups, group].sort((a, b) => a.name.localeCompare(b.name)));
+    },
+    [groups, setGroups],
+  );
+
+  return { groups, add, reload: load };
 }
 
 /** Which groups one product is in. */
@@ -121,6 +137,20 @@ export async function archiveGroup(id: string, restore = false) {
   groupsChanged();
 }
 
+/**
+ * The shop's groups changed — and ONLY the groups.
+ *
+ * This invalidated `CATALOG_SCOPE`, which is where the product LIST lives. Every product save calls
+ * `setProductGroups`, so saving anything re-read every product in the shop to learn something this
+ * device had just decided — the exact round trip `probe-no-round-trip.mjs` exists to forbid, and it
+ * caught this the moment the probe itself was repaired enough to run.
+ *
+ * The groups have their own scope now. What genuinely IS server-computed here is each group's
+ * product count, which is why this invalidates at all rather than doing nothing: a group that has
+ * just gained its first product should stop saying "not used yet".
+ */
+export const GROUPS_SCOPE = 'product_groups';
+
 export function groupsChanged() {
-  invalidate(CATALOG_SCOPE);
+  invalidate(GROUPS_SCOPE);
 }

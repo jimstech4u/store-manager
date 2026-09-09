@@ -13,7 +13,7 @@ import {
 import type { Session, User } from '@supabase/supabase-js';
 import { getSupabase } from '@/lib/supabase/client';
 import { StateStack } from '@academix-admin/state-stack';
-import { messageOf } from '@/lib/format';
+import { messageOf, setMoneyDecimals } from '@/lib/format';
 
 /**
  * Auth and the current store, in one provider.
@@ -134,8 +134,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const supabase = getSupabase();
     const { data, error: err } = await supabase
       .from('store_members')
-      .select('role_code, stores!inner(id, name, slug, onboarded_at)')
-      .eq('user_id', uid);
+      .select('role_code, stores!inner(id, name, slug, onboarded_at, status)')
+      .eq('user_id', uid)
+      /*
+       * A CLOSED SHOP STOPS BEING OFFERED, and keeps everything it ever wrote.
+       *
+       * Filtered here rather than after the fact so the whole app — the switcher, the store count
+       * that decides whether somebody needs to create one, the automatic pick below — works from
+       * one list. Its rows are all still there and its receipts still read: the ledgers are
+       * append-only and a receipt in a customer's hand must not stop resolving because the shop
+       * that issued it was tidied away.
+       */
+      .eq('stores.status', 'active');
 
     if (err) {
       setError(err.message);
@@ -145,7 +155,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     type Row = {
       role_code: Role;
-      stores: { id: string; name: string; slug: string; onboarded_at: string | null };
+      stores: {
+        id: string;
+        name: string;
+        slug: string;
+        onboarded_at: string | null;
+        status: string;
+      };
     };
 
     const rows = (data ?? []) as unknown as Row[];
@@ -157,21 +173,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       onboardedAt: r.stores.onboarded_at,
     }));
 
+    /*
+     * SORTED, because `list[0]` was about to decide which shop somebody works in.
+     *
+     * The rows come back from a join with no `order by`, so "the first store" is whichever one the
+     * database felt like returning — stable enough in testing to look deliberate, and free to
+     * change on any query plan. Which shop a session opens in is not something to leave to that.
+     */
+    list.sort((a, b) => a.name.localeCompare(b.name));
+
     setStores(list);
     setError(null);
 
-    // Reopen wherever they were last, if that store is still theirs — losing your place on every
-    // reload is a small thing that makes an app feel unreliable.
+    /*
+     * Reopen wherever they were last, if that store is still theirs — losing your place on every
+     * reload is a small thing that makes an app feel unreliable.
+     *
+     * BUT NOT INTO A SHOP THAT WAS NEVER FINISHED, while a working one exists.
+     *
+     * A store with no `onboarded_at` is one the layout immediately routes to `/setup/opening`. This
+     * account has a real shop trading since August and a "Yh" created by accident this morning, and
+     * because creating a shop WRITES the remembered id on the way past, every sign-in afterwards
+     * reopened the accident and answered with a setup wizard. The only way out on that screen was
+     * "Skip for now", which marks the wrong shop finished in order to escape it.
+     *
+     * A half-made shop is not lost by this — it is still in the switcher, and choosing it there
+     * lands on its setup, which is the one context where that screen is what somebody asked for.
+     */
+    const ready = list.filter((s) => s.onboardedAt);
+    const preferred = (id: string | null) => {
+      if (!id) return null;
+      const found = list.find((s) => s.id === id);
+      if (!found) return null;
+      if (!found.onboardedAt && ready.length > 0) return null;
+      return found.id;
+    };
+
     setStoreId((current) => {
+      /*
+       * A CHOICE MADE IN THIS SESSION IS SACRED, even into an unfinished shop.
+       *
+       * Running `current` through the same preference was a fresh bug in the fix: `loadStores` runs
+       * again on every auth event, so somebody who deliberately switched to their half-made shop to
+       * finish setting it up was pulled straight back out of it, and the shop became unreachable
+       * rather than merely unlucky. The preference is about what to open when NOBODY has said — a
+       * cold sign-in — not about second-guessing somebody who just pressed a button.
+       */
       if (current && list.some((s) => s.id === current)) return current;
+
       let remembered: string | null = null;
       try {
         remembered = localStorage.getItem(LAST_STORE_KEY);
       } catch {
-        /* storage blocked — fall through to the first store */
+        /* storage blocked — fall through */
       }
-      if (remembered && list.some((s) => s.id === remembered)) return remembered;
-      return list[0]?.id ?? null;
+      const back = preferred(remembered);
+      if (back) return back;
+
+      return ready[0]?.id ?? list[0]?.id ?? null;
     });
   }, []);
 
@@ -239,6 +298,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (storeId) hadStore.current = true;
+  }, [storeId]);
+
+  /*
+   * HOW THIS SHOP SHOWS MONEY, applied as soon as the shop is known.
+   *
+   * `stores.money_decimals` reached nothing before this: every screen formatted to whole naira
+   * because that is the hard-coded default, and a shop that set anything else was ignored. Read
+   * here rather than per screen so one answer serves all 143 formatting calls, and re-read whenever
+   * the store changes — switching shops must not carry the previous one's setting across, the same
+   * reason `selectStore` clears the scopes.
+   */
+  useEffect(() => {
+    if (!storeId) {
+      setMoneyDecimals(0);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const { data } = await getSupabase()
+        .from('stores')
+        .select('money_decimals')
+        .eq('id', storeId)
+        .maybeSingle();
+      if (!cancelled) setMoneyDecimals((data as { money_decimals: number } | null)?.money_decimals);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [storeId]);
 
   const signOut = useCallback(async () => {

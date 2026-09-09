@@ -1,0 +1,102 @@
+.section {
+  margin: var(--space-6) 0 var(--space-2);
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+
+.note {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* The actions END each block rather than being pinned to the foot of the page — see CLAUDE.md. */
+.actions {
+  margin-top: var(--space-4);
+}
+
+/* Latitude and longitude are one fact in two boxes, so they sit on one line and wrap together. */
+.pair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.pair > * {
+  flex: 1 1 8rem;
+  min-width: 0;
+}
+
+/* A sheet's own actions belong at its foot — that is the shape of a sheet, and the exception the
+   no-pinned-footer rule names. */
+.sheetActions {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.sheetActions > * {
+  flex: 1;
+}
+
+.sheetSaid {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.label {
+  display: block;
+  margin-bottom: var(--space-2);
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.select {
+  width: 100%;
+  min-height: var(--touch-comfortable, 52px);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+/* Three ways to show money, each showing itself. "Kobo" is an argument; "₦3,700.50" is the answer. */
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.choice {
+  flex: 1 1 7rem;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-height: var(--touch-comfortable, 52px);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.choiceOn {
+  border-color: var(--primary);
+  background: var(--primary-subtle, var(--surface-2));
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.choiceSaid {
+  font-size: var(--text-sm);
+}
+
+.choiceEg {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}

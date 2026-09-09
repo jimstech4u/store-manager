@@ -10,6 +10,37 @@
    is fine — it is the last step before pixels — but the result must never be written back.
    ===================================================================================== */
 
+/*
+ * HOW THIS SHOP SHOWS MONEY.
+ *
+ * `stores.money_decimals` has existed since 0009 and reached nothing: every one of the 143
+ * `formatMoney` calls took the hard-coded default of 0, and the nine that pass `2` mean "this is a
+ * derived cost and the fraction is real" — which is a different statement and stays exactly as it
+ * is. A setting the shop can change and no screen honours is the failure this file exists to avoid.
+ *
+ * Module state rather than a parameter, because threading a shop through 143 call sites would be a
+ * refactor with a hundred chances to pass the wrong thing, and rather than a React context because
+ * these functions are deliberately pure of React — arithmetic a shop will argue with, testable on
+ * its own.
+ *
+ * SET ONLY FROM THE CLIENT. `AuthProvider` calls it when the shop loads. A server render has no
+ * shop and must never adopt one: the default below is what 0009 chose, so a server-rendered figure
+ * and a shop on the default agree, and a shop that has changed it sees the change on hydration
+ * rather than in HTML that could be cached for somebody else.
+ */
+let shopDecimals = 0;
+
+/** Called by the provider when the shop is known. Client only. */
+export function setMoneyDecimals(decimals: number | null | undefined) {
+  const n = Number(decimals);
+  shopDecimals = Number.isFinite(n) && n >= 0 && n <= 2 ? n : 0;
+}
+
+/** What the shop is currently showing money to. */
+export function moneyDecimals(): number {
+  return shopDecimals;
+}
+
 /**
  * Naira, whole by default.
  *
@@ -20,27 +51,29 @@
  */
 export function formatMoney(
   value: string | number | null | undefined,
-  decimals = 0,
+  decimals?: number,
 ): string {
+  const places = decimals ?? shopDecimals;
   const n = toNumber(value);
   if (n === null) return '—';
 
   return `₦${n.toLocaleString('en-NG', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
+    minimumFractionDigits: places,
+    maximumFractionDigits: places,
   })}`;
 }
 
 /** Money without the currency mark — for table columns where the header already says naira. */
 export function formatAmount(
   value: string | number | null | undefined,
-  decimals = 0,
+  decimals?: number,
 ): string {
+  const places = decimals ?? shopDecimals;
   const n = toNumber(value);
   if (n === null) return '—';
   return n.toLocaleString('en-NG', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
+    minimumFractionDigits: places,
+    maximumFractionDigits: places,
   });
 }
 

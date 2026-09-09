@@ -91,3 +91,23 @@
   font-size: var(--text-sm);
   color: var(--text-muted);
 }
+
+/* Taking a deposit at settle time: the panel says why, the box takes the figure, and the shop's own
+   rate is a button rather than a prefilled value — a deposit is agreed between two people. */
+.holdBox {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.useUsual {
+  justify-self: start;
+  min-height: var(--touch-min, 44px);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useLocation, useNav, useObject } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
+import styles from './unit-form-page.module.css';
 import { AsyncAction, type AsyncState } from '@/components/ui/AsyncAction';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
@@ -69,13 +70,6 @@ export default function UnitFormPage() {
       onBack={goBack}
       title="Add a unit you use"
       subtitle="Your own word for how much of something there is"
-      footer={
-        <AsyncAction state={state} problem={problem} label="Adding this unit">
-          <Button onClick={() => void save()} disabled={name.trim() === ''} fullWidth>
-            Add it
-          </Button>
-        </AsyncAction>
-      }
     >
       <Explain label="What counts as a unit?">
         Whatever you say when somebody asks how much: a crate, a bag, a litre, a keg, a bundle. You
@@ -98,6 +92,26 @@ export default function UnitFormPage() {
         optional
         hint="This is what gets printed on receipts. Leave it empty to use the same word."
       />
+
+      {/*
+        THE ACTION ENDS THE PAGE. It was pinned to the foot, and that is the arrangement every
+        other form here moved away from.
+
+        A pinned bar costs a row of the form on every phone this runs on — permanently, on a screen
+        that is two fields long, so it was spending a fifth of the visible page to keep a button
+        reachable that was never more than one scroll away. It also sits over the content while you
+        type, which on a phone with the keyboard up is most of what is left.
+
+        And scrolling to the bottom to commit is the honest gesture: the last thing you should see
+        before pressing Add it is your answer to the last question.
+      */}
+      <div className={styles.actions}>
+        <AsyncAction state={state} problem={problem} label="Adding this unit">
+          <Button onClick={() => void save()} disabled={name.trim() === ''} fullWidth>
+            Add it
+          </Button>
+        </AsyncAction>
+      </div>
     </PageScaffold>
   );
 }

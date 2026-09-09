@@ -92,6 +92,10 @@ export default function ProductFormPage() {
         onCreateUnit={(unitName) =>
           void nav.push('unit_form_page', unitName.trim() ? { name: unitName } : undefined)
         }
+        /* And a group the shop has no name for yet — pushed from here for the same reason. */
+        onCreateGroup={(groupName) =>
+          void nav.push('group_form_page', groupName.trim() ? { name: groupName } : undefined)
+        }
         onCancel={() => void nav.pop()}
         onSaved={(result) => {
           /*

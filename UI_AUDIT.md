@@ -21,6 +21,8 @@ Each of these is real, permissioned, and tested server-side. Nothing in the app 
 | **Editing a staff member** | `update_staff_details` | Built alongside staff logins; a name or phone can be set once and never corrected. |
 | **The activity feed** | `activity_feed`, `activity_feed_page`, `audit_log` | Every write is already logged. Nobody can read it — including the owner asking "who voided that sale?". |
 | **Empties owed back** | `empties_outstanding` | A distributor's second ledger. The till records crates going out; nothing shows who still has them. |
+| ~~**Holding a deposit on a receipt**~~ | `hold_receipt_deposit` | **Fixed 2026-09-08.** Built with the deposits and never called. The settle screen worked out the shop's usual rate for the lot, printed it, and offered nothing to do with it — a dead end reading "there is no deposit to settle". It is a deposit box on that screen now. |
+| ~~**Empties the shop itself holds**~~ | *nothing existed* | **Fixed 2026-09-08 (0105).** What a customer owes is `backfill_empties`, against that customer. What is stacked in the shop's own yard had no table at all, and the product form asked for it in a box whose answer was written nowhere. |
 | **Customer deposits** | `customer_deposits_held`, `deposit_ledger`, `deposit_forfeits` | Money held against returnables, with a forfeit path. No screen at all. |
 | **Per-customer agreed prices** | `customer_prices`, `product_prices` | `resolve_price` already honours them on the till — a line quietly prices at "this customer's agreed price" and says so. Nothing can SET one. |
 | **Product categories** | `product_categories` | `list_products` returns the name and the stock list shows it, but every form sends `p_category_id: null`. Read-only by accident: there is no RPC to list them either. |
@@ -33,6 +35,37 @@ Each of these is real, permissioned, and tested server-side. Nothing in the app 
 | **Costing method** | `apply_weighted_average` | The shop is on FIFO layers. The switch exists and nobody can reach it. |
 | **Joining a shop by code** | `find_store_by_code` | Presumably for staff onboarding; no screen. |
 | **Price check** | `price_check` | A counter lookup — "what does this cost?" — with no screen. |
+
+## The shop's own row (2026-09-08)
+
+`stores` has seventeen columns and the app could reach two of them: `is_public` and
+`public_description`. Everything else was set at signup or never. Read column by column:
+
+| Column | Was | Now |
+|---|---|---|
+| `name` | fixed at signup for ever | **Settings → This shop.** `rename_store`, 0106 |
+| `status` | did not exist — a shop could never be closed | **added, 0106.** A shop made by a mistyped name sat in the switcher permanently, and having no `onboarded_at` it took the session and answered with a setup wizard |
+| `address`, `latitude`, `longitude` | written by NOTHING, while `public_stores_near` sorts by distance — a shop could switch its storefront on and be searched for by people nearby with no way to say where it is | **Settings → This shop.** `set_store_place`, 0106 |
+| `timezone` | on the table since 0001 and READ BY NOTHING. Every day boundary was the server's, which is UTC — an hour out for Lagos, so an evening's trade could land on the next day | **Settings → This shop**, and `needs_count_today` now truncates in the shop's zone. 0107 |
+| `money_decimals` | since 0009, read by one function (`price_check`) that has no screen. All 143 `formatMoney` calls took the hard-coded default | **Settings → This shop**, applied through `setMoneyDecimals` from `AuthProvider`. 0107 |
+| `currency` | `'NGN'`, read by nothing | **deliberately still unreachable — see below** |
+| `slug`, `code` | derived; `code` is written by `ensure_store_code` when the storefront goes public | not a gap |
+| `login_domain` | staff-login domain | still no screen; staff logins are created without one |
+| `onboarded_at`, `created_by`, `created_at`, `updated_at` | the system's own | not a gap |
+
+### Currency, and why it is not built
+
+The naira sign is written into **85 places** in `src/` — 26 as `prefix="₦"` on money inputs, two in
+the formatters, the rest in text and comments. A control that sets `stores.currency` would let a
+shop choose something no screen honours: every figure would still be printed with a ₦, on receipts
+customers keep.
+
+That is precisely the defect this audit exists to catch — *a field that cannot change anything is
+worse than a missing one, because it looks answered* — so the setting is not offered and the column
+stays at its default. Making it real means a currency-aware formatter and a pass over all 26 input
+adornments, which is a piece of work to be decided on rather than slipped in beside a settings
+screen. `formatMoney` and `formatAmount` now take their decimals from the shop, so the same
+mechanism is where the symbol would go.
 
 ## Published with no consumer
 

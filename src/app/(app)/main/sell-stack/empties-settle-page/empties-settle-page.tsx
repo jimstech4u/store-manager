@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import styles from './empties-settle-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
-import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
+import { LoadArea, useLoadArea } from '@/components/ui/LoadArea';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useLocation, useNav, useObject } from '@academix-admin/navigation-stack';
 import { useAuth } from '@/providers/AuthProvider';
@@ -15,6 +15,7 @@ import { getSupabase } from '@/lib/supabase/client';
 import { formatMoney, messageOf } from '@/lib/format';
 import {
   returnIsAllowed,
+  holdReceiptDeposit,
   returnUnitsFor,
   settleEmpties,
   suggestedDeposit,
@@ -35,6 +36,9 @@ import {
  * that produced the quick-add sheet, and it is wrong for the same reason: the till is not popped,
  * it is pushed under, so nothing is lost by using the whole screen.
  */
+/** One instance, so "no shapes read yet" is the same object every render. */
+const EMPTY_SHAPES: Record<string, ReturnUnit[]> = {};
+
 export default function EmptiesSettlePage() {
   const nav = useNav();
   const goBack = useStackBack();
@@ -56,34 +60,34 @@ export default function EmptiesSettlePage() {
    */
   const provided = useObject<ReceiptEmpties>('receiptEmpties', { global: true, scope: 'sell' });
 
-  const [receipt, setReceipt] = useState<ReceiptEmpties | null>(
-    provided.isProvided ? (provided.getter() ?? null) : null,
-  );
-  const [loading, setLoading] = useState(!receipt);
+  const handed = provided.isProvided ? (provided.getter() ?? null) : null;
 
-  useEffect(() => {
-    if (receipt || !saleId || !store) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const { data, error } = await getSupabase().rpc('empties_by_receipt', {
-          p_store_id: store.id,
-          p_customer_id: null,
-          p_limit: 1,
-          p_sale_id: saleId,
-        });
-        if (error) throw error;
-        if (!cancelled) setReceipt(((data ?? [])[0] as ReceiptEmpties) ?? null);
-      } catch (e) {
-        if (!cancelled) showProblem(messageOf(e, 'Could not read that receipt.'));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [receipt, saleId, store, showProblem]);
+  /*
+   * THE RECEIPT, read into its own area.
+   *
+   * It used to replace the whole screen with a spinner and, on a failure, show the dialog over a
+   * page that then stayed blank for ever — no way back except the browser. `useLoadArea` keeps the
+   * failure interrupting once and leaves a Try again where the receipt was going to be.
+   *
+   * Held when the list already handed the row over: `nav.push` carries an id, records travel
+   * through `provideObject`, and the fallback exists for a cold start and a deep link.
+   */
+  const receiptArea = useLoadArea<ReceiptEmpties | null>(
+    async () => {
+      const { data, error } = await getSupabase().rpc('empties_by_receipt', {
+        p_store_id: store!.id,
+        p_customer_id: null,
+        p_limit: 1,
+        p_sale_id: saleId,
+      });
+      if (error) throw error;
+      return ((data ?? [])[0] as ReceiptEmpties) ?? null;
+    },
+    [saleId, store?.id],
+    { onFail: showProblem, whenNot: Boolean(handed) || !saleId || !store },
+  );
+
+  const receipt = handed ?? receiptArea.data;
 
   /*
    * What each pool comes back in.
@@ -92,28 +96,39 @@ export default function EmptiesSettlePage() {
    * behaviour — any quantity — which is right: a shop that has not said "whole crates only" has not
    * said anything, and refusing its returns would be inventing a rule it never made.
    */
-  const [shapes, setShapes] = useState<Record<string, ReturnUnit[]>>({});
-
-  useEffect(() => {
-    if (!receipt) return;
-    let cancelled = false;
-    void (async () => {
+  /*
+   * AND THIS ONE USED TO SWALLOW ITS OWN FAILURE.
+   *
+   * `catch { found[id] = [] }` — a pool whose shapes could not be read became a pool with no
+   * shapes declared, which is a real and DIFFERENT state that means "any quantity is fine". So a
+   * network blip turned the crate-and-bottle boxes into one free-text box, silently, and the
+   * seller counted into a shape the pool does not accept and found out from the server.
+   *
+   * The two are told apart now. Nothing declared is still nothing declared; a read that failed says
+   * so and offers to go again.
+   */
+  const pools = receipt?.expected;
+  const shapesArea = useLoadArea<Record<string, ReturnUnit[]>>(
+    async () => {
       const found: Record<string, ReturnUnit[]> = {};
-      for (const e of receipt.expected) {
-        try {
-          found[e.category_id] = await returnUnitsFor(e.category_id);
-        } catch {
-          // A pool whose shapes cannot be read is treated as having none: the server still checks,
-          // and a screen that refuses everything because a read failed is worse than one that asks.
-          found[e.category_id] = [];
-        }
+      for (const e of pools ?? []) {
+        found[e.category_id] = await returnUnitsFor(e.category_id);
       }
-      if (!cancelled) setShapes(found);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [receipt]);
+      return found;
+    },
+    [pools],
+    { onFail: showProblem, whenNot: !receipt },
+  );
+
+  /*
+   * A STABLE EMPTY, because `?? {}` is a new object every render.
+   *
+   * `countedBack` lists this, so a fresh object each time makes the memo recompute on every render
+   * — the same defect as the `useProblem` memo that could never be stable, which turned an effect
+   * into a fetch on every keystroke and cleared the composer as it was typed into. Here it would
+   * only waste work, but the reason it is wrong is the reason that one was.
+   */
+  const shapes = useMemo(() => shapesArea.data ?? EMPTY_SHAPES, [shapesArea.data]);
 
   const [busy, setBusy] = useState(false);
   /*
@@ -134,6 +149,14 @@ export default function EmptiesSettlePage() {
   const [apply, setApply] = useState('');
   const [refund, setRefund] = useState('');
   const [mode, setMode] = useState<'cash' | 'credit' | 'none'>('cash');
+  /*
+   * A deposit taken NOW, on a receipt that went out on trust.
+   *
+   * Blank means none, and that has to stay the easy answer: most of these settle with no money
+   * moving at all, and a shop that must dismiss a money box to record four crates coming back will
+   * stop using the screen.
+   */
+  const [hold, setHold] = useState('');
 
   /** Each pool's shapes multiplied out and added up — the arithmetic nobody should do standing up. */
   const countedBack = useMemo(() => {
@@ -182,7 +205,34 @@ export default function EmptiesSettlePage() {
     });
   }, [gone, goneMoney, receipt]);
 
-  if (loading) return <FullPageMessage title="Reading that receipt" tone="loading" />;
+  if (receiptArea.loading) {
+    return (
+      <PageScaffold onBack={goBack} title="What came back?">
+        <LoadArea area={receiptArea} what="that receipt">
+          {() => null}
+        </LoadArea>
+        <ProblemDialog problem={problem} title="Could not read that receipt" />
+      </PageScaffold>
+    );
+  }
+
+  /*
+   * A READ THAT FAILED IS NOT AN EMPTY RECEIPT.
+   *
+   * Both used to land on "Nothing to settle — everything has already come back", which is a
+   * statement of fact about the shop, made on the strength of a request that never arrived. The
+   * seller is standing at a counter holding crates that the screen has just told them are not owed.
+   */
+  if (!receipt && receiptArea.error) {
+    return (
+      <PageScaffold onBack={goBack} title="What came back?">
+        <LoadArea area={receiptArea} what="that receipt">
+          {() => null}
+        </LoadArea>
+        <ProblemDialog problem={problem} title="Could not read that receipt" />
+      </PageScaffold>
+    );
+  }
 
   if (!receipt) {
     return (
@@ -242,6 +292,19 @@ export default function EmptiesSettlePage() {
   const save = async () => {
     setBusy(true);
     try {
+      /*
+       * TAKEN BEFORE THE SETTLEMENT, deliberately.
+       *
+       * `settle_empties` reads what is held on the receipt to work out what can be applied or
+       * given back, so a deposit taken in the same breath has to be on the receipt before it runs.
+       * The other order silently drops it: the money is recorded, and the settlement it was taken
+       * for cannot see it.
+       */
+      const holding = Number(hold) || 0;
+      if (holding > 0) {
+        await holdReceiptDeposit(store!.id, receipt.sale_id, holding, 'Taken when empties came back');
+      }
+
       await settleEmpties({
         storeId: store!.id,
         saleId: receipt.sale_id,
@@ -503,12 +566,53 @@ export default function EmptiesSettlePage() {
             </div>
           </>
         ) : (
-          <InfoPanel tone="info" title="Nothing was held for these">
-            They went out on trust, so there is no deposit to settle — only the containers.
+          /*
+            NOTHING HELD YET — AND THIS IS WHERE IT GETS TAKEN.
+
+            This was a dead end. It worked out what the shop usually holds for the lot, said the
+            figure out loud, and then offered nothing to do with it: "there is no deposit to settle"
+            and a Cancel. Meanwhile `hold_receipt_deposit` had existed since the deposits were
+            built, with no caller anywhere in the app — a capability with no door.
+
+            AND THIS IS THE MOMENT A SHOP ACTUALLY TAKES ONE. Goods go out on trust at the counter,
+            because there is a queue. The customer comes back with three of the four crates, and
+            that is when the conversation about money happens — what is still out, and what the shop
+            is holding against it until it comes.
+
+            It is offered, never filled in. The suggestion is the shop's own rate for these pools,
+            put on the button rather than into the box, because a deposit is agreed between two
+            people and a prefilled figure is the app agreeing on their behalf.
+          */
+          <div className={styles.holdBox}>
+            <InfoPanel tone="info" title="Nothing is being held for these">
+              They went out on trust. You can still take a deposit now, against whatever has not
+              come back.
+            </InfoPanel>
+
+            <Field
+              label="Deposit to hold now"
+              numeric
+              prefix="₦"
+              value={hold}
+              onChange={(e) => setHold(e.target.value)}
+              placeholder="0"
+              hint={
+                suggestion > 0
+                  ? `Your usual rate for this lot is ${formatMoney(suggestion)}.`
+                  : 'Whatever was agreed at the counter.'
+              }
+            />
+
             {suggestion > 0 && (
-              <> Your usual rate for this lot would have been {formatMoney(suggestion)}.</>
+              <button
+                type="button"
+                className={styles.useUsual}
+                onClick={() => setHold(String(suggestion))}
+              >
+                Use {formatMoney(suggestion)}
+              </button>
             )}
-          </InfoPanel>
+          </div>
         )}
       </div>
 

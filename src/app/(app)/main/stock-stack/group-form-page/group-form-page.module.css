@@ -1,0 +1,4 @@
+/* The action ENDS the page rather than being pinned to its foot — see CLAUDE.md. */
+.actions {
+  margin-top: var(--space-7);
+}

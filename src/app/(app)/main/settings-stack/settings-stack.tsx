@@ -24,14 +24,18 @@ import StaffInvitePage from './staff-invite-page/staff-invite-page';
 import ProductFormPage from '../stock-stack/product-form-page/product-form-page';
 import UnitsPage from '../stock-stack/units-page/units-page';
 import UnitFormPage from '../stock-stack/unit-form-page/unit-form-page';
+import GroupFormPage from '../stock-stack/group-form-page/group-form-page';
 import CustomerFormPage from '../people-stack/customer-form-page/customer-form-page';
+import ShopPage from './shop-page/shop-page';
 
 const navLink = {
   product_form_page: ProductFormPage,
   units_page: UnitsPage,
   unit_form_page: UnitFormPage,
+  group_form_page: GroupFormPage,
   customer_form_page: CustomerFormPage,
   settings_page: SettingsPage,
+  shop_page: ShopPage,
   review_page: ReviewPage,
   staff_page: StaffPage,
   bank_page: BankPage,

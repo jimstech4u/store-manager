@@ -30,7 +30,6 @@ export function GroupPicker({
   chosen,
   onToggle,
   onAddNew,
-  busy = false,
   zIndex,
 }: {
   id: string;
@@ -41,7 +40,6 @@ export function GroupPicker({
   onToggle: (groupId: string) => void;
   /** Given whatever was typed, so "NBL" in the search box becomes the name of the new group. */
   onAddNew: (typedName: string) => void;
-  busy?: boolean;
   zIndex?: number;
 }) {
   const { theme } = useTheme();
@@ -126,7 +124,6 @@ export function GroupPicker({
       <button
         type="button"
         className={styles.addRow}
-        disabled={busy}
         onClick={() => onAddNew(query.trim())}
       >
         <PlusIcon />{' '}

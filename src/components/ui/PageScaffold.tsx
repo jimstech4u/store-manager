@@ -9,15 +9,18 @@ import { useTheme } from '@/context/ThemeContext';
 /**
  * The page frame every screen inside a navigation stack uses.
  *
- * Header, one scrolling body, optional sticky footer — the same shape as Flutter's Scaffold,
- * which is what academix-app uses and why its screens feel consistent.
+ * Header and one scrolling body — the same shape as Flutter's Scaffold, which is what academix-app
+ * uses and why its screens feel consistent.
+ *
+ * NO PINNED FOOTER. There was a `footer` prop that put a sticky bar at the bottom of the screen,
+ * and it is gone rather than merely unused: a prop that exists gets reached for, and this one had
+ * exactly one honest-looking use left and one plainly wrong one. A page's action ENDS the page.
  *
  * The header itself is `@academix-admin/header`, not a hand-rolled one. An earlier version of
  * this file reimplemented a title/back/actions bar that the shared package already provides,
  * which meant two things to keep in step and one of them getting no attention. The scaffold's
  * own job is the page FRAME — a single predictable scroll container (which navigation-stack's
- * scroll restoration and the nav bar's scroll subscription both need) and a footer that clears
- * the safe area.
+ * scroll restoration and the nav bar's scroll subscription both need).
  */
 export function PageScaffold({
   title,
@@ -26,7 +29,6 @@ export function PageScaffold({
   backLabel = 'Go back',
   actions,
   action,
-  footer,
   flush = false,
   headerScrolls = false,
   children,
@@ -40,8 +42,6 @@ export function PageScaffold({
   actions?: HeaderAction[];
   /** Escape hatch for a non-icon control in the header. */
   action?: ReactNode;
-  /** Sticky bar for the screen's primary action. */
-  footer?: ReactNode;
   /** Removes body side padding for full-bleed lists. */
   flush?: boolean;
   /**
@@ -97,13 +97,6 @@ export function PageScaffold({
       appBar={header}
       appBarBehavior={headerScrolls ? 'scroll' : 'pinned'}
       bodyClassName={`${styles.body} ${flush ? styles.bodyFlush : ''}`}
-      bottomBar={
-        footer ? (
-          <div className={styles.footer}>
-            <div className={styles.footerInner}>{footer}</div>
-          </div>
-        ) : undefined
-      }
     >
       <div className={styles.inner}>{children}</div>
     </Scaffold>

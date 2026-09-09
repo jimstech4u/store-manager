@@ -68,17 +68,3 @@
   padding-top: var(--space-5);
 }
 
-/* A sticky action bar for screens whose primary action must stay reachable while scrolling —
-   recording a sale, saving a count. */
-.footer {
-  flex: none;
-  padding: var(--space-3) var(--space-4)
-           calc(var(--space-3) + var(--nav-height) + var(--safe-bottom));
-  background: var(--surface);
-  border-top: 1px solid var(--border);
-}
-
-.footerInner {
-  max-width: 640px;
-  margin: 0 auto;
-}

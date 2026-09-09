@@ -334,6 +334,27 @@ export default function SettingsPage() {
             receipt they print, and every picker — the most visible text a shop owns and the only
             piece it could not fix.
           */}
+          {/*
+            THE SHOP'S OWN ROW.
+
+            Everything under here corrects something the shop named — its words, its pools, its
+            people. The one thing it could not correct was itself: the name was fixed at signup for
+            ever, and a shop created by a mistyped name could never be closed, so it sat in the
+            switcher and, having no `onboarded_at`, answered sign-in with a setup wizard.
+          */}
+          <button
+            type="button"
+            className={styles.linkRow}
+            onClick={() => nav.push('shop_page')}
+          >
+            <span className={styles.linkMain}>
+              <span className={styles.linkName}>This shop</span>
+              <span className={styles.sectionNote}>
+                Its name on your receipts, where it is, and closing one you did not mean to make
+              </span>
+            </span>
+          </button>
+
           <button
             type="button"
             className={styles.linkRow}

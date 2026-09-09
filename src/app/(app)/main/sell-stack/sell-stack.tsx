@@ -32,6 +32,7 @@ import ProductFormPage from '../stock-stack/product-form-page/product-form-page'
  * journey nobody tested.
  */
 import UnitFormPage from '../stock-stack/unit-form-page/unit-form-page';
+import GroupFormPage from '../stock-stack/group-form-page/group-form-page';
 /*
  * The sales list, registered here too, for the same reason.
  *
@@ -59,6 +60,7 @@ const navLink = {
   empties_settle_page: EmptiesSettlePage,
   product_form_page: ProductFormPage,
   unit_form_page: UnitFormPage,
+  group_form_page: GroupFormPage,
   sales_page: SalesPage,
   customer_form_page: CustomerFormPage,
 };

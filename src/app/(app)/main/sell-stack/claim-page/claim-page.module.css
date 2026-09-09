@@ -85,11 +85,15 @@
   letter-spacing: 0.04em;
 }
 
-.footer {
+/* The total and the action END the page rather than being pinned to its foot. The sticky version
+   covered the last rows of the list being ticked — the choice at the bottom was made underneath the
+   readout of its own effect. */
+.decide {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
+  margin-top: var(--space-7);
 }
 
 .footerTotal {

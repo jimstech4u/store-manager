@@ -247,19 +247,6 @@ export default function ClaimPage() {
       onBack={goBack}
       title="Take over an order"
       subtitle={found ? `Order ${found.code}` : 'Using the code your colleague read out'}
-      footer={
-        found ? (
-          <div className={styles.footer}>
-            <span className={styles.footerTotal}>
-              <span className={styles.footerLabel}>This tab becomes</span>
-              <strong>{formatMoney(resultingTotal)}</strong>
-            </span>
-            <Button busy={looking} onClick={() => void accept()}>
-              Accept
-            </Button>
-          </div>
-        ) : undefined
-      }
     >
       {/*
         A FAILURE INTERRUPTS; it does not sit on the page.
@@ -332,6 +319,28 @@ export default function ClaimPage() {
               This sale will be recorded for {found.customerName}.
             </InfoPanel>
           )}
+
+          {/*
+            THE TOTAL AND THE ACTION END THE PAGE rather than being pinned to its foot.
+
+            It was a sticky bar, on the argument that the figure changes as boxes are ticked and so
+            has to stay visible. That is the strongest case a pinned bar has here, and it still
+            loses: the bar covered the last rows of the very list being ticked, so the choice at
+            the bottom — the one most likely to be the reason somebody opened this screen — was
+            made underneath the readout of its own effect.
+
+            The figure ends the page instead, which is where somebody looks after finishing the
+            list, and it is the last thing read before pressing Accept.
+          */}
+          <div className={styles.decide}>
+            <span className={styles.footerTotal}>
+              <span className={styles.footerLabel}>This tab becomes</span>
+              <strong>{formatMoney(resultingTotal)}</strong>
+            </span>
+            <Button busy={looking} onClick={() => void accept()}>
+              Accept
+            </Button>
+          </div>
         </>
       )}
     </PageScaffold>

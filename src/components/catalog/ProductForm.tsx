@@ -6,7 +6,12 @@ import { CameraIcon, CloseIcon, PlusIcon } from '@/components/ui/Icon';
 import { Field } from '@/components/ui/Field';
 import { UnitsEditor, unitProblems } from '@/components/catalog/UnitsEditor';
 import { GroupPicker } from '@/components/catalog/GroupPicker';
-import { createGroup, groupsFor, setProductGroups, useProductGroups } from '@/lib/stacks/product-groups';
+import {
+  groupsFor,
+  setProductGroups,
+  useProductGroups,
+  type ProductGroup,
+} from '@/lib/stacks/product-groups';
 import { BarcodeScanner } from '@/components/catalog/BarcodeScanner';
 import { DiscountsEditor, type Discount } from '@/components/catalog/DiscountsEditor';
 import { useNav } from '@academix-admin/navigation-stack';
@@ -92,6 +97,7 @@ export function ProductForm({
   /** Prefills the name when opened from a search that found nothing. */
   initialName = '',
   onCreateUnit,
+  onCreateGroup,
   minimum = false,
 }: {
   onSaved: (result: ProductFormResult) => void;
@@ -107,6 +113,8 @@ export function ProductForm({
    * not exist — the same reason the customer picker asks its caller.
    */
   onCreateUnit?: (name: string) => void;
+  /** Hands over to whoever can push the form that names a new group. */
+  onCreateGroup?: (name: string) => void;
   /**
    * ASK ONLY WHAT THE SALE NEEDS, and ask it properly.
    *
@@ -184,10 +192,9 @@ export function ProductForm({
    * takes any NBL bottle, so "who made it" is what the lorry asks when it comes to collect, and
    * "what shelf does it sit on" is a different question entirely.
    */
-  const { groups } = useProductGroups(storeId ?? null);
+  const { groups, add: addGroup } = useProductGroups(storeId ?? null);
   const [groupIds, setGroupIds] = useState<string[]>([]);
   const [pickingGroups, setPickingGroups] = useState(false);
-  const [makingGroup, setMakingGroup] = useState(false);
   const groupPickerId = useId();
 
   const [units, setUnits] = useState<ProductUnit[]>([]);
@@ -296,6 +303,27 @@ export function ProductForm({
     const cleanup = nav.provideObject(
       'onUnitCreated',
       () => (unit: StoreUnit) => onUnitCreatedRef.current(unit),
+      { global: true, scope: 'catalog' },
+    );
+    return cleanup;
+  }, [nav]);
+
+  /*
+   * And the same for a group, including TICKING IT.
+   *
+   * Somebody who has just gone and named "Nigerian Breweries" has said what this product's maker
+   * is; landing back on a picker where it exists but is not chosen asks the question twice.
+   */
+  const onGroupCreatedRef = useRef<(group: ProductGroup) => void>(() => {});
+  onGroupCreatedRef.current = (group) => {
+    addGroup(group);
+    setGroupIds((prev) => (prev.includes(group.id) ? prev : [...prev, group.id]));
+  };
+
+  useEffect(() => {
+    const cleanup = nav.provideObject(
+      'onGroupCreated',
+      () => (group: ProductGroup) => onGroupCreatedRef.current(group),
       { global: true, scope: 'catalog' },
     );
     return cleanup;
@@ -813,27 +841,36 @@ export function ProductForm({
         close={() => setPickingGroups(false)}
         groups={groups}
         chosen={groupIds}
-        busy={makingGroup}
         onToggle={(id) =>
           setGroupIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
         }
+        /*
+          THE SAME GESTURE AS "Add a unit you use" — a pushed form, not a silent call.
+
+          This used to call `createGroup` straight from the picker behind a guard that began
+          `if (!storeId || !typed.trim()) return;`. The sheet OPENS with an empty search box and the
+          button reads "Make a new group" in that state, so the commonest press of it — open the
+          sheet, press the only thing offering to add something — returned immediately and did
+          nothing. No group, no page, no error. A control that cannot fail and cannot succeed.
+
+          It also had nowhere to report a failure to: the catch was empty, on the reasoning that
+          the picker stays open and the shop can try another name, which tells somebody whose group
+          was refused precisely nothing.
+
+          Pushed by the CALLER, like the unit form, because this component is rendered inside a
+          stack and cannot know which one it is in.
+        */
         onAddNew={(typed) => {
           /*
-            MADE WITHOUT LEAVING THE FORM, the way the customer and product pickers work.
+            CLOSED FIRST, then handed over — the way the unit picker does it.
 
-            Somebody typing "NBL" is usually about to find out it does not exist yet, and sending
-            them to a settings screen to make one means abandoning the product they are half way
-            through entering. The server returns the existing id if there is one, so a shop that
-            forgot it already had a Nigerian Breweries group gets that group, not a telling-off.
+            The sheet does not close itself when the form it asked for is pushed, so it stayed open
+            OVER the new page: the group form arrived underneath the picker, with its own name field
+            and its Make it button covered by the list the shop had just left. Everything worked and
+            none of it could be reached.
           */
-          if (!storeId || !typed.trim()) return;
-          setMakingGroup(true);
-          void createGroup(storeId, typed.trim())
-            .then((id) => setGroupIds((prev) => (prev.includes(id) ? prev : [...prev, id])))
-            .catch(() => {
-              /* The picker stays open and the shop can try a different name. */
-            })
-            .finally(() => setMakingGroup(false));
+          setPickingGroups(false);
+          onCreateGroup?.(typed);
         }}
       />
 

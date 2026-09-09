@@ -1,0 +1,7 @@
+/* The action ENDS the page rather than being pinned to its foot — the same arrangement as the
+   product form, the receive page, the units page and the bank form. A pinned bar costs a row of a
+   two-field form on every phone this runs on, and covers what is being typed once the keyboard is
+   up. */
+.actions {
+  margin-top: var(--space-7);
+}

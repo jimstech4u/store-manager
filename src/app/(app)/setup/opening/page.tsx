@@ -58,7 +58,7 @@ const emptyDebtor = (): DebtorRow => ({ key: newKey(), name: '', phone: '', amou
 
 export default function OpeningBalancesPage() {
   const router = useRouter();
-  const { store, refreshStores } = useAuth();
+  const { store, stores, selectStore, refreshStores } = useAuth();
 
   const [stock, setStock] = useState<StockRow[]>([emptyStock()]);
   const [debtors, setDebtors] = useState<DebtorRow[]>([]);
@@ -155,11 +155,49 @@ export default function OpeningBalancesPage() {
     <div className={styles.page}>
       <div className={styles.inner}>
         <p className={styles.step}>Step 2 of 2</p>
-        <h1 className={styles.heading}>What you have right now</h1>
+        {/*
+          WHICH SHOP THIS IS SETTING UP.
+
+          The screen never said. An account with a real shop and a half-made one — a name typed
+          into the setup form by accident and abandoned — signed in and arrived here with no
+          indication that this was not the shop it has been trading from since August. The only
+          control that left the page was "Skip for now", which finishes the WRONG SHOP in order to
+          escape it.
+        */}
+        <h1 className={styles.heading}>
+          What {store?.name ? <span className={styles.whose}>{store.name}</span> : 'your shop'} has
+          right now
+        </h1>
         <p className={styles.sub}>
           Your shop did not start today. Enter what is on your shelf and who already owes you, so
           your records begin from where you actually are.
         </p>
+
+        {/*
+          AND THE WAY OUT, when there is somewhere else to be.
+
+          Only shown when the account actually has another shop, because on the ordinary journey —
+          one shop, just created — offering to go somewhere else is noise in the middle of setting
+          it up.
+        */}
+        {stores.filter((s) => s.id !== store?.id).length > 0 && (
+          <div className={styles.elsewhere}>
+            <p className={styles.elsewhereSaid}>Setting up the wrong shop?</p>
+            {stores
+              .filter((s) => s.id !== store?.id)
+              .map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  className={styles.elsewhereGo}
+                  onClick={() => selectStore(s.id)}
+                >
+                  Go to {s.name}
+                  {s.onboardedAt ? '' : ' — also needs setting up'}
+                </button>
+              ))}
+          </div>
+        )}
 
       {/*
         A FAILURE INTERRUPTS; it does not sit on the page.

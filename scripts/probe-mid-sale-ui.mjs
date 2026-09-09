@@ -149,7 +149,21 @@ try {
     const gone = await admin.from('products').delete().eq('id', productId);
     if (gone.error) await admin.from('products').update({ status: 'archived' }).eq('id', productId);
   }
-  const storeId = (await admin.from('stores').select('id').limit(1).single()).data.id;
+  /*
+ * THE SHOP THE BROWSER WILL SIGN INTO, asked of the membership.
+ *
+ * `stores.limit(1)` is whichever row the database hands back first, which stopped being the sample
+ * account's shop the day a second shop existed. Rows were created somewhere the browser could not
+ * see them, and the failure looked like a broken picker.
+ */
+const probeShop = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+  auth: { persistSession: false },
+});
+await probeShop.auth.signInWithPassword({
+  email: env.SAMPLE_EMAIL,
+  password: env.SAMPLE_PASSWORD,
+});
+const storeId = (await probeShop.rpc('my_membership')).data[0].store_id;
   await admin.from('store_units').delete().eq('store_id', storeId).eq('name', UNIT);
 }
 

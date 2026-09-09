@@ -15,6 +15,7 @@ import UnitsPage from './units-page/units-page';
  */
 import ReturnUnitsPage from './return-units-page/return-units-page';
 import UnitFormPage from './unit-form-page/unit-form-page';
+import GroupFormPage from './group-form-page/group-form-page';
 /*
  * The receipt, registered here too.
  *
@@ -36,6 +37,7 @@ const navLink = {
   units_page: UnitsPage,
   return_units_page: ReturnUnitsPage,
   unit_form_page: UnitFormPage,
+  group_form_page: GroupFormPage,
   receipt_page: ReceiptPage,
 };
 

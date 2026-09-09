@@ -1,5 +1,5 @@
 /**
- * "How you buy and sell it" — clicked through in a real browser.
+ * "The shapes it comes in" — clicked through in a real browser.
  *
  * The RPC probe proves the rule holds in the database. This proves a shopkeeper can actually reach
  * it: that the screen opens, that the compulsory question appears when a unit arrives in a shape
@@ -42,9 +42,22 @@ const check = (what, ok, detail = '') => {
 const stamp = Date.now().toString().slice(-6);
 
 // ── An item of this probe's own, so nothing the shop sells is disturbed ──────────────────────
-const storeId = (
-  await admin.from('stores').select('id').limit(1).single()
-).data.id;
+/*
+ * THE SHOP THE BROWSER WILL SIGN INTO, asked of the membership.
+ *
+ * `stores.limit(1)` is whichever row the database hands back first, which stopped being the sample
+ * account's shop the day a second shop existed — so the probe's product was created somewhere the
+ * browser could not see it, and the failure read as "the stock screen does not warn about stranded
+ * stock" rather than "the item is in another shop".
+ */
+const probeShop = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+  auth: { persistSession: false },
+});
+await probeShop.auth.signInWithPassword({
+  email: env.SAMPLE_EMAIL,
+  password: env.SAMPLE_PASSWORD,
+});
+const storeId = (await probeShop.rpc('my_membership')).data[0].store_id;
 
 const { data: product } = await admin
   .from('products')
@@ -100,9 +113,6 @@ try {
   await page.waitForTimeout(6000);
   await page.screenshot({ path: `${SHOTS}/1-stock.png`, fullPage: false });
 
-  const stockWarning = page.getByText(/come in but never go out/i);
-  check('the stock screen warns about stranded stock', (await stockWarning.count()) > 0);
-
   // ── Open the item ──────────────────────────────────────────────────────────────────
   // Searched rather than scrolled to: the list pages, and this probe's item sorts last.
   const search = page.getByPlaceholder(/search/i).first();
@@ -116,7 +126,18 @@ try {
   await page.waitForTimeout(4000);
   await page.screenshot({ path: `${SHOTS}/2-product.png` });
 
-  const opener = page.getByText('How you buy and sell it').first();
+  /*
+   * THE WARNING IS ON THE ITEM, and this asked the LIST for it.
+   *
+   * "Some of this can come in but never go out" is an `InfoPanel` on the product page — it is
+   * about one product's shapes, and the stock list has no room to say which item it means. The
+   * check sat before the item was even opened, so it had been failing on a screen that was never
+   * going to carry it.
+   */
+  const stranded = page.getByText(/come in but never go out/i);
+  check('the item warns that some of its stock is stranded', (await stranded.count()) > 0);
+
+  const opener = page.getByText('The shapes it comes in').first();
   check('the item offers a way in', (await opener.count()) > 0);
   await opener.click();
   await page.waitForTimeout(4000);
@@ -124,9 +145,9 @@ try {
 
   check(
     'the compulsory question is on screen',
-    (await page.getByText(/One pbag/i).count()) > 0,
-    'expected "One pbag… is [ ] plitres"',
-  );
+    (await page.getByText(new RegExp(`PLitres${stamp} go inside`, 'i')).count()) > 0,
+    'expected the litre to be asked what it goes inside',
+  );;
   check(
     'and it says what happens if it is skipped',
     (await page.getByText(/can never be sold|never go out/i).count()) > 0,
@@ -135,18 +156,32 @@ try {
   const save = page.getByRole('button', { name: 'Save' }).first();
   check('Save is refused while the question stands', await save.isDisabled());
 
-  // ── Answer it: one bag is 24 litres ────────────────────────────────────────────────
+  // ── Answer it: one bag is 24 litres ──────────────────────────────────
   /*
-   * The box inside the sentence, not "the last numeric input on the page".
+   * SAID ON THE LITRE'S CARD, because a shape declares what it GOES INSIDE.
    *
-   * Pushed-under pages stay mounted in a navigation stack, so `.last()` found a customer's phone
-   * number on a screen two pushes down and sat waiting for an invisible element to become
-   * editable.
+   * The editor used to ask "One PBag is [ ] PLitres" in a `.sentence` block, and this probe
+   * filled that box. The same fact is now entered the way a shop says it — twenty-four litres
+   * fit inside one bag — which lives on the litre's card and writes the identical row:
+   * `bag.defined_against = litre`, `defined_qty = 24`. Opposite end of one sentence.
    */
-  const answer = page.locator('[class*="UnitsEditor_sentence"] input').first();
-  await answer.fill('24');
+  const litreCard = page
+    .locator('li[class*="UnitsEditor_card__"]')
+    .filter({ hasText: new RegExp(`^PLitre${stamp}`) })
+    .first();
+
+  // The fifth tick on every card: the four roles come first, then the container question.
+  await litreCard.locator('input[type="checkbox"]').nth(4).check();
+  await page.waitForTimeout(900);
+
+  await litreCard
+    .getByLabel(new RegExp(`How many PLitres${stamp}`, 'i'))
+    .first()
+    .fill('24');
+  await page.waitForTimeout(400);
+  await litreCard.locator('select').selectOption({ label: `pbag${stamp}` });
   await page.waitForTimeout(1500);
-  await page.screenshot({ path: `${SHOTS}/4-answered.png`, fullPage: true });
+  await page.screenshot({ path: `${SHOTS}/4-answered.png` });
 
   check('Save opens up once it is answered', !(await save.isDisabled()));
 

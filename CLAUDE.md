@@ -381,6 +381,33 @@ fee", "Add an item", "Add another item" — is the PRIMARY button. A grey outlin
 other option", the thing you press when you do NOT want the main one, and the seller who does not
 press it has typed an amount that will not count. One shape, learnt once, everywhere on the site.
 
+## An action ENDS the page. Nothing is pinned to the foot.
+
+The commit button goes last in the flow, after the final question. There is no `footer` prop on
+`PageScaffold` — it was removed rather than left unused, because a prop that exists gets reached
+for, and every screen that had one has been migrated.
+
+- **A pinned bar costs a row of the form on every phone, permanently.** The new-unit form is two
+  fields long and was spending a fifth of its visible page keeping "Add it" reachable when it was
+  never more than one scroll away.
+- **It covers what is being typed.** With the keyboard up on a phone, a bar at the foot and the
+  keyboard between them take most of what is left of the screen.
+- **Scrolling to the bottom to commit is the honest gesture.** You have just been asked eight
+  questions; the last thing you should see before saving is your answer to the eighth.
+
+**The strongest argument for pinning is a live figure, and it still loses.** The claim screen showed
+"This tab becomes ₦X" in a sticky bar because the total changes as lines are ticked — and the bar
+sat over the last rows of the very list being ticked, so the choice at the bottom was made
+underneath the readout of its own effect. The figure ends the page now, which is where somebody
+looks when they have finished the list.
+
+Sheets are not pages. A `BottomSheet`'s own actions belong at its foot — that is the shape of a
+sheet, and the confirmation sheets on the bank, staff and product pages are right as they are.
+
+The one thing that legitimately floats is `FloatingAmount`, which is the running total on the till:
+it is a readout, not an action, it is off to one side rather than a full-width bar, and the sell
+screen's commit lives on `TakePayment` at the end of that page like everything else.
+
 ## A warning that cannot be turned off gets ignored
 
 `InfoPanel` given an `id` folds to a single line, remembers whether this device opened it, and

@@ -16,6 +16,7 @@ import CountEntryPage from './count-entry-page/count-entry-page';
  */
 import ProductFormPage from '../stock-stack/product-form-page/product-form-page';
 import UnitFormPage from '../stock-stack/unit-form-page/unit-form-page';
+import GroupFormPage from '../stock-stack/group-form-page/group-form-page';
 
 const navLink = {
   count_page: CountPage,
@@ -23,6 +24,7 @@ const navLink = {
   product_form_page: ProductFormPage,
   // The form offers to invent a unit the shop has no word for, and pushes it by name.
   unit_form_page: UnitFormPage,
+  group_form_page: GroupFormPage,
 };
 
 export const CountStack = () => (

@@ -98,7 +98,7 @@ try {
   await p.locator('[class*="stock-page_itemName"]').first().click();
   await p.waitForTimeout(4000);
 
-  const opener = p.getByText('How you buy and sell it').first();
+  const opener = p.getByText('The shapes it comes in').first();
   if ((await opener.count()) === 0) {
     console.log('  (no units screen on this item — cannot exercise the write path)');
   } else {

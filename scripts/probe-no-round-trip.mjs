@@ -47,7 +47,21 @@ const check = (what, ok, detail = '') => {
 const stamp = Date.now().toString().slice(-6);
 const NAME = `AAA Round Trip ${stamp}`;
 const RENAMED = `AAA Renamed ${stamp}`;
-const storeId = (await admin.from('stores').select('id').limit(1).single()).data.id;
+/*
+ * THE SHOP THE BROWSER WILL SIGN INTO, asked of the membership.
+ *
+ * `stores.limit(1)` is whichever row the database hands back first, which stopped being the sample
+ * account's shop the day a second shop existed. Rows were created somewhere the browser could not
+ * see them, and the failure looked like a broken picker.
+ */
+const probeShop = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+  auth: { persistSession: false },
+});
+await probeShop.auth.signInWithPassword({
+  email: env.SAMPLE_EMAIL,
+  password: env.SAMPLE_PASSWORD,
+});
+const storeId = (await probeShop.rpc('my_membership')).data[0].store_id;
 
 const crate = (
   await admin
@@ -141,6 +155,19 @@ try {
 
   // ── 2. A saved item reaches the list ──────────────────────────────────────────────
   console.log('\n— an item the shop adds —');
+  /*
+   * SEARCHED FOR, not scrolled to.
+   *
+   * The sheet lists every word this shop has and paginates, so a unit whose name sorts late is not
+   * on the first page — and the probe waited thirty seconds for a row that was never going to be
+   * rendered. Typed rather than filled, because the search is debounced off real keystrokes and
+   * `fill` fires one input event it does not see.
+   */
+  const findUnit = p.getByPlaceholder(/Crate, Bag, Litre/i).first();
+  await findUnit.click();
+  await p.waitForTimeout(500);
+  await findUnit.pressSequentially(`RCrate${stamp}`, { delay: 40 });
+  await p.waitForTimeout(3000);
   await p.locator('[class*="UnitPicker_row"]').filter({ hasText: `RCrate${stamp}` }).first().click();
   await p.waitForTimeout(2500);
   await p
