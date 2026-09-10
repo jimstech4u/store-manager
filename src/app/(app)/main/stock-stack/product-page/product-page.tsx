@@ -268,9 +268,31 @@ export default function ProductPage() {
                   {u.baseQty > 1 && <span className={styles.shapeOf}> of {u.baseQty}</span>}
                 </span>
                 <span>{u.avgCost > 0 ? formatMoney(u.avgCost, 2) : '—'}</span>
-                <span className={styles.shapePrice}>
-                  {u.isSold ? (u.price != null ? formatMoney(u.price) : 'no price yet') : 'not sold'}
-                </span>
+
+                {/*
+                  THE PRICE IS THE CONTROL, because it is the figure a shop changes.
+
+                  Tapping it opens one field with the cost beside it, rather than the eleven-question
+                  edit form or the shapes screen — which sends the whole tree back to move one
+                  number. Only for a shape customers actually buy in: a price on any other can never
+                  reach a receipt.
+                */}
+                {u.isSold ? (
+                  <button
+                    type="button"
+                    className={styles.shapePriceButton}
+                    onClick={() =>
+                      void nav.push('shape_price_page', {
+                        id: product.id,
+                        shape: u.productUnitId,
+                      })
+                    }
+                  >
+                    {u.price != null ? formatMoney(u.price) : 'set a price'}
+                  </button>
+                ) : (
+                  <span className={styles.shapePrice}>not sold</span>
+                )}
               </div>
             ))}
           </div>
@@ -329,14 +351,29 @@ export default function ProductPage() {
                     <li key={sh.productUnitId} className={styles.emptiesRow}>
                       <span>
                         <span className={styles.emptiesName}>{sh.unitPlural}</span>
+                        {/*
+                          "one is 12 bottles" — the shop's own word, and pluralised.
+
+                          This said "one is 12 piece": `products.base_unit`, which is a fixed
+                          vocabulary of seven storage codes and not a word anybody uses, in the
+                          singular for twelve of them. Every shape has carried its plural since the
+                          unit form started asking for it separately, and nothing was reading it.
+                        */}
                         <span className={styles.emptiesMeta}>
-                          {sh.baseQty > 1
-                            ? `one is ${sh.baseQty} ${product.baseUnit}`
-                            : `one ${product.baseUnit}`}
+                          {sh.innerPlural
+                            ? `one is ${formatQty(sh.baseQty)} ${
+                                sh.baseQty === 1
+                                  ? (sh.innerName ?? '').toLowerCase()
+                                  : sh.innerPlural.toLowerCase()
+                              }`
+                            : 'the smallest this comes in'}
                         </span>
                       </span>
                       <span className={styles.emptiesQty}>
-                        {saidAsPart(sh.outNow)}
+                        {saidAsPart(sh.outNow)}{' '}
+                        <span className={styles.emptiesUnit}>
+                          {sh.outNow === 1 ? sh.unitName.toLowerCase() : sh.unitPlural.toLowerCase()}
+                        </span>
                         <span className={styles.emptiesWho}>
                           {sh.customersOut === 1 ? '1 customer' : `${sh.customersOut} customers`}
                         </span>

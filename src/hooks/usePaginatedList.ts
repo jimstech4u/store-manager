@@ -154,9 +154,31 @@ export function usePaginatedList<T>({
    * per render.
    */
   const seededFor = useRef<T[] | null>(null);
+
+  /*
+   * NOT WHILE A RESET IS IN FLIGHT.
+   *
+   * `load(true)` empties `seenRef` and then awaits. If the persisted snapshot rehydrates during
+   * that await — a long spell in the background, or a fresh load after a deployment — this block
+   * sees an empty filter beside a full list and helpfully seeds every old id back into it. The
+   * response then arrives, every row it carries is filtered out as a duplicate, and
+   * `items: reset ? fresh` keeps only the rows created since the list was last read.
+   *
+   * That is exactly what the stock screen showed: two products, and both of them new.
+   *
+   * Money and People survived it because their tables gain rows far less often — the filter was
+   * just as poisoned, but with nothing new to keep, `fresh` came back empty and the guard below
+   * left the restored rows alone. The lists that emptied were the ones something had been writing
+   * to.
+   *
+   * Seeding is right BETWEEN fetches, so a restored list refuses duplicates when it pages on.
+   * During one, the fetch owns the filter.
+   */
+  const resetInFlight = useRef(false);
+
   if (seededFor.current !== snapshot.items) {
     seededFor.current = snapshot.items;
-    if (snapshot.items.length > 0 && seenRef.current.size === 0) {
+    if (!resetInFlight.current && snapshot.items.length > 0 && seenRef.current.size === 0) {
       cursorRef.current = snapshot.cursor;
       for (const row of snapshot.items) seenRef.current.add(getId(row));
     }
@@ -182,6 +204,8 @@ export function usePaginatedList<T>({
       if (reset) {
         cursorRef.current = null;
         seenRef.current = new Set();
+        // Claimed for the duration: a restore landing mid-flight must not put the old ids back.
+        resetInFlight.current = true;
         setLoading(true);
       } else {
         setLoadingMore(true);
@@ -246,6 +270,7 @@ export function usePaginatedList<T>({
         setLoading(false);
         setLoadingMore(false);
         inFlight.current = false;
+        resetInFlight.current = false;
       }
     },
     [enabled, pageSize, setSnapshot],
@@ -269,7 +294,28 @@ export function usePaginatedList<T>({
    * So the deps are compared explicitly. Same question and rows already here → leave them alone.
    * Different question → reset, whatever is on screen.
    */
-  const restored = snapshot.items.length > 0;
+  /*
+   * RESTORED, AND PLAUSIBLY COMPLETE — which is not the same as "has rows".
+   *
+   * This was `items.length > 0`. One row was enough to convince the guard below that the list had
+   * already been loaded, so a snapshot written while the first page was still arriving — a request
+   * aborted by a suspended tab, a deployment swapping the bundle underneath — came back as the
+   * finished article.
+   *
+   * NOT PROVEN TO BE THE REPORTED FAULT. A probe planted a two-row snapshot in `StateStackDB` and
+   * reloaded; the list came back with 139 rows WITH THIS GUARD REMOVED, because `refresh()` asks
+   * for `max(loaded, pageSize)` and corrects a short list on its own. So the screen somebody
+   * reported sitting at two items is doing something else, and that is still open.
+   *
+   * Kept anyway, because trusting a two-row snapshot that still expects more as a finished list is
+   * unsound whatever else is true.
+   *
+   * `hasMore` is what tells a finished page from a stopped one. A finished first page is either
+   * FULL, or short and therefore the end. Short AND still expecting more is a fetch that did not
+   * land, and it is worth doing again.
+   */
+  const restored =
+    snapshot.items.length > 0 && (snapshot.items.length >= pageSize || !snapshot.hasMore);
   const lastDeps = useRef<unknown[] | null>(null);
 
   useEffect(() => {

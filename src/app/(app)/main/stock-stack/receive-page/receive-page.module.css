@@ -274,3 +274,46 @@
   border-top: 1px solid var(--border);
   margin-bottom: var(--space-5);
 }
+
+/* What went back on the same lorry. Beside the charges because it is entered in the same breath,
+   and boxed apart because it is goods rather than money. */
+.wentBack {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+.wentBackWhy {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.wentBackBoxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.wentBackBoxes > * {
+  flex: 1 1 8rem;
+  min-width: 0;
+}
+
+/* Chosen, not typed — the same footprint as the field it replaced, so nothing has to be re-learnt. */
+.supplierPick {
+  width: 100%;
+  min-height: var(--touch-comfortable, 52px);
+  margin-bottom: var(--space-4);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}

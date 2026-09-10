@@ -66,10 +66,12 @@ export default function EmptiesCustomerPage() {
   const outstanding = useMemo(() => owed.filter((r) => r.owed > 0), [owed]);
   const lines = useMemo(() => rollUpOwed(outstanding), [outstanding]);
 
-  const customerName = ledgerArea.data?.length ? undefined : undefined;
-
   return (
-    <PageScaffold onBack={goBack} title="Empties" subtitle={customerName}>
+    <PageScaffold
+      onBack={goBack}
+      title="Empties"
+      subtitle="What they are holding, and every move of it"
+    >
       <ProblemDialog problem={problem} title="Not recorded" />
 
       <h2 className={styles.section}>Still with them</h2>
@@ -96,6 +98,14 @@ export default function EmptiesCustomerPage() {
                     <span className={styles.saidWhat}>
                       {l.label} {l.unit.toLowerCase()}
                     </span>
+                    {/*
+                      THE WORKING, on the line that needed it.
+
+                      There used to be a second section below repeating every shape separately —
+                      "Counted shape by shape" — which said the same thing twice and made the screen
+                      look like two different answers. What that section was really for is visible
+                      here: which products a rolled-up total came from.
+                    */}
                     {l.products.length > 1 && (
                       <span className={styles.saidFrom}>{l.products.join(' + ')}</span>
                     )}
@@ -103,24 +113,6 @@ export default function EmptiesCustomerPage() {
                 ))}
               </ul>
 
-              {/*
-                And the same thing shape by shape. This is what a return is counted in: nobody can
-                hand back "8 NBL crates", but three Goldberg crates go on the floor by the door.
-              */}
-              <h3 className={styles.sub}>Counted shape by shape</h3>
-              <ul className={styles.shapes}>
-                {outstanding.map((r) => (
-                  <li key={r.productUnitId} className={styles.shapeRow}>
-                    <span className={styles.shapeName}>
-                      {r.productName}
-                      <span className={styles.shapeGroup}>{r.groupName ?? 'no maker set'}</span>
-                    </span>
-                    <span className={styles.shapeQty}>
-                      {saidAsPart(r.owed)} {r.owed === 1 ? r.unitName : r.unitPlural}
-                    </span>
-                  </li>
-                ))}
-              </ul>
             </>
           )
         }

@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import styles from './receive-page.module.css';
 import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
+import { SupplierPicker } from '@/components/catalog/SupplierPicker';
+import { useSuppliers, type Supplier } from '@/lib/stacks/suppliers';
 import { useStackBack } from '@/hooks/useStackBack';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
@@ -69,7 +71,37 @@ export default function ReceivePage() {
   const { store } = useAuth();
 
   const [lines, setLines] = useState<ReceiveLine[]>([]);
-  const [supplier, setSupplier] = useState('');
+  /*
+   * WHO THE LOAD CAME FROM — a record, not a spelling.
+   *
+   * The name is kept beside the id because `record_purchase` still takes `p_supplier` as text, and
+   * every delivery recorded before suppliers existed carries one. Both are sent; the id is what can
+   * be totalled.
+   */
+  const [supplier, setSupplier] = useState<{ id: string; name: string } | null>(null);
+  const [pickingSupplier, setPickingSupplier] = useState(false);
+
+  /*
+   * A supplier named on the pushed form lands here and is CHOSEN.
+   *
+   * This page never unmounts while that form sits over it, so without this the picker comes back
+   * without them. And somebody who has just gone and named a supplier has said who the load is
+   * from; landing back on a picker where they exist but are not selected asks it twice.
+   */
+  const onSupplierCreatedRef = useRef<(s: Supplier) => void>(() => {});
+  onSupplierCreatedRef.current = (created) => {
+    addSupplier(created);
+    setSupplier({ id: created.id, name: created.name });
+  };
+
+  useEffect(() => {
+    const cleanup = nav.provideObject(
+      'onSupplierCreated',
+      () => (created: Supplier) => onSupplierCreatedRef.current(created),
+      { global: true, scope: 'catalog' },
+    );
+    return cleanup;
+  }, [nav]);
   const [invoiceRef, setInvoiceRef] = useState('');
   /*
    * The other things a delivery costs, and the ones that give money back.
@@ -84,6 +116,15 @@ export default function ReceivePage() {
   const [chargeLabel, setChargeLabel] = useState('');
   const [chargeAmount, setChargeAmount] = useState('');
   const [rebate, setRebate] = useState('');
+
+  /*
+   * WHAT WENT BACK WITH THE LORRY.
+   *
+   * Keyed by shape, because that is what leaves: forty Goldberg crates. A shop hands these over on
+   * the same visit the new load arrives, counted by the same person against the same note — so it
+   * belongs on this screen and not on one somebody has to remember to open.
+   */
+  const [wentBack, setWentBack] = useState<Record<string, string>>({});
   /*
    * What each product can arrive in.
    *
@@ -93,6 +134,30 @@ export default function ReceivePage() {
   const { byProduct: buyUnits } = useBuyingUnits(store?.id ?? null);
   // Every shape with stock on it, for the "what is already here" line in the picker.
   const { byProduct: shelfShapes } = useSellingUnits(store?.id ?? null);
+  const { suppliers, add: addSupplier } = useSuppliers(store?.id ?? null);
+
+  /*
+   * OFFERED FOR THE ITEMS ON THIS DELIVERY, not the whole catalogue.
+   *
+   * A lorry from Nigerian Breweries takes NBL crates. Listing every returnable shape in the shop
+   * invites forty Guinness crates onto an NBL note, which is the kind of entry nobody can unpick
+   * later. What is on the delivery is the best available statement of who is standing outside.
+   */
+  const canGoBack = useMemo(() => {
+    const seen = new Map<string, { productUnitId: string; product: string; plural: string }>();
+    for (const l of lines) {
+      if (!l.productId) continue;
+      for (const sh of shelfShapes.get(l.productId) ?? []) {
+        if (!sh.isReturnable || seen.has(sh.productUnitId)) continue;
+        seen.set(sh.productUnitId, {
+          productUnitId: sh.productUnitId,
+          product: l.productName ?? '',
+          plural: sh.plural,
+        });
+      }
+    }
+    return [...seen.values()];
+  }, [lines, shelfShapes]);
 
   /*
    * The stock list, so a delivery can say what it changed.
@@ -234,7 +299,7 @@ export default function ReceivePage() {
       const { error: err } = await getSupabase().rpc('record_purchase', {
         p_store_id: store.id,
         p_lines: payload,
-        p_supplier: supplier || null,
+        p_supplier: supplier?.name || null,
         p_invoice_ref: invoiceRef || null,
         /*
          * Everything is a NAMED charge now.
@@ -255,6 +320,27 @@ export default function ReceivePage() {
         p_client_uuid: crypto.randomUUID(),
       });
       if (err) throw err;
+
+      /*
+       * THE EMPTIES THAT WENT BACK, after the delivery and only if it succeeded.
+       *
+       * After, because containers recorded as returned against a delivery that never landed are
+       * crates the shop believes it no longer has. Each is its own row: they are separate
+       * obligations against separate makers and settling one says nothing about another.
+       */
+      for (const sh of canGoBack) {
+        const qty = Number(wentBack[sh.productUnitId]);
+        if (!(qty > 0)) continue;
+        const { error: backErr } = await getSupabase().rpc('record_supplier_empties', {
+          p_store_id: store.id,
+          p_product_unit_id: sh.productUnitId,
+          p_qty: qty,
+          p_supplier_id: supplier?.id ?? null,
+          p_supplier: supplier?.name || null,
+          p_note: invoiceRef ? `Went back on ${invoiceRef}` : null,
+        });
+        if (backErr) throw backErr;
+      }
 
       /*
        * WHAT JUST ARRIVED, told to the screens holding it.
@@ -601,13 +687,24 @@ export default function ReceivePage() {
             </div>
           </div>
 
-          <Field
-            label="Supplier"
-            optional
-            value={supplier}
-            onChange={(e) => setSupplier(e.target.value)}
-            placeholder="Who delivered this"
-          />
+          {/*
+            CHOSEN, NOT TYPED.
+
+            A free-text box made "NBL" and "Nigerian Breweries" two suppliers with no history
+            between them — which stopped being merely untidy when crates started going back on the
+            same lorry, because "who took them" has to be something a shop can total.
+          */}
+          <label className={styles.label} htmlFor="who-from">
+            Supplier
+          </label>
+          <button
+            type="button"
+            id="who-from"
+            className={styles.supplierPick}
+            onClick={() => setPickingSupplier(true)}
+          >
+            {supplier ? supplier.name : 'Who delivered this'}
+          </button>
           <Field
             label="Invoice number"
             optional
@@ -682,6 +779,38 @@ export default function ReceivePage() {
       */}
 
       {/*
+        AND WHAT WENT BACK ON THE SAME LORRY.
+
+        The other end of the empties, and the one leg that had no record at all. Without it the
+        yard figure could only ever climb — every crate a customer brought back added to it and
+        nothing took any away — so it was published as "counted on the 8th" rather than as a
+        balance. This is what makes it arithmetic.
+      */}
+      {canGoBack.length > 0 && (
+        <section className={styles.wentBack}>
+          <span className={styles.chargesLabel}>Empties that went back</span>
+          <p className={styles.wentBackWhy}>
+            Crates and bottles you handed over when this load came. Leave them blank if none did.
+          </p>
+
+          <div className={styles.wentBackBoxes}>
+            {canGoBack.map((sh) => (
+              <Field
+                key={sh.productUnitId}
+                label={`${sh.product} ${sh.plural.toLowerCase()}`}
+                numeric
+                value={wentBack[sh.productUnitId] ?? ''}
+                onChange={(e) =>
+                  setWentBack((prev) => ({ ...prev, [sh.productUnitId]: e.target.value }))
+                }
+                placeholder="0"
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/*
         The total and the action END the page rather than being pinned to its foot.
 
         A pinned bar costs a row of the form on every phone this runs on, and this screen is a
@@ -700,6 +829,25 @@ export default function ReceivePage() {
           </Button>
         </div>
       )}
+
+      <SupplierPicker
+        open={pickingSupplier}
+        onClose={() => setPickingSupplier(false)}
+        suppliers={suppliers}
+        onPick={(chosen) => setSupplier({ id: chosen.id, name: chosen.name })}
+        onCreate={(typed) => {
+          /*
+            The picker closes BEFORE the form is pushed.
+
+            A sheet does not close itself when a page is pushed over it, so the form arrives
+            underneath with its own fields covered by the list somebody has just left — the group
+            picker shipped exactly that bug once.
+          */
+          setPickingSupplier(false);
+          void nav.push('supplier_form_page', typed.trim() ? { name: typed } : undefined);
+        }}
+      />
+
     </PageScaffold>
   );
 }

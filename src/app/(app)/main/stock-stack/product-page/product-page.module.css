@@ -211,3 +211,25 @@ li + li .emptiesRow { border-top: 1px solid var(--border); }
 .shapePrice {
   font-weight: 600;
 }
+
+/* The shape's own word beside the figure — "4576½ crates", never a storage code. */
+.emptiesUnit {
+  font-size: var(--text-sm);
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+/* The price is tappable, and looks it. Underlined rather than boxed so the row still reads as a
+   table line — this sits inside a three-column grid of facts. */
+.shapePriceButton {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 600;
+  text-align: right;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}

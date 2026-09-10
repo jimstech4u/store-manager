@@ -14,6 +14,11 @@ import UnitsPage from './units-page/units-page';
  * about crates is the moment it is looking at the beer, not a settings screen it never opens.
  */
 import UnitFormPage from './unit-form-page/unit-form-page';
+import ShapePricePage from './shape-price-page/shape-price-page';
+import SupplierFormPage from './supplier-form-page/supplier-form-page';
+import SuppliersPage from './suppliers-page/suppliers-page';
+import SupplierAccountPage from './supplier-account-page/supplier-account-page';
+import SupplierPaymentPage from './supplier-payment-page/supplier-payment-page';
 import GroupFormPage from './group-form-page/group-form-page';
 /*
  * The receipt, registered here too.
@@ -35,6 +40,11 @@ const navLink = {
   product_form_page: ProductFormPage,
   units_page: UnitsPage,
   unit_form_page: UnitFormPage,
+  shape_price_page: ShapePricePage,
+  supplier_form_page: SupplierFormPage,
+  suppliers_page: SuppliersPage,
+  supplier_account_page: SupplierAccountPage,
+  supplier_payment_page: SupplierPaymentPage,
   group_form_page: GroupFormPage,
   receipt_page: ReceiptPage,
 };

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useDemandState } from '@academix-admin/state-stack';
 import { getSupabase } from '@/lib/supabase/client';
 import { catalogChanged } from '@/lib/stacks/catalog-stack';
+import { invalidate, useInvalidation } from '@/lib/stacks/invalidation';
 import type { Discount } from '@/components/catalog/DiscountsEditor';
 
 /**
@@ -142,6 +143,19 @@ export async function createStoreUnit(storeId: string, name: string, plural: str
     p_plural: plural,
   });
   if (error) throw error;
+
+  /*
+   * BOTH, and they are different questions.
+   *
+   * `shapesChanged` tells every screen showing this product's shapes to read them again — the
+   * quick-edit page, the product form, whichever is behind the one that saved. `catalogChanged`
+   * tells the DERIVED figures — stock on hand in each shape, landed cost, which units a product
+   * sells in — which the server computes from what just changed.
+   *
+   * Neither touches the product LIST. That is told its own news, one row at a time, by whoever
+   * changed it.
+   */
+  shapesChanged();
   catalogChanged();
   return data as string;
 }
@@ -178,17 +192,31 @@ const toUnit = (r: ProductUnitRow, byId: Map<string, string>): ProductUnit => ({
  * a form. A cached half-finished edit reappearing days later — under a shop that has since changed
  * the item from another till — is a way to overwrite a good answer with a stale one.
  */
+/**
+ * The scope a product's SHAPES live in.
+ *
+ * Their own, and not `catalog_flow`, which is where the paginated product list lives. Saving shapes
+ * has to re-read shapes and must not re-read the list — notifying the list's scope costs a full
+ * round trip to learn something this device just decided, and throws away every page somebody had
+ * scrolled through.
+ */
+export const SHAPES_SCOPE = 'product_shapes';
+
+export function shapesChanged() {
+  invalidate(SHAPES_SCOPE);
+}
+
 export function useProductUnits(productId: string | null) {
   const [units, demandUnits, setUnits] = useDemandState<ProductUnit[]>([], {
     key: `product-units:${productId ?? 'none'}`,
-    scope: 'catalog_flow',
+    scope: SHAPES_SCOPE,
     deps: [productId ?? ''],
     revalidateOnMount: true,
   });
 
   const [loaded, demandLoaded, setLoaded] = useDemandState<boolean>(false, {
     key: `product-units-loaded:${productId ?? 'none'}`,
-    scope: 'catalog_flow',
+    scope: SHAPES_SCOPE,
     deps: [productId ?? ''],
   });
 
@@ -234,6 +262,19 @@ export function useProductUnits(productId: string | null) {
   }, [productId, demandUnits, demandLoaded]);
 
   useEffect(load, [load]);
+
+  /*
+   * And a save made on another screen reaches this one.
+   *
+   * The product form and the quick-edit screen are two pages reading one set of shapes, and saving
+   * used to tell neither: `catalogChanged()` notifies the DERIVED scope, and these live elsewhere.
+   *
+   * NOT PROVEN TO BE THE REPORTED MISMATCH. A probe saved on one screen and opened the other, and
+   * the shapes were correct WITH THIS REMOVED — both are pushed pages, so each mounts fresh and
+   * `revalidateOnMount` refetches regardless. A screen that stays mounted underneath is the case
+   * this covers, and the one somebody saw is still unexplained.
+   */
+  useInvalidation(SHAPES_SCOPE, load);
 
   return { units, setUnits, loaded, setLoaded, loading: busy, error, reload: load };
 }

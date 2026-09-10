@@ -7,7 +7,8 @@ import { SearchLauncher } from '@/components/ui/SearchLauncher';
 import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
 import { Button } from '@/components/ui/Button';
-import { BoxIcon, ChevronRightIcon, PlusIcon } from '@/components/ui/Icon';
+import { BoxIcon,
+  PeopleIcon, ChevronRightIcon, PlusIcon } from '@/components/ui/Icon';
 import { useNav } from '@academix-admin/navigation-stack';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
@@ -139,6 +140,19 @@ export default function StockPage() {
                 icon: <BoxIcon />,
                 onClick: () => void nav.push('receive_page'),
                 ariaLabel: 'Record a delivery',
+              },
+              /*
+                WHO THE SHOP BUYS FROM, beside recording a delivery.
+
+                Here rather than in settings because it is the same thought: a load arrives, and
+                what is owed for it and what went back on the lorry belong to somebody. Behind the
+                same permission for the same reason.
+              */
+              {
+                key: 'suppliers',
+                icon: <PeopleIcon />,
+                onClick: () => void nav.push('suppliers_page'),
+                ariaLabel: 'Suppliers and what you owe them',
               },
             ]
           : []),

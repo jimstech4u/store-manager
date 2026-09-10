@@ -1,0 +1,149 @@
+.list {
+  display: grid;
+  gap: var(--space-1);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--touch-comfortable, 52px);
+  padding: var(--space-3);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row:hover {
+  background: var(--surface-2, var(--surface));
+}
+
+.who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.name {
+  font-weight: 600;
+}
+
+.phone {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.owed {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.owedQty {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.owedNote {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* Said, not left blank. A cleared account is an answer. */
+.clear {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.empty {
+  margin: var(--space-5) 0;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* What the shop is holding altogether — the figure an owner wants first, because it is a liability
+   sitting in the drawer rather than takings. */
+.headline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.headlineLabel {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.headlineValue {
+  font-size: var(--text-2xl, 1.75rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.headlineNote {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.amount {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.held {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.kept {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* Money and containers side by side: they settle separately, so one figure covering both is a
+   figure nobody can act on. */
+.meta {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.owed {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* They owe the shop — a rebate, an overpayment. Said, not hidden. */
+.credit {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.settled {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.actions {
+  margin-bottom: var(--space-4);
+}

@@ -218,6 +218,7 @@ export async function emptiesOwed(customerId: string): Promise<OwedRow[]> {
     baseQty: Number(r.base_qty) || 1,
     groupId: (r.group_id as string | null) ?? null,
     groupName: (r.group_name as string | null) ?? null,
+    side: (r.side as 'they_hold' | 'we_hold') ?? 'they_hold',
     owed: Number(r.owed) || 0,
   }));
 }
@@ -253,6 +254,8 @@ export async function recordEmpties(args: {
   direction: 'out' | 'returned' | 'damaged';
   qty: number;
   reason?: string;
+  /** Defaults to ours-with-them, which is the common case and what every caller meant before. */
+  side?: 'they_hold' | 'we_hold';
 }) {
   const { error } = await getSupabase().rpc('record_customer_empties', {
     p_store_id: args.storeId,
@@ -261,6 +264,7 @@ export async function recordEmpties(args: {
     p_direction: args.direction,
     p_qty: args.qty,
     p_reason: args.reason?.trim() || null,
+    p_side: args.side ?? 'they_hold',
   });
   if (error) throw error;
   ledgersChanged();

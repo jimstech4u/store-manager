@@ -29,6 +29,17 @@ export interface OwedRow {
   baseQty: number;
   groupId: string | null;
   groupName: string | null;
+  /**
+   * Whose containers these are.
+   *
+   *   `they_hold`  ours, out with them
+   *   `we_hold`    theirs, left with us
+   *
+   * Two separate obligations that settle separately: a customer holding four of our crates while
+   * we hold two of theirs owes four and is owed two, and netting them would produce a figure
+   * neither party recognises.
+   */
+  side?: 'they_hold' | 'we_hold';
   owed: number;
 }
 

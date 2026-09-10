@@ -186,8 +186,15 @@ try {
   await shot('crate-and-bottle');
 
   // The four role ticks come first on every card; the fifth is the container question.
-  const crateBox = card(CRATE).locator('input[type="checkbox"]').nth(4);
-  const bottleBox = card(BOTTLE).locator('input[type="checkbox"]').nth(4);
+  // Found by its WORDS, not its position — see probe-opening-in-shapes.
+  const crateBox = card(CRATE)
+    .locator('label')
+    .filter({ hasText: /go inside something bigger/i })
+    .locator('input');
+  const bottleBox = card(BOTTLE)
+    .locator('label')
+    .filter({ hasText: /go inside something bigger/i })
+    .locator('input');
 
   check('the crate is asked whether it goes inside something', await crateBox.isVisible());
   check('so is the bottle', await bottleBox.isVisible());

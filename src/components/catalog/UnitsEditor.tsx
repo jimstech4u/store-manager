@@ -224,12 +224,17 @@ export function UnitsEditor({
       </div>
 
       {/*
-        WHAT THIS SHAPE IS FOR — four answers, all about the same shape.
+        WHAT THIS SHAPE IS FOR — three answers, all about the same shape.
 
         Two lists became one. A crate a shop both buys and sells used to be a row under "Sold in"
         plus a note under "Bought in" explaining that anything you also sell is "already above" —
         an explanation the design needed because the design was wrong. Define the shape once; say
         what it does.
+
+        THERE WAS A FOURTH, "Deposits are held in this", and it is gone. It belonged to the model
+        where a deposit was a rate per container; a deposit is a round sum against a customer now,
+        on its own ledger, so no shape has to claim it. It was saved and read back and consulted by
+        nothing — a question the app could not act on, which is worse than one it never asked.
       */}
       <div className={styles.checks}>
         <label className={styles.check}>
@@ -259,18 +264,6 @@ export function UnitsEditor({
             one on a count screen gets a guess instead of a figure.
           */}
           <span>You count the shelf in this</span>
-        </label>
-        <label className={styles.check}>
-          <input
-            type="checkbox"
-            checked={u.isDeposit}
-            onChange={(e) => patch(u.storeUnitId, { isDeposit: e.target.checked })}
-          />
-          {/*
-            Nobody holds money against a single bottle. Offering one on a deposit screen invites an
-            amount nobody agreed.
-          */}
-          <span>Deposits are held in this</span>
         </label>
       </div>
 

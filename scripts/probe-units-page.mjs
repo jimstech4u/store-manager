@@ -171,7 +171,12 @@ try {
     .first();
 
   // The fifth tick on every card: the four roles come first, then the container question.
-  await litreCard.locator('input[type="checkbox"]').nth(4).check();
+  // Found by its WORDS, not its position — see probe-opening-in-shapes.
+  await litreCard
+    .locator('label')
+    .filter({ hasText: /go inside something bigger/i })
+    .locator('input')
+    .check();
   await page.waitForTimeout(900);
 
   await litreCard
@@ -200,6 +205,7 @@ try {
 
   const { data: gaps } = await admin.rpc('unit_gaps_unchecked', { p_product_id: product.id });
   check('nothing is stranded any more', (gaps ?? []).length === 0);
+
 } finally {
   await browser.close();
   await admin.from('product_units').delete().eq('product_id', product.id);

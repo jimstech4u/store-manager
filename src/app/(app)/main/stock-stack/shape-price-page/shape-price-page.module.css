@@ -1,0 +1,40 @@
+/* The cost beside the price being typed. Stated, never enforced: a shop sells below cost on purpose
+   and a screen that refuses is one somebody works around. */
+.cost {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.costLabel {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.costValue {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.margin {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* The actions END the page rather than being pinned to its foot — see CLAUDE.md. */
+.actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+.actions > * {
+  flex: 1;
+}

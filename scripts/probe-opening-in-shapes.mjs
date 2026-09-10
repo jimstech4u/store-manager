@@ -150,7 +150,13 @@ try {
   await addShape(BOTTLE);
   await p.waitForTimeout(800);
 
-  const bottleParent = card(BOTTLE).locator('input[type="checkbox"]').nth(4);
+  // Found by its WORDS, not its position. It was the fifth tick while there were four roles;
+  // dropping "Deposits are held in this" made it the fourth, and a probe that counts breaks
+  // silently on a change that is visible to nobody reading it.
+  const bottleParent = card(BOTTLE)
+    .locator('label')
+    .filter({ hasText: /go inside something bigger/i })
+    .locator('input');
   await bottleParent.check();
   await p.waitForTimeout(700);
   await card(BOTTLE)

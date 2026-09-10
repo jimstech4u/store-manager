@@ -158,6 +158,18 @@ export function ProductForm({
   const [shelfByShape, setShelfByShape] = useState<Record<string, string>>({});
 
   /*
+   * WHAT ONE OF THEM COST, in the shape the shop buys in.
+   *
+   * `open_stock_by_count` has taken a unit cost since 0078 and this form has always sent null, so a
+   * shop opening with a full shelf opened with no cost against it: every margin read as pure profit
+   * until the first delivery dragged the average up from zero.
+   *
+   * One figure, not one per shape. A crate cost and a bottle cost are the same fact said twice and
+   * can contradict each other; a shop knows what it pays for a crate.
+   */
+  const [openingCost, setOpeningCost] = useState('');
+
+  /*
    * AND THE EMPTIES THE SHOP ITSELF IS HOLDING, per shape that comes back.
    *
    * This box used to ask "Containers already out with customers", which is a different question
@@ -227,6 +239,16 @@ export function ProductForm({
       const said = Number(typed[u.storeUnitId]);
       return sum + (Number.isFinite(said) ? said : 0) * (baseOf[u.storeUnitId] ?? 0);
     }, 0);
+
+  /*
+   * THE SHAPE A COST IS ASKED IN.
+   *
+   * What the shop BUYS in, because that is the figure on the invoice. Failing that the biggest
+   * shape it counts in, which is the next closest thing to how the stock arrives.
+   */
+  const costShape =
+    units.find((u) => u.isBought) ??
+    [...countedShapes].sort((a, b) => (baseOf[b.storeUnitId] ?? 1) - (baseOf[a.storeUnitId] ?? 1))[0];
 
   const shelfBase = totalFrom(shelfByShape, countedShapes);
   const anyShelfSaid = countedShapes.some((u) => (shelfByShape[u.storeUnitId] ?? '').trim() !== '');
@@ -522,7 +544,17 @@ export function ProductForm({
           p_store_id: storeId,
           p_product_id: id,
           p_qty: shelfBase,
-          p_unit_cost: null,
+          /*
+           * DIVIDED DOWN TO THE BASE UNIT, because that is what the writer stores.
+           *
+           * The shop said what a crate cost; stock is held in whatever the crate is made of. Sent
+           * as typed it would record a bottle costing what twelve of them cost, and every margin on
+           * the item would be wrong by a factor of twelve for as long as this stock lasted.
+           */
+          p_unit_cost:
+            openingCost.trim() === '' || !costShape
+              ? null
+              : Number(openingCost) / (baseOf[costShape.storeUnitId] || 1),
           p_note: 'Counted when the item was added',
         });
         if (error) throw error;
@@ -971,6 +1003,30 @@ export function ProductForm({
               )}{' '}
               on the shelf.
             </p>
+          )}
+
+          {/*
+            AND WHAT IT COST, in the shape it is bought in.
+
+            Optional, because a shop that genuinely does not know should not be made to invent a
+            figure — an invented cost is worse than none, since it looks like a measurement. Left
+            blank the stock opens with no cost and the first delivery sets it.
+          */}
+          {costShape && anyShelfSaid && (
+            <Field
+              label={`What one ${costShape.name.toLowerCase()} cost you`}
+              numeric
+              prefix="₦"
+              optional
+              value={openingCost}
+              onChange={(e) => setOpeningCost(e.target.value)}
+              placeholder="0"
+              hint={
+                (baseOf[costShape.storeUnitId] ?? 1) > 1
+                  ? `One ${costShape.name.toLowerCase()} is ${baseOf[costShape.storeUnitId]}. Leave blank if you do not know.`
+                  : 'Leave it blank if you do not know what it cost.'
+              }
+            />
           )}
 
           {/*

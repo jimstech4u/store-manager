@@ -67,6 +67,14 @@ interface OpeningEmpty {
   productUnitId?: string;
   categoryId?: string;
   storeUnitId?: string;
+  /**
+   * Whose containers.
+   *
+   *   `they_hold`  ours, out with them — what the form has always asked.
+   *   `we_hold`    theirs, left here. Routine, and previously unrecordable, so a shop knew what it
+   *                was owed and never what it owed.
+   */
+  side: 'they_hold' | 'we_hold';
 }
 
 const newLineKey = () => Math.random().toString(36).slice(2, 10);
@@ -138,6 +146,14 @@ export default function CustomerFormPage() {
   const [deposit, setDeposit] = useState('');
   /** Which way the shop is entering it: by the item, or by the maker. */
   const [tab, setTab] = useState<'product' | 'group'>('product');
+  /*
+   * Which way the containers are going.
+   *
+   * Separate from the tab above, which is about how the shop KNOWS the obligation — by item or by
+   * maker. This is about WHOSE crates they are, and the two are independent: a shop can know "24
+   * NBL crates of theirs are here" exactly as easily as "24 of ours are with them".
+   */
+  const [side, setSide] = useState<'they_hold' | 'we_hold'>('they_hold');
   /** Which picker is open, if any — the same tab names, so one piece of state cannot disagree. */
   const [picking, setPicking] = useState<null | 'product' | 'group'>(null);
 
@@ -338,7 +354,11 @@ export default function CustomerFormPage() {
             productUnitId: line.productUnitId,
             direction: 'out',
             qty: Number(line.qty),
-            reason: 'What they already had when the account opened',
+            reason:
+              line.side === 'we_hold'
+                ? 'Theirs, already here when the account opened'
+                : 'What they already had when the account opened',
+            side: line.side,
           });
         } else if (line.categoryId && line.storeUnitId) {
           await recordGroupEmpties({
@@ -538,6 +558,34 @@ export default function CustomerFormPage() {
         product would put twenty-four crates against Goldberg because Goldberg sells most — a fact
         nobody stated.
       */}
+      {/*
+        WHOSE CONTAINERS, asked before how they are counted.
+
+        A customer holding four of the shop's crates while the shop holds two of theirs owes four
+        and is owed two. Netting them gives a figure neither party recognises, so they are entered
+        and settled separately all the way down.
+      */}
+      <div className={styles.tabs} role="tablist" aria-label="Whose containers">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={side === 'they_hold'}
+          className={`${styles.tab} ${side === 'they_hold' ? styles.tabOn : ''}`}
+          onClick={() => setSide('they_hold')}
+        >
+          Yours, with them
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={side === 'we_hold'}
+          className={`${styles.tab} ${side === 'we_hold' ? styles.tabOn : ''}`}
+          onClick={() => setSide('we_hold')}
+        >
+          Theirs, with you
+        </button>
+      </div>
+
       <div className={styles.tabs} role="tablist" aria-label="How to enter what they are holding">
         <button
           type="button"
@@ -565,6 +613,10 @@ export default function CustomerFormPage() {
             <li key={line.key} className={styles.lineRow}>
               <span>
                 {line.qty} {line.what}
+                {/* Which way it goes, on the line, because the list holds both. */}
+                <span className={styles.lineSide}>
+                  {line.side === 'we_hold' ? ' · theirs, with you' : ' · yours, with them'}
+                </span>
               </span>
               <button
                 type="button"
@@ -628,6 +680,7 @@ export default function CustomerFormPage() {
                       what: `${chosenItem.productName} ${sh.unitPlural.toLowerCase()}`,
                       qty: byShape[sh.productUnitId],
                       productUnitId: sh.productUnitId,
+                      side,
                     })),
                 ]);
                 setChosenItem(null);
@@ -677,6 +730,7 @@ export default function CustomerFormPage() {
                       qty: byShape[u.storeUnitId],
                       categoryId: chosenMaker.id,
                       storeUnitId: u.storeUnitId,
+                      side,
                     })),
                 ]);
                 setChosenMaker(null);
@@ -697,7 +751,7 @@ export default function CustomerFormPage() {
             if (e.target.checked) setOpeningEmpties([]);
           }}
         />
-        <span>They are holding nothing of yours</span>
+        <span>Nothing of yours is with them, and nothing of theirs is here</span>
       </label>
 
 
