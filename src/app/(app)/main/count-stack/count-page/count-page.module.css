@@ -221,3 +221,13 @@
   margin: 0 0 var(--space-2);
   font-size: var(--text-lg);
 }
+
+/*
+ * The other half of the count, and deliberately secondary.
+ *
+ * The shelf is this screen's job; the yard is the same walk continued. A primary button here would
+ * compete with the list somebody came to work down — the rule the + moved to the header for.
+ */
+.yardLink {
+  margin: var(--space-3) 0 var(--space-4);
+}

@@ -13,6 +13,7 @@ import { getSupabase } from '@/lib/supabase/client';
 import { useProduct } from '@/lib/stacks/catalog-stack';
 import { describeVariance, formatMoney, formatQty, pluralUnit, messageOf } from '@/lib/format';
 import { leadUnit, stockInShapes, useSellingUnits, type SellingUnit } from '@/lib/stacks/selling-units';
+import { countYard, useYard } from '@/lib/stacks/yard';
 import styles from '../count-page/count-page.module.css';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 
@@ -101,6 +102,40 @@ export default function CountEntryPage() {
   const unit = leadUnit(byProduct.get(productId ?? ''));
   const per = unit?.baseQty ?? 1;
 
+  /*
+   * The shapes of THIS item that come back, and the yard's own view of them.
+   *
+   * `yard_empties` is already loaded store-wide for the yard screen, so this costs no request of
+   * its own — and it carries `countedGrain`, which is the whole reason the question can be skipped.
+   */
+  const { shapes: yardRows } = useYard(store?.id ?? null);
+
+  const returnable = useMemo(
+    () => shapes.filter((u: SellingUnit) => u.isReturnable),
+    [shapes],
+  );
+
+  /*
+   * ALREADY COUNTED AS ONE STACK, so do not ask again.
+   *
+   * «if we already count by group (e.g nbl) we just need the sum because we do not need the empties
+   * breakdown again» — and it is not merely redundant to ask, it is unanswerable. A shop with one
+   * pile of NBL crates cannot say how many of them last held Goldberg, and a box demanding the
+   * split would be collecting a guess and recording it as a count.
+   */
+  const countedByMaker = useMemo(() => {
+    const out = new Map<string, string>();
+    for (const y of yardRows) {
+      if (y.countedGrain === 'group' && y.groupName) out.set(y.productUnitId, y.groupName);
+    }
+    return out;
+  }, [yardRows]);
+
+  const emptiesToAsk = useMemo(
+    () => returnable.filter((u: SellingUnit) => !countedByMaker.has(u.productUnitId)),
+    [returnable, countedByMaker],
+  );
+
   /** A base-unit figure, said in the unit the shop counts in. */
   const inUnits = (base: number) => base / per;
 
@@ -113,6 +148,19 @@ export default function CountEntryPage() {
    * silently move a figure onto a different shape.
    */
   const [byShape, setByShape] = useState<Record<string, string>>({});
+
+  /*
+   * AND THE EMPTIES OF THIS ITEM, counted on the same walk.
+   *
+   * A crate is stock too — it is worth money and it is the only part that comes back. Somebody
+   * standing in front of Goldberg counting full crates is also looking at the empty ones, and
+   * making them come back through another screen to say so is how the yard went uncounted for
+   * months while its figure quietly drifted to minus four and a half thousand.
+   *
+   * Only the shapes this item says come back, and only when the shop is not already counting that
+   * maker's crates as one stack — see `countedByMaker` below.
+   */
+  const [emptiesByShape, setEmptiesByShape] = useState<Record<string, string>>({});
 
   /** The whole count in base units — what the server is told, and what the comparison is made in. */
   const countedBase = useMemo(
@@ -173,6 +221,28 @@ export default function CountEntryPage() {
         p_counted: countedBase,
       });
       if (cErr) throw cErr;
+
+      /*
+       * AND THE EMPTIES, in the same breath.
+       *
+       * After the shelf count rather than before it, so a failure here cannot lose the answer this
+       * screen exists for. Only the boxes somebody actually typed into: a blank is "nobody looked"
+       * and must never become a recorded nought — the same rule the yard screen keeps.
+       */
+      const emptyParts = emptiesToAsk
+        .filter((u: SellingUnit) => (emptiesByShape[u.productUnitId] ?? '').trim() !== '')
+        .map((u: SellingUnit) => ({
+          productUnitId: u.productUnitId,
+          qty: Number(emptiesByShape[u.productUnitId]) || 0,
+        }));
+
+      if (emptyParts.length > 0 && store) {
+        await countYard({
+          storeId: store.id,
+          parts: emptyParts,
+          note: `Counted with the ${active?.name ?? 'item'} shelf`,
+        });
+      }
 
       const { data: rows, error: rErr } = await supabase
         .from('stock_periods')
@@ -307,6 +377,62 @@ export default function CountEntryPage() {
             857 and move on — and the whole value of doing this is catching the days when the shelf
             and the records disagree.
           </Explain>
+
+          {/*
+            THE EMPTIES OF THIS ITEM, on the same walk.
+
+            «when product comeback is ticked, we need the empties count as well» — and it belongs
+            here rather than on a screen of its own because the person counting full crates of
+            Goldberg is standing in front of the empty ones. Optional, because the full shelf is the
+            job this screen was opened for and a blank means nobody looked.
+          */}
+          {emptiesToAsk.length > 0 && (
+            <>
+              <h2 className={styles.countAsk}>And the empty ones?</h2>
+              <div className={styles.shapeBoxes}>
+                {emptiesToAsk.map((u: SellingUnit) => (
+                  <div className={styles.shapeBox} key={`empty-${u.productUnitId}`}>
+                    <Field
+                      label={`Empty ${u.plural.toLowerCase()}`}
+                      numeric
+                      optional
+                      value={emptiesByShape[u.productUnitId] ?? ''}
+                      onChange={(e) =>
+                        setEmptiesByShape((prev) => ({
+                          ...prev,
+                          [u.productUnitId]: e.target.value,
+                        }))
+                      }
+                      placeholder="—"
+                    />
+                  </div>
+                ))}
+              </div>
+              <p className={styles.countHint}>
+                In your own yard, not the ones customers still have. Leave it blank if you did not
+                look; type 0 if you looked and there were none.
+              </p>
+            </>
+          )}
+
+          {/*
+            ALREADY ANSWERED, SO NOT ASKED — and said out loud rather than silently skipped.
+
+            A section that simply vanishes reads as a missing feature. Naming the stack it is
+            counted in tells somebody where the answer lives.
+          */}
+          {returnable.length > emptiesToAsk.length && (
+            <p className={styles.countHint}>
+              The empty{' '}
+              {returnable
+                .filter((u: SellingUnit) => countedByMaker.has(u.productUnitId))
+                .map((u: SellingUnit) => u.plural.toLowerCase())
+                .join(' and ')}{' '}
+              are counted as part of{' '}
+              {[...new Set([...countedByMaker.values()])].join(' and ')} in your yard, so there is
+              nothing to enter here.
+            </p>
+          )}
 
           {/* The arithmetic said back. Nobody should have to trust a multiplication they cannot see. */}
           {anySaid && shapes.length > 1 && (

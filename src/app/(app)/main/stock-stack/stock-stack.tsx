@@ -17,6 +17,7 @@ import UnitFormPage from './unit-form-page/unit-form-page';
 import ShapePricePage from './shape-price-page/shape-price-page';
 import SupplierFormPage from './supplier-form-page/supplier-form-page';
 import SuppliersPage from './suppliers-page/suppliers-page';
+import ExpiryPage from './expiry-page/expiry-page';
 import SupplierAccountPage from './supplier-account-page/supplier-account-page';
 import SupplierPaymentPage from './supplier-payment-page/supplier-payment-page';
 import GroupFormPage from './group-form-page/group-form-page';
@@ -43,6 +44,7 @@ const navLink = {
   shape_price_page: ShapePricePage,
   supplier_form_page: SupplierFormPage,
   suppliers_page: SuppliersPage,
+  expiry_page: ExpiryPage,
   supplier_account_page: SupplierAccountPage,
   supplier_payment_page: SupplierPaymentPage,
   group_form_page: GroupFormPage,

@@ -130,3 +130,21 @@
   text-align: right;
   line-height: var(--leading-tight);
 }
+
+/*
+ * The way through to the expiry list, inside the warning that raised it.
+ *
+ * A link rather than a button, because the panel is already the thing drawing the eye — a second
+ * green button here would compete with the list this screen exists to work down.
+ */
+.expiryLink {
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}

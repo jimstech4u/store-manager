@@ -1,0 +1,100 @@
+/* The action ENDS its block rather than being pinned to the page's foot — see CLAUDE.md. */
+.actions {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-4) 0;
+}
+
+/* How the yard is stacked — a question about the data, not a filter over it. */
+.tabs {
+  display: flex;
+  gap: var(--space-1);
+  margin: var(--space-4) 0 var(--space-3);
+  padding: var(--space-1);
+  border-radius: var(--radius);
+  background: var(--surface-sunk, var(--surface));
+  border: 1px solid var(--border);
+}
+
+.tab {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-radius: calc(var(--radius) - 2px);
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.tabOn {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
+}
+
+.rows {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+/*
+ * `min-width: 0` because the name is the flexible half.
+ *
+ * A flex item's floor is its content, so a long product name pushes the figure off a narrow phone
+ * instead of wrapping — the same fault the shape builder's parent row had, where a `<select>` sized
+ * to its longest option carried the delete button 99px off the screen.
+ */
+.name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.note {
+  font-size: var(--text-sm);
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.figure {
+  flex: none;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.have {
+  font-weight: 700;
+}
+
+.short {
+  font-weight: 700;
+  color: var(--danger, #b3261e);
+}
+
+/* Not a number, and deliberately not styled like one. */
+.unknown {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  font-style: italic;
+}

@@ -355,13 +355,40 @@ export const scenarios = [
         unexplained ? unexplained.message.slice(0, 60) : 'it CLOSED without a reason',
       );
 
+      /*
+       * EXPLAINED IN PARTS, since 0129 — because a shortfall rarely has one cause.
+       *
+       * Nine short: six broke in the store room and three cannot be accounted for. Damage is a cost
+       * of doing business and theft is a person, and a resolution that blends them tells an owner
+       * their breakage is nine a week when three of them walked.
+       *
+       * The parts must add up to the variance EXACTLY. A remainder is an unexplained shortfall,
+       * which is the one thing a period may not close on.
+       */
       const { error: whyErr } = await shop.rpc('resolve_variance', {
         p_period_id: periodId,
-        // One of the shop's own reasons — the table refuses anything else, which is right.
-        p_reason: 'unlogged_damage',
-        p_note: 'nine broken in the store room',
+        p_parts: [
+          { qty: 6, reason: 'unlogged_damage', note: 'six broken in the store room' },
+          { qty: 3, reason: 'theft', note: 'three unaccounted for' },
+        ],
       });
-      check('the difference can be explained', !whyErr, whyErr?.message ?? '');
+      check('the difference can be explained, cause by cause', !whyErr, whyErr?.message ?? '');
+
+      /*
+       * AND THE TWO STAY APART. This is the assertion that would have passed under the old
+       * one-reason function while the shop's damage figure quietly carried somebody's theft.
+       */
+      const { data: parts } = await shop
+        .from('variance_resolutions')
+        .select('qty, reason')
+        .eq('stock_period_id', periodId);
+      const dmg = (parts ?? []).find((p) => p.reason === 'unlogged_damage');
+      const thf = (parts ?? []).find((p) => p.reason === 'theft');
+      check(
+        'and breakage is not asked to carry a theft',
+        Number(dmg?.qty) === -6 && Number(thf?.qty) === -3,
+        `damage ${dmg?.qty}, theft ${thf?.qty}`,
+      );
 
       const { error: closeErr } = await shop.rpc('close_stock_period', { p_period_id: periodId });
       check('and then the count closes', !closeErr, closeErr?.message ?? '');

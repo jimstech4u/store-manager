@@ -4,6 +4,15 @@ import NavigationStack from '@academix-admin/navigation-stack';
 import CountPage from './count-page/count-page';
 import CountEntryPage from './count-entry-page/count-entry-page';
 /*
+ * The yard, which is counted on the same walk as the shelf.
+ *
+ * A container is with a customer, with a supplier, or standing here — and the third had no screen.
+ * It belongs in this stack because it is a COUNT: the same job, the same person, the same trip
+ * round the building with a phone.
+ */
+import YardPage from './yard-page/yard-page';
+import YardCountPage from './yard-count-page/yard-count-page';
+/*
  * The catalogue form, registered here too.
  *
  * The commonest thing a count turns up is something nobody ever entered, and the counter has to be
@@ -21,6 +30,8 @@ import GroupFormPage from '../stock-stack/group-form-page/group-form-page';
 const navLink = {
   count_page: CountPage,
   count_entry_page: CountEntryPage,
+  yard_page: YardPage,
+  yard_count_page: YardCountPage,
   product_form_page: ProductFormPage,
   // The form offers to invent a unit the shop has no word for, and pushes it by name.
   unit_form_page: UnitFormPage,

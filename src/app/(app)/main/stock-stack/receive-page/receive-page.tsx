@@ -40,6 +40,19 @@ interface ReceiveLine {
    */
   freeQty: string;
   /**
+   * When THIS delivery goes out of date.
+   *
+   * On the line, not the product, because the same item arrives on different days with different
+   * dates AND different costs — ten that came cheap and go off on Friday, forty dearer ones good
+   * until July. `stock_layers` already keeps each delivery apart with its own cost and its own
+   * remaining quantity; the date belongs at exactly that grain. A field on the product could only
+   * ever hold whichever was typed last.
+   *
+   * Optional, always. Most of what this trade carries has a date nobody ever reaches, and a
+   * required field would be answered with a guess.
+   */
+  expiresOn: string;
+  /**
    * The shop's own unit this arrived in, and what one of them is worth.
    *
    * `packId` is the old one-pack-per-product model. A shop that now says it buys oil in bags AND
@@ -212,6 +225,7 @@ export default function ReceivePage() {
         qty: '',
         unitCost: '',
         freeQty: '',
+        expiresOn: '',
         // The largest, which is how a delivery usually arrives — by the bag rather than the litre.
         buyUnitId: lead?.productUnitId ?? null,
         buyUnitName: lead?.name ?? null,
@@ -292,6 +306,8 @@ export default function ReceivePage() {
           base_factor: l.buyUnitFactor,
           pack_id: l.packId,
           unit_cost: Number(l.unitCost) || 0,
+          // A blank stays a blank: "not dated" is a different fact from "expires today".
+          expires_on: l.expiresOn || null,
         }));
 
       if (payload.length === 0) throw new Error('Add at least one item that came in');
@@ -499,6 +515,21 @@ export default function ReceivePage() {
                 suffix={l.buyUnitName ?? l.packName ?? l.baseUnit}
                 placeholder="0"
                 hint="Thrown in by the supplier. It lands on the shelf and lowers your cost."
+              />
+
+              {/*
+                WHEN THIS LOT GOES OFF.
+
+                Beside the cost rather than on the product, because the two travel together: this
+                delivery cost this much and lasts until this day. The next one will differ in both.
+              */}
+              <Field
+                label="Goes off on"
+                optional
+                type="date"
+                value={l.expiresOn}
+                onChange={(e) => patch(l.key, { expiresOn: e.target.value })}
+                hint="Leave it blank if this does not go off."
               />
 
               {/*

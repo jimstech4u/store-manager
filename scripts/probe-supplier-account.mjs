@@ -127,8 +127,25 @@ try {
   check('there is a returnable shape to send back', Boolean(shape), shape?.products?.name);
 
   if (shape) {
+    /*
+     * COUNT THE STACK FIRST, because a yard with no count has no position.
+     *
+     * These assertions used to read the yard through `?? 0` and measure movements against that
+     * nought. Since 0128 an uncounted shape reports `in_yard = null` — the honest answer, and the
+     * whole point of that migration: a shop that has never counted is not standing at zero, it is
+     * standing at "nobody has looked". `?? 0` turned that null back into a number and every
+     * comparison here silently became 0 → 0.
+     *
+     * So the probe does what a shop would do and counts before it reconciles.
+     */
+    await shop.rpc('count_empties', {
+      p_store_id: storeId,
+      p_parts: [{ product_unit_id: shape.id, qty: 100 }],
+      p_note: `supplier probe ${stamp}`,
+    });
+
     const before = (await shop.rpc('yard_empties', { p_store_id: storeId })).data ?? [];
-    const yardBefore = Number(before.find((y) => y.product_unit_id === shape.id)?.in_yard ?? 0);
+    const yardBefore = Number(before.find((y) => y.product_unit_id === shape.id)?.in_yard);
 
     await shop.rpc('record_supplier_empties', {
       p_store_id: storeId,
@@ -159,7 +176,7 @@ try {
      * balance. Forty going back is forty fewer standing there.
      */
     const after = (await shop.rpc('yard_empties', { p_store_id: storeId })).data ?? [];
-    const yardAfter = Number(after.find((y) => y.product_unit_id === shape.id)?.in_yard ?? 0);
+    const yardAfter = Number(after.find((y) => y.product_unit_id === shape.id)?.in_yard);
     check(
       'and the yard comes down by what left',
       yardBefore - yardAfter === 40,
@@ -181,7 +198,7 @@ try {
     const yardBefore = Number(
       ((await shop.rpc('yard_empties', { p_store_id: storeId })).data ?? []).find(
         (y) => y.product_unit_id === shape.id,
-      )?.in_yard ?? 0,
+      )?.in_yard,
     );
 
     await shop.rpc('record_supplier_empties', {
@@ -196,7 +213,7 @@ try {
     const yardAfter = Number(
       ((await shop.rpc('yard_empties', { p_store_id: storeId })).data ?? []).find(
         (y) => y.product_unit_id === shape.id,
-      )?.in_yard ?? 0,
+      )?.in_yard,
     );
     check(
       'their crates arriving raise the yard',
@@ -255,12 +272,23 @@ try {
     const yardEnd = Number(
       ((await shop.rpc('yard_empties', { p_store_id: storeId })).data ?? []).find(
         (y) => y.product_unit_id === shape.id,
-      )?.in_yard ?? 0,
+      )?.in_yard,
     );
+    /*
+     * BOTH SIDES MOVE THE YARD, and this assertion used to say otherwise.
+     *
+     * It expected `yardAfter - 20` — the twenty of theirs handed back — after a run that had ALSO
+     * sent twenty-five of ours out on a lorry. That is the answer the old `yard_empties` gave,
+     * because it weighed five of the nine ways a container moves and `they_hold` `out` was not one
+     * of them. So the probe passed, and what it was actually asserting was the gap.
+     *
+     * Twenty-five crates leaving a yard is not a bookkeeping subtlety. 0128 weighs all nine, and
+     * this line now fails against the function it was written for.
+     */
     check(
-      'and the yard weighs what came in against what left',
-      yardEnd === yardAfter - 20,
-      `${yardAfter} -> ${yardEnd}`,
+      'and the yard weighs what came in against what left, both sides of it',
+      yardEnd === yardAfter - 25 - 20,
+      `${yardAfter} -> ${yardEnd}, expected ${yardAfter - 45}`,
     );
   }
 

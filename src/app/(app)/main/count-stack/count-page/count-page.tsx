@@ -2,6 +2,7 @@
 
 import styles from './count-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
+import { Button } from '@/components/ui/Button';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { PlusIcon } from '@/components/ui/Icon';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
@@ -123,6 +124,27 @@ export default function CountPage() {
         Pick a product, count what is actually there, and we will tell you whether it matches what
         your records say it should be.
       </InfoPanel>
+
+      {/*
+        THE YARD IS COUNTED ON THE SAME WALK.
+
+        The empties are stock too — a crate is worth money and it is the only part that comes back —
+        and until now the only way to count one was the product form, once, when an item was first
+        created. So the counts a shop had entered sat unreachable and the yard reported the
+        movements alone: minus four and a half thousand Goldberg crates, in a shop that has never
+        been short of one.
+
+        Secondary, because the shelf is the job on this screen and the yard is the other half of it.
+      */}
+      <div className={styles.yardLink}>
+        <Button
+          variant="secondary"
+          fullWidth
+          onClick={() => void nav.push('yard_page')}
+        >
+          <ClipboardCheckIcon /> Your yard — the empties standing here
+        </Button>
+      </div>
 
       <SearchLauncher
         label="Find a product to count"

@@ -14,6 +14,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
 import { useStackBack } from '@/hooks/useStackBack';
 import { searchProducts, useProductList, type Product } from '@/lib/stacks/catalog-stack';
+import { useExpirySummary } from '@/lib/stacks/expiry';
 import {
   alsoReadsAs,
   leadUnit,
@@ -51,6 +52,14 @@ export default function StockPage() {
   const [searchId, searchOps, isSearchOpen] = useSearchController();
 
   const browse = useProductList(store?.id ?? null);
+
+  /*
+   * What is going off, as a single figure rather than a list.
+   *
+   * `expiring_summary` is one row, so a banner that is usually not shown costs one cheap call
+   * instead of reading every dated layer in the shop to find out there is nothing to say.
+   */
+  const expiry = useExpirySummary(store?.id ?? null);
 
   /*
    * Everything on this screen is said in the unit the shop SELLS in.
@@ -168,6 +177,45 @@ export default function StockPage() {
           : []),
       ]}
     >
+      {/*
+        THE ALARM, and only when there is something to sound it about.
+
+        A banner that is always there is furniture — the same reason the two standing paragraphs
+        came off the top of this screen. This one appears when dated stock is close or already
+        past, says which of the two, and goes away again when the shelf is clean.
+
+        Expired and expiring are counted APART because they are two different jobs: one is "sell
+        these first", the other is "take these off the shelf".
+      */}
+      {expiry.summary && (expiry.summary.expiredItems > 0 || expiry.summary.soonItems > 0) && (
+        <InfoPanel
+          tone={expiry.summary.expiredItems > 0 ? 'danger' : 'warning'}
+          title={
+            expiry.summary.expiredItems > 0
+              ? `${expiry.summary.expiredItems} ${
+                  expiry.summary.expiredItems === 1 ? 'delivery has' : 'deliveries have'
+                } gone out of date`
+              : `${expiry.summary.soonItems} ${
+                  expiry.summary.soonItems === 1 ? 'delivery is' : 'deliveries are'
+                } going off soon`
+          }
+        >
+          {expiry.summary.expiredItems > 0
+            ? `${formatMoney(expiry.summary.expiredValue)} of stock cannot be sold. `
+            : ''}
+          {expiry.summary.soonItems > 0 && expiry.summary.nextDate
+            ? `The next goes off on ${new Date(expiry.summary.nextDate).toLocaleDateString()}. `
+            : ''}
+          <button
+            type="button"
+            className={styles.expiryLink}
+            onClick={() => void nav.push('expiry_page')}
+          >
+            See what is going off
+          </button>
+        </InfoPanel>
+      )}
+
       <SearchLauncher
         label="Search your stock"
         placeholder="Search products or a category"
