@@ -13,7 +13,6 @@ import UnitsPage from './units-page/units-page';
  * Registered on the stock stack because it is reached from a product — the moment a shop thinks
  * about crates is the moment it is looking at the beer, not a settings screen it never opens.
  */
-import ReturnUnitsPage from './return-units-page/return-units-page';
 import UnitFormPage from './unit-form-page/unit-form-page';
 import GroupFormPage from './group-form-page/group-form-page';
 /*
@@ -35,7 +34,6 @@ const navLink = {
   stock_history_page: StockHistoryPage,
   product_form_page: ProductFormPage,
   units_page: UnitsPage,
-  return_units_page: ReturnUnitsPage,
   unit_form_page: UnitFormPage,
   group_form_page: GroupFormPage,
   receipt_page: ReceiptPage,

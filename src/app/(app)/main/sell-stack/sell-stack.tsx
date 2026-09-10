@@ -19,7 +19,6 @@ import DepositsPage from './deposits-page/deposits-page';
 import DepositCustomerPage from './deposit-customer-page/deposit-customer-page';
 import EmptiesRecordPage from './empties-record-page/empties-record-page';
 import DepositMovePage from './deposit-move-page/deposit-move-page';
-import EmptiesSettlePage from './empties-settle-page/empties-settle-page';
 /*
  * The catalogue form, registered in this stack too.
  *
@@ -67,7 +66,6 @@ const navLink = {
   deposit_customer_page: DepositCustomerPage,
   empties_record_page: EmptiesRecordPage,
   deposit_move_page: DepositMovePage,
-  empties_settle_page: EmptiesSettlePage,
   product_form_page: ProductFormPage,
   unit_form_page: UnitFormPage,
   group_form_page: GroupFormPage,

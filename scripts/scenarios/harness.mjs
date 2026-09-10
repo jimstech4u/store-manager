@@ -132,6 +132,9 @@ export async function closeShop(storeId) {
     'deposit_forfeits',
     'deposit_holdings',
     'deposit_ledger',
+    'customer_empties',
+    'customer_deposits',
+    'customer_charges',
     'movement_reviews',
     'stock_movements',
     'variance_resolutions',
@@ -260,13 +263,22 @@ export async function backfillDebt(storeId, customerId, amount, note) {
   if (error) throw new Error(`opening balance: ${error.message}`);
 }
 
-export async function backfillEmpties(storeId, customerId, categoryId, qty) {
-  const { error } = await shop.rpc('backfill_empties', {
+/**
+ * What a customer already had when the account opened, in the shape it left in.
+ *
+ * `backfill_empties` wrote to `empties_categories`, which the shape ledger replaced — and while
+ * both existed, an opening balance and a sale landed in different books that could not be added
+ * together. This is the same call the customer form makes.
+ */
+export async function backfillEmpties(storeId, customerId, productUnitId, qty) {
+  const { error } = await shop.rpc('record_customer_empties', {
     p_store_id: storeId,
     p_customer_id: customerId,
-    p_category_id: categoryId,
+    p_product_unit_id: productUnitId,
+    p_direction: 'out',
     p_qty: qty,
-    p_as_of: new Date(Date.now() - 86400000).toISOString().slice(0, 10),
+    p_reason: 'What they already had when the account opened',
+    p_occurred_at: new Date(Date.now() - 86400000).toISOString(),
   });
   if (error) throw new Error(`opening empties: ${error.message}`);
 }
@@ -327,11 +339,32 @@ export async function onHand(productId) {
   return (data ?? []).reduce((sum, m) => sum + Number(m.qty_delta), 0);
 }
 
-/** Containers still out with a customer, per pool. */
-export async function emptiesOut(customerId, categoryId) {
-  const { data } = await shop.rpc('empties_outstanding', {
+/**
+ * Containers still out with a customer, in ONE SHAPE.
+ *
+ * Per shape rather than per pool, which is the change the whole ledger turns on: a pool counted a
+ * crate sale as crates AND the bottles inside them, so four crates out read as eight things owed.
+ * A customer hands back crates.
+ *
+ * Omit the shape to get everything they hold, whatever it is in — the figure the empties list
+ * shows beside a name.
+ */
+export async function emptiesOut(customerId, productUnitId) {
+  const { data } = await shop.rpc('customer_empties_owed', {
     p_store_customer_id: customerId,
-    p_empties_category_id: categoryId,
   });
-  return Number(data ?? 0);
+  const rows = data ?? [];
+  if (!productUnitId) {
+    return rows.reduce((sum, r) => sum + Math.max(Number(r.owed), 0), 0);
+  }
+  return Number(rows.find((r) => r.product_unit_id === productUnitId)?.owed ?? 0);
+}
+
+/** What the shop is holding for somebody, as one money figure. */
+export async function depositHeld(customerId) {
+  const { data } = await shop.rpc('customer_deposit_ledger', {
+    p_store_customer_id: customerId,
+  });
+  const rows = data ?? [];
+  return rows.length > 0 ? Number(rows[0].running) : 0;
 }

@@ -15,6 +15,7 @@ import {
   balanceOf,
   check,
   emptiesOut,
+  depositHeld,
   expectMoney,
   expectQty,
   makeCustomer,
@@ -80,18 +81,33 @@ export const scenarios = [
       ctx.depositCustomer = id;
       expectMoney('they start owing nothing', await balanceOf(id), 0);
 
-      const { error: takeErr } = await shop.rpc('take_deposit', {
+      /*
+       * TWO THINGS, WRITTEN SEPARATELY, because they are two things.
+       *
+       * `take_deposit(pool, qty, per_unit)` did both at once and could not do either alone — a shop
+       * holding a round sum had to express it as crates at a rate. Money on one ledger, containers
+       * on the other, and neither pretends to be the other.
+       */
+      const { error: takeErr } = await shop.rpc('take_customer_deposit', {
         p_store_id: storeId,
         p_customer_id: id,
-        p_category_id: pool,
-        p_qty: 4,
-        p_per_unit: 125,
-        p_note: 'four crates over the counter',
+        p_amount: 500,
+        p_reason: 'four crates over the counter',
       });
       check('a deposit can be taken', !takeErr, takeErr?.message ?? '');
       if (takeErr) return;
 
-      expectQty('four crates go out with them', await emptiesOut(id, pool), 4);
+      const { error: outErr } = await shop.rpc('record_customer_empties', {
+        p_store_id: storeId,
+        p_customer_id: id,
+        p_product_unit_id: ctx.crateShape,
+        p_direction: 'out',
+        p_qty: 4,
+        p_reason: 'four crates over the counter',
+      });
+      check('and the crates recorded against them', !outErr, outErr?.message ?? '');
+
+      expectQty('four crates go out with them', await emptiesOut(id, ctx.crateShape), 4);
 
       /*
        * THE MONEY IS HELD, NOT EARNED.
@@ -100,34 +116,38 @@ export const scenarios = [
        * lets it is one whose receivables include money it has to give back.
        */
       expectMoney('and it does not become a debt', await balanceOf(id), 0);
+      expectMoney('the shop is holding the sum it took', await depositHeld(id), 500);
 
-      /*
-       * ASKED OF THE READER THAT ANSWERS IT.
-       *
-       * There are two records of held money and they are not duplicates. The LEDGER carries the
-       * rate, and `customer_deposits_held` totals a customer's whole position from it — that is the
-       * question a counter deposit answers. `deposit_holdings` answers a narrower one, about a
-       * particular RECEIPT, which a deposit taken over the counter does not have.
-       *
-       * A first version asked the receipt table about a counter deposit, found nothing, and called
-       * it a bug.
-       */
-      const { data: heldRows } = await shop.rpc('customer_deposits_held', {
-        p_store_customer_id: id,
-      });
-      const total = (heldRows ?? []).reduce((sum, r) => sum + Number(r.amount), 0);
-      expectMoney('the shop is holding four times ₦125', total, 500);
-
-      // ── And given back ────────────────────────────────────────────────────────────
-      const { error: backErr } = await shop.rpc('return_empties', {
+      // ── And given back, both halves, separately ───────────────────────────────────
+      const { error: backErr } = await shop.rpc('record_customer_empties', {
         p_store_id: storeId,
         p_customer_id: id,
-        p_category_id: pool,
+        p_product_unit_id: ctx.crateShape,
+        p_direction: 'returned',
         p_qty: 4,
+        p_reason: null,
       });
       check('the crates can come back over the counter', !backErr, backErr?.message ?? '');
+      expectQty('and nothing is out with them', await emptiesOut(id, ctx.crateShape), 0);
 
-      expectQty('and nothing is out with them', await emptiesOut(id, pool), 0);
+      /*
+       * AND THE MONEY IS STILL HELD until somebody gives it back.
+       *
+       * The crates coming back does not hand the money over — that is a second decision, made by a
+       * person, and it is the whole reason these are two ledgers. Under the old model returning
+       * the containers moved the money automatically, so a shop could not hold a deposit against a
+       * customer who had settled their crates.
+       */
+      expectMoney('but the money is still held until it is handed over', await depositHeld(id), 500);
+
+      await shop.rpc('settle_customer_deposit', {
+        p_store_id: storeId,
+        p_customer_id: id,
+        p_amount: 500,
+        p_keep: false,
+        p_reason: 'Crates all back',
+      });
+      expectMoney('and then it is nil', await depositHeld(id), 0);
     },
   },
 
@@ -138,100 +158,131 @@ export const scenarios = [
 
       const id = await makeCustomer(storeId, 'Broke two crates', '08037770002');
 
-      await shop.rpc('take_deposit', {
+      await shop.rpc('take_customer_deposit', {
         p_store_id: storeId,
         p_customer_id: id,
-        p_category_id: pool,
-        p_qty: 4,
-        p_per_unit: 500,
-        p_note: null,
+        p_amount: 2000,
+        p_reason: null,
       });
-      expectQty('four out', await emptiesOut(id, pool), 4);
+      await shop.rpc('record_customer_empties', {
+        p_store_id: storeId,
+        p_customer_id: id,
+        p_product_unit_id: ctx.crateShape,
+        p_direction: 'out',
+        p_qty: 4,
+        p_reason: null,
+      });
+      expectQty('four out', await emptiesOut(id, ctx.crateShape), 4);
 
       /*
        * TWO COME BACK, TWO ARE BROKEN, and the shop keeps ₦1,000 of the ₦2,000 it holds.
        *
-       * `forfeit_deposit` is the only path that turns held money into the shop's own, and it is
-       * separate from a refund on purpose: one is money returned and the other is income, and a
-       * shop that cannot tell them apart cannot explain either during a dispute.
+       * Keeping it is the only path that turns held money into the shop's own, and it stays
+       * separate from giving it back on purpose: one is money returned and the other is income, and
+       * a shop that cannot tell them apart cannot explain either during a dispute.
        */
-      await shop.rpc('return_empties', {
+      await shop.rpc('record_customer_empties', {
         p_store_id: storeId,
         p_customer_id: id,
-        p_category_id: pool,
+        p_product_unit_id: ctx.crateShape,
+        p_direction: 'returned',
         p_qty: 2,
+        p_reason: null,
       });
-      expectQty('two still out', await emptiesOut(id, pool), 2);
+      expectQty('two still out', await emptiesOut(id, ctx.crateShape), 2);
 
-      const { error } = await shop.rpc('forfeit_deposit', {
+      const { error } = await shop.rpc('record_customer_empties', {
         p_store_id: storeId,
         p_customer_id: id,
-        p_category_id: pool,
+        p_product_unit_id: ctx.crateShape,
+        p_direction: 'damaged',
         p_qty: 2,
-        p_amount: 1000,
-        p_note: 'broken',
+        p_reason: 'broken',
       });
-      check('the shop can keep part of it', !error, error?.message ?? '');
+      check('the broken ones can be written off', !error, error?.message ?? '');
       if (error) return;
 
-      expectQty('and the broken ones stop being owed', await emptiesOut(id, pool), 0);
+      expectQty('and the broken ones stop being owed', await emptiesOut(id, ctx.crateShape), 0);
 
-      const { data: forfeits } = await admin
-        .from('deposit_forfeits')
-        .select('qty_units, amount')
-        .eq('store_customer_id', id);
-      expectQty('two written off', (forfeits ?? [])[0]?.qty_units, 2);
-      expectMoney('for ₦1,000 kept', (forfeits ?? [])[0]?.amount, 1000);
-
-      const { data: leftRows } = await shop.rpc('customer_deposits_held', {
-        p_store_customer_id: id,
+      const { error: keepErr } = await shop.rpc('settle_customer_deposit', {
+        p_store_id: storeId,
+        p_customer_id: id,
+        p_amount: 1000,
+        p_keep: true,
+        p_reason: 'Two crates broken',
       });
-      const left = (leftRows ?? []).reduce((sum, r) => sum + Number(r.amount), 0);
+      check('the shop can keep part of it', !keepErr, keepErr?.message ?? '');
+
       /*
-       * TWO CAME BACK AND TWO WERE KEPT, so nothing is held any more.
+       * HALF KEPT, HALF STILL THEIRS.
        *
-       * The ₦1,000 kept is not "still theirs" — it stopped being a deposit the moment the shop kept
-       * it, and it is recorded as income in `deposit_forfeits`. A shop still showing it as held
-       * would be one that owes back money it has already earned.
+       * Under the old model writing off the containers took the money with it, so "keep half" was
+       * not expressible. A thousand is income now and a thousand is still the customer's, and both
+       * are readable months later with the reason attached.
        */
-      expectMoney('and nothing is held against them any more', left, 0);
+      expectMoney('and half of it is still theirs', await depositHeld(id), 1000);
+
+      const { data: kept } = await admin
+        .from('customer_deposits')
+        .select('amount, reason')
+        .eq('store_customer_id', id)
+        .eq('direction', 'retained');
+      expectMoney('for ₦1,000 kept', (kept ?? [])[0]?.amount, 1000);
+      check(
+        'with a reason somebody can read back',
+        Boolean((kept ?? [])[0]?.reason),
+        (kept ?? [])[0]?.reason ?? '(none)',
+      );
     },
   },
 
   {
-    name: '24. A deposit taken on a sale can be given back',
+    name: '24. A deposit taken on a sale is findable, and can be given back',
     async run(ctx) {
-      const { depositSale } = ctx;
+      const { storeId, customer } = ctx;
 
       /*
-       * THE MONEY HAS TO BE FINDABLE FROM THE RECEIPT.
+       * THE MONEY HAS TO BE FINDABLE, and it is findable on the CUSTOMER.
        *
-       * Scenario 5 took ₦500 on a sale. Settling asks how much is held against THAT RECEIPT and
-       * reads `deposit_holdings` — where, until 0096, nothing had ever written a row for a sale.
-       * `hold_receipt_deposit` was added in 0076 for the purpose and had no caller anywhere.
+       * This used to ask `deposit_holdings` what was held against a particular RECEIPT, because
+       * settling happened receipt by receipt. It does not any more: a deposit is a round sum
+       * against a person, and tying it to one receipt is what made "give back part of it" so hard
+       * to express that the screen simply said "Nothing was held for these" on a receipt that had
+       * taken ₦500.
        *
-       * So the settle screen said "Nothing was held for these" on a receipt that had taken ₦500,
-       * and the shop could neither keep part of it for a shortfall nor hand it back. It had taken
-       * money it had no way to return, which is the worst shape a gap can have.
+       * The gap it guards is the same one — money taken with no way to return it — so the check
+       * stays and the question moves.
        */
-      const { data: held } = await admin
-        .from('deposit_holdings')
-        .select('amount, reason')
-        .eq('ref_table', 'sales')
-        .eq('ref_id', depositSale);
+      const held = await depositHeld(customer);
+      check('the deposit taken on a sale is findable afterwards', held > 0, `₦${held}`);
 
-      const total = (held ?? []).reduce((sum, h) => sum + Number(h.amount), 0);
-      expectMoney('the receipt knows it is holding ₦500', total, 500);
-      /*
-       * `reason` is a closed set — 'taken', 'refunded', 'applied_to_shortfall', 'sale_voided' —
-       * because this table exists to explain money and a free-text reason explains nothing a month
-       * later. Money coming in is 'taken', wherever it was taken.
-       */
+      const { data: rows } = await admin
+        .from('customer_deposits')
+        .select('direction, amount, reason')
+        .eq('store_customer_id', customer)
+        .eq('direction', 'taken');
       check(
         'and says how it got there',
-        (held ?? [])[0]?.reason === 'taken',
-        (held ?? [])[0]?.reason ?? 'no row at all',
+        (rows ?? []).length > 0,
+        (rows ?? [])[0]?.reason ?? 'no row at all',
       );
+
+      /*
+       * AND IT CAN BE HANDED BACK — in part, which is the case the old model could not carry.
+       *
+       * Under `deposit_holdings` the money was attached to a receipt and settled with it. A
+       * customer settling half of what they hold is ordinary, and it is two rows here.
+       */
+      const part = Math.min(200, held);
+      const { error: giveErr } = await shop.rpc('settle_customer_deposit', {
+        p_store_id: storeId,
+        p_customer_id: customer,
+        p_amount: part,
+        p_keep: false,
+        p_reason: 'Part of it back',
+      });
+      check('part of it can be handed back', !giveErr, giveErr?.message ?? '');
+      expectMoney('and the rest is still held', await depositHeld(customer), held - part);
     },
   },
 

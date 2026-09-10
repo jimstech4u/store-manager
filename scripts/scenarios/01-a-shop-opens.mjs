@@ -56,8 +56,7 @@ export const scenarios = [
       await backfillDebt(storeId, id, 120000, 'from the book');
       expectMoney('an opening balance is carried in', await balanceOf(id), 120000);
 
-      await backfillEmpties(storeId, id, pool, 4);
-      expectQty('and the crates they already have', await emptiesOut(id, pool), 4);
+      ctx.openingCrates = 4;
 
       /*
        * AND THE TWO DO NOT TOUCH EACH OTHER.
@@ -151,6 +150,15 @@ export const scenarios = [
       expectQty('both shapes are saved', mine.length, 2);
 
       const crateShape = mine.find((u) => u.unit_name === 'Crate');
+
+      /*
+       * THE SHAPE CONTAINERS ARE OWED IN, kept for every scenario after this.
+       *
+       * Not the pool. A pool counted a crate sale as the crates AND the bottles inside them, so
+       * four crates out read as eight things owed; a customer hands back crates. `ctx.pool` stays
+       * beside it because 01 still checks a pool can be named and linked.
+       */
+      ctx.crateShape = crateShape?.product_unit_id;
       expectQty('and a crate works out as twelve bottles', crateShape?.base_qty, 12);
       expectMoney('with the price the shop set', crateShape?.price_per_unit, 5200);
 

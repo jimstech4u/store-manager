@@ -16,20 +16,24 @@ import { messageOf } from '@/lib/format';
  */
 
 export interface AccountEmpties {
-  category_id: string;
-  category: string;
-  kind: 'content' | 'container';
-  qty: string;
-  /** Money actually held against this pool, at the rate it was taken. Often zero. */
-  held: string;
+  /** Null for containers owed to a MAKER rather than a product — what a book carries across. */
+  product_id: string | null;
+  product: string;
+  product_unit_id: string | null;
+  unit: string;
+  unit_plural: string;
+  group: string | null;
+  qty: string | number;
 }
 
-export interface AccountDeposit {
-  category_id: string;
-  category: string;
-  qty: string;
-  amount: string;
-}
+/**
+ * What the shop is holding, as ONE figure.
+ *
+ * It was a row per pool with a quantity and a rate. A shop does not hold twenty crates' worth of
+ * money; it holds forty thousand naira, and expressing that as containers is exactly why a plain
+ * deposit could not be recorded at all.
+ */
+export type AccountDeposit = number;
 
 export interface CustomerAccount {
   customer: { id: string; name: string; business: string | null; phone: string };
@@ -37,7 +41,7 @@ export interface CustomerAccount {
   money: { goods: string; deposits_charged: string; paid: string };
   charges: { label: string; amount: string }[];
   empties: AccountEmpties[];
-  deposits_held: AccountDeposit[];
+  deposits_held: number;
 }
 
 export interface HistoryEvent {

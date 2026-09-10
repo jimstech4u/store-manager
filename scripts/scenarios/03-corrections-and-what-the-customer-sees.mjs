@@ -14,6 +14,7 @@ import {
   balanceOf,
   check,
   emptiesOut,
+  makeCustomer,
   expectMoney,
   expectQty,
   onHand,
@@ -35,7 +36,7 @@ export const scenarios = [
 
       const owedBefore = await balanceOf(customer);
       const shelfBefore = await onHand(product);
-      const cratesBefore = await emptiesOut(customer, pool);
+      const cratesBefore = await emptiesOut(customer, ctx.crateShape);
 
       /*
        * THIRTY CRATES INSTEAD OF THREE — the commonest till mistake there is, and one nobody
@@ -48,7 +49,7 @@ export const scenarios = [
             product_id: product,
             qty: 30,
             pack_id: null,
-            sale_unit_id: crate.product_unit_id,
+            sale_unit_id: ctx.crateShape,
             base_qty: 360,
             unit_price: 5200,
             line_total: 156000,
@@ -63,7 +64,7 @@ export const scenarios = [
       expectMoney('the mistake lands in full on the account', await balanceOf(customer),
         owedBefore + 156000 + 3750);
       expectQty('and takes the stock with it', await onHand(product), shelfBefore - 360);
-      expectQty('and puts thirty crates out', await emptiesOut(customer, pool), cratesBefore + 30);
+      expectQty('and puts thirty crates out', await emptiesOut(customer, ctx.crateShape), cratesBefore + 30);
 
       // ── Voided ────────────────────────────────────────────────────────────────────
       const { error: noReason } = await shop.rpc('void_sale', {
@@ -92,7 +93,14 @@ export const scenarios = [
        */
       expectMoney('what they owe goes back to what it was', await balanceOf(customer), owedBefore);
       expectQty('the stock comes back to the shelf', await onHand(product), shelfBefore);
-      expectQty('and the crates were never sent out', await emptiesOut(customer, pool), cratesBefore);
+      /*
+       * AND THE CONTAINERS STOP BEING OWED — as a row, not a deletion.
+       *
+       * `void_sale` closes the obligation the sale created, as a ROW rather than a deletion:
+       * `customer_empties` is append-only on purpose, so the trace shows the crates going out and
+       * then coming off, with the reason, instead of a gap where a sale used to be.
+       */
+      expectQty('and the crates were never sent out', await emptiesOut(customer, ctx.crateShape), cratesBefore);
 
       const { data: sale } = await admin
         .from('sales')
@@ -129,20 +137,72 @@ export const scenarios = [
       const { storeId, product, customer, pool, depositSale } = ctx;
 
       /*
-       * THE HALF-SETTLED CASE.
+       * THE CASE WHERE VOIDING WOULD GO NEGATIVE.
        *
-       * Scenario 6 brought three of four crates back against that receipt. Reversing its four now
-       * would leave the customer owing minus one crate — a number that means nothing and cannot be
-       * chased. The shop is refused, and told the way out.
+       * This used to be "some of THIS RECEIPT's crates have come back". That question cannot be
+       * asked any more, and deliberately so: containers are one pile per customer now, settled
+       * wherever they are counted, and nobody records which visit a returned crate came from. It is
+       * the same reason a seller no longer has to find the right receipt before counting what is on
+       * the floor.
+       *
+       * The harm the guard exists to prevent is unchanged — a customer owing MINUS one crate is a
+       * number nobody can chase — so the guard asks about that instead. Here the customer owes more
+       * than this sale sent, so reversing it is safe and it voids; the refusal is exercised below
+       * on a sale whose crates have all come back.
        */
+      const owedNow = await emptiesOut(customer, ctx.crateShape);
       const { error } = await shop.rpc('void_sale', {
         p_sale_id: depositSale,
         p_reason: 'changed our mind',
       });
       check(
-        'a sale whose empties have started coming back will not void',
-        error != null,
-        error ? error.message.slice(0, 70) : 'it VOIDED, leaving minus one crate owed',
+        'a void that leaves a chaseable figure is allowed',
+        !error,
+        error?.message ?? `owed ${owedNow} before`,
+      );
+
+      /*
+       * AND ONE THAT WOULD NOT IS REFUSED.
+       *
+       * A fresh customer, one sale, and every crate from it brought back. Reversing the sale now
+       * would take four crates off a customer who owes none.
+       */
+      const fresh = await makeCustomer(storeId, 'Void guard', '08037770009');
+      const { saleId: tight } = await sell(storeId, {
+        customerId: fresh,
+        lines: [
+          {
+            product_id: product,
+            qty: 2,
+            pack_id: null,
+            sale_unit_id: crate.product_unit_id,
+            base_qty: 24,
+            unit_price: 5200,
+            line_total: 10400,
+            containers_out: 2,
+            deposit_charged: 0,
+          },
+        ],
+        payments: [{ amount: 10400, method: 'cash' }],
+      });
+
+      await shop.rpc('record_customer_empties', {
+        p_store_id: storeId,
+        p_customer_id: fresh,
+        p_product_unit_id: ctx.crateShape,
+        p_direction: 'returned',
+        p_qty: 2,
+        p_reason: null,
+      });
+
+      const { error: refused } = await shop.rpc('void_sale', {
+        p_sale_id: tight,
+        p_reason: 'changed our mind',
+      });
+      check(
+        'a void that would leave minus crates is refused',
+        refused != null,
+        refused ? refused.message.slice(0, 60) : 'it VOIDED, leaving minus two crates owed',
       );
 
       /*

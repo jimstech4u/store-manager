@@ -15,11 +15,10 @@ import { usePermission } from '@/hooks/usePermission';
 import { useAuth } from '@/providers/AuthProvider';
 import {
   accountsChanged,
-  type EmptiesPool,
   useCustomerAccount,
-  useEmptiesPools,
 } from '@/lib/stacks/customer-account';
 import { formatMoney, formatQty, messageOf } from '@/lib/format';
+import { saidAsPart } from '@/lib/empties-rollup';
 import { getSupabase } from '@/lib/supabase/client';
 import { useListNotifier } from '@/hooks/useListChannel';
 import styles from './account-page.module.css';
@@ -50,7 +49,6 @@ export default function AccountPage() {
 
   const customerId = (location?.params?.id as string | undefined) ?? null;
   const { account, history, loading, error, reload } = useCustomerAccount(customerId);
-  const pools = useEmptiesPools(store?.id ?? null);
 
   const nav = useNav();
 
@@ -106,10 +104,7 @@ export default function AccountPage() {
   if (!account) return null;
 
   const owed = Number(account.balance);
-  const heldTotal = account.deposits_held.reduce((s, d) => s + Number(d.amount), 0);
-
-  const poolName = (id: string | null) =>
-    pools.find((p: EmptiesPool) => p.id === id)?.name ?? account.empties.find((e) => e.category_id === id)?.category ?? '';
+  const heldTotal = Number(account.deposits_held) || 0;
 
   const owes = Number(account.balance) !== 0;
 
@@ -230,51 +225,43 @@ export default function AccountPage() {
           <div className={styles.card}>
             <p className={styles.cardLabel}>You are holding their money</p>
             <p className={styles.cardValue}>{formatMoney(heldTotal)}</p>
-            <p className={styles.cardNote}>
-              {account.deposits_held
-                .map((d) => `${formatQty(d.qty)} ${d.category}`)
-                .join(' · ')}
-              {' — refund it when they bring them back'}
-            </p>
+            {/*
+              ONE FIGURE, not a breakdown by container. A deposit is a round sum agreed between two
+              people; which crates it notionally covers is a question nobody at the counter asks.
+            */}
+            <p className={styles.cardNote}>Give it back, or keep it and say why</p>
           </div>
         )}
       </div>
 
-      {/* ── Empties, per pool ───────────────────────────────────────────────── */}
+      {/*
+        EMPTIES, IN THE SHAPES THEY LEFT IN.
 
+        This listed pools and split each into "out on trust" and "covered by a deposit" — the old
+        model's confusion made visible. A deposit was a quantity of containers at a rate, so crates
+        could be sorted into paid-for and not. They cannot: a deposit is a round sum against the
+        customer, and a crate is a crate whether or not money sits against it. That is the whole
+        reason the two are separate ledgers now.
+      */}
       <h2 className={styles.section}>Empties still out</h2>
       {account.empties.length === 0 ? (
         <p className={styles.sectionNote}>Nothing of yours is with this customer.</p>
       ) : (
         <ul className={styles.list}>
-          {account.empties.map((e) => {
-            /*
-             * Split the pool into what is out on trust and what is covered by a deposit.
-             *
-             * They settle completely differently — one comes back or is written off, the other
-             * comes back or the money is kept — so a single count is a number the seller cannot
-             * act on. The first version showed "13" for three crates lent on trust plus ten paid
-             * for, with a note implying the deposit covered all thirteen.
-             */
-            const held = account.deposits_held.find((d) => d.category_id === e.category_id);
-            const onDeposit = Number(held?.qty ?? 0);
-            const onTrust = Number(e.qty) - onDeposit;
-            return (
-              <li key={e.category_id} className={styles.row}>
-                <div className={styles.rowMain}>
-                  <p className={styles.rowName}>{e.category}</p>
-                  <p className={styles.rowNote}>
-                    {onTrust > 0 && `${formatQty(onTrust)} out on trust`}
-                    {onTrust > 0 && onDeposit > 0 && ' · '}
-                    {onDeposit > 0 &&
-                      `${formatQty(onDeposit)} covered by ${formatMoney(held?.amount ?? 0)} deposit`}
-                    {onTrust <= 0 && onDeposit <= 0 && 'Nothing outstanding'}
-                  </p>
-                </div>
-                <span className={styles.rowQty}>{formatQty(e.qty)}</span>
-              </li>
-            );
-          })}
+          {account.empties.map((e) => (
+            <li key={`${e.product_unit_id ?? e.group}-${e.unit}`} className={styles.row}>
+              <div className={styles.rowMain}>
+                <p className={styles.rowName}>
+                  {e.product} {Number(e.qty) === 1 ? e.unit.toLowerCase() : e.unit_plural.toLowerCase()}
+                </p>
+                <p className={styles.rowNote}>
+                  {e.group ?? 'no maker set'}
+                  {e.product_id === null && ' · carried across from your book'}
+                </p>
+              </div>
+              <span className={styles.rowQty}>{saidAsPart(Number(e.qty))}</span>
+            </li>
+          ))}
         </ul>
       )}
 
@@ -387,7 +374,7 @@ export default function AccountPage() {
                 {new Date(h.occurred_at).toLocaleString()}
                 {h.detail ? ` · ${h.detail}` : ''}
                 {h.qty_units !== null && h.amount !== null && Number(h.amount) !== 0
-                  ? ` · ${formatQty(Math.abs(Number(h.qty_units)))} ${poolName(h.category_id)}`
+                  ? ` · ${formatQty(Math.abs(Number(h.qty_units)))} containers`
                   : ''}
                 {` · ${h.actor}`}
               </p>

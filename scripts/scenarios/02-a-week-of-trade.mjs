@@ -15,6 +15,8 @@ import {
   balanceOf,
   check,
   emptiesOut,
+  depositHeld,
+  backfillEmpties,
   expectMoney,
   expectQty,
   onHand,
@@ -97,7 +99,29 @@ export const scenarios = [
       const { crate } = await shapesOf(storeId, product);
 
       const owedBefore = await balanceOf(customer);
-      const cratesBefore = await emptiesOut(customer, pool);
+
+      /*
+       * WHAT THE BOOK SAYS THEY ALREADY HAD, in the shape it left in.
+       *
+       * Written here rather than in scenario 1 because the crate's shape id only exists once the
+       * product has been given its shapes. Same call the customer form makes.
+       */
+      const beforeBook = await emptiesOut(customer, ctx.crateShape);
+      await backfillEmpties(storeId, customer, ctx.crateShape, ctx.openingCrates ?? 4);
+      const cratesBefore = await emptiesOut(customer, ctx.crateShape);
+
+      /*
+       * Asserted as a MOVEMENT, not a total.
+       *
+       * This customer has already been sold to in earlier scenarios, and every one of those sales
+       * put crates out through the trigger. A figure from the book adds to that; expecting the
+       * total to equal the book alone is asserting that the sales never happened.
+       */
+      expectQty(
+        'the crates from the book land on top of what they already had',
+        cratesBefore - beforeBook,
+        ctx.openingCrates ?? 4,
+      );
 
       /*
        * FOUR CRATES, AND ₦500 TAKEN AGAINST THEM.
@@ -134,21 +158,25 @@ export const scenarios = [
        */
       expectMoney('paying it all leaves nothing owing', await balanceOf(customer), owedBefore);
 
-      expectQty('four more crates are out with them', await emptiesOut(customer, pool), cratesBefore + 4);
+      expectQty('four more crates are out with them', await emptiesOut(customer, ctx.crateShape), cratesBefore + 4);
 
       /*
-       * AND THE LEDGER KEPT THE RATE THE SHOP CHARGED, not the pool's suggestion.
+       * AND THE DEPOSIT IS A SUM, not a rate per crate.
        *
-       * ₦500 over four crates is ₦125 each. Before 0088 this stamped the pool's ₦1,500, so the shop
-       * recorded itself holding ₦6,000 it had never received and would have paid it back.
+       * This used to read `deposit_ledger.deposit_per_unit` and assert ₦125 — five hundred naira
+       * spread over four crates. That arithmetic is gone with the model: a shop holds five hundred
+       * naira, not four crates' worth of money, and expressing it the other way is precisely why a
+       * plain deposit could not be recorded at all.
+       *
+       * Taken against the CUSTOMER, on its own ledger, and read back as one figure.
        */
-      const { data: rows } = await admin
-        .from('deposit_ledger')
-        .select('qty_units, deposit_per_unit')
-        .eq('ref_id', saleId)
-        .eq('empties_category_id', pool);
-      const row = (rows ?? [])[0];
-      expectMoney('at the rate actually taken', row?.deposit_per_unit, 125);
+      await shop.rpc('take_customer_deposit', {
+        p_store_id: storeId,
+        p_customer_id: customer,
+        p_amount: 500,
+        p_reason: 'Crates on this receipt',
+      });
+      expectMoney('the shop is holding what it actually took', await depositHeld(customer), 500);
     },
   },
 
@@ -157,47 +185,69 @@ export const scenarios = [
     async run(ctx) {
       const { storeId, customer, pool, depositSale } = ctx;
 
-      const out = await emptiesOut(customer, pool);
+      const out = await emptiesOut(customer, ctx.crateShape);
       check('there are crates to bring back', out > 0, `${out} out`);
 
       /*
-       * SETTLED AGAINST THE RECEIPT THAT SENT THEM.
+       * SETTLED AGAINST THE CUSTOMER, IN THE SHAPE THEY LEFT IN.
        *
-       * Empties are owed per receipt, not as one pile, because the deposit is held per receipt. A
-       * customer bringing six crates against a receipt that only sent four is settling two
-       * receipts, and the server says so rather than quietly over-crediting one.
+       * This settled receipt by receipt, because the deposit was held per receipt. It is not any
+       * more — a deposit is a round sum against the customer — so a pile of crates is a pile of
+       * crates, whichever visits they came from. A customer who took four on Tuesday and four on
+       * Friday brings back what they can carry, and no seller should have to find the right receipt
+       * before counting what is on the floor.
        */
-      const { data: result, error } = await shop.rpc('settle_empties', {
+      const { error: backErr } = await shop.rpc('record_customer_empties', {
         p_store_id: storeId,
-        p_sale_id: depositSale,
-        p_returned: [{ category_id: pool, qty: 3 }],
-        p_paid_for: [{ category_id: pool, qty: 1, amount: 1500 }],
-        p_apply_amount: 0,
-        p_refund_amount: 0,
-        p_refund_mode: 'none',
-        p_note: null,
+        p_customer_id: customer,
+        p_product_unit_id: ctx.crateShape,
+        p_direction: 'returned',
+        p_qty: 3,
+        p_reason: null,
       });
-      check('a partial return settles', !error, error?.message ?? '');
-      if (error) return;
-
-      expectQty('three came back', result?.returned_units, 3);
-      expectQty('and one is written off as gone', result?.written_off_units, 1);
-      expectMoney('with what was paid for it', result?.paid_for, 1500);
-
-      expectQty(
-        'that receipt has nothing left out against it',
-        await emptiesOut(customer, pool),
-        out - 4,
-      );
+      check('a partial return settles', !backErr, backErr?.message ?? '');
+      if (backErr) return;
 
       /*
-       * THE OPENING CRATES ARE STILL THERE.
+       * AND ONE IS WRITTEN OFF, which is a different event with the same effect on the count.
        *
-       * Four came in from the book in scenario 1 and were never against a receipt. Settling this
-       * receipt must not touch them — they are a separate obligation with a separate story, and a
-       * system that lets one settle the other cannot answer what a customer actually holds.
+       * Broken, lost, or paid for at the counter. Before this there was nowhere to put it unless
+       * the shop happened to hold a deposit, so obligations stayed open for ever against customers
+       * who had settled.
        */
-      expectQty('the four from the book are untouched', await emptiesOut(customer, pool), 4);
+      const { error: goneErr } = await shop.rpc('record_customer_empties', {
+        p_store_id: storeId,
+        p_customer_id: customer,
+        p_product_unit_id: ctx.crateShape,
+        p_direction: 'damaged',
+        p_qty: 1,
+        p_reason: 'Cracked in the boot',
+      });
+      check('and one is written off as gone', !goneErr, goneErr?.message ?? '');
+
+      /*
+       * PART OF IT, and the rest still owed.
+       *
+       * Four of the seven closed — three back, one gone — leaving three. Partial is the ordinary
+       * case, which is why this is a ledger and not a flag.
+       */
+      expectQty('the rest stays out', await emptiesOut(customer, ctx.crateShape), out - 4);
+
+      /*
+       * THE OPENING CRATES MERGE RATHER THAN SITTING APART.
+       *
+       * Four came in from the book in scenario 1 and four went out on a sale, and they are one pile
+       * of eight — which is the change. While the book wrote to the pool ledger and the sale wrote
+       * to the shape ledger, the same customer had two answers on two screens.
+       */
+      /*
+       * ONE PILE, whatever put it there.
+       *
+       * The book, this receipt and every earlier sale add into the same figure. While the book
+       * wrote to the pool ledger and sales wrote to the shape ledger, this same customer had two
+       * answers on two screens — which is the seam this whole change closed.
+       */
+      expectQty('the book and the sales are one figure', out, cratesBefore + 4);
     },
   },
 
