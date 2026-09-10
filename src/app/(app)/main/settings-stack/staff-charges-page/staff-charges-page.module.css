@@ -1,0 +1,61 @@
+.rows { display: grid; margin: 0; padding: 0; list-style: none; }
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
+}
+.row:last-child { border-bottom: none; }
+
+/* The name is the flexible half, so it needs a zero floor or it pushes the figure off a phone. */
+.who { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-weight: 600; }
+.detail { font-size: var(--text-sm); font-weight: 400; color: var(--text-muted); }
+
+.figure { flex: none; text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+.settled { color: var(--text-muted); font-weight: 400; }
+
+.section { margin: var(--space-6) 0 var(--space-2); font-size: var(--text-lg); font-weight: 700; }
+
+.composer {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  margin: var(--space-4) 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.kinds { display: flex; gap: var(--space-1); }
+
+.kind {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.kindOn { border-color: var(--primary, #0b6252); color: var(--text); font-weight: 600; }
+
+.ledger { display: grid; margin: 0; padding: 0; list-style: none; }
+
+.entry {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+}
+.entry:last-child { border-bottom: none; }
+
+.none { margin: var(--space-4) 0; color: var(--text-muted); }

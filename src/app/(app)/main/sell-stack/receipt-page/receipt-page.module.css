@@ -1,0 +1,10 @@
+/*
+ * The way to correct a receipt, under it rather than beside it.
+ *
+ * Reading a receipt is what this screen is for; correcting one is rare and must not compete with
+ * it. Secondary, full width, and after the document — the same shape every other commit on the site
+ * has, which is to END the page rather than float over it.
+ */
+.correct {
+  margin: var(--space-5) 0 var(--space-4);
+}

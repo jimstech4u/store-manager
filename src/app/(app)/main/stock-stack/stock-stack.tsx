@@ -32,6 +32,8 @@ import GroupFormPage from './group-form-page/group-form-page';
  * already uses between Stock and Sell.
  */
 import ReceiptPage from '../sell-stack/receipt-page/receipt-page';
+import AmendPage from '../sell-stack/amend-page/amend-page';
+import CustomerFormPage from '../people-stack/customer-form-page/customer-form-page';
 
 const navLink = {
   stock_page: StockPage,
@@ -49,6 +51,10 @@ const navLink = {
   supplier_payment_page: SupplierPaymentPage,
   group_form_page: GroupFormPage,
   receipt_page: ReceiptPage,
+  // Pushed from the receipt, so it is registered wherever the receipt is.
+  amend_page: AmendPage,
+  // The correction offers to name a walk-in, and pushes the real form to do it.
+  customer_form_page: CustomerFormPage,
 };
 
 export const StockStack = () => (

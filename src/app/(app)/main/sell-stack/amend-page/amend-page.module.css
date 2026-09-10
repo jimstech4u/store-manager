@@ -1,0 +1,67 @@
+.lines { display: grid; gap: var(--space-3); margin: var(--space-3) 0 var(--space-4); }
+
+.line {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.lineHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+/* The name is the flexible half, so it needs a zero floor or it pushes the control off a phone. */
+.lineName { min-width: 0; font-weight: 600; }
+.lineWas { font-size: var(--text-sm); color: var(--text-muted); white-space: nowrap; }
+
+.boxes { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+@media (max-width: 380px) { .boxes { grid-template-columns: 1fr; } }
+
+.drop {
+  align-self: start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--danger, #b3261e);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.totals {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  margin: var(--space-4) 0;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-variant-numeric: tabular-nums;
+}
+
+.totalRow { display: flex; justify-content: space-between; gap: var(--space-3); }
+.totalRow strong { font-size: var(--text-lg); }
+
+.section { margin: var(--space-6) 0 var(--space-2); font-size: var(--text-lg); font-weight: 700; }
+
+.history { display: grid; margin: 0; padding: 0; list-style: none; }
+
+.was {
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+}
+.was:last-child { border-bottom: none; }
+.wasHead { font-weight: 600; }
+.wasDetail { color: var(--text-muted); }
+
+/* The action ENDS the page rather than being pinned to its foot — see CLAUDE.md. */
+.actions { margin: var(--space-5) 0 var(--space-4); }

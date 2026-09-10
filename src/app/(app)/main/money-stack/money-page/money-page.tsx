@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import styles from './money-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
@@ -9,6 +9,9 @@ import { SearchLauncher } from '@/components/ui/SearchLauncher';
 import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
 import { InfoPanel } from '@/components/ui/Explain';
+import { FilterBar } from '@/components/ui/FilterBar';
+import { customPeriod, resolvePeriod, type Period } from '@/lib/stacks/periods';
+import { salesSummary, type SalesSummary } from '@/lib/stacks/report-readers';
 import { ChartIcon, ChevronRightIcon, ReceiptIcon } from '@/components/ui/Icon';
 import { useAuth } from '@/providers/AuthProvider';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -47,6 +50,15 @@ interface OwedSummary {
 }
 
 export default function MoneyPage() {
+  /*
+   * The window this page is reporting on, resolved by the SHOP's clock.
+   *
+   * Not defaulted in the browser: "this month" has to mean the shop's calendar month in the shop's
+   * timezone, and a till phone that is a day out would quietly summarise the wrong month.
+   */
+  const [period, setPeriod] = useState<Period | null>(null);
+  const [trading, setTrading] = useState<SalesSummary | null>(null);
+
   const goBack = useStackBack();
   const nav = useNav();
   const { store } = useAuth();
@@ -153,6 +165,35 @@ export default function MoneyPage() {
   }, [store, demandOwed]);
 
   useEffect(loadOwed, [loadOwed]);
+
+  /*
+   * The window, and then what it came to.
+   *
+   * Two steps because the second needs the first: the range is resolved by the shop's clock before
+   * anything is aggregated against it. A failure here leaves the summary absent rather than showing
+   * a nought — a figure nobody produced is worse than no figure.
+   */
+  useEffect(() => {
+    if (!store) return;
+    let alive = true;
+    void resolvePeriod(store.id, 'this_month')
+      .then((p) => alive && setPeriod(p))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [store]);
+
+  useEffect(() => {
+    if (!store || !period) return;
+    let alive = true;
+    void salesSummary({ storeId: store.id, from: period.fromAt, to: period.toAt })
+      .then((t) => alive && setTrading(t))
+      .catch(() => alive && setTrading(null));
+    return () => {
+      alive = false;
+    };
+  }, [store, period]);
   // A payment recorded anywhere in the app changes this figure, so it re-reads rather than sitting
   // on a total that was true when the screen was opened.
   useInvalidation(ACCOUNT_DERIVED_SCOPE, loadOwed);
@@ -239,6 +280,47 @@ export default function MoneyPage() {
           </span>
         )}
       </div>
+
+      {/*
+        WHAT THE PERIOD CAME TO, on the list rather than in a reports tab.
+
+        «summary sections like daily, weekly, monthly, customs in the ui so we have a better
+         overview rather than just list and cards»
+
+        Aggregated on the SERVER over the whole window, never summed from the page that happens to
+        be loaded — which is exactly how the old sales report came to be quietly wrong past a
+        thousand rows.
+      */}
+      {period && (
+        <>
+          <FilterBar
+            period={period}
+            onPeriod={(kind) => {
+              void resolvePeriod(store.id, kind).then(setPeriod).catch(() => {});
+            }}
+            onCustom={(from, to) => {
+              void customPeriod(store.id, from, to).then(setPeriod).catch(() => {});
+            }}
+          />
+
+          {trading && (
+            <div className={styles.window}>
+              <div className={styles.windowFig}>
+                <span className={styles.windowLabel}>Billed</span>
+                <span className={styles.windowValue}>{formatMoney(trading.billed)}</span>
+              </div>
+              <div className={styles.windowFig}>
+                <span className={styles.windowLabel}>Came in</span>
+                <span className={styles.windowValue}>{formatMoney(trading.paid)}</span>
+              </div>
+              <div className={styles.windowFig}>
+                <span className={styles.windowLabel}>Receipts</span>
+                <span className={styles.windowValue}>{trading.receipts}</span>
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
       <SearchLauncher
         label="Search customers"

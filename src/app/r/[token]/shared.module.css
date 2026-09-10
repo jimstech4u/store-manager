@@ -199,3 +199,27 @@
   letter-spacing: normal;
   opacity: 0.8;
 }
+
+/*
+ * "This replaces an earlier copy."
+ *
+ * Toned like the cancellation notice above it rather than like an error: a correction is ordinary
+ * and often in the customer's favour. What matters is that it is read before the total, which is
+ * why it sits above the lines.
+ */
+.corrected {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0 0 1rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--line, #d8dee2);
+  background: var(--surface-sunk, #f4f6f7);
+}
+
+.correctedNote {
+  font-size: 0.86rem;
+  color: var(--muted, #566);
+  line-height: 1.45;
+}

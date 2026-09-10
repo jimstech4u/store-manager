@@ -14,6 +14,7 @@ import AccountActionPage from './account-action-page/account-action-page';
  * key, reached from another stack.
  */
 import ReceiptPage from '../sell-stack/receipt-page/receipt-page';
+import AmendPage from '../sell-stack/amend-page/amend-page';
 
 // Registered here as well as in the sell stack, because the account page pushes both. A route
 // registered in only one of the stacks that can reach it is navigation-stack's "Missing route"
@@ -25,6 +26,8 @@ import DepositMovePage from '../sell-stack/deposit-move-page/deposit-move-page';
 
 const navLink = {
   receipt_page: ReceiptPage,
+  // Pushed from the receipt, so it is registered wherever the receipt is.
+  amend_page: AmendPage,
   customer_form_page: CustomerFormPage,
   people_page: PeoplePage,
   account_page: AccountPage,

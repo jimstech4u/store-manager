@@ -373,3 +373,66 @@ svg[data-icon] {
     break-inside: avoid;
   }
 }
+
+/* =====================================================================================
+   THE THIRD PAGE SHAPE: a price list for the wall.
+
+   Not a scaled A4. A poster is read across a shop rather than at arm's length, so the type is
+   sized for distance, the columns balance rather than running one long list down a metre of paper,
+   and the group headings repeat at the top of each column so somebody scanning the middle of the
+   sheet still knows what they are looking at.
+
+   IT CARRIES ITS OWN DATE, large enough to see. A price list on a wall with no date is how a
+   customer argues a six-month-old price, and the QR beside it is what makes a printed poster safe
+   to hang at all — it is a convenience over a source of truth, never a substitute for one.
+   ===================================================================================== */
+@media print {
+  [data-print-root='poster'] {
+    width: auto;
+    padding: 0;
+    font-size: 22pt;
+    line-height: 1.25;
+    columns: 2;
+    column-gap: 18mm;
+  }
+
+  [data-print-root='poster'] h2 {
+    /* `column-span: none` deliberately: a heading spanning both columns would separate a maker
+       from the prices underneath it whenever the break fell in the wrong place. */
+    break-after: avoid;
+    break-inside: avoid;
+    margin: 0 0 4mm;
+    font-size: 26pt;
+    border-bottom: 2pt solid currentColor;
+  }
+
+  [data-print-root='poster'] section {
+    break-inside: avoid-column;
+    margin: 0 0 10mm;
+  }
+
+  [data-print-root='poster'] .posterRow {
+    display: flex;
+    justify-content: space-between;
+    gap: 8mm;
+    break-inside: avoid;
+    padding: 1.5mm 0;
+  }
+
+  [data-print-root='poster'] .posterPrice {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  /* The masthead spans the sheet, above the columns. */
+  [data-print-root='poster'] .posterHead {
+    column-span: all;
+    margin: 0 0 8mm;
+    padding-bottom: 4mm;
+    border-bottom: 3pt solid currentColor;
+  }
+
+  [data-print-root='poster'] .posterShop { font-size: 40pt; font-weight: 800; margin: 0; }
+  [data-print-root='poster'] .posterWhen { font-size: 18pt; margin: 2mm 0 0; }
+}

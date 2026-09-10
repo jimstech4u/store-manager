@@ -1,0 +1,55 @@
+.bar {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+}
+
+/*
+ * Scrolls sideways rather than wrapping to three rows on a phone.
+ *
+ * Seven chips at 390px would take a third of the visible screen before the list being filtered even
+ * begins — the same argument that took the two standing paragraphs off the stock screen.
+ */
+.chips {
+  display: flex;
+  gap: var(--space-1);
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.chips::-webkit-scrollbar { display: none; }
+
+.chip {
+  flex: none;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.chipOn {
+  border-color: var(--primary, #0b6252);
+  background: var(--primary, #0b6252);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* The window, in the server's own words — the same sentence that prints on the document. */
+.window {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.range {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-2) 0 var(--space-4);
+}

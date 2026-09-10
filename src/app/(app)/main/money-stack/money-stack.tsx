@@ -8,6 +8,8 @@ import ReportsPage from './reports-page/reports-page';
 // The same receipt screen the sell stack pushes. Registered here too so a past receipt opens
 // inside Money's own stack, keeping its back button pointing at the sales list.
 import ReceiptPage from '../sell-stack/receipt-page/receipt-page';
+import AmendPage from '../sell-stack/amend-page/amend-page';
+import CustomerFormPage from '../people-stack/customer-form-page/customer-form-page';
 /*
  * The same "record a payment" form the People tab pushes.
  *
@@ -22,6 +24,10 @@ const navLink = {
   sales_page: SalesPage,
   statement_page: StatementPage,
   receipt_page: ReceiptPage,
+  // Pushed from the receipt, so it is registered wherever the receipt is.
+  amend_page: AmendPage,
+  // The correction offers to name a walk-in, and pushes the real form to do it.
+  customer_form_page: CustomerFormPage,
   reports_page: ReportsPage,
   account_action_page: AccountActionPage,
 };

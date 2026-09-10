@@ -23,6 +23,8 @@ interface HistoryRow {
   detail: string | null;
   occurredAt: string;
   refId: string;
+  /** Who recorded it. The customer timeline has said this since 0036; this side was anonymous. */
+  actor: string | null;
 }
 
 /**
@@ -64,6 +66,7 @@ export default function SupplierAccountPage() {
         detail: (r.detail as string | null) ?? null,
         occurredAt: String(r.occurred_at),
         refId: String(r.ref_id),
+        actor: (r.actor as string | null) ?? null,
       })) as HistoryRow[],
     };
   }, [supplierId]);
@@ -200,6 +203,12 @@ export default function SupplierAccountPage() {
                     <span className={styles.eventBody}>
                       <span className={styles.eventLabel}>{h.label}</span>
                       {h.detail ? <span className={styles.eventDetail}>{h.detail}</span> : null}
+                      {/*
+                        WHO, under the label — the same place the customer account puts it.
+                        "Who recorded this" is asked weeks later by somebody who was not there, and
+                        the data has always supported it while no screen would say it.
+                      */}
+                      {h.actor ? <span className={styles.eventDetail}>{h.actor}</span> : null}
                     </span>
                     <span className={styles.eventRight}>
                       {h.amount !== null && (

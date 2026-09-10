@@ -23,6 +23,10 @@ interface SharedReceipt {
     fee_label: string | null;
     note: string | null;
     transfer_details: string | null;
+    /** 1 until the shop corrects it; every correction bumps it. */
+    revision?: number | null;
+    /** Set from revision 2: what this copy replaces, and when. */
+    corrected?: { replaced_at: string; was_total: string } | null;
     /** 'posted' is a live receipt. 'voided' is one the shop has cancelled. */
     status?: string;
     cancelled_reason?: string | null;
@@ -185,9 +189,30 @@ export default function SharedReceiptPage({
           </div>
         )}
 
+        {/*
+          THE COPY THEY WERE SENT IS THE OLD ONE.
+
+          The customer is the one person guaranteed to have the previous version, so this is the
+          page that most needs to say so. Above the lines, for the same reason the cancellation
+          notice is: a receipt is read from the top and put down.
+        */}
+        {sale.status !== 'voided' && sale.corrected && (
+          <div className={styles.corrected} role="status">
+            <strong>This replaces an earlier copy</strong>
+            <span className={styles.correctedNote}>
+              The shop corrected it on {formatDateTime(sale.corrected.replaced_at)}. It previously
+              said {formatMoney(sale.corrected.was_total)}. If you are holding that one, it is out
+              of date.
+            </span>
+          </div>
+        )}
+
         <div className={styles.meta}>
           <span>{formatDateTime(sale.occurred_at)}</span>
-          <span>#{sale.id.slice(0, 8).toUpperCase()}</span>
+          <span>
+            #{sale.id.slice(0, 8).toUpperCase()}
+            {Number(sale.revision ?? 1) > 1 ? ` · rev ${sale.revision}` : ''}
+          </span>
         </div>
 
         {customer && (

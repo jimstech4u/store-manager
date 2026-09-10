@@ -4,6 +4,7 @@ import NavigationStack from '@academix-admin/navigation-stack';
 import SettingsPage from './settings-page/settings-page';
 import ReviewPage from './review-page/review-page';
 import StaffPage from './staff-page/staff-page';
+import StaffChargesPage from './staff-charges-page/staff-charges-page';
 import BankPage from './bank-page/bank-page';
 import WordsPage from './words-page/words-page';
 import BankFormPage from './bank-form-page/bank-form-page';
@@ -37,6 +38,7 @@ const navLink = {
   shop_page: ShopPage,
   review_page: ReviewPage,
   staff_page: StaffPage,
+  staff_charges_page: StaffChargesPage,
   bank_page: BankPage,
   words_page: WordsPage,
   bank_form_page: BankFormPage,

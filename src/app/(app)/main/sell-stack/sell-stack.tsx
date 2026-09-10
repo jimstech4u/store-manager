@@ -5,6 +5,7 @@ import SellPage from './sell-page/sell-page';
 import ClaimPage from './claim-page/claim-page';
 import ShareWhatsAppPage from './share-whatsapp-page/share-whatsapp-page';
 import ReceiptPage from './receipt-page/receipt-page';
+import AmendPage from './amend-page/amend-page';
 import TakePaymentPage from './take-payment-page/take-payment-page';
 /*
  * What is still out, receipt by receipt.
@@ -59,6 +60,7 @@ const navLink = {
   claim_page: ClaimPage,
   share_whatsapp_page: ShareWhatsAppPage,
   receipt_page: ReceiptPage,
+  amend_page: AmendPage,
   take_payment_page: TakePaymentPage,
   empties_page: EmptiesPage,
   empties_customer_page: EmptiesCustomerPage,

@@ -9,6 +9,7 @@
  *   32. A shortfall is explained in as many pieces as it took.
  *   33. Stock carries a date, per delivery, with its own cost.
  *   34. A settled receipt is corrected, and a walk-in acquires a customer when it has to.
+ *   35. A window on the books, resolved by the shop's own clock.
  */
 
 import { admin, check, expectMoney, expectQty, onHand, sell, shop } from './harness.mjs';
@@ -404,6 +405,105 @@ export const scenarios = [
        */
       const { data: after } = await shop.rpc('customer_balance', { p_store_customer_id: customer });
       expectMoney('and only the difference lands on their account', Number(after) - before, 5000);
+    },
+  },
+
+  {
+    name: "35. A window on the books, in the shop's own clock",
+    async run(ctx) {
+      const { storeId } = ctx;
+
+      const at = async (kind) => {
+        const { data, error } = await shop.rpc('period_range', {
+          p_store_id: storeId,
+          p_kind: kind,
+        });
+        if (error) throw new Error(error.message);
+        return Array.isArray(data) ? data[0] : data;
+      };
+
+      const today = await at('today');
+      const yday = await at('yesterday');
+
+      /*
+       * HALF-OPEN, ALWAYS — `[from, to)`.
+       *
+       * Yesterday must end exactly where today begins. An inclusive end double-counts the boundary
+       * day, and the boundary day is the one somebody checks against the drawer.
+       */
+      check(
+        'yesterday ends exactly where today begins',
+        yday.to_at === today.from_at,
+        `${yday.to_at} vs ${today.from_at}`,
+      );
+
+      check(
+        'and the window says what it covers, in words',
+        typeof today.label === 'string' && today.label.length > 0,
+        today.label,
+      );
+
+      /*
+       * THE SHOP'S MIDNIGHT, not the server's. Eight seconds of skew once put a delivery in the
+       * wrong counting period and wrote 147 phantom bottles into stock.
+       */
+      const { data: st } = await shop.from('stores').select('timezone').eq('id', storeId).maybeSingle();
+      const tz = st?.timezone ?? 'UTC';
+      const startsAt = new Date(today.from_at).toLocaleString('en-GB', {
+        timeZone: tz,
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      check("the day starts at the shop's midnight", startsAt === '00:00', `${tz} ${startsAt}`);
+
+      // ── And the figures agree with each other ──────────────────────────────────
+      const ever = await at('all');
+      const { data: sum, error: se } = await shop.rpc('sales_summary', {
+        p_store_id: storeId,
+        p_from: ever.from_at,
+        p_to: ever.to_at,
+      });
+      check('a summary answers over the whole book', !se, se?.message ?? '');
+      const s = Array.isArray(sum) ? sum[0] : sum;
+
+      const { data: days } = await shop.rpc('sales_by_day', {
+        p_store_id: storeId,
+        p_from: ever.from_at,
+        p_to: ever.to_at,
+      });
+      const fromDays = (days ?? []).reduce((t, d) => t + Number(d.billed), 0);
+
+      /*
+       * THE DAYS ADD UP TO THE TOTAL.
+       *
+       * Two independent aggregates over the same rows. They can only disagree if one of them is
+       * windowing differently — which is precisely the class of fault that let the old report drop
+       * everything past its thousandth row without saying so.
+       */
+      expectMoney('and the days in it add up to the total', fromDays, Number(s?.billed));
+
+      const { data: byProduct } = await shop.rpc('sales_by_product', {
+        p_store_id: storeId,
+        p_from: ever.from_at,
+        p_to: ever.to_at,
+      });
+      const fromProducts = (byProduct ?? []).reduce((t, r) => t + Number(r.revenue), 0);
+      check(
+        'and so do the items, once fees are set aside',
+        fromProducts <= Number(s?.billed) + 0.01,
+        `items ₦${fromProducts}, billed ₦${s?.billed}`,
+      );
+
+      /*
+       * AND THE PRICE LIST CARRIES NO COST.
+       *
+       * A seller printing it for the wall must not need a permission that also shows what the shop
+       * paid — otherwise the poster carries the shop's margins onto a wall its customers stand in
+       * front of.
+       */
+      const { data: prices } = await shop.rpc('price_list', { p_store_id: storeId });
+      const leaked = Object.keys((prices ?? [])[0] ?? {}).filter((k) => /cost|margin/i.test(k));
+      check('the price list carries no cost', leaked.length === 0, leaked.join(', ') || 'none');
     },
   },
 ];

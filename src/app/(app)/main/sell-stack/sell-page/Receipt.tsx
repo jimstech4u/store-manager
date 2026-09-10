@@ -22,7 +22,15 @@ interface SaleDetail {
     fee_label: string | null;
     note: string | null;
     transfer_details: string | null;
+    /** 1 until somebody corrects it. Every correction bumps it. */
+    revision: number | null;
   };
+  /*
+   * WHAT THIS REPLACES, when it replaces something.
+   *
+   * Null on revision 1, which is the common case and prints exactly as it always did.
+   */
+  corrected: { replaced_at: string; reason: string; was_total: string } | null;
   customer: { id: string; name: string; phone: string; balance: string } | null;
   /** Named additions to the bill — transport, loading — each answerable on its own. */
   charges: { label: string; amount: string }[];
@@ -157,7 +165,7 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
     return <FullPageMessage title="Preparing the receipt" tone="loading" />;
   }
 
-  const { sale, customer, lines, payments, charges, empties } = detail;
+  const { sale, customer, lines, payments, charges, empties, corrected } = detail;
   const paid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
   const owing = Number(sale.total) - paid;
   const width = settings?.width ?? 80;
@@ -233,8 +241,30 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
 
         <div className={styles.meta}>
           <span>{formatDateTime(sale.occurred_at)}</span>
-          <span>#{sale.id.slice(0, 8).toUpperCase()}</span>
+          <span>
+            #{sale.id.slice(0, 8).toUpperCase()}
+            {Number(sale.revision ?? 1) > 1 ? ` · rev ${sale.revision}` : ''}
+          </span>
         </div>
+
+        {/*
+          IT OWNS UP TO REPLACING SOMETHING.
+
+          Revision 1 prints nothing extra, so the common case is exactly as it was. From revision 2
+          the copy says what it replaces and when — because somebody may still be holding that one,
+          and a shop that corrected a bill in the customer's favour wants it visible while a shop
+          that corrected it the other way has to be able to point at the reason.
+
+          Two short lines, not a paragraph: this also prints on an 80mm roll.
+        */}
+        {corrected && (
+          <div className={styles.replaces}>
+            <p>Replaces the copy printed {formatDateTime(corrected.replaced_at)}.</p>
+            <p>
+              It said {formatMoney(corrected.was_total)}. {corrected.reason}
+            </p>
+          </div>
+        )}
 
         {customer && (
           <div className={styles.meta}>

@@ -164,3 +164,22 @@
   text-decoration: underline;
   cursor: pointer;
 }
+
+/*
+ * What this copy replaces.
+ *
+ * Boxed and above the lines, because somebody scanning a receipt reads the total and stops — the
+ * one thing they must not miss is that the paper in their other hand is out of date. Sized to
+ * survive an 80mm thermal roll, where there is no room for a paragraph.
+ */
+.replaces {
+  margin: 0.4rem 0 0.6rem;
+  padding: 0.35rem 0.45rem;
+  border: 1px dashed currentColor;
+  font-size: 0.78em;
+  line-height: 1.35;
+}
+
+.replaces p {
+  margin: 0;
+}

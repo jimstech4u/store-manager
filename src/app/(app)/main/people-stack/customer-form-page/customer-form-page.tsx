@@ -97,8 +97,24 @@ export default function CustomerFormPage() {
    */
   const attachToSale = location?.params?.then === 'attach-to-sale';
 
+  /*
+   * And the same question asked from a CORRECTION.
+   *
+   * A walk-in receipt being corrected into something that leaves money owing has to acquire
+   * somebody to owe it, and the shop should not have to reopen the picker to find the person they
+   * just created. Its own intent and its own callback, because a callback published once is found
+   * by everyone — the bug that attached a customer filed from the People tab to whatever sale
+   * happened to be open.
+   */
+  const attachToAmend = location?.params?.then === 'attach-to-amend';
+
   const created = useObject<(customer: { id: string; name: string; phone: string }) => void>(
     'onCustomerCreated',
+    { global: true, scope: 'people' },
+  );
+
+  const forAmend = useObject<(customer: { id: string; name: string; phone: string }) => void>(
+    'onCustomerForAmend',
     { global: true, scope: 'people' },
   );
 
@@ -407,6 +423,7 @@ export default function CustomerFormPage() {
       });
 
       if (attachToSale && created.isProvided) created.getter()?.(customer);
+      if (attachToAmend && forAmend.isProvided) forAmend.getter()?.(customer);
       await nav.pop();
     } catch (e) {
       problem.show(messageOf(e, 'That customer could not be saved.'));

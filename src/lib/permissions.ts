@@ -33,6 +33,13 @@ export const PERMISSIONS = [
   'records.confirm',
   'backfill.manage',
   'reports.view',
+  /*
+   * Charge a staff member for missing stock or cash, and settle it (0129).
+   *
+   * Owner and manager only, deliberately, and for the same reason `variance.resolve` is: the
+   * person who can make stock disappear must not also be the person who decides who pays for it.
+   */
+  'staff.charge',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -57,6 +64,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'deposits.manage',
     'records.confirm',
     'reports.view',
+    'staff.charge',
   ],
 
   // Staff deliberately lack records.confirm: they can create a product or customer mid-sale so

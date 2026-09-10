@@ -386,6 +386,25 @@ export default function SettingsPage() {
               </span>
             </span>
           </button>
+
+          {/*
+            WHAT STAFF OWE, which a count can write and nothing could reach.
+            Its own row rather than a tab on the staff screen: "who works here" and "who owes for
+            missing stock" are different questions, and one of them is asked far less often.
+          */}
+          <button
+            type="button"
+            className={styles.linkRow}
+            onClick={() => nav.push('staff_charges_page')}
+          >
+            <span className={styles.linkMain}>
+              <span className={styles.linkName}>What staff owe</span>
+              <span className={styles.sectionNote}>
+                Stock or cash that went missing on somebody&rsquo;s watch, and what has been paid
+                back
+              </span>
+            </span>
+          </button>
         </>
       )}
 

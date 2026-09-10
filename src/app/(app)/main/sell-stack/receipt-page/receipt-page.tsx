@@ -4,6 +4,9 @@ import { useLocation } from '@academix-admin/navigation-stack';
 import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { InfoPanel } from '@/components/ui/Explain';
+import { Button } from '@/components/ui/Button';
+import { usePermission } from '@/hooks/usePermission';
+import styles from './receipt-page.module.css';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { Receipt } from '../sell-page/Receipt';
@@ -27,6 +30,7 @@ export default function ReceiptPage() {
   const goBack = useStackBack();
   const location = useLocation();
   const { store } = useAuth();
+  const { can } = usePermission();
 
   const saleId = (location?.params?.id as string | undefined) ?? null;
   const fresh = location?.params?.fresh === '1';
@@ -72,6 +76,25 @@ export default function ReceiptPage() {
       )}
 
       <Receipt saleId={saleId} storeId={store.id} />
+
+      {/*
+        THE WAY TO CORRECT IT, behind the permission that already governs voiding.
+
+        Secondary and below the receipt, because reading one is the job of this screen and
+        correcting one is rare. It is a PAGE rather than a sheet: it is a form, it survives a
+        rotation, and the keyboard would cover half of a sheet on a phone.
+      */}
+      {can('sales.amend') && (
+        <div className={styles.correct}>
+          <Button
+            variant="secondary"
+            fullWidth
+            onClick={() => void nav.push('amend_page', { id: saleId })}
+          >
+            Something on this is wrong
+          </Button>
+        </div>
+      )}
     </PageScaffold>
   );
 }
