@@ -18,6 +18,22 @@ import ShapePricePage from './shape-price-page/shape-price-page';
 import SupplierFormPage from './supplier-form-page/supplier-form-page';
 import SuppliersPage from './suppliers-page/suppliers-page';
 import ExpiryPage from './expiry-page/expiry-page';
+/*
+ * COUNTING LIVES HERE NOW.
+ *
+ * It had its own tab and its own stack, which put a job most shops do weekly beside the four they
+ * do hourly — and a nav bar is worth more than that. Counting is something you do TO stock, so it
+ * is reached from the stock screen by a floating button, the way Take payment is reached from the
+ * till, and its pages are secondary pages of this stack with a back button like every other.
+ *
+ * The files stay under `count-stack/` on purpose: a NavigationStack is a registration, not a
+ * folder, and moving eight directories to make the path agree with the map would be churn with
+ * real risk and no behaviour attached.
+ */
+import CountPage from '../count-stack/count-page/count-page';
+import CountEntryPage from '../count-stack/count-entry-page/count-entry-page';
+import YardPage from '../count-stack/yard-page/yard-page';
+import YardCountPage from '../count-stack/yard-count-page/yard-count-page';
 import SupplierAccountPage from './supplier-account-page/supplier-account-page';
 import SupplierPaymentPage from './supplier-payment-page/supplier-payment-page';
 import GroupFormPage from './group-form-page/group-form-page';
@@ -47,6 +63,10 @@ const navLink = {
   supplier_form_page: SupplierFormPage,
   suppliers_page: SuppliersPage,
   expiry_page: ExpiryPage,
+  count_page: CountPage,
+  count_entry_page: CountEntryPage,
+  yard_page: YardPage,
+  yard_count_page: YardCountPage,
   supplier_account_page: SupplierAccountPage,
   supplier_payment_page: SupplierPaymentPage,
   group_form_page: GroupFormPage,

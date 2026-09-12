@@ -161,7 +161,8 @@ export default function ReceivePage() {
     for (const l of lines) {
       if (!l.productId) continue;
       for (const sh of shelfShapes.get(l.productId) ?? []) {
-        if (!sh.isReturnable || seen.has(sh.productUnitId)) continue;
+        // The shape it ARRIVES in: a lorry brings and takes crates, never loose bottles.
+        if (!sh.isReturnable || !sh.isBought || seen.has(sh.productUnitId)) continue;
         seen.set(sh.productUnitId, {
           productUnitId: sh.productUnitId,
           product: l.productName ?? '',

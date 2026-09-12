@@ -10,6 +10,7 @@
 
 import { chromium } from '@playwright/test';
 import { readFileSync } from 'node:fs';
+import { reachCount } from './lib/reach.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3100';
 
@@ -70,7 +71,7 @@ try {
   await p.waitForTimeout(4000);
   await where('push delivery');
 
-  await tab('Count');
+  await reachCount(p, tab);
   await where('tab Count');
 
   const row = p.locator('[class*="count-page_row"]').first();

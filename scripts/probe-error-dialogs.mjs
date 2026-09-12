@@ -12,6 +12,7 @@
 
 import { chromium } from '@playwright/test';
 import { readFileSync, mkdirSync } from 'node:fs';
+import { reachPeople } from './lib/reach.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3100';
 const SHOTS =
@@ -113,7 +114,7 @@ try {
   await p.locator('button[type="submit"]').first().click();
   await p.waitForTimeout(12000);
 
-  await tab('People');
+  await reachPeople(p, tab);
   const add = p.getByRole('button', { name: /add|new/i }).first();
   await add.click();
   await p.waitForTimeout(3500);

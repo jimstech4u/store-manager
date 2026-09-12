@@ -73,6 +73,16 @@ const REPORTS: { id: Which; name: string; blurb: string; windowed: boolean }[] =
 ];
 
 interface Loaded {
+  /*
+   * WHICH REPORT THIS IS AN ANSWER TO.
+   *
+   * `useLoadArea` keeps the previous value while it refetches — correct for a refresh, because the
+   * rows on screen are the last thing known to be true. Switching REPORT is not a refresh: it is a
+   * different question, and the old object's empty slice for the new one rendered as the new one's
+   * result. The price list showed "Nothing has a price on it yet" over thirty-seven prices that had
+   * already come back down the wire.
+   */
+  for: Which;
   summary: SalesSummary | null;
   days: DayRow[];
   products: ProductRow[];
@@ -112,23 +122,24 @@ export default function ReportsPage() {
 
   const read = useCallback(async (): Promise<Loaded> => {
     const w = { storeId: store!.id, from: period!.fromAt, to: period!.toAt };
+    const base = { ...empty, for: which };
     switch (which) {
       case 'sales':
-        return { ...empty, summary: await salesSummary(w), days: await salesByDay(w) };
+        return { ...base, summary: await salesSummary(w), days: await salesByDay(w) };
       case 'days':
-        return { ...empty, days: await salesByDay(w), summary: await salesSummary(w) };
+        return { ...base, days: await salesByDay(w), summary: await salesSummary(w) };
       case 'products':
-        return { ...empty, products: await salesByProduct(w) };
+        return { ...base, products: await salesByProduct(w) };
       case 'takings':
-        return { ...empty, methods: await takingsByMethod(w) };
+        return { ...base, methods: await takingsByMethod(w) };
       case 'debtors':
-        return { ...empty, debtors: await debtorsAged(store!.id) };
+        return { ...base, debtors: await debtorsAged(store!.id) };
       case 'stock':
-        return { ...empty, stock: await stockReport(store!.id) };
+        return { ...base, stock: await stockReport(store!.id) };
       case 'staff':
-        return { ...empty, staff: await staffActivity(w) };
+        return { ...base, staff: await staffActivity(w) };
       case 'prices':
-        return { ...empty, prices: await priceList(store!.id) };
+        return { ...base, prices: await priceList(store!.id) };
     }
   }, [store, period, which]);
 
@@ -305,7 +316,16 @@ export default function ReportsPage() {
       )}
 
       <LoadArea area={area} what="this report">
-        {(data) => (
+        {(data) =>
+          /*
+           * The previous report's object is not an answer to this one.
+           *
+           * Shown as "reading" rather than as an empty result, because an empty result is a claim
+           * and this one has not been made yet.
+           */
+          data.for !== which ? (
+            <p className={styles.footnote}>Reading this report…</p>
+          ) : (
           <>
             <div className={styles.printRow}>
               <Button onClick={() => print(which === 'prices' ? 'poster' : 'a4')} fullWidth>
@@ -350,13 +370,15 @@ export default function ReportsPage() {
               </div>
             )}
           </>
-        )}
+          )
+        }
       </LoadArea>
     </PageScaffold>
   );
 }
 
 const empty: Loaded = {
+  for: 'sales',
   summary: null,
   days: [],
   products: [],

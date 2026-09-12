@@ -5,6 +5,26 @@ import SettingsPage from './settings-page/settings-page';
 import ReviewPage from './review-page/review-page';
 import StaffPage from './staff-page/staff-page';
 import StaffChargesPage from './staff-charges-page/staff-charges-page';
+/*
+ * CUSTOMERS LIVE HERE NOW, as a section of Settings rather than a tab of their own.
+ *
+ * The People tab was a list somebody opens to look somebody up — a reference, not a job — and it
+ * was spending a sixth of the nav bar on that. Every way INTO a customer that matters is already
+ * elsewhere: the till attaches one, Money lists who owes, a receipt names one. So the list itself
+ * belongs with the other things a shop keeps rather than does.
+ *
+ * The files stay under `people-stack/`: a NavigationStack is a registration, not a folder.
+ */
+import PeoplePage from '../people-stack/people-page/people-page';
+import AccountPage from '../people-stack/account-page/account-page';
+import AccountActionPage from '../people-stack/account-action-page/account-action-page';
+import CustomerFormPage from '../people-stack/customer-form-page/customer-form-page';
+import ReceiptPage from '../sell-stack/receipt-page/receipt-page';
+import AmendPage from '../sell-stack/amend-page/amend-page';
+import EmptiesCustomerPage from '../sell-stack/empties-customer-page/empties-customer-page';
+import DepositCustomerPage from '../sell-stack/deposit-customer-page/deposit-customer-page';
+import EmptiesRecordPage from '../sell-stack/empties-record-page/empties-record-page';
+import DepositMovePage from '../sell-stack/deposit-move-page/deposit-move-page';
 import BankPage from './bank-page/bank-page';
 import WordsPage from './words-page/words-page';
 import BankFormPage from './bank-form-page/bank-form-page';
@@ -25,7 +45,6 @@ import ProductFormPage from '../stock-stack/product-form-page/product-form-page'
 import UnitsPage from '../stock-stack/units-page/units-page';
 import UnitFormPage from '../stock-stack/unit-form-page/unit-form-page';
 import GroupFormPage from '../stock-stack/group-form-page/group-form-page';
-import CustomerFormPage from '../people-stack/customer-form-page/customer-form-page';
 import ShopPage from './shop-page/shop-page';
 
 const navLink = {
@@ -39,6 +58,16 @@ const navLink = {
   review_page: ReviewPage,
   staff_page: StaffPage,
   staff_charges_page: StaffChargesPage,
+  people_page: PeoplePage,
+  account_page: AccountPage,
+  account_action_page: AccountActionPage,
+  receipt_page: ReceiptPage,
+  // Pushed from the receipt, so it is registered wherever the receipt is.
+  amend_page: AmendPage,
+  empties_customer_page: EmptiesCustomerPage,
+  deposit_customer_page: DepositCustomerPage,
+  empties_record_page: EmptiesRecordPage,
+  deposit_move_page: DepositMovePage,
   bank_page: BankPage,
   words_page: WordsPage,
   bank_form_page: BankFormPage,

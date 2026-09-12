@@ -22,11 +22,19 @@
   cursor: pointer;
 }
 
+/*
+ * THE ACTIVE TAB IS THE PRIMARY COLOUR.
+ *
+ * A white pill on a grey trough reads as "raised", not as "chosen" — on a phone in daylight the
+ * difference between the two states was a shade of grey and a font weight, and which tab you were
+ * on had to be worked out from the content below it. The shop's own colour is the one signal on
+ * this site that already means "this one".
+ */
 .tabOn {
-  background: var(--surface);
-  color: var(--text);
+  background: var(--primary, #0b6252);
+  color: var(--primary-text);
   font-weight: 600;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 12%);
 }
 
 .lede {

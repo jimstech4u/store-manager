@@ -95,6 +95,14 @@ export default function CountPage() {
 
   return (
     <PageScaffold
+      /*
+        A SECONDARY PAGE NOW, so it carries a back arrow like every other.
+
+        This was a stack root with its own tab, which is why it had none. Counting is something you
+        do TO stock and is reached from the stock screen's floating button, so the way out is back
+        to the shelf you were looking at.
+      */
+      onBack={goBack}
       title="Count"
       subtitle="Check the shelf against the records"
       /*

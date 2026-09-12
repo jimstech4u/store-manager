@@ -371,9 +371,23 @@ export default function SellPage() {
 
   const addProductRef = useRef<((product: Product) => Promise<void>) | null>(null);
 
+  /*
+   * WHAT IS ON ITS WAY IN, by name.
+   *
+   * Adding an item makes two round trips before the line can exist — the shapes it sells in, and
+   * whether its container comes back — and until both land there was nothing on screen at all. On
+   * an empty receipt that is a blank page, which reads as "the tap did not register", so the seller
+   * taps again; on a growing one the list simply does not move.
+   *
+   * The name rather than a flag, because the row says which item is coming: a seller who added the
+   * wrong thing wants to know that before it lands.
+   */
+  const [adding, setAdding] = useState<string | null>(null);
+
   const addProduct = async (product: Product) => {
     if (!activeOrder) return;
     const productId = product.id;
+    setAdding(product.name);
     // Keep it for as long as the receipt does — the line will need its cost and unit long after
     // whatever search found it has been typed over.
     rememberProduct(product);
@@ -448,6 +462,7 @@ export default function SellPage() {
         });
       }
       pickerOps.close();
+      setAdding(null);
       return;
     }
 
@@ -487,6 +502,9 @@ export default function SellPage() {
       }),
     );
     pickerOps.close();
+    // The line is on the receipt, so the placeholder has done its job — cleared here rather than
+    // after the count question below, which is a background enquiry the seller is not waiting on.
+    setAdding(null);
 
     /*
      * HAS THIS BEEN COUNTED TODAY?
@@ -805,6 +823,25 @@ export default function SellPage() {
          * under the sticky bar.
          */
         <div ref={orderTopRef} className={styles.orderBox}>
+          {/*
+            WHAT IS ON ITS WAY IN.
+
+            Outside the `lines.length > 0` guard deliberately: the first item added to an empty
+            receipt is exactly the case that showed nothing at all, because there was no list for a
+            spinner to live in. It names the item, so a seller who tapped the wrong thing knows
+            before it lands.
+          */}
+          {adding && (
+            <div className={styles.lines}>
+              <div className={`${styles.line} ${styles.lineComing}`} aria-live="polite">
+                <div className={styles.lineHead}>
+                  <span className={styles.comingName}>{adding}</span>
+                  <span className={styles.comingNote}>adding…</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ── Lines ─────────────────────────────────────────────────────────── */}
           {activeOrder.lines.length > 0 && (
             <div className={styles.lines}>

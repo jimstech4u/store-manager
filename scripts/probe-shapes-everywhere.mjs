@@ -21,6 +21,7 @@
 import { chromium } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync, mkdirSync } from 'node:fs';
+import { reachCount } from './lib/reach.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3100';
 const SHOTS =
@@ -312,7 +313,7 @@ try {
 
   // ══ Counting it ═══════════════════════════════════════════════════════════════════
   console.log('\n— counting it —');
-  await tab('Count');
+  await reachCount(p, tab);
   /*
    * VISIBLE ONLY. A pushed page never unmounts here, so the Stock list is still in the DOM under
    * the Count tab and a plain text match lands on a row nobody can see.

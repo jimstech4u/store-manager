@@ -20,6 +20,7 @@
 import { chromium } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync, mkdirSync } from 'node:fs';
+import { reachCount } from './lib/reach.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3100';
 const SHOTS =
@@ -239,7 +240,7 @@ try {
 
   // ══ The count screen ══════════════════════════════════════════════════════════════
   console.log('\n— counting the shelf —');
-  await tab('Count');
+  await reachCount(p, tab);
   await p.waitForTimeout(2500);
   const countSearch = p.getByPlaceholder(/search/i).first();
   if ((await countSearch.count()) > 0) {

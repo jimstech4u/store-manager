@@ -111,7 +111,14 @@ export default function CountEntryPage() {
   const { shapes: yardRows } = useYard(store?.id ?? null);
 
   const returnable = useMemo(
-    () => shapes.filter((u: SellingUnit) => u.isReturnable),
+    /*
+     * THE SHAPE THE SHOP COUNTS IN.
+     *
+     * A distributor counts crates, not bottles — that is what `is_counted` means and it is the
+     * shop's own answer. Asking for the empty bottles of an item counted in crates is asking
+     * somebody to open every crate in the yard.
+     */
+    () => shapes.filter((u: SellingUnit) => u.isReturnable && u.isCounted),
     [shapes],
   );
 

@@ -1,12 +1,5 @@
 import type { ReactNode } from 'react';
-import {
-  BoxIcon,
-  CashIcon,
-  PeopleIcon,
-  ReceiptIcon,
-  ClipboardCheckIcon,
-  SettingsIcon,
-} from '@/components/ui/Icon';
+import { BoxIcon, CashIcon, ReceiptIcon, SettingsIcon } from '@/components/ui/Icon';
 import type { Permission } from '@/lib/permissions';
 
 /**
@@ -48,24 +41,30 @@ export const TABS: TabDefinition[] = [
     icon: <BoxIcon size="1.4em" />,
     description: 'What you have, what it cost, and what came in.',
   },
-  {
-    id: 'count-stack',
-    label: 'Count',
-    icon: <ClipboardCheckIcon size="1.4em" />,
-    requires: 'stock.count',
-    description: 'Count the shelf and find anything that does not add up.',
-  },
+  /*
+   * COUNT AND PEOPLE ARE NO LONGER TABS.
+   *
+   * Six tabs on a 390px phone is six labels of about nine characters, and two of them were earning
+   * their place far less than the rest:
+   *
+   *   COUNT is something you do TO stock, weekly in most shops, beside four things done hourly. It
+   *   is reached from the stock screen by a floating button — the same gesture as Take payment on
+   *   the till, and the one control on this site that legitimately floats, because it leads
+   *   somewhere else rather than committing the page it sits on.
+   *
+   *   PEOPLE was a list somebody opens to look somebody up: a reference, not a job. Every way INTO
+   *   a customer that matters is already elsewhere — the till attaches one, Money lists who owes, a
+   *   receipt names one — so the list itself sits under Settings with the other things a shop keeps
+   *   rather than does.
+   *
+   * Neither page moved and neither lost a route; they are secondary pages of `stock-stack` and
+   * `settings-stack` now, with a back arrow like every other secondary page.
+   */
   {
     id: 'money-stack',
     label: 'Money',
     icon: <CashIcon size="1.4em" />,
     description: 'Who owes you, who you owe, and what has been paid.',
-  },
-  {
-    id: 'people-stack',
-    label: 'People',
-    icon: <PeopleIcon size="1.4em" />,
-    description: 'Your customers, their prices, and their empties.',
   },
   {
     id: 'settings-stack',

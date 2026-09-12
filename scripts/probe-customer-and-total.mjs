@@ -14,6 +14,7 @@
 import { chromium } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync, mkdirSync } from 'node:fs';
+import { reachPeople } from './lib/reach.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3100';
 const SHOTS =
@@ -206,7 +207,7 @@ try {
   await p.locator('button[aria-label*="back" i]:visible').first().click().catch(() => {});
   await p.waitForTimeout(3000);
 
-  await tab('People');
+  await reachPeople(p, tab);
   await p.locator('button[aria-label*="customer" i]:visible').first().click();
   await p.waitForTimeout(4000);
 

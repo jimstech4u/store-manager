@@ -14,6 +14,7 @@
 import { chromium } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync, mkdirSync } from 'node:fs';
+import { reachPeople } from './lib/reach.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3100';
 const SHOTS =
@@ -146,7 +147,7 @@ try {
 
   // ══ 2. Customer → account → receipt ═══════════════════════════════════════════════
   console.log('\n— from a customer to what they were charged for —');
-  await tab('People');
+  await reachPeople(p, tab);
   /*
    * Searched for, not scrolled to.
    *

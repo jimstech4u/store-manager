@@ -7,6 +7,8 @@ import { SearchLauncher } from '@/components/ui/SearchLauncher';
 import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
 import { Button } from '@/components/ui/Button';
+import { FloatingAction } from '@/components/ui/FloatingAction';
+import { ClipboardCheckIcon } from '@/components/ui/Icon';
 import { BoxIcon,
   PeopleIcon, ChevronRightIcon, PlusIcon } from '@/components/ui/Icon';
 import { useNav } from '@academix-admin/navigation-stack';
@@ -414,6 +416,22 @@ export default function StockPage() {
             </div>
           )}
         </>
+      )}
+
+      {/*
+        COUNTING IS REACHED FROM STOCK, not from a tab of its own.
+
+        It had a sixth of the nav bar for a job most shops do weekly, beside four they do hourly.
+        Counting is something you do TO stock, so it is reached the way Take payment is reached from
+        the till: a floating pill over the list, which is the one control on this site that
+        legitimately floats because it leads somewhere else rather than committing this page.
+      */}
+      {can('stock.count') && (
+        <FloatingAction
+          label="Count"
+          icon={<ClipboardCheckIcon />}
+          onClick={() => void nav.push('count_page')}
+        />
       )}
     </PageScaffold>
   );

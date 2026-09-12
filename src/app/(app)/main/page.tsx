@@ -14,9 +14,7 @@ import { usePermission } from '@/hooks/usePermission';
 import { TABS, defaultTabFor } from './nav-config';
 import { SellStack } from './sell-stack/sell-stack';
 import { StockStack } from './stock-stack/stock-stack';
-import { CountStack } from './count-stack/count-stack';
 import { MoneyStack } from './money-stack/money-stack';
-import { PeopleStack } from './people-stack/people-stack';
 import { SettingsStack } from './settings-stack/settings-stack';
 
 /**
@@ -33,12 +31,17 @@ import { SettingsStack } from './settings-stack/settings-stack';
  *     (including a mid-session switch) rather than being handed two hard-coded hex values.
  */
 
+/*
+ * FOUR STACKS, not six.
+ *
+ * `count-stack` and `people-stack` are gone as tabs and as stacks: their pages are registered in
+ * `stock-stack` and `settings-stack` respectively, reached by a floating button on Stock and a
+ * Customers row in Settings. See the note in nav-config.tsx for why.
+ */
 const STACK_COMPONENTS: Record<string, React.ReactElement> = {
   'sell-stack': <SellStack />,
   'stock-stack': <StockStack />,
-  'count-stack': <CountStack />,
   'money-stack': <MoneyStack />,
-  'people-stack': <PeopleStack />,
   'settings-stack': <SettingsStack />,
 };
 

@@ -21,6 +21,7 @@
 
 import { chromium } from '@playwright/test';
 import { readFileSync, mkdirSync } from 'node:fs';
+import { reachPeople } from './lib/reach.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3100';
 const SHOTS =
@@ -112,7 +113,7 @@ try {
    */
   // ══ The customer form waits for a name ════════════════════════════════════════════
   console.log('\n— a new customer —');
-  await tab('People');
+  await reachPeople(p, tab);
   await p.waitForTimeout(1500);
   const addPerson = p
     .getByRole('button', { name: /Add (a )?(customer|somebody|person)/i })
@@ -230,10 +231,19 @@ try {
   }
 
   const withShape = await body();
-  check(
+  /*
+     * "What you have now" — the section's real heading.
+     *
+     * This asserted on "On the shelf right now", which the form stopped saying when the question
+     * became one box PER SHAPE rather than a single number: a shelf of crates and loose bottles
+     * cannot be answered with one figure. The string survives only in a comment in `ProductForm`,
+     * so this check had been failing for its own reasons before anything in this round touched the
+     * navigation — worth saying, because it would otherwise read as a regression from the move.
+     */
+    check(
     'once there is a shape, the rest appears',
-    /On the shelf right now/i.test(withShape),
-    (withShape.match(/On the shelf right now/i) ?? ['it did not'])[0],
+    /What you have now/i.test(withShape),
+    (withShape.match(/What you have now/i) ?? ['it did not'])[0],
   );
   check(
     'and the waiting line goes',

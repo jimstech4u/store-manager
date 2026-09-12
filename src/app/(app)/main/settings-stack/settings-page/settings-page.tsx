@@ -371,6 +371,32 @@ export default function SettingsPage() {
         </>
       )}
 
+      {/*
+        CUSTOMERS, as a section rather than a tab.
+
+        The People tab was a list somebody opens to look somebody up — a reference, not a job — and
+        it was spending a sixth of the nav bar on that. Every way INTO a customer that matters is
+        already elsewhere: the till attaches one, Money lists who owes, a receipt names one. So the
+        list itself belongs with the other things a shop keeps rather than does.
+      */}
+      {can('customers.manage') && (
+        <>
+          <h2 className={styles.section}>Customers</h2>
+          <button
+            type="button"
+            className={styles.linkRow}
+            onClick={() => nav.push('people_page')}
+          >
+            <span className={styles.linkMain}>
+              <span className={styles.linkName}>Everyone you sell to</span>
+              <span className={styles.sectionNote}>
+                Their balances, the containers they are holding, and what they have bought
+              </span>
+            </span>
+          </button>
+        </>
+      )}
+
       {can('staff.manage') && (
         <>
           <h2 className={styles.section}>Your team</h2>

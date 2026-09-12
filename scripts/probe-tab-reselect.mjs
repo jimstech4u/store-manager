@@ -110,14 +110,23 @@ try {
   await p.waitForTimeout(4000);
   check('the delivery is open again', (await body()).includes('Record a delivery'));
 
-  await tab('Count');
-  const first = p.locator('[class*="count-page_row"]').first();
+  /*
+   * MONEY, not Count — because Count is no longer a tab.
+   *
+   * The property under test is about TWO TABS each left one page deep: reselecting one must reach
+   * the top of THAT stack rather than another's. Count's pages moved into the Stock stack, so using
+   * it here would leave one stack two pages deep and test nothing at all. Money is a real second
+   * tab with a real pushable page.
+   */
+  await tab('Money');
+  await p.waitForTimeout(2500);
+  const first = p.getByRole('button', { name: /all sales|receipts/i }).first();
   if (await first.count()) {
     await first.click();
     await p.waitForTimeout(4000);
   }
-  check('and the count is one page deep', (await body()).includes('Check the shelf'), (await body()).slice(0, 70));
-  await p.screenshot({ path: `${SHOTS}/4-count-deep.png` });
+  check('and Money is one page deep', /sales|receipt/i.test(await body()), (await body()).slice(0, 70));
+  await p.screenshot({ path: `${SHOTS}/4-money-deep.png` });
 
   await tab('Stock');
   const back = await body();
@@ -147,8 +156,9 @@ try {
   await p.waitForTimeout(4000);
   check('the delivery is open once more', (await body()).includes('Record a delivery'));
 
-  await tab('Count');
-  const row2 = p.locator('[class*="count-page_row"]').first();
+  await tab('Money');
+  await p.waitForTimeout(2500);
+  const row2 = p.getByRole('button', { name: /all sales|receipts/i }).first();
   if (await row2.count()) {
     await row2.click();
     await p.waitForTimeout(4000);
@@ -170,7 +180,9 @@ try {
   console.log('\n— and the browser’s own Back —');
   await p.getByRole('button', { name: /Record a delivery|Receive/i }).first().click();
   await p.waitForTimeout(4000);
-  await tab('Count');
+  // Money, for the same reason as above: the journey under test is BETWEEN tabs.
+  await tab('Money');
+  await p.waitForTimeout(2500);
   await tab('Stock');
   await p.goBack();
   await p.waitForTimeout(3500);

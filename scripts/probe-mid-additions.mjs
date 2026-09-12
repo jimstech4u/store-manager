@@ -12,6 +12,7 @@
 import { chromium } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync, mkdirSync } from 'node:fs';
+import { reachCount } from './lib/reach.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3100';
 const SHOTS =
@@ -77,7 +78,24 @@ const fillProductForm = async (p, unitName) => {
   await p.locator('[class*="UnitPicker_row"]').filter({ hasText: unitName }).first().click();
   await p.waitForTimeout(2000);
 
-  const shelf = p.getByLabel(/On the shelf right now/i).first();
+  /*
+   * THE STOCK BOX EXISTS ONLY FOR A SHAPE THE SHOP COUNTS IN.
+   *
+   * This looked for a field called "On the shelf right now" — a single number the form stopped
+   * asking for once the question became one box PER COUNTED SHAPE, because a shelf of crates and
+   * loose bottles cannot be answered with one figure. `countedShapes` drives those boxes, and a
+   * newly added shape starts with only "Customers buy this" ticked, so until counting is ticked
+   * there is no box at all and nothing to fill.
+   */
+  const counts = p.getByLabel(/you count the shelf in this/i).first();
+  if ((await counts.count()) > 0) {
+    await counts.scrollIntoViewIfNeeded();
+    await counts.check();
+    await p.waitForTimeout(800);
+  }
+
+  // Labelled by the shape's own plural, which is whatever the shop calls it.
+  const shelf = p.locator('[class*="shapeBoxes"] input:visible').first();
   await shelf.scrollIntoViewIfNeeded();
   await shelf.fill('0');
   await p.waitForTimeout(400);
@@ -311,7 +329,7 @@ try {
 
   // ══ 4. A count can invent the item it is looking at ═══════════════════════════════
   console.log('\n— a count does not send you to Stock either —');
-  await tab('Count');
+  await reachCount(p, tab);
   const cAdd = p.getByRole('button', { name: /Something not on this list/i }).first();
   check('the count offers to add what is on the shelf', (await cAdd.count()) > 0);
   await p.screenshot({ path: `${SHOTS}/7-count.png` });

@@ -11,6 +11,7 @@
 
 import { chromium } from '@playwright/test';
 import { readFileSync, mkdirSync } from 'node:fs';
+import { reachPeople } from './lib/reach.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3100';
 const SHOTS =
@@ -146,7 +147,7 @@ try {
    * both live in that scope. Nothing was even written: LEAVING a page deleted a list belonging to
    * another page.
    */
-  await tab('People');
+  await reachPeople(p, tab);
   const people = () => p.locator(// The People page reuses money-page.module.css, so its rows carry that prefix.
     '[class*="money-page_rowName"]:visible').count();
 

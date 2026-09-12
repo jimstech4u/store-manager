@@ -15,6 +15,7 @@
 import { chromium } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync, mkdirSync } from 'node:fs';
+import { reachPeople } from './lib/reach.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3100';
 const SHOTS =
@@ -55,9 +56,22 @@ const errors = [];
 p.on('pageerror', (e) => errors.push(String(e).split('\n')[0]));
 
 /** The people stack's own address, e.g. "1.a1" — the part that says how deep it is. */
+/*
+ * THE STACK THE CUSTOMER PAGES LIVE IN, which is `settings-stack` now.
+ *
+ * People was a tab with a stack of its own; it is a section of Settings. Reading `people-stack` out
+ * of the address returned the fallback string for every call, so `pushed !== atRoot` compared two
+ * identical "(not in the address)" strings and the push assertion could never pass — while two
+ * assertions either side of it PASSED on the fallback being non-empty, which is worse: a probe
+ * passing for the wrong reason says nothing at all.
+ *
+ * Throwing when the segment is missing is the point: if the pages move again this fails loudly
+ * rather than quietly measuring nothing.
+ */
 const peopleStack = () => {
-  const m = /people-stack%3A([^|&#]*)/.exec(p.url());
-  return m ? decodeURIComponent(m[1]) : '(not in the address)';
+  const m = /settings-stack%3A([^|&#]*)/.exec(p.url());
+  if (!m) throw new Error(`settings-stack is not in the address: ${p.url()}`);
+  return decodeURIComponent(m[1]);
 };
 
 const bodyText = async () => (await p.locator('body').innerText()).replace(/\s+/g, ' ').trim();
@@ -77,7 +91,7 @@ try {
   await p.locator('button[type="submit"]').first().click();
   await p.waitForTimeout(12000);
 
-  await tab('People');
+  await reachPeople(p, tab);
   const atRoot = peopleStack();
   check('the People stack is at its root', atRoot.length > 0, atRoot);
   const rootText = await bodyText();

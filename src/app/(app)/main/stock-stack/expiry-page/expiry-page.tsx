@@ -40,12 +40,12 @@ export default function ExpiryPage() {
   const problem = useProblem();
   const showProblem = problem.show;
   /*
-   * ONE dialog, and the row it was opened for held beside it.
+   * ONE dialog for the page, and the row it was opened for held beside it.
    *
-   * A `<ConfirmDialog>` rendered inside the list would mount one per row, and each would carry its
-   * own copy of the controller — so pressing confirm on the fourth row would be answered by the
-   * first dialog to notice. Every confirmation on this site is a dialog rather than a
-   * `window.confirm`, and one dialog for the page is the shape that keeps working.
+   * `pending` does double duty: it is which row the question is about, AND whether the question is
+   * being asked at all — because `ConfirmDialog` opens on mount, so the caller mounting it is the
+   * act of asking. One per row would also mean one controller per row, and a confirm on the fourth
+   * would be answered by whichever noticed first.
    */
   const confirm = useConfirm();
   const [pending, setPending] = useState<ExpiringLayer | null>(null);
@@ -103,10 +103,7 @@ export default function ExpiryPage() {
           <span className={styles.rowAction}>
             <Button
               variant="secondary"
-              onClick={() => {
-                setPending(l);
-                confirm.open();
-              }}
+              onClick={() => setPending(l)}
               disabled={busy === l.layerId}
             >
               {busy === l.layerId ? 'Taking it off…' : 'Take it off the shelf'}
@@ -127,21 +124,35 @@ export default function ExpiryPage() {
     <PageScaffold onBack={goBack} title="Going off" subtitle="Dated stock, soonest first">
       <ProblemDialog problem={problem} title="Could not read what is going off" />
 
-      <ConfirmDialog
-        controller={confirm}
-        title="Write this off?"
-        message={
-          pending
-            ? `${formatQty(pending.remaining)} of ${pending.productName} comes off the shelf and ` +
-              `is recorded as damage worth ${formatMoney(pending.valueAtCost)}. The delivery it ` +
-              `came from keeps its history.`
-            : undefined
-        }
-        confirmText="Write it off"
-        onConfirm={() => {
-          if (pending) void takeOff(pending);
-        }}
-      />
+      {/*
+        MOUNTED ONLY WHILE THE QUESTION IS BEING ASKED.
+
+        `ConfirmDialog` opens itself on mount — "mounted means asked", which is what stops a dialog
+        existing invisibly with nothing able to dismiss it. Rendered unconditionally it therefore
+        opened the moment this screen did: an empty "Write this off?" over the list, with Cancel
+        closing it and the next render opening it straight back. The whole page was unusable.
+
+        The caller decides whether the question is on the page at all, and `pending` is that
+        decision.
+      */}
+      {pending && (
+        <ConfirmDialog
+          controller={confirm}
+          title="Write this off?"
+          message={
+            `${formatQty(pending.remaining)} of ${pending.productName} comes off the shelf and is ` +
+            `recorded as damage worth ${formatMoney(pending.valueAtCost)}. The delivery it came ` +
+            `from keeps its history.`
+          }
+          confirmText="Write it off"
+          onDismiss={() => setPending(null)}
+          onConfirm={() => {
+            const row = pending;
+            setPending(null);
+            void takeOff(row);
+          }}
+        />
+      )}
 
       <InfoPanel id="expiry.what" tone="info" title="Each delivery keeps its own date">
         The same item can arrive twice in a month at two prices with two dates. What you see here is

@@ -90,7 +90,17 @@ export default function SupplierFormPage() {
     const out: { productUnitId: string; label: string }[] = [];
     for (const [productId, shapes] of byProduct) {
       for (const sh of shapes) {
-        if (!sh.isReturnable) continue;
+        /*
+         * THE SHAPE IT ARRIVES IN, not every shape that comes back.
+         *
+         * A brewery delivers in crates and takes crates back on the same lorry. It has never seen
+         * the bottles on their own, so offering "Goldberg bottles" on a supplier's opening position
+         * is asking a question the shop cannot answer about a party that does not deal in them.
+         *
+         * The customer side asks the opposite question and uses `isCounted` — see
+         * `customer-form-page`.
+         */
+        if (!sh.isReturnable || !sh.isBought) continue;
         out.push({
           productUnitId: sh.productUnitId,
           label: `${named.get(productId) ?? 'Item'} ${sh.plural.toLowerCase()}`,
