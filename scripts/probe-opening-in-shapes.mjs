@@ -175,6 +175,14 @@ try {
   for (const which of [CRATE, BOTTLE]) {
     await role(which, /count the shelf in this/i);
     await role(which, /comes back empty/i);
+    /*
+     * AND SAYING A CUSTOMER CAN BUY THEM, which is now a deliberate tick.
+     *
+     * A new shape starts COUNTED and nothing else — anything the shop has a word for it can count,
+     * while whether customers may buy in it is a decision only the shop can make. `unitProblems`
+     * refuses the save otherwise, and the form says so: "Say what a customer can buy."
+     */
+    await role(which, /customers buy this/i);
   }
   await p.waitForTimeout(1000);
   await shot('shapes-ticked');
@@ -257,15 +265,28 @@ try {
     `${opened} on the shelf`,
   );
 
-  const { data: yard } = await shop.rpc('store_empties_on_hand', { p_store_id: storeId });
-  const mine = (yard ?? []).filter((r) => /ocrate|obottle/i.test(r.category_name));
-  const crateYard = mine.find((r) => new RegExp(CRATE, 'i').test(r.category_name));
-  const bottleYard = mine.find((r) => new RegExp(BOTTLE, 'i').test(r.category_name));
-  check('forty empty crates are recorded in the yard', Number(crateYard?.qty) === 40, `${crateYard?.qty}`);
+  /*
+   * READ FROM `yard_empties`, which is where the yard now lives.
+   *
+   * This read `store_empties_on_hand` — the POOL-era reader, keyed by `empties_category_id` and
+   * joined to `empties_categories`. Since 0128 the product form's count resolves the pool to a
+   * SHAPE and writes `product_unit_id` with the pool id left null, so that reader stopped seeing
+   * the rows it was asked about and answered `undefined` for a count that had been recorded
+   * perfectly well. The shape reader is the one the screens use.
+   */
+  const { data: yard } = await shop.rpc('yard_empties', { p_store_id: storeId });
+  const mine = (yard ?? []).filter((r) => r.product_id === productId);
+  const crateYard = mine.find((r) => new RegExp(CRATE, 'i').test(r.unit_name));
+  const bottleYard = mine.find((r) => new RegExp(BOTTLE, 'i').test(r.unit_name));
+  check(
+    'forty empty crates are recorded in the yard',
+    Number(crateYard?.counted) === 40,
+    `${crateYard?.counted}`,
+  );
   check(
     'and nought empty bottles is recorded, not left blank',
-    bottleYard !== undefined && Number(bottleYard.qty) === 0,
-    bottleYard ? `${bottleYard.qty}` : 'no row',
+    bottleYard !== undefined && Number(bottleYard.counted) === 0,
+    bottleYard ? `counted ${bottleYard.counted}` : 'no row',
   );
 
   console.log('\n— page errors —');

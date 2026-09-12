@@ -1,5 +1,5 @@
 /**
- * One list of shapes, and four things a shape can be for.
+ * One list of shapes, and three things a shape can be for.
  *
  * «bought in and sold in are now SELECTING from the shape, not defining it again»
  *
@@ -8,7 +8,8 @@
  * was wrong. The claims now:
  *
  *   · one list, one Add button, every shape on the item in it;
- *   · four roles per shape — arrives in, customers buy, counted in, deposits held in;
+ *   · three roles per shape — arrives in, customers buy, counted in. The fourth, deposits held
+ *     in, was removed: a deposit is a round sum against a customer, not a rate per container;
  *   · ticking a role SAVES, and the shape tree survives the save (a crate still knows it is 12).
  *
  * That last one is not decoration. A first version of 0080 renamed the key the second pass reads,
@@ -112,16 +113,28 @@ try {
   check('with one way to add', (await p.getByRole('button', { name: /Add a shape/i }).count()) === 1);
   check('both shapes are listed', /Crate/i.test(page) && /Bottle/i.test(page));
 
-  // ══ Four roles ════════════════════════════════════════════════════════════════════
-  console.log('\n— four things a shape can be for —');
+  // ══ Three roles ═══════════════════════════════════════════════════════════════════
+  console.log('\n— three things a shape can be for —');
   for (const role of [
     'It arrives in this',
     'Customers buy this',
     'You count the shelf in this',
-    'Deposits are held in this',
   ]) {
     check(`"${role}" is offered`, (await p.getByText(role, { exact: true }).count()) > 0);
   }
+
+  /*
+   * AND THE FOURTH IS GONE, which is the assertion worth keeping.
+   *
+   * "Deposits are held in this" came off at the shop's request: a deposit is a round sum against a
+   * CUSTOMER on its own ledger, not a rate per container, so no shape has to claim it. It was
+   * saved, read back, and consulted by nothing — a question the app could not act on, which is
+   * worse than one it never asks. This probe demanded it for a while after it left.
+   */
+  check(
+    'and "Deposits are held in this" is gone',
+    (await p.getByText('Deposits are held in this', { exact: true }).count()) === 0,
+  );
 
   // ══ Changing one saves, and the tree survives ═════════════════════════════════════
   console.log('\n— ticking a role saves, and a crate still knows it is twelve —');

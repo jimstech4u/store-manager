@@ -59,7 +59,11 @@ export function UnitsEditor({
   /** Hands over to whoever can push the form that invents a new one. */
   onCreateUnit: (name: string) => void;
 }) {
-  const [picking, setPicking] = useState<null | 'bought' | 'sold'>(null);
+  /*
+   * Whether the shape picker is open. It used to carry WHICH LIST the shop had pressed — bought or
+   * sold — and the one-list redesign left only 'sold' ever being set, so the value said nothing.
+   */
+  const [picking, setPicking] = useState(false);
 
   /*
    * Shapes whose container has been asked for and not yet chosen.
@@ -75,12 +79,18 @@ export function UnitsEditor({
   const patch = (storeUnitId: string, change: Partial<ProductUnit>) =>
     setUnits(units.map((u) => (u.storeUnitId === storeUnitId ? { ...u, ...change } : u)));
 
-  const addUnit = (unit: StoreUnit, side: 'bought' | 'sold') => {
+  const addUnit = (unit: StoreUnit) => {
     const existing = units.find((u) => u.storeUnitId === unit.id);
     if (existing) {
-      // Already on the item, just not on this side of it. A shop that buys and sells in crates has
-      // one crate, not two.
-      patch(unit.id, side === 'bought' ? { isBought: true } : { isSold: true });
+      /*
+       * ALREADY ON THE ITEM, so this changes nothing.
+       *
+       * It used to tick a role — `side === 'bought' ? isBought : isSold` — left over from when the
+       * editor was two lists and "which side did they press" meant something. There is one list
+       * now and `side` was only ever 'sold', so re-picking a crate silently ticked "customers buy
+       * this" on a shape whose ticks are the shop's own answers. A form that changes an answer
+       * nobody revisited is worse than one that does nothing.
+       */
       return;
     }
 
@@ -93,16 +103,26 @@ export function UnitsEditor({
         plural: unit.plural,
         baseQty: 1,
         /*
-         * A NEW SHAPE STARTS SOLD, and is otherwise unassigned.
+         * A NEW SHAPE STARTS COUNTED, and is otherwise unassigned.
          *
-         * There is one list now, so "which side did they press" no longer means anything — a shape
-         * is added, then the shop says what it is for. Sold is the one role a product cannot do
-         * without (nothing reaches a receipt otherwise), so it is the honest default; counting and
-         * deposits are answers only the shop has.
+         * It started SOLD, on the reasoning that selling is the one role a product cannot do
+         * without. That was the wrong way round for two reasons.
+         *
+         * COUNTING IS THE ROLE EVERY SHAPE HAS. A shape exists because the shop has a word for it,
+         * and anything it has a word for it can count — a crate in the store room is a crate
+         * whether or not the shop ever sells one. Selling is a decision: a distributor stocks in
+         * crates and sells in crates AND bottles, and which of those a customer may buy is exactly
+         * the thing only the shop knows.
+         *
+         * AND THE DEFAULT DECIDED WHETHER THE FORM ASKED FOR OPENING STOCK AT ALL. "What you have
+         * now" renders a box per COUNTED shape, so a shape that started unticked meant a new item
+         * was saved with nothing on its shelf and nobody was asked. Silently starting at nought is
+         * precisely what the required-with-zero-accepted rule exists to prevent, and it was being
+         * undone by a default three sections higher up the form.
          */
         isBought: false,
-        isSold: true,
-        isCounted: false,
+        isSold: false,
+        isCounted: true,
         isDeposit: false,
         sellPrice: '',
         isReturnable: false,
@@ -264,6 +284,27 @@ export function UnitsEditor({
             one on a count screen gets a guess instead of a figure.
           */}
           <span>You count the shelf in this</span>
+        </label>
+
+        {/*
+          AND WHETHER IT COMES BACK — a role, not a selling detail.
+
+          This lived inside the `isSold` block, beside the price and the quantity rules, which are
+          genuinely about selling. Whether a crate comes back is not: a brewery's crate comes back
+          whether or not a customer may ever buy one.
+
+          It went unnoticed while every new shape started SOLD. Since a shape now starts COUNTED and
+          nothing else, a distributor who counts crates and sells only bottles could not mark the
+          crate returnable at all — and since 0136 the containers a customer owes are counted in the
+          shape the shop COUNTS in, so the yard would have had nothing to count.
+        */}
+        <label className={styles.check}>
+          <input
+            type="checkbox"
+            checked={u.isReturnable}
+            onChange={(e) => patch(u.storeUnitId, { isReturnable: e.target.checked })}
+          />
+          <span>The {u.name.toLowerCase()} comes back empty</span>
         </label>
       </div>
 
@@ -516,15 +557,6 @@ export function UnitsEditor({
             </button>
           </div>
 
-          <label className={styles.check}>
-            <input
-              type="checkbox"
-              checked={u.isReturnable}
-              onChange={(e) => patch(u.storeUnitId, { isReturnable: e.target.checked })}
-            />
-            <span>The {u.name.toLowerCase()} comes back empty</span>
-          </label>
-
         </>
       )}
     </li>
@@ -564,13 +596,13 @@ export function UnitsEditor({
         tick what it is for. Everything else on this item reads these.
       </p>
       <ul className={styles.list}>{units.map(unitRow)}</ul>
-      <button type="button" className={styles.add} onClick={() => setPicking('sold')}>
+      <button type="button" className={styles.add} onClick={() => setPicking(true)}>
         <PlusIcon /> Add a shape
       </button>
 
       <UnitPicker
-        open={picking !== null}
-        onClose={() => setPicking(null)}
+        open={picking}
+        onClose={() => setPicking(false)}
         units={storeUnits}
         /*
           Everything already on the item, because there is one list now.
@@ -581,9 +613,9 @@ export function UnitsEditor({
         */
         taken={units.map((u) => u.storeUnitId)}
         title="What shape does this come in?"
-        onPick={(unit) => addUnit(unit, picking ?? 'sold')}
+        onPick={(unit) => addUnit(unit)}
         onCreate={(name) => {
-          setPicking(null);
+          setPicking(false);
           onCreateUnit(name);
         }}
       />

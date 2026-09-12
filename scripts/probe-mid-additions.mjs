@@ -79,18 +79,20 @@ const fillProductForm = async (p, unitName) => {
   await p.waitForTimeout(2000);
 
   /*
-   * THE STOCK BOX EXISTS ONLY FOR A SHAPE THE SHOP COUNTS IN.
+   * SAYING A CUSTOMER CAN BUY IT, which is now a deliberate tick.
    *
-   * This looked for a field called "On the shelf right now" — a single number the form stopped
-   * asking for once the question became one box PER COUNTED SHAPE, because a shelf of crates and
-   * loose bottles cannot be answered with one figure. `countedShapes` drives those boxes, and a
-   * newly added shape starts with only "Customers buy this" ticked, so until counting is ticked
-   * there is no box at all and nothing to fill.
+   * A new shape starts COUNTED and nothing else: a shape exists because the shop has a word for it,
+   * and anything it has a word for it can count — whether customers may buy in it is a decision
+   * only the shop can make. `unitProblems` refuses a save with nothing sellable ("Say what a
+   * customer can buy"), so this is part of adding an item now rather than something the form
+   * assumed.
+   *
+   * Counting needs no tick: it is the default, which is also what puts the stock box on the form.
    */
-  const counts = p.getByLabel(/you count the shelf in this/i).first();
-  if ((await counts.count()) > 0) {
-    await counts.scrollIntoViewIfNeeded();
-    await counts.check();
+  const sells = p.getByLabel(/customers buy this/i).first();
+  if ((await sells.count()) > 0) {
+    await sells.scrollIntoViewIfNeeded();
+    await sells.check();
     await p.waitForTimeout(800);
   }
 

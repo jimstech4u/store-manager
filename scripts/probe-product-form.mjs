@@ -135,34 +135,76 @@ try {
   check('both units are on the item', cards === 2, `${cards} card(s)`);
 
   /*
-   * One CRATE is twelve BOTTLES — said in that direction.
+   * ONE CRATE HOLDS TWELVE BOTTLES, said in that direction from the start.
    *
-   * Adding the crate first makes it the ruler, so the bottle's card asks "One bottle is [ ]
-   * crates", whose honest answer is a twelfth. The form offers to turn the sentence round.
+   * This used to press "Wrong way round" — a swap button from when a shape declared what it was
+   * MADE OF, so adding the crate first made it the ruler and the bottle's card asked "one bottle is
+   * [ ] crates", whose honest answer is a twelfth. A shape declares what it GOES INSIDE now, so the
+   * sentence reads "[12] bottles fit inside one [crate]" and there is nothing to turn round.
+   *
+   * The swap button has been gone since f241257; this probe had been asserting on it since.
    */
-  await p.getByRole('button', { name: /Wrong way round/i }).first().click();
-  await p.waitForTimeout(1200);
+  const bottleCard = p.locator('li[class*="UnitsEditor_card__"]').nth(1);
 
-  const sentence = await p.locator('[class*="UnitsEditor_sentence"]').first().innerText();
+  /*
+   * TICK, THEN PICK THE CONTAINER, THEN SAY HOW MANY — in that order.
+   *
+   * Ticking adds an EMPTY row: which shape a bottle goes inside is the question, and choosing one
+   * for the shop would be a guess written into the tree. The "How many" field only exists once a
+   * container has been chosen, so filling it first fills nothing.
+   */
+  await bottleCard.getByText(/go inside something bigger/i).first().click();
+  await p.waitForTimeout(1000);
+
+  const parent = bottleCard.locator('select').first();
+  await parent.waitFor({ timeout: 15000 });
+  const options = await parent.locator('option').count();
+  check('the bottle is offered a container to go inside', options > 1, `${options} option(s)`);
+  await parent.selectOption({ index: options - 1 });
+  await p.waitForTimeout(1000);
+
+  const howMany = bottleCard.getByLabel(/^How many /i).first();
+  await howMany.fill('12');
+  await p.waitForTimeout(600);
+
+  const sentence = (await bottleCard.innerText()).replace(/\s+/g, ' ');
+  /*
+   * THE QUANTITY IS READ OFF THE INPUT, never off the text.
+   *
+   * `innerText` does not contain an input's VALUE. Asserting `/12/` against it could not pass
+   * whatever the form did — the same mistake as the probe that once checked a form field through
+   * `innerText` and reported data loss that had already been fixed.
+   */
+  const said = await howMany.inputValue();
   check(
     'the sentence can be said the way a shop says it',
-    /one fcrate/i.test(sentence),
-    sentence.split('\n').join(' ').slice(0, 80),
+    said.trim() === '12' && /fit inside one/i.test(sentence),
+    `"${said}" ${(sentence.match(/How many .*?fit inside one \S+/i) ?? ['(no sentence)'])[0]}`,
   );
 
-  for (const box of await p.locator('[class*="UnitsEditor_sentence"] input').all()) {
-    if ((await box.inputValue()).trim() === '') {
-      await box.fill('12');
-      await p.waitForTimeout(400);
+  /*
+   * AND SAYING A CUSTOMER CAN BUY THEM, which is now a deliberate tick.
+   *
+   * A new shape starts COUNTED and nothing else — anything the shop has a word for it can count,
+   * while whether customers may buy in it is a decision only the shop can make. The price field
+   * belongs to a SOLD shape, so without this there is no price to fill and `unitProblems` refuses
+   * the save with "Say what a customer can buy".
+   */
+  for (const card of await p.locator('li[class*="UnitsEditor_card__"]').all()) {
+    const sells = card.getByText(/^Customers buy this$/i).first();
+    if ((await sells.count()) > 0) {
+      await sells.click();
+      await p.waitForTimeout(500);
     }
   }
+  await p.waitForTimeout(800);
 
   // A price on each: the crate at 9,600, the bottle at 900.
   // Scoped to the unit cards. The discount composer also carries a "Price for one X …" label, and
   // an anchored regex does not separate them because the accessible name includes the hint.
   const prices = await p
     .locator('li[class*="UnitsEditor_card__"]')
-    .getByLabel(/^Price for one/i)
+    .getByLabel(/Price for one/i)
     .all();
   check('each sold unit asks its own price', prices.length === 2, `${prices.length} price field(s)`);
   await prices[0].fill('9600');
