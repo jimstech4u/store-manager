@@ -1,5 +1,5 @@
 /**
- * One list of shapes, and three things a shape can be for.
+ * One list of shapes, and two things a shape can be for.
  *
  * «bought in and sold in are now SELECTING from the shape, not defining it again»
  *
@@ -113,12 +113,11 @@ try {
   check('with one way to add', (await p.getByRole('button', { name: /Add a shape/i }).count()) === 1);
   check('both shapes are listed', /Crate/i.test(page) && /Bottle/i.test(page));
 
-  // ══ Three roles ═══════════════════════════════════════════════════════════════════
-  console.log('\n— three things a shape can be for —');
+  // ══ Two roles, and the container question ═════════════════════════════════════════
+  console.log('\n— what a shape can be for —');
   for (const role of [
     'It arrives in this',
     'Customers buy this',
-    'You count the shelf in this',
   ]) {
     check(`"${role}" is offered`, (await p.getByText(role, { exact: true }).count()) > 0);
   }
@@ -136,11 +135,37 @@ try {
     (await p.getByText('Deposits are held in this', { exact: true }).count()) === 0,
   );
 
+  /*
+   * AND SO IS COUNTING, which was never a choice.
+   *
+   * A shape is on an item because the shop has a word for it, and anything it has a word for it can
+   * count. The tick's wrong answer silently removed the opening-stock box, so a new item saved with
+   * an unexamined nought on its shelf. 0138 forces it true for every shape.
+   */
+  check(
+    'and so is "You count the shelf in this"',
+    (await p.getByText('You count the shelf in this', { exact: true }).count()) === 0,
+  );
+
   // ══ Changing one saves, and the tree survives ═════════════════════════════════════
   console.log('\n— ticking a role saves, and a crate still knows it is twelve —');
-  const bottleCounted = p.getByText('You count the shelf in this', { exact: true }).nth(1);
+  /*
+   * "It arrives in this" ON THE BOTTLE'S CARD — the CHECKBOX, not the nth label.
+   *
+   * `getByText(...).nth(1)` counts every matching node in the document, and a pushed-under page
+   * stays mounted: the second match was not reliably the bottle's, and clicking a span that happens
+   * to sit under another card toggles nothing the probe then checks. Scoping to the card and
+   * checking the input says exactly what is meant, and `check()` is idempotent so it cannot
+   * accidentally untick.
+   */
+  const bottleCard = p.locator('li[class*="UnitsEditor_card__"]').filter({ hasText: 'Bottle' }).first();
+  const bottleCounted = bottleCard
+    .locator('label')
+    .filter({ hasText: /It arrives in this/i })
+    .first()
+    .locator('input');
   await bottleCounted.scrollIntoViewIfNeeded();
-  await bottleCounted.click();
+  await bottleCounted.check();
   await p.waitForTimeout(600);
   await p.screenshot({ path: `${SHOTS}/2-ticked.png`, fullPage: true });
 
@@ -166,18 +191,41 @@ try {
   );
 
   const bottleAfter = after.find((u) => u.name === 'Bottle');
+  /*
+   * THE ROLE THAT WAS TICKED — "It arrives in this", on the bottle.
+   *
+   * This used to tick and then assert `is_counted`. Counting stopped being a tick in 0138: a shape
+   * is on an item because the shop has a word for it, and anything it has a word for it can count.
+   * The claim is unchanged — ticking a role saves, and the shape tree survives the save — it is
+   * just made with a role that still exists.
+   */
   check(
     'the role that was ticked was saved',
-    bottleAfter?.is_counted === true,
-    `bottle counted: ${bottleAfter?.is_counted}`,
+    bottleAfter?.is_bought === true,
+    `bottle arrives-in: ${bottleAfter?.is_bought}`,
   );
   check(
     'and the roles that were not ticked are untouched',
     after.every((u) => {
       const b = before.find((x) => x.name === u.name);
-      return b && b.is_bought === u.is_bought && b.is_sold === u.is_sold;
+      if (!b) return false;
+      // The bottle's `is_bought` is the one that was just ticked; everything else must be as it was.
+      const boughtOk = u.name === 'Bottle' ? true : b.is_bought === u.is_bought;
+      return boughtOk && b.is_sold === u.is_sold;
     }),
     after.map((u) => `${u.name}:b=${u.is_bought},s=${u.is_sold}`).join(' '),
+  );
+
+  /*
+   * AND EVERY SHAPE IS COUNTED, whatever anybody ticked.
+   *
+   * Forced by a trigger rather than by the writer, so the guarantee holds for the two migrations
+   * that insert shapes directly and for anything written later.
+   */
+  check(
+    'and every shape is counted, with nothing to press',
+    after.every((u) => u.is_counted === true),
+    after.map((u) => `${u.name}:${u.is_counted}`).join(' '),
   );
 
   check('no page errors throughout', errors.length === 0, errors.join(' | '));

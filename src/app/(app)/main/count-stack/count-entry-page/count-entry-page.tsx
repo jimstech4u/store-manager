@@ -112,13 +112,13 @@ export default function CountEntryPage() {
 
   const returnable = useMemo(
     /*
-     * THE SHAPE THE SHOP COUNTS IN.
+     * EVERY SHAPE THAT COMES BACK.
      *
-     * A distributor counts crates, not bottles — that is what `is_counted` means and it is the
-     * shop's own answer. Asking for the empty bottles of an item counted in crates is asking
-     * somebody to open every crate in the yard.
+     * This also required `is_counted`, from when that was a tick the shop chose. It is true of
+     * every shape now, so the condition selected everything and said nothing — and the shop's rule
+     * is the plain one: empties, wherever they are asked about, are the shapes that come back.
      */
-    () => shapes.filter((u: SellingUnit) => u.isReturnable && u.isCounted),
+    () => shapes.filter((u: SellingUnit) => u.isReturnable),
     [shapes],
   );
 

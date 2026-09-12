@@ -173,7 +173,10 @@ try {
    * back empty. Four boxes, and the form has to ask all four.
    */
   for (const which of [CRATE, BOTTLE]) {
-    await role(which, /count the shelf in this/i);
+    /*
+     * COUNTING IS NO LONGER A TICK — every shape has it, so there is nothing to press. What is left
+     * to say about a container is whether it comes back.
+     */
     await role(which, /comes back empty/i);
     /*
      * AND SAYING A CUSTOMER CAN BUY THEM, which is now a deliberate tick.

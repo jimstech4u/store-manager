@@ -161,8 +161,14 @@ export default function ReceivePage() {
     for (const l of lines) {
       if (!l.productId) continue;
       for (const sh of shelfShapes.get(l.productId) ?? []) {
-        // The shape it ARRIVES in: a lorry brings and takes crates, never loose bottles.
-        if (!sh.isReturnable || !sh.isBought || seen.has(sh.productUnitId)) continue;
+        /*
+         * EVERY SHAPE THAT COMES BACK, not only the ones goods arrive in.
+         *
+         * This also required `is_bought`, on the reasoning that a lorry brings and takes crates. A
+         * shop does send bottles back too, and over-offering a shape costs a glance while hiding
+         * one the shop needs costs a container nobody can record.
+         */
+        if (!sh.isReturnable || seen.has(sh.productUnitId)) continue;
         seen.set(sh.productUnitId, {
           productUnitId: sh.productUnitId,
           product: l.productName ?? '',

@@ -103,22 +103,19 @@ export function UnitsEditor({
         plural: unit.plural,
         baseQty: 1,
         /*
-         * A NEW SHAPE STARTS COUNTED, and is otherwise unassigned.
+         * A NEW SHAPE IS COUNTED — as every shape is — and has no other role until the shop says.
          *
-         * It started SOLD, on the reasoning that selling is the one role a product cannot do
-         * without. That was the wrong way round for two reasons.
+         * COUNTING IS NOT A CHOICE. A shape is on an item because the shop has a word for it, and
+         * anything it has a word for it can count: a crate in the store room is a crate whether or
+         * not the shop ever sells one. It was a tick for a while, and the wrong answer to it
+         * silently removed the opening-stock box — so a new item was saved with an unexamined
+         * nought on its shelf, which is exactly what required-with-zero-accepted exists to prevent.
+         * 0138 forces it true for every row; this is here so the object is honest before it saves.
          *
-         * COUNTING IS THE ROLE EVERY SHAPE HAS. A shape exists because the shop has a word for it,
-         * and anything it has a word for it can count — a crate in the store room is a crate
-         * whether or not the shop ever sells one. Selling is a decision: a distributor stocks in
-         * crates and sells in crates AND bottles, and which of those a customer may buy is exactly
-         * the thing only the shop knows.
-         *
-         * AND THE DEFAULT DECIDED WHETHER THE FORM ASKED FOR OPENING STOCK AT ALL. "What you have
-         * now" renders a box per COUNTED shape, so a shape that started unticked meant a new item
-         * was saved with nothing on its shelf and nobody was asked. Silently starting at nought is
-         * precisely what the required-with-zero-accepted rule exists to prevent, and it was being
-         * undone by a default three sections higher up the form.
+         * THE TWO THAT ARE CHOICES stay off until asked. Whether goods ARRIVE in this shape and
+         * whether customers may BUY in it are decisions only the shop can make — a distributor
+         * stocks in crates and sells in crates AND bottles, and which is which is the whole
+         * question.
          */
         isBought: false,
         isSold: false,
@@ -273,18 +270,17 @@ export function UnitsEditor({
           />
           <span>Customers buy this</span>
         </label>
-        <label className={styles.check}>
-          <input
-            type="checkbox"
-            checked={u.isCounted}
-            onChange={(e) => patch(u.storeUnitId, { isCounted: e.target.checked })}
-          />
-          {/*
-            A distributor counts crates, not bottles, even when it sells both. Asking for the wrong
-            one on a count screen gets a guess instead of a figure.
-          */}
-          <span>You count the shelf in this</span>
-        </label>
+        {/*
+          "You count the shelf in this" IS GONE.
+
+          A shape is on an item because the shop HAS A WORD for it, and anything it has a word for
+          it can count — so this was a question whose only honest answer was yes, and whose wrong
+          answer silently removed a box the shop needed: an unticked shape meant the product form
+          asked for no opening stock at all, and a new item was saved with an unexamined nought on
+          its shelf.
+
+          Every shape is counted now, forced by a trigger in 0138 so no writer can unset it.
+        */}
 
         {/*
           AND WHETHER IT COMES BACK — a role, not a selling detail.

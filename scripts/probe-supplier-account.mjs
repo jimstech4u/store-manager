@@ -117,11 +117,20 @@ try {
 
   // ── Containers ────────────────────────────────────────────────────────────────────
   console.log(NL + '— and the crates that went back —');
+  /*
+   * A LIVE product's shape, not merely a returnable one.
+   *
+   * This took whatever came back first and got an ARCHIVED product another probe had retired —
+   * `yard_empties` excludes those, correctly, so every yard read came back undefined and every
+   * comparison was NaN → NaN. A locator that can select something the reader will not return is the
+   * same class of fault as a probe that cannot fail.
+   */
   const { data: shapes } = await admin
     .from('product_units')
-    .select('id, products!inner(name, store_id)')
+    .select('id, products!inner(name, store_id, status)')
     .eq('is_returnable', true)
     .eq('products.store_id', storeId)
+    .eq('products.status', 'active')
     .limit(1);
   const shape = (shapes ?? [])[0];
   check('there is a returnable shape to send back', Boolean(shape), shape?.products?.name);

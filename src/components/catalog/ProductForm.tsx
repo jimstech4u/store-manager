@@ -219,8 +219,15 @@ export function ProductForm({
    * nothing on an item whose shapes are all untick ed cannot record any opening stock at all, and
    * silently having no stock is the failure this section exists to prevent.
    */
-  const countedShapes = units.some((u) => u.isCounted)
-    ? units.filter((u) => u.isCounted)
+  /*
+   * EVERY SHAPE GETS A BOX.
+   *
+   * This filtered on `is_counted` and fell back to all shapes when nothing was ticked. The tick is
+   * gone — a shape exists because the shop has a word for it, and anything it has a word for it can
+   * count — so the fallback is the whole rule. Named shapes only: a half-typed row has no word yet.
+   */
+  const countedShapes = units.some((u) => u.name.trim() !== '')
+    ? units.filter((u) => u.name.trim() !== '')
     : units;
 
   /** And the shapes that come back empty — a crate and a bottle answer separately. */

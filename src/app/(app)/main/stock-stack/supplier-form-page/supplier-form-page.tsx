@@ -91,16 +91,13 @@ export default function SupplierFormPage() {
     for (const [productId, shapes] of byProduct) {
       for (const sh of shapes) {
         /*
-         * THE SHAPE IT ARRIVES IN, not every shape that comes back.
+         * EVERY SHAPE THAT COMES BACK.
          *
-         * A brewery delivers in crates and takes crates back on the same lorry. It has never seen
-         * the bottles on their own, so offering "Goldberg bottles" on a supplier's opening position
-         * is asking a question the shop cannot answer about a party that does not deal in them.
-         *
-         * The customer side asks the opposite question and uses `isCounted` — see
-         * `customer-form-page`.
+         * This required `is_bought` while the customer side required `is_counted` — two different
+         * answers to one question. Counting stopped being a tick, and the shop's rule is the plain
+         * one: empties, wherever they are asked about, are the shapes that come back.
          */
-        if (!sh.isReturnable || !sh.isBought) continue;
+        if (!sh.isReturnable) continue;
         out.push({
           productUnitId: sh.productUnitId,
           label: `${named.get(productId) ?? 'Item'} ${sh.plural.toLowerCase()}`,
