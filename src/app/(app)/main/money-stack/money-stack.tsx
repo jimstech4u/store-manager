@@ -5,6 +5,15 @@ import MoneyPage from './money-page/money-page';
 import SalesPage from './sales-page/sales-page';
 import StatementPage from './statement-page/statement-page';
 import ReportsPage from './reports-page/reports-page';
+/*
+ * MONEY GOING OUT — the other half of "how did we do".
+ *
+ * Every way money could leave was attached to something the shop bought or somebody it owed, so
+ * takings read as profit. Reached from a floating pill on the money screen, the way Take payment is
+ * reached from the till and Count from Stock.
+ */
+import ExpensesPage from './expenses-page/expenses-page';
+import ExpensePage from './expense-page/expense-page';
 // The same receipt screen the sell stack pushes. Registered here too so a past receipt opens
 // inside Money's own stack, keeping its back button pointing at the sales list.
 import ReceiptPage from '../sell-stack/receipt-page/receipt-page';
@@ -29,6 +38,8 @@ const navLink = {
   // The correction offers to name a walk-in, and pushes the real form to do it.
   customer_form_page: CustomerFormPage,
   reports_page: ReportsPage,
+  expenses_page: ExpensesPage,
+  expense_page: ExpensePage,
   account_action_page: AccountActionPage,
 };
 

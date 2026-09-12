@@ -10,9 +10,11 @@ import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
 import { InfoPanel } from '@/components/ui/Explain';
 import { FilterBar } from '@/components/ui/FilterBar';
+import { FloatingAction } from '@/components/ui/FloatingAction';
+import { usePermission } from '@/hooks/usePermission';
 import { customPeriod, resolvePeriod, type Period } from '@/lib/stacks/periods';
 import { salesSummary, type SalesSummary } from '@/lib/stacks/report-readers';
-import { ChartIcon, ChevronRightIcon, ReceiptIcon } from '@/components/ui/Icon';
+import { CashIcon, ChartIcon, ChevronRightIcon, ReceiptIcon } from '@/components/ui/Icon';
 import { useAuth } from '@/providers/AuthProvider';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useListChannel } from '@/hooks/useListChannel';
@@ -56,6 +58,8 @@ export default function MoneyPage() {
    * Not defaulted in the browser: "this month" has to mean the shop's calendar month in the shop's
    * timezone, and a till phone that is a day out would quietly summarise the wrong month.
    */
+  const { can } = usePermission();
+
   const [period, setPeriod] = useState<Period | null>(null);
   const [trading, setTrading] = useState<SalesSummary | null>(null);
 
@@ -430,6 +434,25 @@ export default function MoneyPage() {
       */}
 
       {/* ── The receipt behind one line ─────────────────────────────────────────── */}
+
+      {/*
+        MONEY GOING OUT, reached the way Take payment is reached from the till.
+
+        «expense that we forgot business do have ... the entry is a floating button in money page
+         just like take payment, count button float buttons»
+
+        This screen is about money owed TO the shop; what the shop spends is the other half of the
+        same question and belongs one tap away rather than buried in a menu. A floating pill is the
+        one control on this site that legitimately floats, because it leads somewhere else rather
+        than committing the list underneath it.
+      */}
+      {can('expenses.record') && (
+        <FloatingAction
+          label="Money out"
+          icon={<CashIcon />}
+          onClick={() => void nav.push('expenses_page')}
+        />
+      )}
     </PageScaffold>
   );
 }

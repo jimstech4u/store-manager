@@ -40,6 +40,14 @@ export const PERMISSIONS = [
    * person who can make stock disappear must not also be the person who decides who pays for it.
    */
   'staff.charge',
+  /*
+   * Record money the shop spends — rent, fuel, transport, wages (0137).
+   *
+   * Owner and manager. A seller who may take a payment has no reason to record the rent, and
+   * reading what the shop spends is gated harder still: `expenses` is readable behind
+   * `reports.view`, because what a business spends is the owner's business.
+   */
+  'expenses.record',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -65,6 +73,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'records.confirm',
     'reports.view',
     'staff.charge',
+    'expenses.record',
   ],
 
   // Staff deliberately lack records.confirm: they can create a product or customer mid-sale so
