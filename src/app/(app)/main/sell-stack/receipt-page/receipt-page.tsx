@@ -60,12 +60,7 @@ export default function ReceiptPage() {
         is the way to act on it without hunting for the till's own action.
       */
       actions={[
-        {
-          key: 'empties',
-          icon: <ReturnIcon />,
-          onClick: () => void nav.push('empties_page'),
-          ariaLabel: 'Containers still to come back',
-        },
+        
       ]}
     >
       {fresh && (

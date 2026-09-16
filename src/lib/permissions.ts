@@ -48,6 +48,13 @@ export const PERMISSIONS = [
    * `reports.view`, because what a business spends is the owner's business.
    */
   'expenses.record',
+  /*
+   * Change a shelf count after it has been entered (0145).
+   *
+   * A day's count is said once. Owner and manager may correct it, with a reason, and the change is
+   * kept beside the original — for the same reason as `variance.resolve`.
+   */
+  'counts.correct',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -74,6 +81,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'reports.view',
     'staff.charge',
     'expenses.record',
+    'counts.correct',
   ],
 
   // Staff deliberately lack records.confirm: they can create a product or customer mid-sale so

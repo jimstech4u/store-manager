@@ -12,6 +12,10 @@ import { accountsChanged } from '@/lib/stacks/customer-account';
 import { stockMoved } from '@/lib/stacks/catalog-stack';
 import { useListNotifier } from '@/hooks/useListChannel';
 import { formatMoney, messageOf } from '@/lib/format';
+import { useSellingUnits } from '@/lib/stacks/selling-units';
+import { useUncountedToday } from '@/lib/stacks/count-gate';
+import { useLiveRefresh } from '@/hooks/useLiveRefresh';
+import { useNav } from '@academix-admin/navigation-stack';
 import {
   chargesTotal,
   depositTotal,
@@ -248,6 +252,50 @@ export function TakePayment({
   const towardsOldDebt = Math.min(over, owedBefore);
   const change = Math.max(over - towardsOldDebt, 0);
 
+
+  /*
+   * WHAT ON THIS SALE COMES BACK EMPTY, named the way the line names it.
+   *
+   * Read from the shapes the shop already has loaded store-wide, so it costs no request: a line
+   * sold in a shape marked "comes back empty" is a container somebody must owe.
+   */
+  const { byProduct } = useSellingUnits(storeId);
+
+  /*
+   * NOT COUNTED TODAY, so not sold today.
+   *
+   * The same answer the till and the count page read, asked of the server for the lines on this sale
+   * — so a sale left open overnight is checked against TODAY, not against whenever its items were
+   * added. The sale can be built with uncounted items on it; it cannot be settled.
+   */
+  const nav = useNav();
+  const lineIds = useMemo(() => order.lines.map((l) => l.productId), [order.lines]);
+  const { uncounted, reload: reloadCounts } = useUncountedToday(storeId, lineIds);
+  /*
+   * RE-ASKED WHENEVER THIS PAGE COMES BACK INTO VIEW.
+   *
+   * Another device may have counted the item while this receipt sat open, or the day may have turned
+   * over. The server's answer on resume is the one that counts — never what this device remembered.
+   */
+  useLiveRefresh(nav, reloadCounts);
+  const uncountedNames = useMemo(
+    () =>
+      uncounted.map(
+        (id) => order.lines.find((l) => l.productId === id)?.productName ?? 'An item',
+      ),
+    [uncounted, order.lines],
+  );
+  const comingBack = useMemo(() => {
+    const out: string[] = [];
+    for (const l of order.lines) {
+      if (!l.saleUnitId || !(Number(l.qty) > 0)) continue;
+      const shape = (byProduct.get(l.productId) ?? []).find(
+        (u) => u.productUnitId === l.saleUnitId,
+      );
+      if (shape?.isReturnable) out.push(`${l.productName} ${shape.plural.toLowerCase()}`);
+    }
+    return out;
+  }, [order.lines, byProduct]);
 
   const settle = async () => {
     setBusy(true);
@@ -865,15 +913,54 @@ export function TakePayment({
         back and start again, this offers the action right here — the question has only just
         become relevant, and answering it should not cost them the screen they are on.
       */}
-      {!order.customerId && remaining > 0 && (
+      {/*
+        CONTAINERS NEED SOMEBODY TO BRING THEM BACK.
+
+        «any returnable product in a receipt needs a customer»
+
+        A walk-in leaving with crates used to settle cleanly and the crates vanished from every
+        ledger — there was nobody to owe them to, so nothing was written. The database refuses that
+        now (0142); this says so BEFORE the button, as a condition to fix rather than a failure to
+        dismiss, and offers the fix on the same screen.
+      */}
+      {/*
+        COUNT FIRST. A condition, not a failure: it is true before anything is pressed, and it stays
+        on the page with the way to fix it beside it rather than waiting to be discovered in a dialog.
+      */}
+      {uncounted.length > 0 && (
         <>
-          <InfoPanel tone="warning" title="Who is taking this on credit?">
-            {formatMoney(remaining)} is unpaid, so it needs an account to sit in.
+          <InfoPanel tone="warning" title="Count the shelf before this is sold">
+            {uncountedNames.join(', ')} {uncounted.length === 1 ? 'has' : 'have'} not been counted
+            today. The sale settles once {uncounted.length === 1 ? 'it is' : 'they are'} counted.
           </InfoPanel>
-          <Button variant="secondary" size="large" fullWidth onClick={onNeedCustomer}>
-            Choose a customer
+          <Button
+            variant="secondary"
+            size="large"
+            fullWidth
+            onClick={() => void nav.push('count_gate_page')}
+          >
+            Count {uncounted.length === 1 ? 'it' : 'them'} now
           </Button>
         </>
+      )}
+
+      {!order.customerId && comingBack.length > 0 && (
+        <InfoPanel tone="warning" title="Who is taking the containers?">
+          {comingBack.join(', ')} {comingBack.length === 1 ? 'comes' : 'come'} back empty, so this
+          sale needs a customer to owe {comingBack.length === 1 ? 'it' : 'them'}.
+        </InfoPanel>
+      )}
+
+      {!order.customerId && remaining > 0 && (
+        <InfoPanel tone="warning" title="Who is taking this on credit?">
+          {formatMoney(remaining)} is unpaid, so it needs an account to sit in.
+        </InfoPanel>
+      )}
+
+      {!order.customerId && (remaining > 0 || comingBack.length > 0) && (
+        <Button variant="secondary" size="large" fullWidth onClick={onNeedCustomer}>
+          Choose a customer
+        </Button>
       )}
       {/*
         The action ends the page rather than being pinned to its foot.
@@ -889,7 +976,10 @@ export function TakePayment({
           fullWidth
           busy={busy}
           busyLabel="Recording"
-          disabled={!order.customerId && paid < total}
+          disabled={
+            uncounted.length > 0 ||
+            (!order.customerId && (paid < total || comingBack.length > 0))
+          }
           onClick={settle}
         >
           {paid >= total

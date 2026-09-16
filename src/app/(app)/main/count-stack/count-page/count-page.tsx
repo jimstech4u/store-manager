@@ -1,8 +1,9 @@
 'use client';
 
+import { useMemo } from 'react';
 import styles from './count-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
-import { Button } from '@/components/ui/Button';
+import { FloatingAction } from '@/components/ui/FloatingAction';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { PlusIcon } from '@/components/ui/Icon';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
@@ -10,7 +11,7 @@ import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
 import { useNav } from '@academix-admin/navigation-stack';
 import { InfoPanel } from '@/components/ui/Explain';
-import { ClipboardCheckIcon } from '@/components/ui/Icon';
+import { CheckIcon, ClipboardCheckIcon } from '@/components/ui/Icon';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -18,6 +19,8 @@ import { searchProducts, useProductList, type Product } from '@/lib/stacks/catal
 import { useListChannel } from '@/hooks/useListChannel';
 import { formatQty, pluralUnit } from '@/lib/format';
 import { stockInShapes, useSellingUnits } from '@/lib/stacks/selling-units';
+import { countedByWords, useTodaysCounts } from '@/lib/stacks/count-gate';
+import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 
 /**
  * The stock count — CRODS.
@@ -74,6 +77,19 @@ export default function CountPage() {
    */
   useListChannel<Product>('products', browse.items, browse.setItems);
   const products = browse.products;
+
+  /*
+   * WHICH OF THESE ARE ALREADY COUNTED TODAY, and by whom.
+   *
+   * A day's count is said once. Marking the rows means nobody walks to a shelf the till already
+   * counted this morning — and re-asked on resume, because that till may have counted it since.
+   */
+  const productIds = useMemo(() => products.map((p) => p.id), [products]);
+  const { byProduct: todays, reload: reloadTodays } = useTodaysCounts(
+    store?.id ?? null,
+    productIds,
+  );
+  useLiveRefresh(nav, reloadTodays);
 
 
   if (!store) return null;
@@ -133,26 +149,6 @@ export default function CountPage() {
         your records say it should be.
       </InfoPanel>
 
-      {/*
-        THE YARD IS COUNTED ON THE SAME WALK.
-
-        The empties are stock too — a crate is worth money and it is the only part that comes back —
-        and until now the only way to count one was the product form, once, when an item was first
-        created. So the counts a shop had entered sat unreachable and the yard reported the
-        movements alone: minus four and a half thousand Goldberg crates, in a shop that has never
-        been short of one.
-
-        Secondary, because the shelf is the job on this screen and the yard is the other half of it.
-      */}
-      <div className={styles.yardLink}>
-        <Button
-          variant="secondary"
-          fullWidth
-          onClick={() => void nav.push('yard_page')}
-        >
-          <ClipboardCheckIcon /> Your yard — the empties standing here
-        </Button>
-      </div>
 
       <SearchLauncher
         label="Find a product to count"
@@ -217,11 +213,16 @@ export default function CountPage() {
               >
                 <span className={styles.rowMain}>
                   <span className={styles.rowName}>{p.name}</span>
-                  <span className={styles.rowMeta}>
-                    records say {saidAs(p)}
-                  </span>
+                  {todays.get(p.id) ? (
+                    <span className={`${styles.rowMeta} ${styles.rowCounted}`}>
+                      Counted today {countedByWords(todays.get(p.id)!)}
+                      {todays.get(p.id)!.edits > 0 ? ' · corrected' : ''}
+                    </span>
+                  ) : (
+                    <span className={styles.rowMeta}>records say {saidAs(p)}</span>
+                  )}
                 </span>
-                <ClipboardCheckIcon />
+                {todays.get(p.id) ? <CheckIcon /> : <ClipboardCheckIcon />}
               </button>
             </li>
           ))}
@@ -229,6 +230,18 @@ export default function CountPage() {
       )}
 
       {/* ── Counting sheet ──────────────────────────────────────────────────────── */}
+
+      {/*
+        THE YARD, as a floating button — the same gesture as Count on the stock screen.
+
+        It was a full-width button between the notice and the list, which pushed the list the shop came
+        to work down further off the screen. The shelf is this page's job; the yard is one tap away.
+      */}
+      <FloatingAction
+        label="Your yard"
+        icon={<ClipboardCheckIcon />}
+        onClick={() => void nav.push('yard_page')}
+      />
     </PageScaffold>
   );
 }

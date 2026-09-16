@@ -9,6 +9,7 @@ import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { useDemandState } from '@academix-admin/state-stack';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatDateTime, formatMoney, formatQty, pluralUnit, messageOf } from '@/lib/format';
+import { owedRowsFromReceipt, rollUpOwed } from '@/lib/empties-rollup';
 import { renderReceiptCanvas, renderReceiptImage, shareImage, shareLink } from '@/lib/share';
 import { receiptPdf, sharePdf } from '@/lib/pdf';
 import { appUrl } from '@/lib/app-url';
@@ -35,7 +36,8 @@ interface SaleDetail {
   /** Named additions to the bill — transport, loading — each answerable on its own. */
   charges: { label: string; amount: string }[];
   /** What the customer still holds of the shop's, per pool, after this sale. */
-  empties: { category: string; qty: string; held: string }[];
+  /** What this receipt sent out, one row per product shape (0140). Rolled up for printing. */
+  empties: unknown;
   lines: {
     id: string;
     product_name: string;
@@ -165,7 +167,15 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
     return <FullPageMessage title="Preparing the receipt" tone="loading" />;
   }
 
-  const { sale, customer, lines, payments, charges, empties, corrected } = detail;
+  const { sale, customer, lines, payments, charges, corrected } = detail;
+  /*
+   * STILL WITH YOU, said the way the counter says it.
+   *
+   * Whole ones add across a maker, parts stay with their product: 3½ Gulder and 5½ Goldberg is
+   * "8 NBL crates, ½ Gulder crate, ½ Goldberg crate". Applied here, on the rows this receipt sent
+   * out, by the same function the empties pages use — so paper and screen cannot disagree.
+   */
+  const stillWithYou = rollUpOwed(owedRowsFromReceipt(detail.empties));
   const paid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
   const owing = Number(sale.total) - paid;
   const width = settings?.width ?? 80;
@@ -212,12 +222,12 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
       ...(owing > 0 ? [{ label: 'Balance', value: formatMoney(owing), strong: true }] : []),
       // What the customer still holds of the shop's. The crates are the half of an account that
       // gets disputed, precisely because nobody has anything in writing about them.
-      ...((empties ?? []).length > 0
+      ...(stillWithYou.length > 0
         ? [{ label: 'Still with you', value: '', strong: true }]
         : []),
-      ...(empties ?? []).map((e) => ({
-        label: e.category,
-        value: `${formatQty(e.qty)}${Number(e.held) > 0 ? ` (${formatMoney(e.held)} held)` : ''}`,
+      ...stillWithYou.map((e) => ({
+        label: `${e.label} ${e.unit.toLowerCase()}`,
+        value: e.said,
       })),
     ],
     note: sale.note,
@@ -344,18 +354,17 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
           the containers are the half that gets disputed, because nobody has anything in writing
           about them.
         */}
-        {(empties ?? []).length > 0 && (
+        {stillWithYou.length > 0 && (
           <div className={styles.totals}>
             <div className={styles.row}>
               <span className={styles.emptiesHead}>Still with you</span>
             </div>
-            {empties.map((e) => (
-              <div className={styles.row} key={e.category}>
-                <span>{e.category}</span>
-                <span className={styles.value}>
-                  {formatQty(e.qty)}
-                  {Number(e.held) > 0 ? ` · ${formatMoney(e.held)} held` : ''}
+            {stillWithYou.map((e) => (
+              <div className={styles.row} key={`${e.label}-${e.unit}-${e.isPart}`}>
+                <span>
+                  {e.label} {e.unit.toLowerCase()}
                 </span>
+                <span className={styles.value}>{e.said}</span>
               </div>
             ))}
           </div>

@@ -14,6 +14,8 @@ import ReportsPage from './reports-page/reports-page';
  */
 import ExpensesPage from './expenses-page/expenses-page';
 import ExpensePage from './expense-page/expense-page';
+// Choosing a date range — a page, because nothing is typed inside a bottom sheet.
+import PeriodPage from './period-page/period-page';
 // The same receipt screen the sell stack pushes. Registered here too so a past receipt opens
 // inside Money's own stack, keeping its back button pointing at the sales list.
 import ReceiptPage from '../sell-stack/receipt-page/receipt-page';
@@ -40,6 +42,7 @@ const navLink = {
   reports_page: ReportsPage,
   expenses_page: ExpensesPage,
   expense_page: ExpensePage,
+  period_page: PeriodPage,
   account_action_page: AccountActionPage,
 };
 

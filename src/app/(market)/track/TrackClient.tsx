@@ -8,6 +8,7 @@ import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatMoney, formatQty, messageOf } from '@/lib/format';
+import { owedRowsFromReceipt, rollUpOwed } from '@/lib/empties-rollup';
 import styles from './track.module.css';
 
 /**
@@ -46,8 +47,11 @@ interface TrackedOrder {
    * when the crates do, which is precisely why it has to be named rather than absorbed.
    */
   deposit_total?: string;
-  /** What is still out, grouped the way a shop counts it: by category, not by brand. */
-  empties?: { category: string; qty: string; deposit: string }[];
+  /**
+   * Containers that come back, one row per product shape with its maker (0141) — what a paid order
+   * sent out, or what an open one is about to. Rolled up on the page with the counter's rule.
+   */
+  empties?: unknown;
   total: string;
 }
 
@@ -357,6 +361,38 @@ export function TrackClient({ initialToken }: { initialToken?: string } = {}) {
             )}
 
             {/*
+              THE CONTAINERS, said the way the counter says them.
+
+              Whole ones add across a maker and parts stay with their product: 3½ Gulder and
+              5½ Goldberg is "8 NBL crates, ½ Gulder crate, ½ Goldberg crate". The same function
+              prints the receipt and fills the empties pages, so the link, the paper and the shop's
+              screen cannot disagree. Shown while the order is being built too — a customer should
+              see the crates they are taking home before they leave with them.
+            */}
+            {order.status !== 'cancelled' &&
+              (() => {
+                const comingBack = rollUpOwed(owedRowsFromReceipt(order.empties));
+                if (comingBack.length === 0) return null;
+                return (
+                  <>
+                    <div className={styles.line}>
+                      <span className={styles.lineName}>
+                        {order.status === 'settled' ? 'Still with you' : 'Comes back empty'}
+                      </span>
+                    </div>
+                    {comingBack.map((e) => (
+                      <div className={styles.line} key={`${e.label}-${e.unit}-${e.isPart}`}>
+                        <span className={styles.lineName}>
+                          {e.label} {e.unit.toLowerCase()}
+                        </span>
+                        <span className={styles.lineTotal}>{e.said}</span>
+                      </div>
+                    ))}
+                  </>
+                );
+              })()}
+
+            {/*
               Once paid for, this IS the receipt.
 
               What is outstanding matters more here than anywhere: somebody who paid part of it in
@@ -375,32 +411,6 @@ export function TrackClient({ initialToken }: { initialToken?: string } = {}) {
                     <span>{formatMoney(Number(order.total) - Number(order.paid ?? 0))}</span>
                   </div>
                 )}
-                {/*
-                  WHAT THE CUSTOMER IS STILL HOLDING.
-
-                  Netted, so somebody who has already brought some back sees what is left rather
-                  than the number they originally left with. The deposit is shown only where one
-                  was actually taken — containers sent out on trust are still owed back, and "₦0
-                  held" beside them reads like nothing is owed at all.
-                */}
-                {(order.empties ?? []).length > 0 && (
-                  <>
-                    <div className={styles.line}>
-                      <span className={styles.lineName}>Still to come back</span>
-                    </div>
-                    {(order.empties ?? []).map((e, i) => (
-                      <div className={styles.line} key={`${e.category}-${i}`}>
-                        <span className={styles.lineName}>
-                          {formatQty(e.qty)} {e.category}
-                        </span>
-                        {Number(e.deposit) > 0 && (
-                          <span className={styles.lineTotal}>{formatMoney(e.deposit)} held</span>
-                        )}
-                      </div>
-                    ))}
-                  </>
-                )}
-
                 <p className={styles.settled}>
                   Paid for on {new Date(order.updated_at).toLocaleDateString()}. This is your
                   receipt — keep the link.

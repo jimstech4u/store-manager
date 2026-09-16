@@ -7,13 +7,12 @@ import { PageScaffold } from '@/components/ui/PageScaffold';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { Explain, InfoPanel } from '@/components/ui/Explain';
-import { BottomSheet } from '@/components/ui/BottomSheet';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { settingsChanged, SETTINGS_SCOPE } from '@/lib/stacks/bank-accounts';
 import { getSupabase } from '@/lib/supabase/client';
 import styles from './staff-invite-page.module.css';
-import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
+import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/components/ui/Dialog';
 import { messageOf } from '@/lib/format';
 
 /**
@@ -171,6 +170,8 @@ export default function StaffInvitePage() {
     if (!local || !reference.domain) return null;
     return `${local}@${reference.domain}.sm`;
   }, [firstName, lastName, reference.domain]);
+
+  const addedDialog = useConfirm();
 
   if (!store) return null;
 
@@ -393,34 +394,26 @@ export default function StaffInvitePage() {
         the address is the one thing the admin cannot get back by any other route on this screen —
         losing it to a mis-swipe means going to the team list to look it up.
       */}
-      <BottomSheet
-        open={done !== null}
-        onClose={addAnother}
-        title="Added"
-        dismissible={false}
-        footer={
-          <div className={styles.sheetActions}>
-            <Button variant="secondary" onClick={addAnother}>
-              Add another
-            </Button>
-            <Button onClick={() => void nav.pop()}>Back to the team</Button>
-          </div>
-        }
-      >
-        <InfoPanel tone="success" title="Their login">
-          <p className={styles.credential}>{done?.email}</p>
-          <p>
-            Give them this address and the password you chose. They will be asked to pick their own
-            password the first time they sign in.
-          </p>
-        </InfoPanel>
-
-        {done?.warning && (
-          <InfoPanel tone="warning" title="One thing did not save">
-            {done.warning}
-          </InfoPanel>
-        )}
-      </BottomSheet>
+      {/*
+        THE RESULT IS A MESSAGE, so it is a dialog (DialogViewer) — not a bottom sheet. Mounted only
+        while there is something to say, because `ConfirmDialog` opens itself on mount.
+      */}
+      {done && (
+        <ConfirmDialog
+          controller={addedDialog}
+          title="Added"
+          message={
+            `Their login is ${done.email}. Give them this address and the password you chose — ` +
+            'they will be asked to pick their own the first time they sign in.' +
+            (done.warning ? ` One thing did not save: ${done.warning}` : '')
+          }
+          confirmText="Back to the team"
+          cancelText="Add another"
+          tone="primary"
+          onDismiss={addAnother}
+          onConfirm={() => void nav.pop()}
+        />
+      )}
     </PageScaffold>
   );
 }

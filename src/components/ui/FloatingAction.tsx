@@ -1,7 +1,8 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { useNavBarState } from '@/providers/NavBarState';
+import { useScrollbarGutter } from '@/hooks/useScrollbarGutter';
 import styles from './FloatingAmount.module.css';
 
 /**
@@ -32,6 +33,13 @@ export function FloatingAction({
   disabled?: boolean;
 }) {
   const bar = useNavBarState();
+  /*
+   * Clear the page's scrollbar as well as the edge. A page slides in with a transform, which makes
+   * its scroll box — scrollbar included — the thing `right` is measured from; without this the pill
+   * sat on top of the scrollbar on a desktop browser. 0 on a phone, where scrollbars take no width.
+   */
+  const pillRef = useRef<HTMLButtonElement>(null);
+  const gutter = useScrollbarGutter(pillRef);
 
   /*
    * Clear the bar while it is showing; take its place once it has gone.
@@ -46,7 +54,9 @@ export function FloatingAction({
     <button
       type="button"
       className={`${styles.pill} ${disabled ? styles.disabled : ''}`}
+      ref={pillRef}
       style={{
+        right: `calc(var(--space-4) + ${gutter}px)`,
         bottom: clearsBar
           ? `calc(16px + ${barHeight} + env(safe-area-inset-bottom, 0px))`
           : 'calc(16px + env(safe-area-inset-bottom, 0px))',

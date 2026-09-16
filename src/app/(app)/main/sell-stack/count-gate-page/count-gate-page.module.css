@@ -1,47 +1,44 @@
-/*
- * The same composer as the empties on a new customer — one form, a picker for WHAT, one box for HOW
- * MANY, and what has been added listed above. Copied rather than shared because the two pages ask
- * different questions about the same kind of line, and a shared stylesheet between two pages in two
- * stacks is a coupling nobody would think to check before changing one.
- */
+.lead {
+  margin: 0 0 var(--space-4);
+  color: var(--text);
+}
 
-/* How the yard is being counted. The active one is the shop's own colour. */
-.tabs {
+.list {
+  list-style: none;
   display: flex;
-  gap: var(--space-1);
-  margin: var(--space-4) 0 var(--space-2);
-  padding: var(--space-1);
-  border-radius: var(--radius);
-  background: var(--surface-sunk, var(--surface));
-  border: 1px solid var(--border);
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-4);
+  padding: 0;
 }
 
-.tab {
+.row {
+  margin: 0;
+}
+
+/* Two actions, side by side: carry on, or record what is there. Neither is hidden — a seller with
+   a customer waiting must be able to see the way past without hunting for it. */
+.actions {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.actions > * {
   flex: 1;
-  min-width: 0;
-  padding: var(--space-2) var(--space-3);
-  border: none;
-  border-radius: calc(var(--radius) - 2px);
-  background: none;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: var(--text-sm);
-  cursor: pointer;
 }
 
-.tabOn {
-  background: var(--primary, #0b6252);
-  color: var(--primary-text);
-  font-weight: 600;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 12%);
+/* The actions END the page rather than sitting at a sheet's foot — see CLAUDE.md. */
+.pageActions {
+  display: flex;
+  gap: var(--space-3);
+  margin: var(--space-5) 0 var(--space-4);
 }
 
-.lede {
-  margin: 0 0 var(--space-3);
-  font-size: var(--text-sm);
-  color: var(--text-muted);
+.pageActions > * {
+  flex: 1;
 }
 
+/* ── The composer — the same shape as the yard count and a new customer's empties ── */
 .lineList {
   list-style: none;
   margin: 0 0 var(--space-3);
@@ -63,10 +60,6 @@
 
 .lineRow + .lineRow {
   border-top: 1px solid var(--border);
-}
-
-.lineKind {
-  color: var(--text-muted);
 }
 
 .lineRemove {
@@ -99,11 +92,6 @@
   cursor: pointer;
 }
 
-.addLine:disabled {
-  color: var(--text-muted);
-  cursor: default;
-}
-
 .composer {
   display: grid;
   gap: var(--space-3);
@@ -114,9 +102,29 @@
   background: var(--surface);
 }
 
+.composerHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
 .composerWho {
   margin: 0;
+  min-width: 0;
   font-weight: 700;
+}
+
+.composerSwitch {
+  flex: none;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .composerWhy {
@@ -177,12 +185,22 @@
   color: var(--text-muted);
 }
 
-.pickNone {
-  margin: var(--space-3) 0;
-  color: var(--text-muted);
+/* ── What on this sale is already counted, and by whom ─────────────────────────────── */
+.counted {
+  margin-top: var(--space-4);
 }
 
-/* The action ENDS the page rather than being pinned to its foot — see CLAUDE.md. */
-.actions {
-  margin: var(--space-5) 0 var(--space-4);
+.countedHead {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-base);
+}
+
+.countedText {
+  min-width: 0;
+}
+
+.countedWho {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
 }

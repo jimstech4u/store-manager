@@ -1,0 +1,10 @@
+.fields {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-2) 0 var(--space-4);
+}
+
+/* The action ENDS the page rather than being pinned to its foot — see CLAUDE.md. */
+.actions {
+  margin: var(--space-5) 0 var(--space-4);
+}

@@ -5,7 +5,6 @@ import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
-import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Explain, InfoPanel } from '@/components/ui/Explain';
 import { PlusIcon, TrashIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -15,7 +14,7 @@ import { settingsChanged, SETTINGS_SCOPE } from '@/lib/stacks/bank-accounts';
 import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
 import styles from './staff-page.module.css';
-import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
+import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/components/ui/Dialog';
 import { messageOf } from '@/lib/format';
 
 /**
@@ -109,6 +108,7 @@ export default function StaffPage() {
 
   const problem = useProblem();
 
+  const removeDialog = useConfirm();
   const [confirmRemove, setConfirmRemove] = useState<Member | null>(null);
 
   const load = useCallback(async () => {
@@ -389,56 +389,44 @@ export default function StaffPage() {
         </>
       )}
 
-      <BottomSheet
-        open={confirmRemove !== null}
-        onClose={() => setConfirmRemove(null)}
-        title={`Remove ${confirmRemove?.email ?? ''}?`}
-        footer={
-          <div className={styles.sheetActions}>
-            <Button variant="secondary" onClick={() => setConfirmRemove(null)}>
-              Keep them
-            </Button>
-            <Button
-              variant="danger"
-              onClick={async () => {
-                if (!confirmRemove) return;
-                try {
-                  const { error: e } = await getSupabase().rpc('remove_member', {
-                    p_store_id: store.id,
-                    p_user_id: confirmRemove.user_id,
-                  });
-                  if (e) throw e;
-
-                  /*
-                   * Taken out of the list here, rather than re-reading the team.
-                   *
-                   * `load()` fetched every member again to learn one had gone — a round trip for
-                   * something this device had just done, with the old list on screen until it
-                   * landed.
-                   */
-                  setSnapshot({
-                    ...snapshotRef.current,
-                    members: snapshotRef.current.members.filter(
-                      (m) => m.user_id !== confirmRemove.user_id,
-                    ),
-                  });
-                  setConfirmRemove(null);
-                } catch (e) {
-                  problem.show(messageOf(e, 'They could not be removed.'));
-                  setConfirmRemove(null);
-                }
-              }}
-            >
-              Remove them
-            </Button>
-          </div>
-        }
-      >
-        <p>
-          They lose access to this shop immediately. Everything they recorded stays exactly as it
-          is — sales, payments and counts keep their name on them.
-        </p>
-      </BottomSheet>
+      {/*
+        A CONFIRMATION IS A DIALOG (DialogViewer), not a bottom sheet — and mounted only while it is
+        being asked, because `ConfirmDialog` opens itself on mount.
+      */}
+      {confirmRemove && (
+        <ConfirmDialog
+          controller={removeDialog}
+          title={`Remove ${confirmRemove.email}?`}
+          message={
+            'They lose access to this shop immediately. Everything they recorded stays exactly as ' +
+            'it is — sales, payments and counts keep their name on them.'
+          }
+          confirmText="Remove them"
+          cancelText="Keep them"
+          tone="danger"
+          onDismiss={() => setConfirmRemove(null)}
+          onConfirm={() => {
+            const target = confirmRemove;
+            setConfirmRemove(null);
+            void (async () => {
+              try {
+                const { error: e } = await getSupabase().rpc('remove_member', {
+                  p_store_id: store.id,
+                  p_user_id: target.user_id,
+                });
+                if (e) throw e;
+                // Taken out of the list here: this device knows exactly who went.
+                setSnapshot({
+                  ...snapshotRef.current,
+                  members: snapshotRef.current.members.filter((m) => m.user_id !== target.user_id),
+                });
+              } catch (e) {
+                problem.show(messageOf(e, 'They could not be removed.'));
+              }
+            })();
+          }}
+        />
+      )}
     </PageScaffold>
   );
 }

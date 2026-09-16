@@ -258,3 +258,33 @@
   font-size: var(--text-sm);
   color: var(--text-muted);
 }
+
+/*
+ * Which unit a maker's amount is in — shown only when the maker comes back in more than one.
+ * Small, because it qualifies the box below it rather than competing with it; the chosen one is the
+ * shop's own colour, like every active choice on the site.
+ */
+.unitChoice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-2);
+}
+
+.unitChip {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.unitChipOn {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-text);
+  font-weight: 600;
+}

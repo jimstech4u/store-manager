@@ -323,20 +323,36 @@ export function PhotoUpload({
               with everything else in your shop.
             </p>
 
-            <label className={styles.toggle}>
-              <input
-                type="checkbox"
-                checked={keepBackground}
-                onChange={toggleBackground}
+            {/*
+              A CHOICE BETWEEN TWO BUTTONS, not a tick box.
+
+              This was a checkbox inside the sheet, and nothing that takes input lives in a bottom
+              viewer. Two buttons say both outcomes out loud — which a tick box never did — and the
+              chosen one is the shop's own colour, like every other active choice on the site.
+            */}
+            <div className={styles.bgChoice} role="group" aria-label="The background">
+              <button
+                type="button"
+                aria-pressed={!keepBackground}
+                className={`${styles.bgOption} ${!keepBackground ? styles.bgOptionOn : ''}`}
+                onClick={() => keepBackground && toggleBackground()}
                 disabled={working}
-              />
-              <span>
-                <strong>Keep the background</strong>
-                <span className={styles.toggleNote}>
-                  Tick this if part of the item was rubbed out, or if where it is standing matters.
-                </span>
-              </span>
-            </label>
+              >
+                White background
+              </button>
+              <button
+                type="button"
+                aria-pressed={keepBackground}
+                className={`${styles.bgOption} ${keepBackground ? styles.bgOptionOn : ''}`}
+                onClick={() => !keepBackground && toggleBackground()}
+                disabled={working}
+              >
+                Keep the background
+              </button>
+            </div>
+            <p className={styles.toggleNote}>
+              Keep it if part of the item was rubbed out, or if where it is standing matters.
+            </p>
 
             {!keepBackground && !pending.backgroundRemoved && (
               <InfoPanel tone="info" title="The background was left as it was">

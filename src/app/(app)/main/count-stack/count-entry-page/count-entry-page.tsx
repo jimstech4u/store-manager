@@ -16,6 +16,10 @@ import { leadUnit, stockInShapes, useSellingUnits, type SellingUnit } from '@/li
 import { countYard, useYard } from '@/lib/stacks/yard';
 import styles from '../count-page/count-page.module.css';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
+import { CountedToday } from '@/components/stock/CountedToday';
+import { useLiveRefresh } from '@/hooks/useLiveRefresh';
+import { usePermission } from '@/hooks/usePermission';
+import { countsChanged, useTodaysCounts } from '@/lib/stacks/count-gate';
 
 /**
  * Counting one product: a PAGE, not a sheet.
@@ -130,10 +134,18 @@ export default function CountEntryPage() {
    * pile of NBL crates cannot say how many of them last held Goldberg, and a box demanding the
    * split would be collecting a guess and recording it as a count.
    */
+  /*
+   * AN ITEM WITH A MAKER IS COUNTED UNDER THAT MAKER — always, not only once somebody has.
+   *
+   * This used to skip the empties box only after a maker count existed, so until the first walk of
+   * the yard a Goldberg count asked for empty Goldberg crates — and the yard screen then counted the
+   * same crates again under NBL. By maker and item by item do not overlap: a crate is a crate
+   * whatever was in it last, so only items that belong to NO maker are asked about here.
+   */
   const countedByMaker = useMemo(() => {
     const out = new Map<string, string>();
     for (const y of yardRows) {
-      if (y.countedGrain === 'group' && y.groupName) out.set(y.productUnitId, y.groupName);
+      if (y.groupId && y.groupName) out.set(y.productUnitId, y.groupName);
     }
     return out;
   }, [yardRows]);
@@ -198,6 +210,25 @@ export default function CountEntryPage() {
   const [note, setNote] = useState('');
   const [done, setDone] = useState(false);
 
+  /*
+   * HAS THIS ALREADY BEEN COUNTED TODAY — by anybody, on any device?
+   *
+   * A day's count is said once (0145). The till may have counted it at nine; a second count here at
+   * ten used to overwrite that figure and its counter without a trace. Now the screen asks first, and
+   * an item already counted shows that count — the figure, who said it, when, and any corrections —
+   * instead of empty boxes. Changing it is a correction, by an owner or manager, with a reason.
+   *
+   * Re-asked whenever the page comes back into view: another till may have counted it meanwhile.
+   */
+  const { can } = usePermission();
+  const todayIds = useMemo(() => (productId ? [productId] : []), [productId]);
+  const { byProduct: todays, reload: reloadToday } = useTodaysCounts(store?.id ?? null, todayIds);
+  useLiveRefresh(nav, reloadToday);
+  const today = productId ? todays.get(productId) ?? null : null;
+
+  /* Somebody else's count landed while this one was being typed. Said on the page, not as an error. */
+  const [beaten, setBeaten] = useState<string | null>(null);
+
 
   useEffect(() => {
     void load();
@@ -208,6 +239,59 @@ export default function CountEntryPage() {
   // What the gap is worth at what the stock cost — the figure that makes a variance mean something
   // to a shop owner rather than being a count of bottles.
   const lossValue = active && hasGap ? Math.abs(variance) * Number(active.avgUnitCost) : 0;
+
+  /** What the records say about a counted period, next to what was counted. */
+  const readPeriod = async (periodId: string): Promise<CountState> => {
+    const supabase = getSupabase();
+    const { data: rows, error: rErr } = await supabase
+      .from('stock_periods')
+      .select(
+        'id, opening_qty, receiving_qty, sales_qty, damaged_qty, other_qty,' +
+          ' expected_closing_qty, actual_closing_qty, variance_qty',
+      )
+      .eq('id', periodId)
+      .maybeSingle();
+    if (rErr) throw rErr;
+
+    const { data: within } = await supabase.rpc('variance_within_tolerance', {
+      p_period_id: periodId,
+    });
+
+    const r = rows as unknown as Record<string, string>;
+    return {
+      periodId,
+      opening: Number(r.opening_qty),
+      receiving: Number(r.receiving_qty),
+      sales: Number(r.sales_qty),
+      damaged: Number(r.damaged_qty),
+      other: Number(r.other_qty),
+      expected: Number(r.expected_closing_qty),
+      actual: Number(r.actual_closing_qty),
+      variance: Number(r.variance_qty),
+      withinTolerance: Boolean(within),
+    };
+  };
+
+  /*
+   * COUNTED EARLIER TODAY AND NOT YET CLOSED — so show how it compares, and let it be closed.
+   *
+   * The till counts mid-sale and never closes; the gap is explained here. Re-read when the figure
+   * changes, which is what a correction does.
+   */
+  const todayPeriod = today?.periodStatus === 'open' ? today.periodId : null;
+  const todayFigure = today?.countedBase ?? null;
+  useEffect(() => {
+    if (!todayPeriod || done) return;
+    let live = true;
+    readPeriod(todayPeriod)
+      .then((next) => live && setState(next))
+      .catch(() => {
+        // The card above still says what was counted; the comparison simply is not shown yet.
+      });
+    return () => {
+      live = false;
+    };
+  }, [todayPeriod, todayFigure, done]);
 
   /** Submit the physical count and read back what the records expected. */
   const submitCount = async () => {
@@ -227,7 +311,18 @@ export default function CountEntryPage() {
         // something to do in your head in front of a shelf.
         p_counted: countedBase,
       });
-      if (cErr) throw cErr;
+      if (cErr) {
+        /*
+         * COUNTED FIRST BY SOMEBODY ELSE — while this was being typed. Not a failure: the item is
+         * counted, and the count that stands is shown in place of the boxes.
+         */
+        if ((cErr as { code?: string }).code === '23505') {
+          setBeaten(cErr.message);
+          countsChanged();
+          return;
+        }
+        throw cErr;
+      }
 
       /*
        * AND THE EMPTIES, in the same breath.
@@ -251,33 +346,9 @@ export default function CountEntryPage() {
         });
       }
 
-      const { data: rows, error: rErr } = await supabase
-        .from('stock_periods')
-        .select(
-          'id, opening_qty, receiving_qty, sales_qty, damaged_qty, other_qty,' +
-            ' expected_closing_qty, actual_closing_qty, variance_qty',
-        )
-        .eq('id', periodId)
-        .maybeSingle();
-      if (rErr) throw rErr;
-
-      const { data: within } = await supabase.rpc('variance_within_tolerance', {
-        p_period_id: periodId,
-      });
-
-      const r = rows as unknown as Record<string, string>;
-      setState({
-        periodId: periodId as string,
-        opening: Number(r.opening_qty),
-        receiving: Number(r.receiving_qty),
-        sales: Number(r.sales_qty),
-        damaged: Number(r.damaged_qty),
-        other: Number(r.other_qty),
-        expected: Number(r.expected_closing_qty),
-        actual: Number(r.actual_closing_qty),
-        variance: Number(r.variance_qty),
-        withinTolerance: Boolean(within),
-      });
+      setState(await readPeriod(periodId as string));
+      // The till, Take payment and this screen's own card all re-ask.
+      countsChanged();
     } catch (e: unknown) {
       submitError.show(messageOf(e, 'Could not save the count'));
     } finally {
@@ -328,10 +399,50 @@ export default function CountEntryPage() {
         </InfoPanel>
       )}
 
+      {beaten && !done && (
+        <InfoPanel tone="info" title="Somebody counted this first">
+          {beaten} Their count stands and yours was not saved — nothing else needs doing.
+        </InfoPanel>
+      )}
+
+      {/*
+        COUNTED TODAY: the count that stands, who said it, and every change since. Shown in place of
+        the boxes, because a second count is refused — and a screen that offers one anyway is inviting
+        somebody to do the work twice and then be told no.
+      */}
+      {today && !done && (
+        <CountedToday
+          storeId={store.id}
+          count={today}
+          shapes={shapes}
+          baseUnit={active?.baseUnit}
+        >
+          {can('counts.correct') ? (
+            <Button
+              variant="secondary"
+              fullWidth
+              onClick={() => void nav.push('count_correct_page', { id: productId })}
+            >
+              Correct this count
+            </Button>
+          ) : (
+            <p className={styles.countHint}>
+              A count stands for the day. If it is wrong, an owner or manager can correct it.
+            </p>
+          )}
+        </CountedToday>
+      )}
+
       {done ? (
         <InfoPanel tone="success" title="Counted and closed">
           Tomorrow starts from what you counted, not from what the records guessed.
         </InfoPanel>
+      ) : today && state === null ? (
+        today.periodStatus === 'open' ? null : (
+          <InfoPanel tone="success" title="Counted and closed for today">
+            The next count starts tomorrow, from this figure.
+          </InfoPanel>
+        )
       ) : state === null ? (
         <>
           {/* Only the input. The expected figure is deliberately not shown yet. */}
@@ -436,8 +547,8 @@ export default function CountEntryPage() {
                 .map((u: SellingUnit) => u.plural.toLowerCase())
                 .join(' and ')}{' '}
               are counted as part of{' '}
-              {[...new Set([...countedByMaker.values()])].join(' and ')} in your yard, so there is
-              nothing to enter here.
+              {[...new Set([...countedByMaker.values()])].join(' and ')} — under &ldquo;Your
+              yard&rdquo;, by maker — so there is nothing to enter here.
             </p>
           )}
 
@@ -485,7 +596,7 @@ export default function CountEntryPage() {
 
             <div className={`${styles.crodsRow} ${styles.countedRow}`}>
               <span>
-                <strong>You counted</strong>
+                <strong>{today && !today.countedByYou ? 'Counted' : 'You counted'}</strong>
               </span>
               <span className={styles.crodsValue}>
                 <strong>
@@ -570,6 +681,10 @@ export default function CountEntryPage() {
         {done ? (
           <Button size="large" fullWidth onClick={() => void nav.pop()}>
             Done
+          </Button>
+        ) : today && state === null ? (
+          <Button size="large" fullWidth variant="secondary" onClick={() => void nav.pop()}>
+            Back
           </Button>
         ) : state === null ? (
           <Button

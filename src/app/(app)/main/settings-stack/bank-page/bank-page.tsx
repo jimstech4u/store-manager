@@ -5,7 +5,7 @@ import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
-import { BottomSheet } from '@/components/ui/BottomSheet';
+import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/components/ui/Dialog';
 import { Explain, InfoPanel } from '@/components/ui/Explain';
 import { EditIcon, PlusIcon, StarIcon, TrashIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -52,6 +52,8 @@ export default function BankPage() {
   const loading = !settled;
 
   const [confirmRemove, setConfirmRemove] = useState<Account | null>(null);
+  const removeDialog = useConfirm();
+  const problem = useProblem();
 
   /*
    * Nothing reloads after a write any more.
@@ -167,41 +169,43 @@ export default function BankPage() {
         </InfoPanel>
       )}
 
-      <BottomSheet
-        open={confirmRemove !== null}
-        onClose={() => setConfirmRemove(null)}
-        title="Remove this account?"
-        footer={
-          <div className={styles.sheetActions}>
-            <Button variant="secondary" onClick={() => setConfirmRemove(null)}>
-              Keep it
-            </Button>
-            <Button
-              variant="danger"
-              onClick={async () => {
-                if (!confirmRemove) return;
-                await getSupabase().rpc('archive_bank_account', { p_id: confirmRemove.id });
+      <ProblemDialog problem={problem} title="Not removed" />
 
-                /*
-                 * Taken out here rather than re-read.
-                 *
-                 * `load()` fetched every account to learn that one had gone, with the removed one
-                 * still on screen until it landed — long enough for somebody to press it again.
-                 */
-                write(accounts.filter((a) => a.id !== confirmRemove.id));
-                setConfirmRemove(null);
-              }}
-            >
-              Remove it
-            </Button>
-          </div>
-        }
-      >
-        <p>
-          It stops being offered at the counter. Transfers already recorded against it keep their
-          record, so your past months still reconcile.
-        </p>
-      </BottomSheet>
+      {/*
+        A CONFIRMATION IS A DIALOG, not a sheet — and mounted only while it is being asked, because
+        `ConfirmDialog` opens itself on mount.
+      */}
+      {confirmRemove && (
+        <ConfirmDialog
+          controller={removeDialog}
+          title="Remove this account?"
+          message={
+            'It stops being offered at the counter. Transfers already recorded against it keep ' +
+            'their record, so your past months still reconcile.'
+          }
+          confirmText="Remove it"
+          cancelText="Keep it"
+          tone="danger"
+          onDismiss={() => setConfirmRemove(null)}
+          onConfirm={() => {
+            const target = confirmRemove;
+            setConfirmRemove(null);
+            void (async () => {
+              /*
+               * The failure is SAID now. This used to ignore the result and take the row off the
+               * screen regardless, so a refused removal looked exactly like a successful one.
+               */
+              const { error } = await getSupabase().rpc('archive_bank_account', { p_id: target.id });
+              if (error) {
+                problem.show(error.message);
+                return;
+              }
+              // Taken out here rather than re-read: the writer knows which row went.
+              write(accounts.filter((a) => a.id !== target.id));
+            })();
+          }}
+        />
+      )}
     </PageScaffold>
   );
 }

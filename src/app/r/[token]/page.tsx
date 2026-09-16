@@ -7,6 +7,7 @@ import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { useDemandState } from '@academix-admin/state-stack';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatDateTime, formatMoney, formatQty, pluralUnit } from '@/lib/format';
+import { owedRowsFromReceipt, rollUpOwed } from '@/lib/empties-rollup';
 
 interface SharedReceipt {
   shop: {
@@ -49,7 +50,8 @@ interface SharedReceipt {
   /** Money held against containers. Not payment for anything: it comes back when they do. */
   deposit_total: string;
   /** What is still out, grouped the way a shop counts it — by category, not by brand. */
-  empties: { category: string; qty: string; deposit: string }[];
+  /** What this receipt sent out, one row per product shape (0140). */
+  empties: unknown;
   /** Grouped by method, because that is what somebody checks against their own record. */
   payments: { amount: string; method: string }[];
   paid_total: string;
@@ -143,7 +145,8 @@ export default function SharedReceiptPage({
 
   const { shop, sale, customer, lines, payments } = receipt;
   const charges = receipt.charges ?? [];
-  const empties = receipt.empties ?? [];
+  // The same rule as the till's copy: whole ones add across a maker, parts stay with their beer.
+  const empties = rollUpOwed(owedRowsFromReceipt(receipt.empties));
   const depositHeld = Number(receipt.deposit_total ?? 0);
   /*
    * The server's figure, not a sum of what this page happened to be sent.
@@ -325,14 +328,12 @@ export default function SharedReceiptPage({
             <div className={styles.row}>
               <span className={styles.emptiesHead}>Still to come back</span>
             </div>
-            {empties.map((e, i) => (
-              <div className={styles.row} key={i}>
+            {empties.map((e) => (
+              <div className={styles.row} key={`${e.label}-${e.unit}-${e.isPart}`}>
                 <span>
-                  {formatQty(e.qty)} {e.category}
+                  {e.label} {e.unit.toLowerCase()}
                 </span>
-                {Number(e.deposit) > 0 && (
-                  <span className={styles.value}>{formatMoney(e.deposit)} held</span>
-                )}
+                <span className={styles.value}>{e.said}</span>
               </div>
             ))}
           </div>

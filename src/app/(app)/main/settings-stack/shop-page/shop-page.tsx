@@ -6,8 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
 import { AsyncAction, useAsyncAction } from '@/components/ui/AsyncAction';
-import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
-import { BottomSheet } from '@/components/ui/BottomSheet';
+import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/components/ui/Dialog';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
@@ -95,6 +94,8 @@ export default function ShopPage() {
       cancelled = true;
     };
   }, [shopId, showProblem]);
+
+  const closeDialog = useConfirm();
 
   if (!store) return null;
 
@@ -354,36 +355,29 @@ export default function ShopPage() {
         `window.confirm`. It says what is at stake rather than "are you sure?": a shop with a
         hundred sales on it is a different decision from one made this morning by accident.
       */}
-      <BottomSheet
-        open={closing}
-        onClose={() => setClosing(false)}
-        title={sales && sales > 0 ? 'This shop has been trading' : `Close ${store.name}?`}
-        footer={
-          <div className={styles.sheetActions}>
-            <Button variant="secondary" onClick={() => setClosing(false)} disabled={busy}>
-              Keep it
-            </Button>
-            <Button variant="danger" busy={busy} onClick={() => void doClose((sales ?? 0) > 0)}>
-              {sales && sales > 0 ? 'Close it anyway' : 'Close it'}
-            </Button>
-          </div>
-        }
-      >
-        <p className={styles.sheetSaid}>
-          {sales && sales > 0 ? (
-            <>
-              There are <strong>{sales}</strong> sales recorded against {store.name}. Closing it
-              keeps every one of them — nothing is deleted and the receipts still open — but nobody
-              will be able to reach the shop from the app again without you reopening it.
-            </>
-          ) : (
-            <>
-              Nothing has ever been sold from {store.name}, so there is nothing to lose. You will
-              land in {elsewhere[0]?.name} instead.
-            </>
-          )}
-        </p>
-      </BottomSheet>
+      {/*
+        A CONFIRMATION IS A DIALOG (DialogViewer), not a bottom sheet — and mounted only while it is
+        being asked, because `ConfirmDialog` opens itself on mount.
+      */}
+      {closing && (
+        <ConfirmDialog
+          controller={closeDialog}
+          title={sales && sales > 0 ? 'This shop has been trading' : `Close ${store.name}?`}
+          message={
+            sales && sales > 0
+              ? `There are ${sales} sales recorded against ${store.name}. Closing it keeps every ` +
+                'one of them — nothing is deleted and the receipts still open — but nobody will be ' +
+                'able to reach the shop from the app again without you reopening it.'
+              : `Nothing has ever been sold from ${store.name}, so there is nothing to lose.` +
+                (elsewhere[0] ? ` You will land in ${elsewhere[0].name} instead.` : '')
+          }
+          confirmText={sales && sales > 0 ? 'Close it anyway' : 'Close it'}
+          cancelText="Keep it"
+          tone="danger"
+          onDismiss={() => setClosing(false)}
+          onConfirm={() => void doClose((sales ?? 0) > 0)}
+        />
+      )}
     </PageScaffold>
   );
 }

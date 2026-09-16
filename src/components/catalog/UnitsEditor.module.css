@@ -230,7 +230,7 @@
 .parentRow {
   display: flex;
   flex-wrap: wrap;
-  align-items: end;
+  align-items: flex-end;
   gap: var(--space-2);
 }
 

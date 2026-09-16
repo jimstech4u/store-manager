@@ -402,7 +402,18 @@ underneath the readout of its own effect. The figure ends the page now, which is
 looks when they have finished the list.
 
 Sheets are not pages. A `BottomSheet`'s own actions belong at its foot — that is the shape of a
-sheet, and the confirmation sheets on the bank, staff and product pages are right as they are.
+sheet. But what a sheet may HOLD is narrow:
+
+- **No input inside a bottom viewer, ever.** Not a text box, not a date, not a checkbox. Anything
+  typed is a form, and a form is a pushed page — a sheet's local state does not survive a rotation,
+  and the keyboard covers the half being typed into. The count prompt on the till and the custom
+  date range were both sheets with boxes in them; both are pages now (`count_gate_page`,
+  `period_page`), and the photo check's "keep the background" tick became two buttons.
+- **No confirmation or message in a bottom viewer either.** "Remove this account?", "Close this
+  shop?", "Added" — those are `ConfirmDialog` / `ProblemDialog` (DialogViewer). An earlier version
+  of this file called the bank, staff and product confirmation sheets "right as they are", and they
+  stayed sheets because of it. A sheet is for CHOOSING from a list or VIEWING something; a question
+  that must be answered is a dialog.
 
 The one thing that legitimately floats is `FloatingAmount`, which is the running total on the till:
 it is a readout, not an action, it is off to one side rather than a full-width bar, and the sell

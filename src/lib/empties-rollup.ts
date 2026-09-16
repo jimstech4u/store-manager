@@ -176,3 +176,25 @@ export function owedInWords(rows: OwedRow[]): string {
     .map((l) => `${l.said} ${l.label} ${l.unit.toLowerCase()}`)
     .join(', ');
 }
+
+/**
+ * A receipt's `empties` rows, as the rule reads them.
+ *
+ * Both copies of a receipt — the till's and the shared link — hand over the same snake_case rows
+ * (0140), so the mapping lives here once rather than in each page.
+ */
+export function owedRowsFromReceipt(rows: unknown): OwedRow[] {
+  if (!Array.isArray(rows)) return [];
+  return (rows as Record<string, unknown>[]).map((r) => ({
+    productId: String(r.product_id ?? ''),
+    productName: String(r.product_name ?? ''),
+    productUnitId: String(r.product_unit_id ?? ''),
+    unitName: String(r.unit_name ?? ''),
+    unitPlural: String(r.unit_plural ?? ''),
+    baseQty: Number(r.base_qty) || 1,
+    groupId: (r.group_id as string | null) ?? null,
+    groupName: (r.group_name as string | null) ?? null,
+    side: 'they_hold',
+    owed: Number(r.owed) || 0,
+  }));
+}

@@ -8,7 +8,6 @@ import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { InfoPanel } from '@/components/ui/Explain';
 import { Button } from '@/components/ui/Button';
 import { PhotoUpload } from '@/components/ui/PhotoUpload';
-import { BottomSheet } from '@/components/ui/BottomSheet';
 import { ChevronRightIcon, EditIcon, TrashIcon } from '@/components/ui/Icon';
 import { getSupabase } from '@/lib/supabase/client';
 import { useAuth } from '@/providers/AuthProvider';
@@ -23,7 +22,7 @@ import { LoadArea, useLoadArea } from '@/components/ui/LoadArea';
 import { saidAsPart } from '@/lib/empties-rollup';
 import { formatMoney, formatQty, pluralUnit, messageOf } from '@/lib/format';
 import styles from './product-page.module.css';
-import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
+import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/components/ui/Dialog';
 
 /**
  * One product: what it is, what it cost, what is left, and its pictures.
@@ -78,6 +77,7 @@ export default function ProductPage() {
   /** Every shape, largest first — the order a shop names them in. */
   const shapes = [...sellingUnits].sort((a, b) => b.baseQty - a.baseQty);
 
+  const removeDialog = useConfirm();
   const [removing, setRemoving] = useState(false);
   const removeError = useProblem();
   const [busy, setBusy] = useState(false);
@@ -140,79 +140,54 @@ export default function ProductPage() {
         sheet has to be able to say that and offer the override — otherwise the seller meets a
         raw database error with no way forward.
       */}
-      <BottomSheet
-        open={removing}
-        onClose={() => setRemoving(false)}
-        title={`Remove ${product.name}?`}
-        footer={
-          <div className={styles.removeActions}>
-            <Button variant="secondary" onClick={() => setRemoving(false)} disabled={busy}>
-              Keep it
-            </Button>
-            <Button
-              variant="danger"
-              busy={busy}
-              onClick={async () => {
-                setBusy(true);
-                try {
-                  const { error } = await getSupabase().rpc('archive_product', {
-                    p_product_id: product.id,
-                    p_reason: null,
-                    p_force: onHand !== 0,
-                  });
-                  if (error) throw error;
-
-                  /*
-                   * The list is told it is gone.
-                   *
-                   * Without this the item stayed on the stock screen until something re-read it,
-                   * so a shop removed something, pressed Back, saw it still there, and removed it
-                   * again — or reached for a page refresh. This device knows exactly which row
-                   * went; asking the server to say so is asking a question we answered.
-                   */
-                  notifyProducts({ type: 'remove', id: product.id });
-
-                  setRemoving(false);
-                  nav.pop();
-                } catch (e) {
-                  removeError.show(messageOf(e, 'Could not remove it.'));
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              Remove it
-            </Button>
-          </div>
-        }
-      >
-      {/*
-        A FAILURE INTERRUPTS; it does not sit on the page.
-
-        As a panel this was the first thing pushed off the top when a keyboard opened, so an action
-        that failed looked exactly like one that did nothing — and the button gets pressed again.
-      */}
       <ProblemDialog problem={removeError} title="Not removed" />
 
-        {onHand !== 0 && (
-          <InfoPanel
-            tone="warning"
-            title={`There ${onHand === 1 ? 'is' : 'are'} still ${
-              sellingUnits.length > 0
-                ? stockInShapes(sellingUnits)
-                : `${formatQty(product.onHand)} ${pluralUnit(product.baseUnit, onHand)}`
-            } on the shelf`}
-          >
-            Removing it now takes that stock out of what your shop is worth. Do this only if the
-            item is finished, written off, or was never really there.
-          </InfoPanel>
-        )}
-
-        <p className={styles.removeNote}>
-          Past sales keep this item and still add up correctly. It just stops appearing when you
-          are selling or counting.
-        </p>
-      </BottomSheet>
+      {/*
+        A CONFIRMATION IS A DIALOG (DialogViewer), not a bottom sheet — and mounted only while it is
+        being asked, because `ConfirmDialog` opens itself on mount.
+      */}
+      {removing && (
+        <ConfirmDialog
+          controller={removeDialog}
+          title={`Remove ${product.name}?`}
+          message={
+            (onHand !== 0
+              ? `There ${onHand === 1 ? 'is' : 'are'} still ${
+                  sellingUnits.length > 0
+                    ? stockInShapes(sellingUnits)
+                    : `${formatQty(product.onHand)} ${pluralUnit(product.baseUnit, onHand)}`
+                } on the shelf. Removing it now takes that stock out of what your shop is worth — ` +
+                'do this only if the item is finished, written off, or was never really there. '
+              : '') +
+            'Past sales keep this item and still add up correctly. It just stops appearing when ' +
+            'you are selling or counting.'
+          }
+          confirmText="Remove it"
+          cancelText="Keep it"
+          tone="danger"
+          onDismiss={() => setRemoving(false)}
+          onConfirm={() => {
+            void (async () => {
+              setBusy(true);
+              try {
+                const { error } = await getSupabase().rpc('archive_product', {
+                  p_product_id: product.id,
+                  p_reason: null,
+                  p_force: onHand !== 0,
+                });
+                if (error) throw error;
+                // The list is told it is gone — this device knows exactly which row went.
+                notifyProducts({ type: 'remove', id: product.id });
+                nav.pop();
+              } catch (e) {
+                removeError.show(messageOf(e, 'Could not remove it.'));
+              } finally {
+                setBusy(false);
+              }
+            })();
+          }}
+        />
+      )}
 
       <dl className={styles.facts}>
         <div className={styles.fact}>

@@ -4,8 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import styles from './sell-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { useStackBack } from '@/hooks/useStackBack';
+import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { useOverlayRoute } from '@academix-admin/navigation-stack';
-import { useNav, scrollIntoViewBelow } from '@academix-admin/navigation-stack';
+import { useIsTop, useNav, scrollIntoViewBelow } from '@academix-admin/navigation-stack';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
@@ -17,8 +18,8 @@ import { ShareOrder } from '@/components/sell/ShareOrder';
 import { ConfirmDialog, useConfirm } from '@/components/ui/Dialog';
 import { useAsyncAction } from '@/components/ui/AsyncAction';
 import { ProductPicker } from '@/components/catalog/ProductPicker';
-import { CountGate } from '@/components/sell/CountGate';
-import { findByBarcode, whichNeedCount } from '@/lib/stacks/mid-sale';
+import { findByBarcode } from '@/lib/stacks/mid-sale';
+import { useUncountedToday } from '@/lib/stacks/count-gate';
 import { BarcodeScanner } from '@/components/catalog/BarcodeScanner';
 import type { ProductFormResult } from '@/components/catalog/ProductForm';
 import { useAuth } from '@/providers/AuthProvider';
@@ -236,7 +237,57 @@ export default function SellPage() {
    */
   const [scanning, setScanning] = useState(false);
   const [scanProblem, setScanProblem] = useState<string | null>(null);
-  const [needCount, setNeedCount] = useState<string[]>([]);
+  /*
+   * WHAT ON THIS SALE HAS NOT BEEN COUNTED TODAY — asked of the server for the lines on the sale.
+   *
+   * It used to be a list the till built up as items were ADDED, so a sale left open overnight kept
+   * yesterday's answer and could be settled the next day against a shelf nobody had counted. Keyed
+   * on the lines, it re-asks whenever they change and whenever the sale is opened.
+   */
+  const saleProductIds = useMemo(
+    () => (activeOrder?.lines ?? []).map((l) => l.productId),
+    [activeOrder?.lines],
+  );
+  const { uncounted: needCount, reload: reloadCounts } = useUncountedToday(
+    store?.id ?? null,
+    saleProductIds,
+  );
+  /*
+   * RE-ASKED WHENEVER THIS PAGE COMES BACK INTO VIEW.
+   *
+   * Another device may have counted the item while this receipt sat open, or the day may have turned
+   * over. The server's answer on resume is the one that counts — never what this device remembered.
+   */
+  useLiveRefresh(nav, reloadCounts);
+
+  /*
+   * THE COUNT IS PUSHED, not offered — once per item per visit to the till.
+   *
+   * When the sale is opened with uncounted items on it, and whenever an uncounted item is added, the
+   * count page opens by itself with that item already chosen. Each item is pushed for once: pressing
+   * "Not now" and coming back does not push the same thing again, but the note below stays and Take
+   * payment will not settle until it is counted.
+   *
+   * Only while the till is the page on screen, in the tab that is showing — a push fired from a page
+   * underneath would land on top of whatever the seller is actually looking at.
+   */
+  const tillIsTop = useIsTop();
+  const offeredCount = useRef<{ order: string | null; ids: Set<string> }>({
+    order: null,
+    ids: new Set(),
+  });
+  useEffect(() => {
+    if (!activeOrder) return;
+    if (offeredCount.current.order !== activeOrder.clientUuid) {
+      offeredCount.current = { order: activeOrder.clientUuid, ids: new Set() };
+    }
+    if (!tillIsTop || !nav.isActiveStack()) return;
+    const fresh = needCount.filter((id) => !offeredCount.current.ids.has(id));
+    if (fresh.length === 0) return;
+    fresh.forEach((id) => offeredCount.current.ids.add(id));
+    const newest = [...activeOrder.lines].reverse().find((l) => fresh.includes(l.productId));
+    void nav.push('count_gate_page', { focus: newest?.productId ?? fresh[0] });
+  }, [needCount, tillIsTop, activeOrder, nav]);
 
   const [askCloseTab, setAskCloseTab] = useState(false);
   /*
@@ -507,24 +558,9 @@ export default function SellPage() {
     setAdding(null);
 
     /*
-     * HAS THIS BEEN COUNTED TODAY?
-     *
-     * Asked AFTER the line is on the receipt, never before. The sale is not what is in question —
-     * the shelf figure is — and a seller who is blocked at the counter reaches for paper, which
-     * loses the sale as well as the count.
-     *
-     * Failures are swallowed on purpose. If the shop cannot be reached, the right outcome is a
-     * sale that goes through and a count that gets asked for next time; refusing to sell because
-     * a background question could not be answered would be the worst of both.
+     * HAS THIS BEEN COUNTED TODAY? Answered by `useUncountedToday`, which re-asks because the lines
+     * just changed — and the effect above pushes the count page with this item chosen if it has not.
      */
-    try {
-      const owing = await whichNeedCount([product.id]);
-      if (owing.has(product.id)) {
-        setNeedCount((ids) => (ids.includes(product.id) ? ids : [...ids, product.id]));
-      }
-    } catch {
-      // Nothing to say to the seller. The sale stands.
-    }
   };
 
   onCustomerCreatedRef.current = (customer) => {
@@ -749,11 +785,26 @@ export default function SellPage() {
             activeOrder.label.trim() ||
             `Customer ${Math.max(1, orders.findIndex((o) => o.clientUuid === activeId) + 1)}`
           }
-          label={emptyLines.length > 0 ? 'Fix the quantity' : 'Take payment'}
+          /*
+            COUNT FIRST, SAID ON THE BUTTON. With something uncounted on the sale the pill does not
+            go grey and leave the seller guessing why — it says what has to happen, and pressing it
+            goes there. Payment is the next thing it says once the count is in.
+          */
+          label={
+            emptyLines.length > 0
+              ? 'Fix the quantity'
+              : needCount.length > 0
+                ? `Count ${needCount.length === 1 ? 'an item' : `${needCount.length} items`} first`
+                : 'Take payment'
+          }
           amount={formatMoney(total)}
           disabled={emptyLines.length > 0}
           busy={payment.state === 'busy'}
-          onClick={() => payment.run(openPayment)}
+          onClick={() =>
+            needCount.length > 0
+              ? void nav.push('count_gate_page', { why: 'pay' })
+              : payment.run(openPayment)
+          }
         />
       )}
 
@@ -771,7 +822,11 @@ export default function SellPage() {
         onClearCustomer={() => setAskClearCustomer(true)}
         onCloseTab={() => setAskCloseTab(true)}
         onClaim={() => void nav.push('claim_page')}
-        onShare={() => setSharing(true)}
+        onShare={() =>
+          needCount.length > 0
+            ? void nav.push('count_gate_page', { why: 'share' })
+            : setSharing(true)
+        }
         hasCustomer={Boolean(activeOrder?.customerId)}
         orderCode={activeOrder?.code ?? null}
         /*
@@ -842,6 +897,35 @@ export default function SellPage() {
             </div>
           )}
 
+          {/*
+            NOT COUNTED TODAY — and the sale cannot be settled until it is.
+
+            The count page opens by itself when an uncounted item arrives. If the seller backs out of
+            it this note stays, because Take payment refuses to settle while anything here is
+            uncounted — a note that could be dismissed would hide the reason the button is grey.
+          */}
+          {needCount.length > 0 && (
+            <InfoPanel
+              tone="warning"
+              title={
+                needCount.length === 1
+                  ? `${
+                      activeOrder.lines.find((l) => l.productId === needCount[0])?.productName ??
+                      'This item'
+                    } has not been counted today`
+                  : `${needCount.length} items here have not been counted today`
+              }
+            >
+              Count the shelf before selling it. The sale can be built, but not settled, until
+              {needCount.length === 1 ? ' it is' : ' they are'} counted.
+              <div className={styles.countNote}>
+                <Button size="small" onClick={() => void nav.push('count_gate_page')}>
+                  Count {needCount.length === 1 ? 'it' : 'them'} now
+                </Button>
+              </div>
+            </InfoPanel>
+          )}
+
           {/* ── Lines ─────────────────────────────────────────────────────────── */}
           {activeOrder.lines.length > 0 && (
             <div className={styles.lines}>
@@ -853,7 +937,24 @@ export default function SellPage() {
                       {/* Just the name. The base-unit total ("12 pieces in total") used to sit
                           here and was read as a second quantity to check against the one being
                           entered — two numbers for one line, with nothing saying which mattered. */}
-                      <p className={styles.lineName}>{line.productName}</p>
+                      <p className={styles.lineName}>
+                        {line.productName}
+                        {/*
+                          NOT COUNTED TODAY, on the line itself. The note above says how many; this
+                          says which — and one tap counts exactly this item.
+                        */}
+                        {needCount.includes(line.productId) && (
+                          <button
+                            type="button"
+                            className={styles.countChip}
+                            onClick={() =>
+                              void nav.push('count_gate_page', { focus: line.productId })
+                            }
+                          >
+                            Not counted today · Count
+                          </button>
+                        )}
+                      </p>
                       <button
                         type="button"
                         className={styles.lineRemove}
@@ -1394,27 +1495,7 @@ export default function SellPage() {
       )}
 
 
-      {activeOrder && (
-        <CountGate
-          open={needCount.length > 0}
-          onClose={() => setNeedCount([])}
-          items={needCount.flatMap((id) => {
-            const line = activeOrder.lines.find((l) => l.productId === id);
-            if (!line) return [];
-            const unit = saleUnits[id]?.find((u) => u.id === line.saleUnitId);
-            return [
-              {
-                productId: id,
-                productName: line.productName,
-                unitName: unit?.name ?? line.baseUnit,
-                unitPlural: unit?.name ?? line.baseUnit,
-                baseQty: Number(unit?.baseQty ?? 1),
-              },
-            ];
-          })}
-          onCounted={(done) => setNeedCount((ids) => ids.filter((id) => !done.includes(id)))}
-        />
-      )}
+
 
       {activeOrder && (
         <CustomerPicker

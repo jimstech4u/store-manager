@@ -6,6 +6,8 @@ import ClaimPage from './claim-page/claim-page';
 import ShareWhatsAppPage from './share-whatsapp-page/share-whatsapp-page';
 import ReceiptPage from './receipt-page/receipt-page';
 import AmendPage from './amend-page/amend-page';
+import CountGatePage from './count-gate-page/count-gate-page';
+import CountCorrectPage from '../count-stack/count-correct-page/count-correct-page';
 import TakePaymentPage from './take-payment-page/take-payment-page';
 /*
  * What is still out, receipt by receipt.
@@ -61,6 +63,10 @@ const navLink = {
   share_whatsapp_page: ShareWhatsAppPage,
   receipt_page: ReceiptPage,
   amend_page: AmendPage,
+  // "Count this one first" — a page, because nothing is typed inside a bottom sheet.
+  count_gate_page: CountGatePage,
+  // Pushed from the count page when an item was already counted and the figure is wrong.
+  count_correct_page: CountCorrectPage,
   take_payment_page: TakePaymentPage,
   empties_page: EmptiesPage,
   empties_customer_page: EmptiesCustomerPage,

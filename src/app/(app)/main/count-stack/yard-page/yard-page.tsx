@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
-import { Button } from '@/components/ui/Button';
+import { FloatingAction } from '@/components/ui/FloatingAction';
 import { InfoPanel } from '@/components/ui/Explain';
 import { ClipboardCheckIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -42,18 +42,31 @@ export default function YardPage() {
 
   useLiveRefresh(nav, reload);
 
-  const counted = useMemo(
-    () => groups.filter((g) => g.countedGrain !== null).length,
-    [groups],
-  );
-  const uncounted = groups.length - counted;
+  /*
+   * BY MAKER AND ITEM BY ITEM DO NOT OVERLAP.
+   *
+   * A stack of NBL crates is counted as NBL — the same physical crate whatever beer was in it last —
+   * so an item with a maker has no row of its own under "Item by item". It showed every item there,
+   * so Goldberg appeared twice: once inside NBL and once alone, as though it could be counted both
+   * ways at once.
+   */
+  const loose = useMemo(() => shapes.filter((r) => !r.groupId), [shapes]);
+
+  // A maker whose containers come back in more than one unit shows the unit; otherwise just the name.
+  const unitsPerMaker = useMemo(() => {
+    const n = new Map<string, number>();
+    for (const g of groups) n.set(g.groupId, (n.get(g.groupId) ?? 0) + 1);
+    return n;
+  }, [groups]);
+
+  const uncounted = [...groups, ...loose].filter((r) => r.countedGrain === null).length;
 
   if (!store) return null;
 
   const say = (n: number | null, one: string, many: string) =>
     n === null ? null : `${formatQty(n)} ${Math.abs(n) === 1 ? one : many}`;
 
-  const rowsForGrain: (YardGroupRow | YardRow)[] = grain === 'group' ? groups : shapes;
+  const rowsForGrain: (YardGroupRow | YardRow)[] = grain === 'group' ? groups : loose;
 
   return (
     <PageScaffold
@@ -77,12 +90,6 @@ export default function YardPage() {
           figure. Count it once and every crate in and out afterwards keeps it right.
         </InfoPanel>
       )}
-
-      <div className={styles.actions}>
-        <Button size="large" fullWidth onClick={() => void nav.push('yard_count_page')}>
-          <ClipboardCheckIcon /> Count the yard
-        </Button>
-      </div>
 
       {/*
         HOW IT IS STACKED, not a filter.
@@ -113,9 +120,10 @@ export default function YardPage() {
       </div>
 
       {rowsForGrain.length === 0 ? (
-        <InfoPanel tone="info" title="Nothing comes back yet">
-          When you tick &ldquo;this comes back&rdquo; on an item&rsquo;s shape, its crates and
-          bottles appear here to be counted.
+        <InfoPanel tone="info" title={grain === 'group' ? 'No makers here yet' : 'Nothing here'}>
+          {grain === 'group'
+            ? 'Put an item that comes back under a maker on its form, and the maker appears here.'
+            : 'Every item that comes back belongs to a maker, so it is counted under "By maker".'}
         </InfoPanel>
       ) : (
         <ul className={styles.rows}>
@@ -125,7 +133,9 @@ export default function YardPage() {
               ? `${(r as YardGroupRow).groupId}-${(r as YardGroupRow).storeUnitId}`
               : (r as YardRow).productUnitId;
             const name = isGroup
-              ? `${(r as YardGroupRow).groupName} ${r.unitPlural.toLowerCase()}`
+              ? (unitsPerMaker.get((r as YardGroupRow).groupId) ?? 0) > 1
+                ? `${(r as YardGroupRow).groupName} ${r.unitPlural.toLowerCase()}`
+                : (r as YardGroupRow).groupName
               : `${(r as YardRow).productName} ${r.unitPlural.toLowerCase()}`;
 
             const moved =
@@ -179,6 +189,18 @@ export default function YardPage() {
           stack again — the new count replaces the old one and the history keeps both.
         </InfoPanel>
       )}
+
+      {/*
+        COUNTING IS A FLOATING BUTTON, like Count on the stock screen.
+
+        It was a full-width button above the list. This page's job is READING the yard; counting it
+        is the action one tap away, and floating it keeps the list the first thing on the screen.
+      */}
+      <FloatingAction
+        label="Count the yard"
+        icon={<ClipboardCheckIcon />}
+        onClick={() => void nav.push('yard_count_page')}
+      />
     </PageScaffold>
   );
 }

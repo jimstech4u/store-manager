@@ -183,6 +183,15 @@ export default function CustomerFormPage() {
   const [itemShapes, setItemShapes] = useState<ShapeOut[]>([]);
   const [chosenMaker, setChosenMaker] = useState<ReturnableGroup | null>(null);
   const [makerUnits, setMakerUnits] = useState<GroupUnit[]>([]);
+  /*
+   * ONE amount for a maker, and the unit it is counted in.
+   *
+   * The shop says "they have 24 of NBL's", so that is what is asked. The unit defaults to the one
+   * most of the maker's items come back in — `group_return_units` returns them in that order — and
+   * is only offered as a choice when there genuinely is one.
+   */
+  const [makerQty, setMakerQty] = useState('');
+  const [makerUnitId, setMakerUnitId] = useState<string | null>(null);
   const [byShape, setByShape] = useState<Record<string, string>>({});
   /*
    * The lines added so far, and the shop's explicit "none".
@@ -263,7 +272,8 @@ export default function CustomerFormPage() {
       const rows = await groupReturnUnits(chosenMaker.id).catch(() => []);
       if (!cancelled) {
         setMakerUnits(rows);
-        setByShape({});
+        setMakerQty('');
+        setMakerUnitId(rows[0]?.storeUnitId ?? null);
       }
     })();
     return () => {
@@ -712,20 +722,25 @@ export default function CustomerFormPage() {
       {chosenMaker && (
         <div className={styles.composer}>
           <p className={styles.composerWho}>{chosenMaker.name}</p>
-          <div className={styles.shapeBoxes}>
-            {makerUnits.map((u) => (
-              <Field
-                key={u.storeUnitId}
-                label={u.plural}
-                numeric
-                value={byShape[u.storeUnitId] ?? ''}
-                onChange={(e) =>
-                  setByShape((prev) => ({ ...prev, [u.storeUnitId]: e.target.value }))
-                }
-                placeholder="0"
-              />
-            ))}
-          </div>
+
+          {/*
+            ONE BOX. The maker is the thing being counted.
+
+            «we are to have the title how many and an input box — there is no shape or nothing we
+             need to check»
+
+            A shop saying "they have 8 of NBL's" is not choosing between crates and bottles, so the
+            screen does not ask. The line is recorded against the container most of the maker's
+            items come back in, which `group_return_units` returns first.
+          */}
+          <Field
+            label="How many"
+            numeric
+            value={makerQty}
+            onChange={(e) => setMakerQty(e.target.value)}
+            placeholder="0"
+          />
+
           <p className={styles.composerWhy}>
             For containers you know are theirs but cannot say which item they came from — what a
             book carries across.
@@ -735,20 +750,20 @@ export default function CustomerFormPage() {
               Cancel
             </Button>
             <Button
-              disabled={!makerUnits.some((u) => Number(byShape[u.storeUnitId]) > 0)}
+              disabled={!makerUnitId || !(Number(makerQty) > 0)}
               onClick={() => {
+                const unit = makerUnits.find((u) => u.storeUnitId === makerUnitId);
+                if (!unit) return;
                 setOpeningEmpties((prev) => [
                   ...prev,
-                  ...makerUnits
-                    .filter((u) => Number(byShape[u.storeUnitId]) > 0)
-                    .map((u) => ({
-                      key: newLineKey(),
-                      what: `${chosenMaker.name} ${u.plural.toLowerCase()}`,
-                      qty: byShape[u.storeUnitId],
-                      categoryId: chosenMaker.id,
-                      storeUnitId: u.storeUnitId,
-                      side,
-                    })),
+                  {
+                    key: newLineKey(),
+                    what: chosenMaker.name,
+                    qty: makerQty,
+                    categoryId: chosenMaker.id,
+                    storeUnitId: unit.storeUnitId,
+                    side,
+                  },
                 ]);
                 setChosenMaker(null);
               }}
