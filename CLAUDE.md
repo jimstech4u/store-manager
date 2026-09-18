@@ -319,6 +319,35 @@ count.
 four; the unit form it offers to push was registered in two. The symptom is navigation-stack's own
 "Missing route" screen, on the one journey nobody walked.
 
+## Nothing sells off a shelf nobody has counted today
+
+The count is a GATE, and it is answered by the server, never by a timestamp on a receipt or a draft.
+`needs_count_today` asks one question — has somebody entered a count for this item on the shop's own
+calendar day? — and three screens read the same answer: the till, the count page it pushes, and Take
+payment. A sale left open overnight is checked against TODAY, which is the whole reason the earlier
+version (a list the till built up as items were ADDED) was wrong.
+
+- **The till counts ONCE a day, for everybody.** `count_from_till` locks the item, looks for today's
+  count and refuses a second one with `unique_violation` — which the screen reads as "somebody
+  already did this", names them, and carries on. Two tills on two receipts in the same second queue
+  on the lock, and the second sees the first's figure. Mid-sale, with a customer waiting, a second
+  figure is not a second count; it is a guess overwriting a fact.
+- **The count SCREEN may count again, as often as the shop likes** — a delivery lands at two and the
+  shelf is walked again at six, and both are real counts. Every fresh count after the day's first
+  needs `counts.correct` (owner, manager), needs a reason, and writes the figure it replaces to
+  `stock_count_edits` BEFORE anything moves. `counted_by`/`counted_at` on the period always say who
+  walked the shelf this time; the trail says who said what before that, and why it changed.
+- **There is one act, not two.** 0145 shipped a separate "correct this count" and 0146 dropped it:
+  counting again with a reason IS the correction, and two ways to change one figure means two trails
+  and one more thing to explain to a shop.
+- **A guard on the server, not only on the screen.** A trigger on `sale_lines` refuses a line on a
+  sale created in THIS transaction for an item nobody counted today. "In this transaction" is exactly
+  `sales.created_at = now()`, so amending an old receipt stays possible whatever today's shelf says.
+- **Say what happened, in the words somebody at the shelf would use.** The variance reasons are not
+  ledger categories with labels attached: "Sold, but nobody entered it", "Broken or spoiled",
+  "Stolen or missing" — each with what it does to the money underneath it, and only the ones that can
+  be true of THIS gap (nothing is stolen when there is more on the shelf than expected).
+
 ## Three things happen to a container, and all three are recordable
 
 It came back. It is still owed. Or it is GONE. The settle screen could record the first, records the

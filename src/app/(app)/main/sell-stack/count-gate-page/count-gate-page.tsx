@@ -20,7 +20,6 @@ import {
   useTodaysCounts,
   useUncountedToday,
 } from '@/lib/stacks/count-gate';
-import { usePermission } from '@/hooks/usePermission';
 import { countFromTill } from '@/lib/stacks/mid-sale';
 import { messageOf } from '@/lib/format';
 import styles from './count-gate-page.module.css';
@@ -89,7 +88,6 @@ export default function CountGatePage() {
    * An item another till counted this morning is not asked about here — the server already has its
    * count — but the seller should be able to see that it was, rather than wonder why it is missing.
    */
-  const { can } = usePermission();
   const { byProduct: todays } = useTodaysCounts(store?.id ?? null, lineIds);
   const countedOnSale = useMemo(() => {
     const seen = new Set<string>();
@@ -368,6 +366,11 @@ export default function CountGatePage() {
 
       {countedOnSale.length > 0 && (
         <section className={styles.counted} aria-label="Already counted today">
+          {/*
+            COUNTED, SO NOT ASKED AGAIN. Mid-sale a shelf is counted once a day by whoever reaches it
+            first — a second figure from a till, with a customer waiting, is how a count becomes a
+            guess. Walking the shelf again is a manager's job, on the item's own screen.
+          */}
           <h2 className={styles.countedHead}>Already counted today</h2>
           <ul className={styles.lineList}>
             {countedOnSale.map((c) => {
@@ -384,15 +387,6 @@ export default function CountGatePage() {
                       {c.count.edits > 0 ? ` · corrected by ${c.count.lastEditedBy}` : ''}
                     </span>
                   </span>
-                  {can('counts.correct') && (
-                    <Button
-                      size="small"
-                      variant="secondary"
-                      onClick={() => void nav.push('count_correct_page', { id: c.productId })}
-                    >
-                      Correct
-                    </Button>
-                  )}
                 </li>
               );
             })}

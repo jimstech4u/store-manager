@@ -1,0 +1,70 @@
+.ask {
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: var(--text-lg);
+}
+
+.shapeBoxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.shapeBoxes > * {
+  flex: 1 1 7rem;
+  min-width: 0;
+}
+
+/* The change, said back before it is saved: from what to what. */
+.said {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* One tap for the reason: a shop counting twice is nearly always one of four things. */
+.whyList {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.why {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  min-height: var(--touch-comfortable, 52px);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.whyOn {
+  border-color: var(--primary);
+  background: var(--primary-subtle);
+}
+
+.whyName {
+  font-weight: 600;
+}
+
+.whyHint {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.action {
+  margin-top: var(--space-5);
+}
+
+.trace {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  text-align: center;
+}

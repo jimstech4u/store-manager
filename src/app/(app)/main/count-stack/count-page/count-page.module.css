@@ -227,3 +227,183 @@
   margin: 0 0 var(--space-2);
   font-size: var(--text-lg);
 }
+
+/* What the reason MEANS, under its name — read before choosing, not after. */
+.reasonHint {
+  display: block;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* ── Accounting for a difference: one line per thing that happened ────────────────── */
+.accountLeft {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-base);
+  color: var(--text);
+}
+
+.partList {
+  list-style: none;
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.partRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+  background: var(--surface);
+}
+
+.partRow + .partRow {
+  border-top: 1px solid var(--border);
+}
+
+.partText {
+  min-width: 0;
+}
+
+.partNote {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.partRemove {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: none;
+  color: var(--danger);
+  cursor: pointer;
+}
+
+.composer {
+  display: grid;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.pickReason {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: var(--touch-comfortable, 52px);
+  padding: 0 var(--space-3);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pickChosen {
+  font-weight: 600;
+}
+
+.pickEmpty {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* Which shape the figure is in — a crate of it is not a bottle of it. */
+.shapeRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.shapePick {
+  min-height: 40px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.shapePickOn {
+  border-color: var(--primary);
+  background: var(--primary-subtle);
+  font-weight: 600;
+}
+
+.composerActions {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.composerActions > * {
+  flex: 1;
+}
+
+.pickList {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pickAdd {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: var(--touch-comfortable, 52px);
+  padding: var(--space-3);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pickRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: 100%;
+  min-height: var(--touch-comfortable, 52px);
+  padding: var(--space-3);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pickName {
+  font-weight: 600;
+}
+
+.pickMeta {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}

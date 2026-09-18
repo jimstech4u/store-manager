@@ -36,6 +36,7 @@ export function CountedToday({
   /** What may be done about it — the correction button, or why there is none. */
   children?: ReactNode;
 }) {
+  // The trail is only interesting once something has replaced something — one count says itself.
   const { steps } = useCountTrail(storeId, count.edits > 0 ? count.productId : null);
 
   const say = (base: number) =>
@@ -51,7 +52,7 @@ export function CountedToday({
       <p className={styles.figure}>{say(count.countedBase)}</p>
       <p className={styles.who}>
         {count.edits > 0
-          ? `Corrected ${count.edits === 1 ? 'once' : `${count.edits} times`} · first counted ${countedByWords(count)}`
+          ? `Counted ${count.edits + 1} times today · this one ${countedByWords(count)}`
           : `Counted ${countedByWords(count)}`}
       </p>
 
@@ -67,8 +68,8 @@ export function CountedToday({
                   </>
                 ) : (
                   <>
-                    <strong>{s.byYou ? 'You' : s.by}</strong> changed it from{' '}
-                    {say(s.oldBase ?? 0)} to {say(s.qtyBase)}
+                    <strong>{s.byYou ? 'You' : s.by}</strong> counted again:{' '}
+                    {say(s.oldBase ?? 0)} → {say(s.qtyBase)}
                     {s.reason && <span className={styles.reason}>“{s.reason}”</span>}
                   </>
                 )}

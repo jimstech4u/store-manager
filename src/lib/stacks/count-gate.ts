@@ -72,15 +72,18 @@ export interface TodaysCount {
   countedBy: string;
   countedByYou: boolean;
   countedAt: string;
+  /** The first walk of the shelf today — who, and when — whatever has replaced it since. */
+  firstBy: string;
+  firstAt: string;
   edits: number;
   lastEditedBy: string | null;
   lastEditedAt: string | null;
   lastReason: string | null;
 }
 
-/** One step in the day's history of a count: the count itself, then each correction. */
+/** One step in the day's history: the first count, then every fresh count that replaced it. */
 export interface CountTrailStep {
-  kind: 'counted' | 'corrected';
+  kind: 'counted' | 'recount' | 'correction';
   qtyBase: number;
   oldBase: number | null;
   reason: string | null;
@@ -122,6 +125,8 @@ export function useTodaysCounts(storeId: string | null, productIds: string[]) {
           countedBy: (r.counted_by_name as string) ?? 'Someone',
           countedByYou: Boolean(r.counted_by_you),
           countedAt: r.counted_at as string,
+          firstBy: (r.first_by_name as string) ?? 'Someone',
+          firstAt: (r.first_at as string) ?? (r.counted_at as string),
           edits: Number(r.edits ?? 0),
           lastEditedBy: (r.last_edited_by as string | null) ?? null,
           lastEditedAt: (r.last_edited_at as string | null) ?? null,
@@ -188,17 +193,29 @@ export function useCountTrail(storeId: string | null, productId: string | null) 
 }
 
 /**
- * Change today's count, with a reason. Owner and manager only — the server refuses anybody else.
- * `countedBase` is in base units.
+ * Count the shelf again, with a reason.
+ *
+ * The same two calls the count screen makes for a first count — open the day, say the figure — and
+ * the server does the rest: it refuses anybody without `counts.correct`, and writes the figure being
+ * replaced to the trail before it moves anything (0146). `countedBase` is in base units.
+ *
+ * The TILL never comes here. Counting mid-sale is once a day for everybody.
  */
-export async function correctTodaysCount(productId: string, countedBase: number, reason: string) {
-  const { error } = await getSupabase().rpc('correct_todays_count', {
+export async function recountToday(productId: string, countedBase: number, reason: string) {
+  const supabase = getSupabase();
+  const { data: periodId, error: pErr } = await supabase.rpc('ensure_open_period', {
     p_product_id: productId,
+  });
+  if (pErr) throw pErr;
+
+  const { error } = await supabase.rpc('enter_stock_count', {
+    p_period_id: periodId,
     p_counted: countedBase,
     p_reason: reason.trim(),
   });
   if (error) throw error;
   countsChanged();
+  return periodId as string;
 }
 
 /** "9:14" today — every count this reads is from today, so the date is never worth saying. */

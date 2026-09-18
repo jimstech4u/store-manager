@@ -32,7 +32,8 @@ import ExpiryPage from './expiry-page/expiry-page';
  */
 import CountPage from '../count-stack/count-page/count-page';
 import CountEntryPage from '../count-stack/count-entry-page/count-entry-page';
-import CountCorrectPage from '../count-stack/count-correct-page/count-correct-page';
+import CountAgainPage from '../count-stack/count-again-page/count-again-page';
+import VarianceReasonPage from '../count-stack/variance-reason-page/variance-reason-page';
 import YardPage from '../count-stack/yard-page/yard-page';
 import YardCountPage from '../count-stack/yard-count-page/yard-count-page';
 import SupplierAccountPage from './supplier-account-page/supplier-account-page';
@@ -66,8 +67,10 @@ const navLink = {
   expiry_page: ExpiryPage,
   count_page: CountPage,
   count_entry_page: CountEntryPage,
-  // A day's count is said once; changing it is a correction with a reason (0145).
-  count_correct_page: CountCorrectPage,
+  // The shelf can be counted again, by a manager, with the old figure kept (0146).
+  count_again_page: CountAgainPage,
+  // Named where a gap is accounted for, so nobody leaves a half-finished count (0147).
+  variance_reason_page: VarianceReasonPage,
   yard_page: YardPage,
   yard_count_page: YardCountPage,
   supplier_account_page: SupplierAccountPage,

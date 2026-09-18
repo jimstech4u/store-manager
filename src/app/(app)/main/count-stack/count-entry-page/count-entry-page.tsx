@@ -20,6 +20,13 @@ import { CountedToday } from '@/components/stock/CountedToday';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { usePermission } from '@/hooks/usePermission';
 import { countsChanged, useTodaysCounts } from '@/lib/stacks/count-gate';
+import {
+  resolveVariance,
+  useVarianceReasons,
+  type VarianceReason,
+} from '@/lib/stacks/variance-reasons';
+import { BottomSheet } from '@/components/ui/BottomSheet';
+import { PlusIcon, CloseIcon } from '@/components/ui/Icon';
 
 /**
  * Counting one product: a PAGE, not a sheet.
@@ -48,14 +55,18 @@ interface CountState {
   withinTolerance: boolean;
 }
 
-const REASONS = [
-  { code: 'miscount', label: 'I counted wrong', effect: 'The count is corrected. Nothing is lost.' },
-  { code: 'theft', label: 'Stolen or missing', effect: 'Recorded as a loss at what the stock cost.' },
-  { code: 'unrecorded_sale', label: 'Sold but not entered', effect: 'Recorded as a sale that was missed.' },
-  { code: 'unlogged_damage', label: 'Broken or spoiled', effect: 'Recorded as damage.' },
-  { code: 'unrecorded_receipt', label: 'Came in but not entered', effect: 'Recorded as stock received.' },
-  { code: 'other', label: 'Something else', effect: 'Recorded with your note.' },
-] as const;
+/** One line of the account: how many, what happened, and anything worth remembering. */
+interface Part {
+  key: string;
+  /** The treatment the books apply — one of the six the ledger knows. */
+  treatment: string;
+  /** What the shop called it. */
+  label: string;
+  /** A PLAIN quantity in base units. The server gives it the variance's sign. */
+  qtyBase: number;
+  said: string;
+  note: string;
+}
 
 export default function CountEntryPage() {
   const nav = useNav();
@@ -206,7 +217,24 @@ export default function CountEntryPage() {
   // A product that would not load and a count that would not submit are different failures with
   // different lifetimes — the first belongs to the cached product, the second to this visit.
   const error = loadError;
-  const [reason, setReason] = useState<string | null>(null);
+  /*
+   * THE ACCOUNT OF THE DIFFERENCE — one line per thing that happened, not one reason for the lot.
+   *
+   * «after counting, before we close, we give account for the missing | additions» — nine bottles
+   * short is rarely one story: four were broken, three went out on a sale nobody entered, two nobody
+   * can explain. A single chip made somebody pick the biggest cause and quietly mislabel the rest,
+   * and the report an owner reads afterwards is exactly the one that was flattened.
+   *
+   * The parts must add up to the gap EXACTLY — the server refuses anything else, because a remainder
+   * is an unexplained shortfall and that is the one thing a period must not close on.
+   */
+  const { reasons } = useVarianceReasons(store?.id ?? null);
+  const [parts, setParts] = useState<Part[]>([]);
+  const [picking, setPicking] = useState(false);
+  const [partReason, setPartReason] = useState<VarianceReason | null>(null);
+  const [partQty, setPartQty] = useState('');
+  const [partShape, setPartShape] = useState<string | null>(null);
+  const [partNote, setPartNote] = useState('');
   const [note, setNote] = useState('');
   const [done, setDone] = useState(false);
 
@@ -356,6 +384,48 @@ export default function CountEntryPage() {
     }
   };
 
+  /*
+   * WHAT IS STILL UNACCOUNTED FOR, in base units. The account is kept in base units for the same
+   * reason the count is: it is the only figure a crate and a bottle can both be added into.
+   */
+  const accounted = parts.reduce((sum, p) => sum + p.qtyBase, 0);
+  const gapBase = state === null || state.variance === null ? 0 : Math.abs(state.variance);
+  const leftToAccount = Math.max(0, gapBase - accounted);
+
+  /** The smallest shape the shop names — what a handful of missing bottles is counted in. */
+  const smallest = shapes.length > 0 ? shapes[shapes.length - 1] : null;
+  const partUnit = shapes.find((u) => u.productUnitId === (partShape ?? smallest?.productUnitId));
+  const partBase = (Number(partQty) || 0) * (partUnit?.baseQty ?? 1);
+
+  const canAddPart =
+    !!partReason && partBase > 0.0001 && partBase <= leftToAccount + 0.0001;
+
+  const addPart = () => {
+    if (!partReason || !canAddPart) return;
+    setParts((prev) => [
+      ...prev,
+      {
+        key: `${partReason.label}-${Date.now()}`,
+        treatment: partReason.treatment,
+        label: partReason.label,
+        qtyBase: partBase,
+        said:
+          shapes.length > 0
+            ? stockInShapes(shapes.map((u) => ({ ...u, onHandBase: partBase })))
+            : `${formatQty(partBase)}`,
+        note: partNote.trim(),
+      },
+    ]);
+    setPartReason(null);
+    setPartQty('');
+    setPartNote('');
+  };
+
+  /** Only the reasons that can explain THIS gap. */
+  const reasonsHere = reasons.filter((r) =>
+    variance < 0 ? r.direction !== 'over' : r.direction !== 'short',
+  );
+
   /** Explain the gap, then close the period. */
   const resolveAndClose = async () => {
     if (!state) return;
@@ -363,15 +433,23 @@ export default function CountEntryPage() {
     try {
       const supabase = getSupabase();
 
-      const needsReason = state.variance !== null && Math.abs(state.variance) > 0.0001;
-      if (needsReason) {
-        if (!reason) throw new Error('Choose what happened before closing');
-        const { error: vErr } = await supabase.rpc('resolve_variance', {
-          p_period_id: state.periodId,
-          p_reason: reason,
-          p_note: note || null,
-        });
-        if (vErr) throw vErr;
+      /*
+       * EVERY PART, IN ONE CALL.
+       *
+       * This used to send `p_reason` — an argument `resolve_variance` stopped taking in 0129, when a
+       * variance became splittable. Closing a count with a gap failed on the one screen a shop does
+       * it from, and the screen said only "Could not close this count".
+       */
+      if (parts.length > 0) {
+        await resolveVariance(
+          state.periodId,
+          parts.map((p) => ({
+            qty: p.qtyBase,
+            reason: p.treatment,
+            label: p.label,
+            note: [p.note.trim(), note.trim()].filter(Boolean).join(' · ') || undefined,
+          })),
+        );
       }
 
       const { error: cErr } = await supabase.rpc('close_stock_period', {
@@ -421,13 +499,14 @@ export default function CountEntryPage() {
             <Button
               variant="secondary"
               fullWidth
-              onClick={() => void nav.push('count_correct_page', { id: productId })}
+              onClick={() => void nav.push('count_again_page', { id: productId })}
             >
-              Correct this count
+              Count it again
             </Button>
           ) : (
             <p className={styles.countHint}>
-              A count stands for the day. If it is wrong, an owner or manager can correct it.
+              This count stands until an owner or manager walks the shelf again — and the figure it
+              replaces is kept, with the name of whoever entered each.
             </p>
           )}
         </CountedToday>
@@ -615,17 +694,26 @@ export default function CountEntryPage() {
               <div className={styles.gap} role="alert">
                 <p className={styles.gapHead}>
                   <WarningIcon />
-                  {variance < 0 ? 'Stock is missing' : 'More than expected'}
+                  {variance < 0 ? 'Some of it is not there' : 'There is more than there should be'}
                 </p>
                 <p className={styles.gapNumber}>
                   {describeVariance(inUnits(variance), unit?.name ?? active?.baseUnit ?? 'piece')}
                 </p>
-                {lossValue > 0 && (
-                  <p className={styles.gapMeaning}>
-                    That is <strong>{formatMoney(lossValue)}</strong> at what this stock cost
-                    you.
-                  </p>
-                )}
+                {/* WHAT IT MEANS, in one sentence, before anything is asked. */}
+                <p className={styles.gapMeaning}>
+                  You counted{' '}
+                  <strong>
+                    {formatQty(Math.abs(inUnits(variance)))}{' '}
+                    {unitName(Math.abs(inUnits(variance)))}
+                  </strong>{' '}
+                  {variance < 0 ? 'fewer than' : 'more than'} your records expected.
+                  {lossValue > 0 && (
+                    <>
+                      {' '}
+                      That is <strong>{formatMoney(lossValue)}</strong> at what this stock cost you.
+                    </>
+                  )}
+                </p>
                 {state.withinTolerance && (
                   <p className={styles.gapMeaning}>
                     Small enough to be a normal counting difference — you can close without
@@ -634,38 +722,148 @@ export default function CountEntryPage() {
                 )}
               </div>
 
-              <p className={styles.reasonLabel}>What happened?</p>
-              <div className={styles.reasons}>
-                {REASONS.map((r) => (
+              {/*
+                ACCOUNTED FOR LINE BY LINE — one composer, the same shape as fees on a delivery and
+                payments on a sale. Pick what happened, say how many, add it; repeat until nothing is
+                left over. Only the reasons that can be true of THIS gap are offered: nothing is
+                stolen when there is more on the shelf than expected.
+              */}
+              <p className={styles.reasonLabel}>
+                {variance < 0 ? 'Where did it go?' : 'Where did it come from?'}
+              </p>
+
+              <p className={styles.accountLeft}>
+                {leftToAccount > 0.0001 ? (
+                  <>
+                    <strong>
+                      {formatQty(inUnits(leftToAccount))} {unitName(inUnits(leftToAccount))}
+                    </strong>{' '}
+                    still to account for
+                  </>
+                ) : (
+                  <>All {formatQty(Math.abs(inUnits(variance)))}{' '}
+                  {unitName(Math.abs(inUnits(variance)))} accounted for</>
+                )}
+              </p>
+
+              {parts.length > 0 && (
+                <ul className={styles.partList}>
+                  {parts.map((p) => (
+                    <li key={p.key} className={styles.partRow}>
+                      <span className={styles.partText}>
+                        <strong>{p.label}</strong> · {p.said}
+                        {p.note && <span className={styles.partNote}>{p.note}</span>}
+                      </span>
+                      <button
+                        type="button"
+                        className={styles.partRemove}
+                        onClick={() => setParts((prev) => prev.filter((x) => x.key !== p.key))}
+                        aria-label={`Remove ${p.label}`}
+                      >
+                        <CloseIcon />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {leftToAccount > 0.0001 && (
+                <div className={styles.composer}>
                   <button
-                    key={r.code}
                     type="button"
-                    className={`${styles.reason} ${reason === r.code ? styles.reasonActive : ''}`}
-                    onClick={() => setReason(r.code)}
-                    aria-pressed={reason === r.code}
+                    className={styles.pickReason}
+                    onClick={() => setPicking(true)}
                   >
-                    <span className={styles.reasonName}>{r.label}</span>
-                    <span className={styles.reasonEffect}>{r.effect}</span>
+                    {partReason ? (
+                      <span className={styles.pickChosen}>{partReason.label}</span>
+                    ) : (
+                      <span className={styles.pickEmpty}>
+                        <PlusIcon /> What happened?
+                      </span>
+                    )}
                   </button>
-                ))}
-              </div>
+
+                  {partReason && (
+                    <>
+                      <div className={styles.shapeBoxes}>
+                        <Field
+                          label="How many"
+                          numeric
+                          value={partQty}
+                          onChange={(e) => setPartQty(e.target.value)}
+                          placeholder="0"
+                          hint={`Up to ${formatQty(inUnits(leftToAccount))} ${unitName(
+                            inUnits(leftToAccount),
+                          )}`}
+                        />
+                      </div>
+
+                      {/* WHICH SHAPE the figure is in — a crate of it is not a bottle of it. */}
+                      {shapes.length > 1 && (
+                        <div className={styles.shapeRow} role="group" aria-label="In what">
+                          {shapes.map((u) => (
+                            <button
+                              key={u.productUnitId}
+                              type="button"
+                              className={`${styles.shapePick} ${
+                                (partShape ?? smallest?.productUnitId) === u.productUnitId
+                                  ? styles.shapePickOn
+                                  : ''
+                              }`}
+                              aria-pressed={(partShape ?? smallest?.productUnitId) === u.productUnitId}
+                              onClick={() => setPartShape(u.productUnitId)}
+                            >
+                              {u.plural}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      <Field
+                        label="Note"
+                        optional
+                        value={partNote}
+                        onChange={(e) => setPartNote(e.target.value)}
+                        placeholder="Who, when, anything worth remembering"
+                      />
+
+                      <div className={styles.composerActions}>
+                        <Button variant="secondary" onClick={() => setPartReason(null)}>
+                          Cancel
+                        </Button>
+                        <Button disabled={!canAddPart} onClick={addPart}>
+                          Add
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
 
               <Field
-                label="Note"
+                label="Anything about the whole count?"
                 optional
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                placeholder="Anything worth remembering"
+                placeholder="Kept with every line above"
               />
 
               <WorkedExample
                 label="Why this matters"
                 rows={[
-                  { label: 'Records expected', value: formatQty(state.expected) },
-                  { label: 'Actually there', value: formatQty(state.actual ?? 0) },
                   {
-                    label: 'Unaccounted for',
-                    value: `${formatQty(Math.abs(variance))} · ${formatMoney(lossValue)}`,
+                    label: 'Records expected',
+                    value: `${formatQty(inUnits(state.expected))} ${unitName(inUnits(state.expected))}`,
+                  },
+                  {
+                    label: 'You counted',
+                    value: `${formatQty(inUnits(state.actual ?? 0))} ${unitName(inUnits(state.actual ?? 0))}`,
+                  },
+                  {
+                    label: 'Not accounted for',
+                    value: `${formatQty(Math.abs(inUnits(variance)))} ${unitName(
+                      Math.abs(inUnits(variance)),
+                    )} · ${formatMoney(lossValue)}`,
                     emphasis: true,
                   },
                 ]}
@@ -676,6 +874,40 @@ export default function CountEntryPage() {
         </>
       )}
 
+
+      {/* A CHOICE IS A SHEET — and adding one is a pushed page, offered BEFORE the list. */}
+      <BottomSheet open={picking} onClose={() => setPicking(false)} title="What happened?">
+        <ul className={styles.pickList}>
+          <li>
+            <button
+              type="button"
+              className={styles.pickAdd}
+              onClick={() => {
+                setPicking(false);
+                void nav.push('variance_reason_page');
+              }}
+            >
+              <PlusIcon /> A reason of your own
+            </button>
+          </li>
+          {reasonsHere.map((r) => (
+            <li key={`${r.id ?? 'builtin'}-${r.label}`}>
+              <button
+                type="button"
+                className={styles.pickRow}
+                onClick={() => {
+                  setPartReason(r);
+                  setPartShape(null);
+                  setPicking(false);
+                }}
+              >
+                <span className={styles.pickName}>{r.label}</span>
+                {r.hint && <span className={styles.pickMeta}>{r.hint}</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </BottomSheet>
 
       <div className={styles.pageAction}>
         {done ? (
@@ -703,10 +935,10 @@ export default function CountEntryPage() {
             fullWidth
             busy={busy}
             busyLabel="Closing"
-            disabled={hasGap && !state.withinTolerance && !reason}
+            disabled={hasGap && !state.withinTolerance && leftToAccount > 0.0001}
             onClick={resolveAndClose}
           >
-            {hasGap ? 'Explain and close' : 'Close this count'}
+            {hasGap ? 'Account for it and close' : 'Close this count'}
           </Button>
         )}
       </div>
