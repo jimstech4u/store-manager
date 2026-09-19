@@ -270,6 +270,41 @@ export async function recordEmpties(args: {
   ledgersChanged();
 }
 
+/**
+ * Containers broken or lost — and, when the customer pays for them, the damages fee — in ONE write.
+ *
+ * It used to be two entries on two screens: "Broken or lost" here, "Keep some for breakage" on the
+ * deposit, typed and described twice and balanced by whoever remembered the second. The server does
+ * both in one transaction (0151): the fee comes out of their deposit as far as it goes, and anything
+ * beyond what is held is added to what they owe. Nothing is written unless all of it is.
+ *
+ * `parts` are in each owed row's own shape — the page has already turned "1 crate 3 bottles" into
+ * the rows it settles.
+ */
+export async function writeOffEmpties(args: {
+  storeId: string;
+  customerId: string;
+  parts: { productUnitId: string; qty: number }[];
+  /** What happened — kept on the container rows and on the fee. */
+  reason: string;
+  /** What was written off, in its shapes: "Goldberg 60cl: 1 crate 3 bottles". */
+  said: string;
+  fee?: number | null;
+}): Promise<{ kept: number; charged: number }> {
+  const { data, error } = await getSupabase().rpc('write_off_empties', {
+    p_store_id: args.storeId,
+    p_customer_id: args.customerId,
+    p_parts: args.parts.map((p) => ({ product_unit_id: p.productUnitId, qty: p.qty })),
+    p_reason: args.reason.trim(),
+    p_said: args.said,
+    p_fee: args.fee && args.fee > 0 ? args.fee : null,
+  });
+  if (error) throw error;
+  ledgersChanged();
+  const out = (data ?? {}) as { kept?: number | string; charged?: number | string };
+  return { kept: Number(out.kept) || 0, charged: Number(out.charged) || 0 };
+}
+
 // ─── What the customer form offers to owe against ────────────────────────────────────
 
 export interface ReturnableGroup {
