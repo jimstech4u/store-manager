@@ -90,16 +90,30 @@ export function saidAsPart(n: number): string {
  * the unit's name both take part in the key. Rolling a crate together with a bottle because both
  * are NBL would be the pool model's mistake in a new place.
  *
- * A group with only ONE product contributing is named by the PRODUCT, not the group. "Four NBL
- * bottles" when only Goldberg is owed says less than "four Goldberg bottles", and the shop reading
- * it back has to go and look up which beer anyway.
+ * WHOLE ONES ARE NAMED BY THE MAKER whenever the product has one — "NBL 2", even when only Gulder
+ * contributes. The shop says it that way because a whole crate IS interchangeable: the customer can
+ * hand back any NBL crate against it. (This used to name a lone contributor by the product, which is
+ * how the counter never talks about it.)
+ *
+ * ONE PRODUCT IS ADDED UP BEFORE IT IS SPLIT. A receipt now lists everything still with the customer
+ * — old receipts and this one — so the same beer can arrive as several rows: half a Goldberg crate
+ * from Monday and half from Wednesday. Split first, those are two halves; added first, they are the
+ * whole crate the customer is actually holding.
  */
-export function rollUpOwed(rows: OwedRow[]): OwedLine[] {
+export function rollUpOwed(input: OwedRow[]): OwedLine[] {
   const buckets = new Map<
     string,
     { unit: string; unitOne: string; group: string | null; whole: number; products: Set<string> }
   >();
   const parts: OwedLine[] = [];
+
+  const combined = new Map<string, OwedRow>();
+  for (const r of input) {
+    const k = `${r.productId}|${r.productUnitId}|${r.side ?? 'they_hold'}`;
+    const had = combined.get(k);
+    combined.set(k, had ? { ...had, owed: had.owed + r.owed } : { ...r });
+  }
+  const rows = [...combined.values()];
 
   for (const r of rows) {
     if (!(r.owed > 0)) continue;
@@ -150,9 +164,8 @@ export function rollUpOwed(rows: OwedRow[]): OwedLine[] {
   }
 
   const wholes: OwedLine[] = [...buckets.values()].map((b) => ({
-    // Named by the group only when more than one product is in the total. With one, the group name
-    // hides the answer rather than summarising it.
-    label: b.products.size > 1 && b.group ? b.group : [...b.products][0],
+    // By the maker whenever there is one — the whole crate is anybody's crate from that maker.
+    label: b.group ?? [...b.products][0],
     unit: b.whole === 1 ? b.unitOne : b.unit,
     qty: b.whole,
     said: String(b.whole),

@@ -9,6 +9,7 @@ import { InfoPanel } from '@/components/ui/Explain';
 import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
 import { getSupabase } from '@/lib/supabase/client';
 import { accountsChanged } from '@/lib/stacks/customer-account';
+import { ledgersChanged } from '@/lib/stacks/customer-ledgers';
 import { stockMoved } from '@/lib/stacks/catalog-stack';
 import { useListNotifier } from '@/hooks/useListChannel';
 import { formatMoney, messageOf } from '@/lib/format';
@@ -376,6 +377,13 @@ export function TakePayment({
        * it happened; every screen guessing on a timer is the arrangement this replaced.
        */
       accountsChanged();
+      /*
+       * AND THE EMPTIES LIST. A sale in a shape that comes back writes a container row for the
+       * customer, and the Empties page lives in its own scope that `accountsChanged` never reaches —
+       * so a customer who had just taken three crates was missing from the list until the page was
+       * reloaded by hand.
+       */
+      ledgersChanged();
 
       /*
        * A SALE MOVES STOCK, and the stock screens were never told.

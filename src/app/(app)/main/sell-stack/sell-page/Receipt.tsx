@@ -38,6 +38,8 @@ interface SaleDetail {
   /** What the customer still holds of the shop's, per pool, after this sale. */
   /** What this receipt sent out, one row per product shape (0140). Rolled up for printing. */
   empties: unknown;
+  /** What the customer owed once this sale was recorded, as at the sale (0149). */
+  account?: { owed_after: string | number } | null;
   lines: {
     id: string;
     product_name: string;
@@ -169,15 +171,24 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
 
   const { sale, customer, lines, payments, charges, corrected } = detail;
   /*
-   * STILL WITH YOU, said the way the counter says it.
+   * STILL WITH YOU, said the way the counter says it — and ALL of it, not just today's.
    *
-   * Whole ones add across a maker, parts stay with their product: 3½ Gulder and 5½ Goldberg is
-   * "8 NBL crates, ½ Gulder crate, ½ Goldberg crate". Applied here, on the rows this receipt sent
-   * out, by the same function the empties pages use — so paper and screen cannot disagree.
+   * Everything the customer holds as at this sale: what earlier receipts sent out, less what came
+   * back, plus this one (0149). Whole ones add across a maker, parts stay with their product: 3½
+   * Goldberg and 2½ Gulder is "5 NBL crates, ½ Goldberg crate, ½ Gulder crate". Applied by the same
+   * function the empties pages use — so paper and screen cannot disagree.
    */
   const stillWithYou = rollUpOwed(owedRowsFromReceipt(detail.empties));
   const paid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
   const owing = Number(sale.total) - paid;
+  /*
+   * THE ACCOUNT, AS AT THIS SALE: what they owed before it, what it left, and where that puts them.
+   *
+   * «16,500 (old) + 1,000 (new) = 17,500». Read as at the sale rather than today, so a receipt
+   * reprinted next month still says what it said when it was handed over.
+   */
+  const owedAfter = detail.account ? Number(detail.account.owed_after) || 0 : null;
+  const owedBefore = owedAfter === null ? null : owedAfter - owing;
   const width = settings?.width ?? 80;
   // Below roughly 58mm there is not enough width for a two-column row, so the layout stacks.
   const narrow = width < 58;
@@ -219,7 +230,15 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
         label: `Paid (${p.method})`,
         value: formatMoney(p.amount),
       })),
-      ...(owing > 0 ? [{ label: 'Balance', value: formatMoney(owing), strong: true }] : []),
+      ...(owing > 0 ? [{ label: 'Left on this sale', value: formatMoney(owing) }] : []),
+      ...(owedBefore !== null && owedBefore > 0.005
+        ? [{ label: 'Owed before', value: formatMoney(owedBefore) }]
+        : []),
+      ...(owedAfter !== null && owedAfter > 0.005
+        ? [{ label: 'Total owed', value: formatMoney(owedAfter), strong: true }]
+        : owing > 0
+          ? [{ label: 'Balance', value: formatMoney(owing), strong: true }]
+          : []),
       // What the customer still holds of the shop's. The crates are the half of an account that
       // gets disputed, precisely because nobody has anything in writing about them.
       ...(stillWithYou.length > 0
@@ -335,15 +354,26 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
 
           {owing > 0 && (
             <div className={styles.row}>
-              <span>Balance</span>
+              <span>{owedAfter !== null ? 'Left on this sale' : 'Balance'}</span>
               <span className={styles.value}>{formatMoney(owing)}</span>
             </div>
           )}
 
-          {customer && Number(customer.balance) > 0 && (
+          {/*
+            BEFORE AND AFTER, as at this sale. "Total owed" used to read the balance TODAY, so an old
+            receipt reprinted later disagreed with the copy the customer was holding.
+          */}
+          {owedBefore !== null && owedBefore > 0.005 && (
             <div className={styles.row}>
+              <span>Owed before</span>
+              <span className={styles.value}>{formatMoney(owedBefore)}</span>
+            </div>
+          )}
+
+          {owedAfter !== null && owedAfter > 0.005 && (
+            <div className={`${styles.row} ${styles.grand}`}>
               <span>Total owed</span>
-              <span className={styles.value}>{formatMoney(customer.balance)}</span>
+              <span className={styles.value}>{formatMoney(owedAfter)}</span>
             </div>
           )}
         </div>

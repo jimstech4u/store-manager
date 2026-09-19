@@ -50,8 +50,10 @@ interface SharedReceipt {
   /** Money held against containers. Not payment for anything: it comes back when they do. */
   deposit_total: string;
   /** What is still out, grouped the way a shop counts it — by category, not by brand. */
-  /** What this receipt sent out, one row per product shape (0140). */
+  /** Everything still with the customer as at this sale — earlier receipts and this one (0149). */
   empties: unknown;
+  /** What the customer owed once this sale was recorded, as at the sale (0149). */
+  account?: { owed_after: string | number } | null;
   /** Grouped by method, because that is what somebody checks against their own record. */
   payments: { amount: string; method: string }[];
   paid_total: string;
@@ -62,8 +64,11 @@ interface SharedReceipt {
  *
  * Public: no sign-in, because the point is that it works for someone who does not use this
  * software and never will. What they get is deliberately narrower than what staff see — no
- * costs, no margin, no running balance. A receipt handed to a customer is not a window into the
- * shop's buying prices.
+ * costs and no margin: a receipt handed to a customer is not a window into the shop's buying prices.
+ *
+ * Their OWN account is on it, though (0149): what they owed before this sale and what they owe after
+ * it, and every container of the shop's they are holding. That is the customer's business before it
+ * is anybody's, and it is the part of a receipt that settles an argument.
  *
  * Unknown, revoked and expired tokens all produce the same message, so the page cannot be used
  * to work out whether a token ever existed.
@@ -157,6 +162,9 @@ export default function SharedReceiptPage({
    */
   const paid = Number(receipt.paid_total ?? 0);
   const owing = Number(sale.total) - paid;
+  // As at this sale, the same three figures the till's copy prints.
+  const owedAfter = receipt.account ? Number(receipt.account.owed_after) || 0 : null;
+  const owedBefore = owedAfter === null ? null : owedAfter - owing;
   const width = Number(shop.printer_width_mm) || 80;
   const narrow = width < 58;
 
@@ -307,9 +315,23 @@ export default function SharedReceiptPage({
           ))}
 
           {owing > 0 && sale.status !== 'voided' && (
-            <div className={`${styles.row} ${styles.owing}`}>
-              <span>Balance</span>
+            <div className={`${styles.row} ${owedAfter === null ? styles.owing : ''}`}>
+              <span>{owedAfter !== null ? 'Left on this sale' : 'Balance'}</span>
               <span className={styles.value}>{formatMoney(owing)}</span>
+            </div>
+          )}
+
+          {sale.status !== 'voided' && owedBefore !== null && owedBefore > 0.005 && (
+            <div className={styles.row}>
+              <span>Owed before</span>
+              <span className={styles.value}>{formatMoney(owedBefore)}</span>
+            </div>
+          )}
+
+          {sale.status !== 'voided' && owedAfter !== null && owedAfter > 0.005 && (
+            <div className={`${styles.row} ${styles.owing}`}>
+              <span>Total owed</span>
+              <span className={styles.value}>{formatMoney(owedAfter)}</span>
             </div>
           )}
         </div>
@@ -326,7 +348,7 @@ export default function SharedReceiptPage({
         {empties.length > 0 && (
           <div className={styles.totals}>
             <div className={styles.row}>
-              <span className={styles.emptiesHead}>Still to come back</span>
+              <span className={styles.emptiesHead}>Still with you</span>
             </div>
             {empties.map((e) => (
               <div className={styles.row} key={`${e.label}-${e.unit}-${e.isPart}`}>

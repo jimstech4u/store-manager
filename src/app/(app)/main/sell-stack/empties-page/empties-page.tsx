@@ -9,6 +9,7 @@ import { useSearchController } from '@academix-admin/search-viewer';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { useEmptiesCustomers, type EmptiesCustomer } from '@/lib/stacks/customer-ledgers';
+import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { formatQty } from '@/lib/format';
 import styles from './empties-page.module.css';
 
@@ -28,7 +29,9 @@ export default function EmptiesPage() {
   const nav = useNav();
   const goBack = useStackBack();
   const { store } = useAuth();
-  const { rows } = useEmptiesCustomers(store?.id ?? null);
+  const { rows, reload } = useEmptiesCustomers(store?.id ?? null);
+  // Another till's sale lands here on the next look, not on a reload somebody has to remember.
+  useLiveRefresh(nav, reload);
   /*
    * SEARCHING HAPPENS IN THE VIEWER, not in a box on the page.
    *
