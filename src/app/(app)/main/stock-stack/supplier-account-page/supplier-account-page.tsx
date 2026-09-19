@@ -3,6 +3,7 @@
 import { useCallback } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { RecordLink } from '@/components/ui/RecordLink';
+import { usePermission } from '@/hooks/usePermission';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { Button } from '@/components/ui/Button';
 import { InfoPanel } from '@/components/ui/Explain';
@@ -42,6 +43,7 @@ interface HistoryRow {
  *              do the interleaving in their head.
  */
 export default function SupplierAccountPage() {
+  const { can } = usePermission();
   const nav = useNav();
   const goBack = useStackBack();
   const location = useLocation();
@@ -119,33 +121,39 @@ export default function SupplierAccountPage() {
               a load sent back. Recording any of them as a delivery would invent stock.
             */}
             <div className={styles.actions}>
-              <Button
-                size="large"
-                fullWidth
-                onClick={() =>
-                  void nav.push('supplier_payment_page', { id: supplierId, kind: 'paid' })
-                }
-              >
-                <CashIcon /> Record a payment
-              </Button>
-              <Button
-                variant="secondary"
-                fullWidth
-                onClick={() =>
-                  void nav.push('supplier_payment_page', { id: supplierId, kind: 'charge' })
-                }
-              >
-                Record a charge
-              </Button>
-              <Button
-                variant="secondary"
-                fullWidth
-                onClick={() =>
-                  void nav.push('supplier_payment_page', { id: supplierId, kind: 'credit' })
-                }
-              >
-                Record what they owe you
-              </Button>
+              {can('payments.record') && (
+                <Button
+                  size="large"
+                  fullWidth
+                  onClick={() =>
+                    void nav.push('supplier_payment_page', { id: supplierId, kind: 'paid' })
+                  }
+                >
+                  <CashIcon /> Record a payment
+                </Button>
+              )}
+              {can('payments.record') && (
+                <Button
+                  variant="secondary"
+                  fullWidth
+                  onClick={() =>
+                    void nav.push('supplier_payment_page', { id: supplierId, kind: 'charge' })
+                  }
+                >
+                  Record a charge
+                </Button>
+              )}
+              {can('payments.record') && (
+                <Button
+                  variant="secondary"
+                  fullWidth
+                  onClick={() =>
+                    void nav.push('supplier_payment_page', { id: supplierId, kind: 'credit' })
+                  }
+                >
+                  Record what they owe you
+                </Button>
+              )}
             </div>
 
             <h2 className={styles.section}>Containers sent back</h2>

@@ -66,7 +66,7 @@ export default function SettingsPage() {
   const nav = useNav();
   const goBack = useStackBack();
   const { store, user, signOut } = useAuth();
-  const { can, role } = usePermission();
+  const { can, canOpen, role } = usePermission();
   const { theme, storedTheme, setTheme } = useTheme();
   const hiddenNotices = useHiddenNotices();
   const accounts = useBankAccounts(store?.id ?? null);
@@ -370,31 +370,35 @@ export default function SettingsPage() {
             ever, and a shop created by a mistyped name could never be closed, so it sat in the
             switcher and, having no `onboarded_at`, answered sign-in with a setup wizard.
           */}
-          <button
-            type="button"
-            className={styles.linkRow}
-            onClick={() => nav.push('shop_page')}
-          >
-            <span className={styles.linkMain}>
-              <span className={styles.linkName}>This shop</span>
-              <span className={styles.sectionNote}>
-                Its name on your receipts, where it is, and closing one you did not mean to make
+          {canOpen('shop_page') && (
+            <button
+              type="button"
+              className={styles.linkRow}
+              onClick={() => nav.push('shop_page')}
+            >
+              <span className={styles.linkMain}>
+                <span className={styles.linkName}>This shop</span>
+                <span className={styles.sectionNote}>
+                  Its name on your receipts, where it is, and closing one you did not mean to make
+                </span>
               </span>
-            </span>
-          </button>
+            </button>
+          )}
 
-          <button
-            type="button"
-            className={styles.linkRow}
-            onClick={() => nav.push('words_page')}
-          >
-            <span className={styles.linkMain}>
-              <span className={styles.linkName}>Words you measure in</span>
-              <span className={styles.sectionNote}>
-                Crate, bottle, dirica, paint — correct one here and it changes everywhere
+          {canOpen('words_page') && (
+            <button
+              type="button"
+              className={styles.linkRow}
+              onClick={() => nav.push('words_page')}
+            >
+              <span className={styles.linkMain}>
+                <span className={styles.linkName}>Words you measure in</span>
+                <span className={styles.sectionNote}>
+                  Crate, bottle, dirica, paint — correct one here and it changes everywhere
+                </span>
               </span>
-            </span>
-          </button>
+            </button>
+          )}
 
         </>
       )}
@@ -446,19 +450,21 @@ export default function SettingsPage() {
             Its own row rather than a tab on the staff screen: "who works here" and "who owes for
             missing stock" are different questions, and one of them is asked far less often.
           */}
-          <button
-            type="button"
-            className={styles.linkRow}
-            onClick={() => nav.push('staff_charges_page')}
-          >
-            <span className={styles.linkMain}>
-              <span className={styles.linkName}>What staff owe</span>
-              <span className={styles.sectionNote}>
-                Stock or cash that went missing on somebody&rsquo;s watch, and what has been paid
-                back
+          {canOpen('staff_charges_page') && (
+            <button
+              type="button"
+              className={styles.linkRow}
+              onClick={() => nav.push('staff_charges_page')}
+            >
+              <span className={styles.linkMain}>
+                <span className={styles.linkName}>What staff owe</span>
+                <span className={styles.sectionNote}>
+                  Stock or cash that went missing on somebody&rsquo;s watch, and what has been paid
+                  back
+                </span>
               </span>
-            </span>
-          </button>
+            </button>
+          )}
         </>
       )}
 
@@ -703,9 +709,11 @@ export default function SettingsPage() {
                     Receipts can only show an account you have added. Add one and it will be
                     offered here.
                   </p>
-                  <Button onClick={() => void nav.push('bank_form_page')}>
-                    <PlusIcon /> Add a bank account
-                  </Button>
+                  {canOpen('bank_form_page') && (
+                    <Button onClick={() => void nav.push('bank_form_page')}>
+                      <PlusIcon /> Add a bank account
+                    </Button>
+                  )}
                 </InfoPanel>
               ) : (
                 <>
@@ -735,13 +743,15 @@ export default function SettingsPage() {
                       );
                     })}
                   </ul>
-                  <button
-                    type="button"
-                    className={styles.accountAdd}
-                    onClick={() => void nav.push('bank_form_page')}
-                  >
-                    <PlusIcon /> Add another account
-                  </button>
+                  {canOpen('bank_form_page') && (
+                    <button
+                      type="button"
+                      className={styles.accountAdd}
+                      onClick={() => void nav.push('bank_form_page')}
+                    >
+                      <PlusIcon /> Add another account
+                    </button>
+                  )}
                 </>
               )}
 

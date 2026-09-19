@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { useNav } from '@academix-admin/navigation-stack';
+import { usePermission } from '@/hooks/usePermission';
 import styles from './RecordLink.module.css';
 
 /**
@@ -26,6 +27,9 @@ export function RecordLink({
   children: ReactNode;
 }) {
   const nav = useNav();
+  const { canOpen } = usePermission();
+  // Somebody who cannot open this record reads the name, as plain text — no door they cannot use.
+  if (!canOpen(route)) return <span className={className}>{children}</span>;
   return (
     <button
       type="button"

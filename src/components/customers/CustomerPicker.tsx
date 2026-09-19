@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
+import { usePermission } from '@/hooks/usePermission';
 import styles from './CustomerPicker.module.css';
 import { SelectionViewer, useSelectionController } from '@academix-admin/selection-viewer';
 import { useTheme } from '@/context/ThemeContext';
@@ -65,7 +66,8 @@ export function CustomerPicker({
    * component reaching for a route by name is a component that breaks when it is reused somewhere
    * that route does not exist.
    */
-  onCreate: (name: string) => void;
+  /** Offered only to somebody who may add customers — the picker checks, so no caller has to. */
+  onCreate?: (name: string) => void;
   storeId: string;
   initialName?: string;
 }) {
@@ -110,9 +112,14 @@ export function CustomerPicker({
     enabled: open,
   });
 
-  /** Offered at both ends of a list that runs to hundreds. */
-  const addButton = (
-    <button type="button" className={styles.addRow} onClick={() => onCreate(query.trim())}>
+  /*
+   * Offered at both ends of a list that runs to hundreds — and only to somebody who may add a
+   * customer: a row that opens a form the server will refuse is a door they cannot use.
+   */
+  const { canOpen } = usePermission();
+  const create = onCreate && canOpen('customer_form_page') ? onCreate : null;
+  const addButton = create && (
+    <button type="button" className={styles.addRow} onClick={() => create(query.trim())}>
       <PlusIcon /> {query.trim() ? `Add "${query.trim()}"` : 'Add a new customer'}
     </button>
   );
@@ -142,8 +149,8 @@ export function CustomerPicker({
           <ViewerNoResult
             text="Nobody by that name yet"
             hint="You only need to save someone when they are buying on credit."
-            actionText={query.trim() ? `Add "${query.trim()}"` : 'Add a new customer'}
-            onAction={() => onCreate(query.trim())}
+            actionText={create ? (query.trim() ? `Add "${query.trim()}"` : 'Add a new customer') : undefined}
+            onAction={create ? () => create(query.trim()) : undefined}
           />
         ),
       }}

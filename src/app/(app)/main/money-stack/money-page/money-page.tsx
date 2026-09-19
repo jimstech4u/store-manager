@@ -56,7 +56,7 @@ export default function MoneyPage() {
    * Not defaulted in the browser: "this month" has to mean the shop's calendar month in the shop's
    * timezone, and a till phone that is a day out would quietly summarise the wrong month.
    */
-  const { can } = usePermission();
+  const { can, canOpen } = usePermission();
 
   const goBack = useStackBack();
   const nav = useNav();
@@ -235,12 +235,17 @@ export default function MoneyPage() {
       title="Money"
       subtitle="Who owes you, and what has been paid"
       actions={[
-        {
-          key: 'reports',
-          icon: <ChartIcon />,
-          onClick: () => void nav.push('reports_page'),
-          ariaLabel: 'Reports you can print or save',
-        },
+        // Only for somebody who may read them — the page would only say "not part of your job".
+        ...(canOpen('reports_page')
+          ? [
+              {
+                key: 'reports',
+                icon: <ChartIcon />,
+                onClick: () => void nav.push('reports_page'),
+                ariaLabel: 'Reports you can print or save',
+              },
+            ]
+          : []),
         {
           key: 'sales',
           icon: <ReceiptIcon />,

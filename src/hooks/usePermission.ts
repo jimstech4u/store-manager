@@ -2,7 +2,8 @@
 
 import { useCallback, useMemo } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
-import { roleCan, type Permission } from '@/lib/permissions';
+import { ROUTE_NEEDS, roleCan, type Permission } from '@/lib/permissions';
+import { useGrantedPermissions } from '@/providers/PermissionsProvider';
 
 /**
  * `can('sales.record')` — the single way the UI asks whether something is allowed.
@@ -18,7 +19,21 @@ export function usePermission() {
   const { store } = useAuth();
   const role = store?.role ?? null;
 
-  const can = useCallback((permission: Permission) => roleCan(role, permission), [role]);
+  // The server's per-person answer once it has arrived; the role until then.
+  const granted = useGrantedPermissions();
+  const can = useCallback(
+    (permission: Permission) => (granted ? granted.has(permission) : roleCan(role, permission)),
+    [granted, role],
+  );
 
-  return useMemo(() => ({ can, role }), [can, role]);
+  // Whether a page can be opened at all — for the button, action or link that would push it.
+  const canOpen = useCallback(
+    (route: string) => {
+      const needs = ROUTE_NEEDS[route];
+      return needs ? can(needs) : true;
+    },
+    [can],
+  );
+
+  return useMemo(() => ({ can, canOpen, role }), [can, canOpen, role]);
 }

@@ -2,6 +2,7 @@
 
 import { useCallback } from 'react';
 import styles from '../../money-stack/money-page/money-page.module.css';
+import { usePermission } from '@/hooks/usePermission';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -33,6 +34,7 @@ interface CustomerRow {
  * customer only needs saving when they buy on credit. This is where the ones who were saved live.
  */
 export default function PeoplePage() {
+  const { canOpen } = usePermission();
   const goBack = useStackBack();
   const nav = useNav();
   const { store } = useAuth();
@@ -148,21 +150,25 @@ export default function PeoplePage() {
       title="People"
       subtitle="Your customers"
       // Was a bar pinned to the bottom of the page, which covered the last customer in the list.
-      actions={[
-        {
-          key: 'add',
-          icon: <PlusIcon />,
-          /*
-           * Straight to the form, not to the picker.
-           *
-           * "+" on a list of customers means "add one" — it used to open the CHOOSER, which is
-           * for finding somebody who already exists. Being shown a search box after asking to add
-           * a customer is being answered a question you did not ask.
-           */
-          onClick: () => void nav.push('customer_form_page'),
-          ariaLabel: 'Add a customer',
-        },
-      ]}
+      actions={
+        canOpen('customer_form_page')
+          ? [
+            {
+              key: 'add',
+              icon: <PlusIcon />,
+              /*
+               * Straight to the form, not to the picker.
+               *
+               * "+" on a list of customers means "add one" — it used to open the CHOOSER, which is
+               * for finding somebody who already exists. Being shown a search box after asking to add
+               * a customer is being answered a question you did not ask.
+               */
+              onClick: () => void nav.push('customer_form_page'),
+              ariaLabel: 'Add a customer',
+            },
+            ]
+          : undefined
+      }
     >
       <PageState status={status}>
         {() => (

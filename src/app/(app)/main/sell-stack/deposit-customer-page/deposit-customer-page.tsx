@@ -2,6 +2,7 @@
 
 
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
+import { usePermission } from '@/hooks/usePermission';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { Button } from '@/components/ui/Button';
 import { InfoPanel } from '@/components/ui/Explain';
@@ -26,6 +27,7 @@ import styles from './deposit-customer-page.module.css';
  * the screen works out is one that disagrees the moment two rows share a timestamp.
  */
 export default function DepositCustomerPage() {
+  const { canOpen } = usePermission();
   const nav = useNav();
   const goBack = useStackBack();
   const location = useLocation();
@@ -102,28 +104,34 @@ export default function DepositCustomerPage() {
               typed into one survives a rotation, and this moves somebody's money.
             */}
             <div className={styles.actions}>
-              <Button
-                fullWidth
-                disabled={held <= 0}
-                onClick={() => void nav.push('deposit_move_page', { id: customerId, mode: 'give' })}
-              >
-                Give some back
-              </Button>
-              <Button
-                variant="danger"
-                fullWidth
-                disabled={held <= 0}
-                onClick={() => void nav.push('deposit_move_page', { id: customerId, mode: 'keep' })}
-              >
-                Keep some for breakage
-              </Button>
-              <Button
-                variant="secondary"
-                fullWidth
-                onClick={() => void nav.push('deposit_move_page', { id: customerId, mode: 'take' })}
-              >
-                Take more
-              </Button>
+              {canOpen('deposit_move_page') && (
+                <Button
+                  fullWidth
+                  disabled={held <= 0}
+                  onClick={() => void nav.push('deposit_move_page', { id: customerId, mode: 'give' })}
+                >
+                  Give some back
+                </Button>
+              )}
+              {canOpen('deposit_move_page') && (
+                <Button
+                  variant="danger"
+                  fullWidth
+                  disabled={held <= 0}
+                  onClick={() => void nav.push('deposit_move_page', { id: customerId, mode: 'keep' })}
+                >
+                  Keep some for breakage
+                </Button>
+              )}
+              {canOpen('deposit_move_page') && (
+                <Button
+                  variant="secondary"
+                  fullWidth
+                  onClick={() => void nav.push('deposit_move_page', { id: customerId, mode: 'take' })}
+                >
+                  Take more
+                </Button>
+              )}
             </div>
 
             <h2 className={styles.section}>Every move of it</h2>

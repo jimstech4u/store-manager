@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
+import { usePermission } from '@/hooks/usePermission';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { Button } from '@/components/ui/Button';
 import { InfoPanel } from '@/components/ui/Explain';
@@ -33,6 +34,7 @@ import styles from './empties-customer-page.module.css';
  * row saying what happened.
  */
 export default function EmptiesCustomerPage() {
+  const { canOpen } = usePermission();
   const nav = useNav();
   const goBack = useStackBack();
   const location = useLocation();
@@ -173,30 +175,34 @@ export default function EmptiesCustomerPage() {
         a dismiss, and nothing typed survives a rotation.
       */}
       <div className={styles.actions}>
-        <Button
-          fullWidth
-          disabled={outstanding.length === 0}
-          onClick={() =>
-            void nav.push('empties_record_page', { id: customerId, direction: 'returned' })
-          }
-        >
-          <PlusIcon /> They brought some back
-        </Button>
+        {canOpen('empties_record_page') && (
+          <Button
+            fullWidth
+            disabled={outstanding.length === 0}
+            onClick={() =>
+              void nav.push('empties_record_page', { id: customerId, direction: 'returned' })
+            }
+          >
+            <PlusIcon /> They brought some back
+          </Button>
+        )}
         {/*
           A WRITE-OFF IS NOT A RETURN, and it is red because it closes an obligation without the
           thing coming back. On trust, broken, or paid for at the counter — all ordinary, and all
           previously impossible to record unless the shop happened to hold a deposit.
         */}
-        <Button
-          variant="danger"
-          fullWidth
-          disabled={outstanding.length === 0}
-          onClick={() =>
-            void nav.push('empties_record_page', { id: customerId, direction: 'damaged' })
-          }
-        >
-          Broken or lost
-        </Button>
+        {canOpen('empties_record_page') && (
+          <Button
+            variant="danger"
+            fullWidth
+            disabled={outstanding.length === 0}
+            onClick={() =>
+              void nav.push('empties_record_page', { id: customerId, direction: 'damaged' })
+            }
+          >
+            Broken or lost
+          </Button>
+        )}
       </div>
 
       <h2 className={styles.section}>Everything that has happened</h2>

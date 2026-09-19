@@ -70,7 +70,7 @@ export default function ReviewPage() {
   const nav = useNav();
   const goBack = useStackBack();
   const { store } = useAuth();
-  const { can } = usePermission();
+  const { can, canOpen } = usePermission();
 
   /*
    * The review queue in state-stack.
@@ -249,13 +249,15 @@ export default function ReviewPage() {
                 </div>
 
                 <div className={styles.cardActions}>
-                  <Button
-                    size="small"
-                    variant="secondary"
-                    onClick={() => void nav.push('product_form_page', { id: p.id })}
-                  >
-                    Fill in the rest
-                  </Button>
+                  {canOpen('product_form_page') && (
+                    <Button
+                      size="small"
+                      variant="secondary"
+                      onClick={() => void nav.push('product_form_page', { id: p.id })}
+                    >
+                      Fill in the rest
+                    </Button>
+                  )}
                   <Button
                     size="small"
                     busy={busy === p.id}
@@ -297,13 +299,15 @@ export default function ReviewPage() {
                 </div>
 
                 <div className={styles.cardActions}>
-                  <Button
-                    size="small"
-                    variant="secondary"
-                    onClick={() => void nav.push('customer_form_page', { id: c.id })}
-                  >
-                    Check the details
-                  </Button>
+                  {canOpen('customer_form_page') && (
+                    <Button
+                      size="small"
+                      variant="secondary"
+                      onClick={() => void nav.push('customer_form_page', { id: c.id })}
+                    >
+                      Check the details
+                    </Button>
+                  )}
                   <Button
                     size="small"
                     busy={busy === c.id}

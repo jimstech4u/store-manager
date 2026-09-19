@@ -12,6 +12,7 @@ import { useOverlayRoute } from '@academix-admin/navigation-stack';
 import { useTheme } from '@/context/ThemeContext';
 import { useProductSearch, type Product } from '@/lib/stacks/catalog-stack';
 import { formatMoney, formatQty, pluralUnit } from '@/lib/format';
+import { usePermission } from '@/hooks/usePermission';
 import styles from './ProductPicker.module.css';
 
 /**
@@ -58,6 +59,9 @@ export function ProductPicker({
   emptyHint?: string;
   zIndex?: number;
 }) {
+  // Creating an item is offered only to somebody who may (products.manage) — checked here, once.
+  const { canOpen } = usePermission();
+  const addNew = onAddNew && canOpen('product_form_page') ? onAddNew : undefined;
   const { theme } = useTheme();
   const dark = theme === 'dark';
 
@@ -138,11 +142,11 @@ export function ProductPicker({
               something it has never entered. Sending somebody elsewhere here means abandoning a
               half-built receipt or a half-entered delivery, so the form comes to them.
             */}
-            {onAddNew && (
+            {addNew && (
               <Button
                 size="large"
                 fullWidth
-                onClick={() => onAddNew(query.trim())}
+                onClick={() => addNew(query.trim())}
               >
                 <PlusIcon /> Add &ldquo;{query.trim() || 'a new item'}&rdquo; to your shop
               </Button>
@@ -183,8 +187,8 @@ export function ProductPicker({
         put it at the top; this is the same list of the same kind of thing and should behave the
         same way.
       */}
-      {onAddNew && (
-        <button type="button" className={styles.addRow} onClick={() => onAddNew(query.trim())}>
+      {addNew && (
+        <button type="button" className={styles.addRow} onClick={() => addNew(query.trim())}>
           <PlusIcon /> {query.trim() ? `Add "${query.trim()}"` : 'Add something new'}
         </button>
       )}

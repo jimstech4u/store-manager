@@ -96,6 +96,51 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   ],
 };
 
+/**
+ * WHAT OPENING EACH PAGE NEEDS — the permission the server checks for that page's job.
+ *
+ * One map, read in three places, so a person never meets a door they cannot open:
+ *   * a button, header action or name link that leads here is not drawn (`canOpen`);
+ *   * the page itself, reached anyway (an old link, a URL), says so under its one header;
+ *   * and the server refuses regardless — this map only saves somebody the walk.
+ *
+ * Each entry is the permission the page's own write checks in the database (`has_permission`), not
+ * a guess: counting the yard is `deposits.manage` because `count_empties` asks for it, and naming a
+ * variance reason is `stock.count` because `add_variance_reason` does. Pages absent from here are
+ * open to every member.
+ */
+export const ROUTE_NEEDS: Readonly<Record<string, Permission>> = {
+  count_page: 'stock.count',
+  count_entry_page: 'stock.count',
+  count_again_page: 'counts.correct',
+  variance_reason_page: 'stock.count',
+  yard_count_page: 'deposits.manage',
+  reports_page: 'reports.view',
+  review_page: 'records.confirm',
+  staff_page: 'staff.manage',
+  staff_invite_page: 'staff.manage',
+  staff_charges_page: 'staff.charge',
+  words_page: 'products.manage',
+  shop_page: 'store.settings',
+  bank_form_page: 'store.settings',
+  receive_page: 'stock.receive',
+  suppliers_page: 'stock.receive',
+  supplier_form_page: 'stock.receive',
+  supplier_account_page: 'stock.receive',
+  supplier_payment_page: 'stock.receive',
+  product_form_page: 'products.manage',
+  units_page: 'products.manage',
+  unit_form_page: 'products.manage',
+  group_form_page: 'products.manage',
+  shape_price_page: 'products.manage',
+  expense_page: 'expenses.record',
+  amend_page: 'sales.amend',
+  account_action_page: 'payments.record',
+  deposit_move_page: 'deposits.manage',
+  empties_record_page: 'deposits.manage',
+  customer_form_page: 'customers.manage',
+};
+
 export function roleCan(role: Role | null | undefined, permission: Permission): boolean {
   if (!role) return false;
   return ROLE_PERMISSIONS[role]?.includes(permission) ?? false;

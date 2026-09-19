@@ -1,6 +1,7 @@
 'use client';
 
 import type { ComponentType } from 'react';
+import { gatePage } from '@/components/ui/PermissionGate';
 import ProductPage from './stock-stack/product-page/product-page';
 import ProductFormPage from './stock-stack/product-form-page/product-form-page';
 import ReceivePage from './stock-stack/receive-page/receive-page';
@@ -71,7 +72,29 @@ import WordsPage from './settings-stack/words-page/words-page';
  * these follow each tab's own list in the URL by position too, so one inserted in the middle would
  * send every open URL for the pages after it somewhere else.
  */
-export const RECORD_PAGES: Record<string, ComponentType> = {
+/*
+ * Pages that say "not your job" in their own words, under their own title — left to do it. Every
+ * other page that needs a permission (`ROUTE_NEEDS`) is wrapped by `gatePage` below.
+ */
+const SAYS_ITSELF = new Set([
+  'count_page',
+  'count_again_page',
+  'reports_page',
+  'review_page',
+  'staff_page',
+  'words_page',
+]);
+
+function gateAll(pages: Record<string, ComponentType>): Record<string, ComponentType> {
+  return Object.fromEntries(
+    Object.entries(pages).map(([route, page]) => [
+      route,
+      SAYS_ITSELF.has(route) ? page : gatePage(route, page),
+    ]),
+  );
+}
+
+export const RECORD_PAGES: Record<string, ComponentType> = gateAll({
   // Stock and what is bought
   product_page: ProductPage,
   product_form_page: ProductFormPage,
@@ -127,7 +150,7 @@ export const RECORD_PAGES: Record<string, ComponentType> = {
   bank_page: BankPage,
   bank_form_page: BankFormPage,
   words_page: WordsPage,
-};
+});
 
 /** Handed to each stack's `additionalNavLinks` — one array, so its identity never changes. */
 export const RECORD_LINKS = [RECORD_PAGES];

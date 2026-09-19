@@ -39,7 +39,7 @@ export default function ProductPage() {
 
   // Told when this item is removed, so the stock list loses it without being re-read.
   const notifyProducts = useListNotifier<Product>('products');
-  const { can } = usePermission();
+  const { can, canOpen } = usePermission();
 
   const productId = (location?.params?.id as string | undefined) ?? null;
 
@@ -257,7 +257,12 @@ export default function ProductPage() {
                   number. Only for a shape customers actually buy in: a price on any other can never
                   reach a receipt.
                 */}
-                {u.isSold ? (
+                {u.isSold && !canOpen('shape_price_page') ? (
+                  // Somebody who cannot change prices reads the price; it is not a button for them.
+                  <span className={styles.shapePrice}>
+                    {u.price != null ? formatMoney(u.price) : 'no price yet'}
+                  </span>
+                ) : u.isSold ? (
                   <button
                     type="button"
                     className={styles.shapePriceButton}

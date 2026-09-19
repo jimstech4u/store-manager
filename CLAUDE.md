@@ -540,6 +540,28 @@ tries has ten empty fields on it for the nine that do not apply this time.
 The shop names each one as it adds it. That is also why the fees are stored by name rather than
 summed into a total — "loading" and "union levy" mean something to the person reading it back.
 
+## Nobody meets a door they cannot open
+
+Three layers, one map (`ROUTE_NEEDS` in `lib/permissions.ts`, each entry the permission that page's
+own write checks in the database):
+
+1. **The way in is not drawn.** A button, header action or row that would push a page this person
+   cannot use is absent (`usePermission().canOpen(route)`), and a `RecordLink` to one reads as plain
+   text. The pickers check for themselves, so no caller has to: `CustomerPicker` hides "Add a new
+   customer", `ProductPicker` hides "Add".
+2. **The page says so, under its one header.** `gatePage` wraps every such page in
+   `record-pages.tsx`, for an old link, a URL, or a role that changed while the page sat open. Six
+   pages say it in their own words instead (`SAYS_ITSELF`).
+3. **The server refuses anyway.** The first two only save somebody the walk.
+
+**The answer comes from the SERVER, not from the role.** `PermissionsProvider` reads
+`member_permissions(store, me)` once per shop — the same rule `has_permission` enforces, role plus
+that person's own ticks — and `usePermission` uses it, falling back to the role map only until the
+first answer arrives. Asking the role alone was wrong in both directions: a manager whose Reports box
+was unticked still saw the button and was refused, and a staff member given counting could not find
+Count at all. `scripts/probe-permission-gates.mjs` makes a staff login with counting added and
+deposits removed and walks the screens.
+
 ## Permission in a store says nothing about the ids you were handed
 
 `has_permission(p_store_id, 'deposits.manage')` answers "may this person act in this shop". It does

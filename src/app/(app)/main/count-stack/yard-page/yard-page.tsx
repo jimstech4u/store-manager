@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useNav } from '@academix-admin/navigation-stack';
+import { usePermission } from '@/hooks/usePermission';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { FloatingAction } from '@/components/ui/FloatingAction';
@@ -27,6 +28,7 @@ import styles from './yard-page.module.css';
  * position, and the honest word for it is "not counted yet".
  */
 export default function YardPage() {
+  const { canOpen } = usePermission();
   const nav = useNav();
   const goBack = useStackBack();
   const { store } = useAuth();
@@ -210,11 +212,13 @@ export default function YardPage() {
         It was a full-width button above the list. This page's job is READING the yard; counting it
         is the action one tap away, and floating it keeps the list the first thing on the screen.
       */}
-      <FloatingAction
-        label="Count the yard"
-        icon={<ClipboardCheckIcon />}
-        onClick={() => void nav.push('yard_count_page')}
-      />
+      {canOpen('yard_count_page') && (
+        <FloatingAction
+          label="Count the yard"
+          icon={<ClipboardCheckIcon />}
+          onClick={() => void nav.push('yard_count_page')}
+        />
+      )}
     </PageScaffold>
   );
 }
