@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { SelectionViewer, useSelectionController } from '@academix-admin/selection-viewer';
 import { useTheme } from '@/context/ThemeContext';
-import { ViewerNoResult } from '@/components/ui/ViewerState';
+import { ViewerLoading, ViewerNoResult } from '@/components/ui/ViewerState';
 import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
 import type { Supplier } from '@/lib/stacks/suppliers';
 import styles from './UnitPicker.module.css';
@@ -29,7 +29,13 @@ export function SupplierPicker({
   onPick,
   onCreate,
   suppliers,
+  loading = false,
 }: {
+  /**
+   * The list has not been read yet. Shown as loading, not as "none": before the first answer a
+   * picker that said "no suppliers yet" was saying the same thing as a shop that really has none.
+   */
+  loading?: boolean;
   open: boolean;
   onClose: () => void;
   onPick: (supplier: Supplier) => void;
@@ -92,7 +98,8 @@ export function SupplierPicker({
       maxHeight="88dvh"
       closeThreshold={0.2}
       zIndex={1000}
-      selectionState={shown.length === 0 ? 'empty' : 'data'}
+      selectionState={loading && shown.length === 0 ? 'loading' : shown.length === 0 ? 'empty' : 'data'}
+      loadingProp={{ view: <ViewerLoading text="Loading your suppliers" /> }}
     >
       <button type="button" className={styles.addRow} onClick={() => onCreate(query.trim())}>
         <PlusIcon /> {query.trim() && !exact ? `Add "${query.trim()}"` : 'Add a supplier'}

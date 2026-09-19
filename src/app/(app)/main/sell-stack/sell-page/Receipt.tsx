@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import styles from './Receipt.module.css';
 import { useNav } from '@academix-admin/navigation-stack';
 import { Button } from '@/components/ui/Button';
 import { WhatsAppIcon } from '@/components/ui/Icon';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
-import { useDemandState } from '@academix-admin/state-stack';
+import { useResource } from '@/lib/stacks/resource';
+import { ACCOUNT_DERIVED_SCOPE } from '@/lib/stacks/customer-account';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatDateTime, formatMoney, formatQty, pluralUnit, messageOf } from '@/lib/format';
 import { owedRowsFromReceipt, rollUpOwed } from '@/lib/empties-rollup';
@@ -74,33 +75,50 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
    * from a customer's history — put a blank rectangle in front of a customer who was handed a
    * phone to look at their receipt.
    *
-   * Nothing invalidates this deliberately, and nothing needs to: the key is the sale id, and a
-   * sale that gets voided is a different screen.
+   * KEPT, AND RE-READ WHEN THE SALE'S FIGURES MOVE. This used to say nothing needs to invalidate it
+   * — but a credit sale is paid later and a sale can be amended, and both change what this receipt
+   * says it is owed. It now re-reads under the account figures' scope (a payment, an amendment, the
+   * same on another till), keeping what is shown until the answer lands. And its error is no longer
+   * stored WITH the receipt: a failed first read was cached as the receipt, with no way to ask again.
    */
-  const [snapshot, demand] = useDemandState<{
-    detail: SaleDetail | null;
+  const res = useResource<{
+    detail: SaleDetail;
     shopName: string;
-    settings: { width: number; header: string | null; footer: string | null } | null;
-    error: string | null;
-  }>(
-    { detail: null, shopName: '', settings: null, error: null },
-    {
-      key: `receipt:${saleId}`,
-      scope: 'receipt_flow',
-      persist: true,
-      deps: [saleId, storeId],
-      revalidateOnMount: false,
+    settings: { width: number; header: string | null; footer: string | null };
+  }>({
+    key: `receipt:v2:${saleId}`,
+    scope: ACCOUNT_DERIVED_SCOPE,
+    deps: [storeId],
+    read: async () => {
+      const supabase = getSupabase();
+      const [{ data: d, error: dErr }, { data: s }, { data: store }] = await Promise.all([
+        supabase.rpc('sale_detail', { p_sale_id: saleId }),
+        supabase.rpc('ensure_store_settings', { p_store_id: storeId }),
+        supabase.from('stores').select('name').eq('id', storeId).maybeSingle(),
+      ]);
+      if (dErr) throw dErr;
+
+      const row = (Array.isArray(s) ? s[0] : s) as
+        | { printer_width_mm: string; receipt_header: string | null; receipt_footer: string | null }
+        | null;
+
+      return {
+        detail: d as unknown as SaleDetail,
+        shopName: (store as { name: string } | null)?.name ?? '',
+        settings: {
+          width: Number(row?.printer_width_mm ?? 80),
+          header: row?.receipt_header ?? null,
+          footer: row?.receipt_footer ?? null,
+        },
+      };
     },
-  );
+  });
 
-  // Readable from the loader without becoming a dependency of it.
-  const snapshotRef = useRef(snapshot);
-  snapshotRef.current = snapshot;
-
-  const detail = snapshot.detail;
-  const shopName = snapshot.shopName;
-  const settings = snapshot.settings;
-  const error = snapshot.error;
+  const detail = res.data?.detail ?? null;
+  const shopName = res.data?.shopName ?? '';
+  const settings = res.data?.settings ?? null;
+  // Only a receipt never read is an error screen; a failed re-read keeps the receipt readable.
+  const error = res.data ? null : res.error;
 
   const [sharing, setSharing] = useState(false);
   const nav = useNav();
@@ -117,56 +135,24 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
   const [sharingWhatsApp, setSharingWhatsApp] = useState(false);
   const [makingPdf, setMakingPdf] = useState(false);
 
-  useEffect(() => {
-    demand(async ({ set }) => {
-      const supabase = getSupabase();
-      try {
-        const [{ data: d, error: dErr }, { data: s }, { data: store }] = await Promise.all([
-          supabase.rpc('sale_detail', { p_sale_id: saleId }),
-          supabase.rpc('ensure_store_settings', { p_store_id: storeId }),
-          supabase.from('stores').select('name').eq('id', storeId).maybeSingle(),
-        ]);
-        if (dErr) throw dErr;
-
-        const row = (Array.isArray(s) ? s[0] : s) as
-          | { printer_width_mm: string; receipt_header: string | null; receipt_footer: string | null }
-          | null;
-
-        set(
-          {
-            detail: d as unknown as SaleDetail,
-            shopName: (store as { name: string } | null)?.name ?? '',
-            settings: {
-              width: Number(row?.printer_width_mm ?? 80),
-              header: row?.receipt_header ?? null,
-              footer: row?.receipt_footer ?? null,
-            },
-            error: null,
-          },
-          { override: true },
-        );
-      } catch (e: unknown) {
-        // A receipt that has already been read once stays readable. It cannot have changed —
-        // it is a settled sale — so a failed re-read is a network problem, not a reason to take
-        // the receipt off the screen of whoever is looking at it.
-        set(
-          {
-            ...snapshotRef.current,
-            error: snapshotRef.current.detail
-              ? null
-              : messageOf(e, 'Could not load the receipt'),
-          },
-          { override: true },
-        );
-      }
-    });
-  }, [saleId, storeId, demand]);
-
   if (error) {
-    return <FullPageMessage title="Could not load the receipt" tone="error">{error}</FullPageMessage>;
+    return (
+      <FullPageMessage
+        title="Could not load the receipt"
+        tone="error"
+        inPage
+        action={
+          <Button fullWidth onClick={res.reload}>
+            Try again
+          </Button>
+        }
+      >
+        {error}
+      </FullPageMessage>
+    );
   }
   if (!detail) {
-    return <FullPageMessage title="Preparing the receipt" tone="loading" />;
+    return <FullPageMessage title="Preparing the receipt" tone="loading" inPage />;
   }
 
   const { sale, customer, lines, payments, charges, corrected } = detail;

@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { SelectionViewer } from '@academix-admin/selection-viewer';
 import { useOverlayRoute } from '@academix-admin/navigation-stack';
 import { CheckIcon, CloseIcon, PlusIcon } from '@/components/ui/Icon';
-import { ViewerNoResult } from '@/components/ui/ViewerState';
+import { ViewerLoading, ViewerNoResult } from '@/components/ui/ViewerState';
 import { useTheme } from '@/context/ThemeContext';
 import type { ProductGroup } from '@/lib/stacks/product-groups';
 import styles from './GroupPicker.module.css';
@@ -31,7 +31,13 @@ export function GroupPicker({
   onToggle,
   onAddNew,
   zIndex,
+  loading = false,
 }: {
+  /**
+   * The list has not been read yet. Shown as loading, not as "none": before the first answer a
+   * picker that said "no groups yet" was saying the same thing as a shop that really has none.
+   */
+  loading?: boolean;
   id: string;
   isOpen: boolean;
   close: () => void;
@@ -110,7 +116,8 @@ export function GroupPicker({
       minHeight="60dvh"
       maxHeight="92dvh"
       closeThreshold={0.2}
-      selectionState={shown.length === 0 ? 'empty' : 'data'}
+      selectionState={loading && shown.length === 0 ? 'loading' : shown.length === 0 ? 'empty' : 'data'}
+      loadingProp={{ view: <ViewerLoading text="Loading your groups" /> }}
       zIndex={zIndex}
     >
       {/*

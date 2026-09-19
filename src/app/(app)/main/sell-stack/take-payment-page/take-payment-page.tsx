@@ -3,9 +3,9 @@
 import { useState } from 'react';
 import { useLocation, useNav, useObject } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { FloatingAmount } from '@/components/ui/FloatingAmount';
 import { PlusIcon } from '@/components/ui/Icon';
-import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { TakePayment } from '../sell-page/TakePayment';
 import { CustomerPicker } from '@/components/customers/CustomerPicker';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -74,25 +74,20 @@ export default function TakePaymentPage() {
    * Reachable by a reload or a pasted link after the tab was closed — the draft is working state,
    * not a record, so there is nothing to restore and nothing to apologise for.
    */
-  if (!activeOrder) {
-    /*
-     * Still fetching is not the same as gone.
-     *
-     * On a reload this page renders before the shop's open orders have come back, and saying "no
-     * longer open" for that second is a lie that sends a seller off to start the sale again.
-     */
-    if (syncing || (wantedId && orders.length === 0)) {
-      return <FullPageMessage title="Opening this sale" tone="loading" />;
-    }
-
-    return (
-      <PageScaffold onBack={goBack} title="Take payment">
-        <FullPageMessage title="This sale is no longer open">
-          It was settled or closed. Start a new one from the Sell screen.
-        </FullPageMessage>
-      </PageScaffold>
-    );
-  }
+  /*
+   * ONE HEADER. Still fetching is not the same as gone: on a reload this page renders before the
+   * shop's open orders have come back, and saying "no longer open" for that second is a lie that
+   * sends a seller off to start the sale again.
+   */
+  const status: PageStatus = activeOrder
+    ? { state: 'ready' }
+    : syncing || (wantedId && orders.length === 0)
+      ? { state: 'loading', what: 'this sale' }
+      : {
+          state: 'empty',
+          title: 'This sale is no longer open',
+          body: 'It was settled or closed. Start a new one from the Sell screen.',
+        };
 
   return (
     <PageScaffold
@@ -100,6 +95,10 @@ export default function TakePaymentPage() {
       title="Take payment"
       subtitle="Cash, transfer, or on account"
     >
+      <PageState status={status}>
+        {() =>
+          activeOrder && (
+            <>
       {/*
         Back to the receipt, in the same place the till puts "Take payment".
 
@@ -171,6 +170,10 @@ export default function TakePaymentPage() {
           });
         }}
       />
+            </>
+          )
+        }
+      </PageState>
     </PageScaffold>
   );
 }

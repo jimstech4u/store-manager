@@ -68,8 +68,13 @@ export default function AccountActionPage() {
    * types how much is being paid. `useCustomerAccount` is the same cache the account page behind
    * this one reads, so the two cannot disagree.
    */
-  const { account } = useCustomerAccount(customerId);
-  const owed = Number(account?.balance ?? 0);
+  const { account, error: accountError, reload: reloadAccount } = useCustomerAccount(customerId);
+  /*
+   * `null` until the account has been read — NOT zero. This was `Number(account?.balance ?? 0)`, so
+   * above the box where somebody types a payment the page said nothing, or worse, treated an
+   * unread account as one that owed nothing.
+   */
+  const owed = account ? Number(account.balance) : null;
 
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('cash');
@@ -160,9 +165,25 @@ export default function AccountActionPage() {
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
         placeholder="0"
-        hint={owed ? `They owe ${formatMoney(Math.abs(owed))} at the moment.` : undefined}
+        hint={
+          owed === null
+            ? accountError
+              ? 'Could not check what they owe right now.'
+              : 'Checking what they owe…'
+            : owed
+              ? `They owe ${formatMoney(Math.abs(owed))} at the moment.`
+              : 'They owe nothing at the moment.'
+        }
         autoFocus
       />
+
+      {owed === null && accountError && (
+        <p className={styles.retryLine}>
+          <button type="button" className={styles.retry} onClick={reloadAccount}>
+            Try again
+          </button>
+        </p>
+      )}
 
       {kind === 'payment' && (
         <div className={styles.field}>

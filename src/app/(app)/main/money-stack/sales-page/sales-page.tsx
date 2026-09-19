@@ -3,8 +3,7 @@
 import { useCallback } from 'react';
 import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
-import { FullPageMessage } from '@/components/ui/FullPageMessage';
-import { Button } from '@/components/ui/Button';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
 import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
@@ -93,24 +92,25 @@ export default function SalesPage() {
   });
 
   if (!store) return null;
-  if (list.loading && list.items.length === 0) {
-    return <FullPageMessage title="Loading sales" tone="loading" />;
-  }
-
-  if (list.error && list.items.length === 0) {
-    return (
-      <FullPageMessage
-        title="Could not load your sales"
-        tone="error"
-        action={<Button fullWidth onClick={() => list.reload()}>Try again</Button>}
-      >
-        {list.error}
-      </FullPageMessage>
-    );
-  }
+  /*
+   * ONE HEADER, and the body says what it has. The list shows once it has rows; until the first page
+   * has been read it is loading — not "none yet", which is what an empty list drew before the read
+   * had even started — and a read that failed says so with a way to try again.
+   */
+  const status: PageStatus =
+    list.items.length > 0
+      ? { state: 'ready' }
+      : list.error
+        ? { state: 'error', what: 'your sales', error: list.error, onRetry: () => list.reload() }
+        : list.loading || list.hasMore
+          ? { state: 'loading', what: 'your sales' }
+          : { state: 'ready' };
 
   return (
     <PageScaffold onBack={goBack} title="Sales" subtitle="Every receipt you have issued">
+      <PageState status={status}>
+        {() => (
+          <>
       <SearchLauncher
         label="Search sales"
         placeholder="Search by customer or note"
@@ -216,6 +216,9 @@ export default function SalesPage() {
           )}
         </>
       )}
+          </>
+        )}
+      </PageState>
     </PageScaffold>
   );
 }

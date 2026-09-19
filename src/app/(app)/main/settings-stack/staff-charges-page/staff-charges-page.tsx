@@ -60,7 +60,24 @@ export default function StaffChargesPage() {
 
   /** Whose trace is open, and what is being added to it. */
   const [open, setOpen] = useState<string | null>(null);
-  const [ledger, setLedger] = useState<StaffChargeRow[]>([]);
+  /*
+   * THEIR HISTORY, kept per person.
+   *
+   * It was `useState([])` filled by hand when a row was opened, so it read "Nothing recorded yet"
+   * until the answer arrived — the same words as a person with no history — and a read that failed
+   * left it saying so. Keyed by who is open: each person's history is kept, shown at once the next
+   * time, and re-read behind it.
+   */
+  const ledgerArea = useLoadArea<StaffChargeRow[]>(
+    () => staffChargeLedger(store!.id, open!),
+    [open ?? ''],
+    {
+      key: `staff-ledger:${store?.id ?? 'none'}:${open ?? 'none'}`,
+      scope: STAFF_SCOPE,
+      onFail: showProblem,
+      whenNot: !store || !open,
+    },
+  );
   const [kind, setKind] = useState<StaffChargeDirection>('paid');
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
@@ -80,11 +97,6 @@ export default function StaffChargesPage() {
     setAmount('');
     setReason('');
     setKind('paid');
-    try {
-      setLedger(await staffChargeLedger(store.id, row.memberUserId));
-    } catch (e) {
-      showProblem(messageOf(e, 'Could not read that history.'));
-    }
   };
 
   const add = async (row: StaffOwing) => {
@@ -100,7 +112,7 @@ export default function StaffChargesPage() {
       });
       setAmount('');
       setReason('');
-      setLedger(await staffChargeLedger(store.id, row.memberUserId));
+      ledgerArea.reload();
       area.reload();
       setState('idle');
     } catch (e) {
@@ -203,23 +215,27 @@ export default function StaffChargesPage() {
                         )}
 
                         <h3 className={styles.section}>Everything so far</h3>
-                        {ledger.length === 0 ? (
-                          <p className={styles.none}>Nothing recorded yet.</p>
-                        ) : (
-                          <ul className={styles.ledger}>
-                            {ledger.map((e) => (
-                              <li key={e.id} className={styles.entry}>
-                                <span>
-                                  {said(e.direction)} — {e.reason}
-                                </span>
-                                <span>
-                                  {formatMoney(e.amount)} ·{' '}
-                                  {new Date(e.occurredAt).toLocaleDateString()}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
+                        <LoadArea area={ledgerArea} what="their history">
+                          {(ledger) =>
+                            ledger.length === 0 ? (
+                              <p className={styles.none}>Nothing recorded yet.</p>
+                            ) : (
+                              <ul className={styles.ledger}>
+                                {ledger.map((e) => (
+                                  <li key={e.id} className={styles.entry}>
+                                    <span>
+                                      {said(e.direction)} — {e.reason}
+                                    </span>
+                                    <span>
+                                      {formatMoney(e.amount)} ·{' '}
+                                      {new Date(e.occurredAt).toLocaleDateString()}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )
+                          }
+                        </LoadArea>
                       </>
                     )}
                   </span>

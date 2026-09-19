@@ -1,7 +1,7 @@
 'use client';
 
 import { ACCOUNT_DERIVED_SCOPE } from '@/lib/stacks/customer-account';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { Button } from '@/components/ui/Button';
 import { Explain, InfoPanel } from '@/components/ui/Explain';
@@ -12,7 +12,7 @@ import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
-import { customPeriod, resolvePeriod, type Period, type PeriodKind } from '@/lib/stacks/periods';
+import { customPeriod, resolvePeriod, usePeriod, type PeriodKind } from '@/lib/stacks/periods';
 import {
   debtorsAged,
   downloadCsv,
@@ -102,7 +102,9 @@ export default function ReportsPage() {
   const showProblem = problem.show;
 
   const [which, setWhich] = useState<Which>('sales');
-  const [period, setPeriod] = useState<Period | null>(null);
+  const { period, setPeriod, error: periodError, reload: reloadPeriod } = usePeriod(
+    store?.id ?? null,
+  );
 
   /*
    * The window is resolved before anything is read.
@@ -110,16 +112,6 @@ export default function ReportsPage() {
    * Not defaulted in the browser: "this month" has to mean the shop's calendar month in the shop's
    * timezone, and a phone that is a day out would silently produce a report for the wrong month.
    */
-  useEffect(() => {
-    if (!store) return;
-    let alive = true;
-    void resolvePeriod(store.id, 'this_month')
-      .then((p) => alive && setPeriod(p))
-      .catch((e) => showProblem(String(e?.message ?? e)));
-    return () => {
-      alive = false;
-    };
-  }, [store, showProblem]);
 
   const read = useCallback(async (): Promise<Loaded> => {
     const w = { storeId: store!.id, from: period!.fromAt, to: period!.toAt };
@@ -317,6 +309,16 @@ export default function ReportsPage() {
               .catch((e) => showProblem(String(e?.message ?? e)));
           }}
         />
+      )}
+
+      {/* The window itself is still being worked out, or could not be — said, with a way back. */}
+      {active.windowed && !period && (
+        <LoadArea
+          area={{ data: null, loading: !periodError, error: periodError, reload: reloadPeriod }}
+          what="the dates"
+        >
+          {() => null}
+        </LoadArea>
       )}
 
       <LoadArea area={area} what="this report">

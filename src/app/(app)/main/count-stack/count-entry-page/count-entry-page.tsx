@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { Explain, InfoPanel, WorkedExample } from '@/components/ui/Explain';
@@ -19,7 +20,8 @@ import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 import { CountedToday } from '@/components/stock/CountedToday';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { usePermission } from '@/hooks/usePermission';
-import { countsChanged, useTodaysCounts } from '@/lib/stacks/count-gate';
+import { COUNTS_SCOPE, countsChanged, useTodaysCounts } from '@/lib/stacks/count-gate';
+import { useLoadArea } from '@/components/ui/LoadArea';
 import {
   resolveVariance,
   useVarianceReasons,
@@ -85,7 +87,7 @@ export default function CountEntryPage() {
    * The count itself below stays local. It is the result of an action taken during THIS visit, not
    * something fetched about the product, and caching it would be caching a keystroke.
    */
-  const { product: active, error: loadError, reload: load } = useProduct(productId);
+  const { product: active, error: loadError, settled, reload: load } = useProduct(productId);
 
   /*
    * COUNTED IN WHAT THE SHOP SELLS IN, not in base units.
@@ -98,7 +100,12 @@ export default function CountEntryPage() {
    * both be added into. The conversion happens at the two edges: what is typed is multiplied on
    * the way in, and every figure shown is divided on the way out.
    */
-  const { byProduct } = useSellingUnits(store?.id ?? null);
+  const {
+    byProduct,
+    loaded: unitsLoaded,
+    error: unitsError,
+    reload: reloadUnits,
+  } = useSellingUnits(store?.id ?? null);
 
   /*
    * EVERY SHAPE THE SHOP KEEPS THIS IN, largest first — the order somebody counts in.
@@ -123,7 +130,12 @@ export default function CountEntryPage() {
    * `yard_empties` is already loaded store-wide for the yard screen, so this costs no request of
    * its own — and it carries `countedGrain`, which is the whole reason the question can be skipped.
    */
-  const { shapes: yardRows } = useYard(store?.id ?? null);
+  const {
+    shapes: yardRows,
+    loaded: yardLoaded,
+    error: yardError,
+    reload: reloadYard,
+  } = useYard(store?.id ?? null);
 
   const returnable = useMemo(
     /*
@@ -214,9 +226,6 @@ export default function CountEntryPage() {
    * notice it presses the button again.
    */
   const submitError = useProblem();
-  // A product that would not load and a count that would not submit are different failures with
-  // different lifetimes — the first belongs to the cached product, the second to this visit.
-  const error = loadError;
   /*
    * THE ACCOUNT OF THE DIFFERENCE — one line per thing that happened, not one reason for the lot.
    *
@@ -228,7 +237,12 @@ export default function CountEntryPage() {
    * The parts must add up to the gap EXACTLY — the server refuses anything else, because a remainder
    * is an unexplained shortfall and that is the one thing a period must not close on.
    */
-  const { reasons } = useVarianceReasons(store?.id ?? null);
+  const {
+    reasons,
+    loaded: reasonsLoaded,
+    error: reasonsError,
+    reload: reloadReasons,
+  } = useVarianceReasons(store?.id ?? null);
   const [parts, setParts] = useState<Part[]>([]);
   const [picking, setPicking] = useState(false);
   const [partReason, setPartReason] = useState<VarianceReason | null>(null);
@@ -250,7 +264,12 @@ export default function CountEntryPage() {
    */
   const { can } = usePermission();
   const todayIds = useMemo(() => (productId ? [productId] : []), [productId]);
-  const { byProduct: todays, reload: reloadToday } = useTodaysCounts(store?.id ?? null, todayIds);
+  const {
+    byProduct: todays,
+    reload: reloadToday,
+    loaded: todayLoaded,
+    error: todayError,
+  } = useTodaysCounts(store?.id ?? null, todayIds);
   useLiveRefresh(nav, reloadToday);
   const today = productId ? todays.get(productId) ?? null : null;
 
@@ -308,18 +327,20 @@ export default function CountEntryPage() {
    */
   const todayPeriod = today?.periodStatus === 'open' ? today.periodId : null;
   const todayFigure = today?.countedBase ?? null;
+  /*
+   * READ AS PART OF OPENING THE PAGE, not after it. This was an effect that ran once today's count
+   * had arrived, so the card appeared, then — a moment later — the sections under it; and a failed
+   * read was swallowed, leaving them missing with nothing to press. Kept (keyed by the figure, so a
+   * correction reads afresh), so opening the same item again shows it at once.
+   */
+  const periodArea = useLoadArea(() => readPeriod(todayPeriod as string), [todayPeriod, todayFigure], {
+    key: `count-period:${todayPeriod ?? 'none'}:${todayFigure ?? ''}`,
+    scope: COUNTS_SCOPE,
+    whenNot: !todayPeriod || done,
+  });
   useEffect(() => {
-    if (!todayPeriod || done) return;
-    let live = true;
-    readPeriod(todayPeriod)
-      .then((next) => live && setState(next))
-      .catch(() => {
-        // The card above still says what was counted; the comparison simply is not shown yet.
-      });
-    return () => {
-      live = false;
-    };
-  }, [todayPeriod, todayFigure, done]);
+    if (periodArea.data && !done) setState(periodArea.data);
+  }, [periodArea.data, done]);
 
   /** Submit the physical count and read back what the records expected. */
   const submitCount = async () => {
@@ -467,15 +488,45 @@ export default function CountEntryPage() {
 
   if (!store || !productId) return null;
 
+  /*
+   * ONE HEADER, and the body waits until it knows enough to ask honestly.
+   *
+   * Each of these used to start empty and be read as an answer: no count today looked exactly like
+   * "not counted yet" (so the boxes were offered for an item already counted, and the second count
+   * was refused only on submit), no shapes drew no boxes, and an empty yard asked for the empty
+   * crates of an item whose maker's crates are counted as one stack. Once the count is under way
+   * (`state`), nothing here pulls it back to a loader.
+   */
+  const waitFor = (
+    loaded: boolean,
+    error: string | null,
+    what: string,
+    onRetry: () => void,
+  ): PageStatus | null =>
+    loaded ? null : error ? { state: 'error', what, error, onRetry } : { state: 'loading', what };
+  const status: PageStatus =
+    done || state !== null
+      ? { state: 'ready' }
+      : settled && !active && !loadError
+        ? { state: 'empty', title: 'That item is gone' }
+        : (waitFor(Boolean(active), loadError, 'this item', () => void load()) ??
+          waitFor(todayLoaded, todayError, "today's count", reloadToday) ??
+          waitFor(unitsLoaded, unitsError, 'what it is counted in', reloadUnits) ??
+          waitFor(yardLoaded, yardError, 'the empties', reloadYard) ??
+          // Counted and still open: the comparison is part of the page, so it arrives with it.
+          (todayPeriod
+            ? // Reached only while `state` is still empty — including the moment between the figures
+              // arriving and being taken into it, which must not draw an empty page for a frame.
+              waitFor(false, periodArea.data ? null : periodArea.error, 'how it compares', periodArea.reload)
+            : null) ?? { state: 'ready' });
+
   return (
     <PageScaffold onBack={goBack} title={active?.name ?? 'Count'} subtitle="Check the shelf">
       <ProblemDialog problem={submitError} title="Could not continue" />
 
-      {error && (
-        <InfoPanel tone="danger" title="Could not load this item">
-          {error}
-        </InfoPanel>
-      )}
+      <PageState status={status}>
+        {() => (
+          <>
 
       {beaten && !done && (
         <InfoPanel tone="info" title="Somebody counted this first">
@@ -874,6 +925,9 @@ export default function CountEntryPage() {
         </>
       )}
 
+          </>
+        )}
+      </PageState>
 
       {/* A CHOICE IS A SHEET — and adding one is a pushed page, offered BEFORE the list. */}
       <BottomSheet open={picking} onClose={() => setPicking(false)} title="What happened?">
@@ -890,6 +944,21 @@ export default function CountEntryPage() {
               <PlusIcon /> A reason of your own
             </button>
           </li>
+          {/* Not read yet is not "no reasons": say which. */}
+          {!reasonsLoaded && (
+            <li>
+              {reasonsError ? (
+                <InfoPanel tone="danger" title="Could not load the reasons">
+                  {reasonsError}{' '}
+                  <Button variant="secondary" size="small" onClick={reloadReasons}>
+                    Try again
+                  </Button>
+                </InfoPanel>
+              ) : (
+                <p className={styles.countHint}>Loading the reasons…</p>
+              )}
+            </li>
+          )}
           {reasonsHere.map((r) => (
             <li key={`${r.id ?? 'builtin'}-${r.label}`}>
               <button

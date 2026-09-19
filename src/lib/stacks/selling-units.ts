@@ -1,10 +1,8 @@
 'use client';
 
-import { useCallback, useEffect } from 'react';
-import { useDemandState } from '@academix-admin/state-stack';
+import { useMemo } from 'react';
 import { getSupabase } from '@/lib/supabase/client';
-import { useReload, useResource } from '@/lib/stacks/resource';
-import { useInvalidation } from '@/lib/stacks/invalidation';
+import { useResource } from '@/lib/stacks/resource';
 import { DERIVED_SCOPE } from '@/lib/stacks/catalog-stack';
 
 /**
@@ -114,37 +112,39 @@ const toUnit = (r: Row): SellingUnit => ({
  * should see it, not a spinner, and the shop's answer replaces what was cached a moment later.
  */
 export function useSellingUnits(storeId: string | null) {
-  const [units, demandUnits] = useDemandState<SellingUnit[]>([], {
+  /*
+   * A RESOURCE. The read's error was ignored (`const { data } = …`) and an empty answer written
+   * with `override` — so ONE failed read erased what every item is sold in, and every screen fell
+   * back to base units until the next good one. Now a failure keeps what was known, and `loaded`
+   * says whether anything has been read yet.
+   */
+  const r = useResource<SellingUnit[]>({
     key: `selling-units:${storeId ?? 'none'}`,
     scope: DERIVED_SCOPE,
-    persist: true,
-    deps: [storeId ?? ''],
-    revalidateOnMount: false,
+    enabled: Boolean(storeId),
+    read: async () => {
+      const { data, error } = await getSupabase().rpc('product_selling_units', {
+        p_store_id: storeId,
+      });
+      if (error) throw error;
+      return ((data ?? []) as Row[]).map(toUnit);
+    },
   });
+  const units = useMemo(() => r.data ?? [], [r.data]);
 
-  const load = useCallback(() => {
-    if (!storeId) return;
-    void demandUnits(async ({ set }) => {
-      const { data } = await getSupabase().rpc('product_selling_units', { p_store_id: storeId });
-      set(((data ?? []) as Row[]).map(toUnit), { override: true });
-    });
-  }, [storeId, demandUnits]);
+  // Built once per answer, not every render — a fresh Map each render re-ran everything that
+  // depended on it.
+  const byProduct = useMemo(() => {
+    const m = new Map<string, SellingUnit[]>();
+    for (const u of units) {
+      const list = m.get(u.productId);
+      if (list) list.push(u);
+      else m.set(u.productId, [u]);
+    }
+    return m;
+  }, [units]);
 
-  useEffect(load, [load]);
-  // A page pushed under another never remounts, so a catalogue write while it sits there
-  // would otherwise leave it showing figures from before the change.
-  useInvalidation(DERIVED_SCOPE, load);
-
-  /** Grouped by product, largest-selling unit first — the order a shop thinks in. */
-  const byProduct = new Map<string, SellingUnit[]>();
-  for (const u of units) {
-    const list = byProduct.get(u.productId);
-    if (list) list.push(u);
-    else byProduct.set(u.productId, [u]);
-  }
-
-  const reload = useReload(DERIVED_SCOPE, `selling-units:${storeId ?? 'none'}`, load);
-  return { units, byProduct, reload };
+  return { units, byProduct, reload: r.reload, loaded: r.loaded, loading: r.loading, error: r.error };
 }
 
 /**
@@ -200,34 +200,28 @@ export function pricedUnit(units: SellingUnit[] | undefined): SellingUnit | null
  * opening every product one at a time is not finding them at all.
  */
 export function useUnitGaps(storeId: string | null) {
-  const [gaps, demandGaps] = useDemandState<UnitGap[]>([], {
+  /*
+   * A RESOURCE. The read's error was ignored (`const { data } = …`) and an empty answer written
+   * with `override` — so ONE failed read erased what every item is sold in, and every screen fell
+   * back to base units until the next good one. Now a failure keeps what was known, and `loaded`
+   * says whether anything has been read yet.
+   */
+  const r = useResource<UnitGap[]>({
     key: `unit-gaps:${storeId ?? 'none'}`,
     scope: DERIVED_SCOPE,
-    persist: true,
-    deps: [storeId ?? ''],
-    revalidateOnMount: false,
-  });
-
-  const load = useCallback(() => {
-    if (!storeId) return;
-    void demandGaps(async ({ set }) => {
-      const { data } = await getSupabase().rpc('products_with_unit_gaps', { p_store_id: storeId });
-      set(
-        ((data ?? []) as { product_id: string; product_name: string; gap_units: string[] }[]).map(
-          (r) => ({ productId: r.product_id, productName: r.product_name, units: r.gap_units }),
-        ),
-        { override: true },
+    enabled: Boolean(storeId),
+    read: async () => {
+      const { data, error } = await getSupabase().rpc('products_with_unit_gaps', {
+        p_store_id: storeId,
+      });
+      if (error) throw error;
+      return ((data ?? []) as { product_id: string; product_name: string; gap_units: string[] }[]).map(
+        (row) => ({ productId: row.product_id, productName: row.product_name, units: row.gap_units }),
       );
-    });
-  }, [storeId, demandGaps]);
-
-  useEffect(load, [load]);
-  // A page pushed under another never remounts, so a catalogue write while it sits there
-  // would otherwise leave it showing figures from before the change.
-  useInvalidation(DERIVED_SCOPE, load);
-
-  const reload = useReload(DERIVED_SCOPE, `unit-gaps:${storeId ?? 'none'}`, load);
-  return { gaps, reload };
+    },
+  });
+  const gaps = useMemo(() => r.data ?? [], [r.data]);
+  return { gaps, reload: r.reload, loaded: r.loaded };
 }
 
 export interface UnitGap {
@@ -246,46 +240,44 @@ export interface UnitGap {
  * shop said a bag holds is exactly what the costing divides by.
  */
 export function useBuyingUnits(storeId: string | null) {
-  const [units, demandUnits] = useDemandState<BuyingUnit[]>([], {
+  /*
+   * A RESOURCE. The read's error was ignored (`const { data } = …`) and an empty answer written
+   * with `override` — so ONE failed read erased what every item is sold in, and every screen fell
+   * back to base units until the next good one. Now a failure keeps what was known, and `loaded`
+   * says whether anything has been read yet.
+   */
+  const r = useResource<BuyingUnit[]>({
     key: `buying-units:${storeId ?? 'none'}`,
     scope: DERIVED_SCOPE,
-    persist: true,
-    deps: [storeId ?? ''],
-    revalidateOnMount: false,
+    enabled: Boolean(storeId),
+    read: async () => {
+      const { data, error } = await getSupabase().rpc('product_buying_units', {
+        p_store_id: storeId,
+      });
+      if (error) throw error;
+      return ((data ?? []) as BuyingUnitRow[]).map((row) => ({
+        productId: row.product_id,
+        productUnitId: row.product_unit_id,
+        name: row.unit_name,
+        plural: row.unit_plural,
+        baseQty: Number(row.base_qty),
+        isDefault: row.is_default,
+      }));
+    },
   });
+  const units = useMemo(() => r.data ?? [], [r.data]);
 
-  const load = useCallback(() => {
-    if (!storeId) return;
-    void demandUnits(async ({ set }) => {
-      const { data } = await getSupabase().rpc('product_buying_units', { p_store_id: storeId });
-      set(
-        ((data ?? []) as BuyingUnitRow[]).map((r) => ({
-          productId: r.product_id,
-          productUnitId: r.product_unit_id,
-          name: r.unit_name,
-          plural: r.unit_plural,
-          baseQty: Number(r.base_qty),
-          isDefault: r.is_default,
-        })),
-        { override: true },
-      );
-    });
-  }, [storeId, demandUnits]);
+  const byProduct = useMemo(() => {
+    const m = new Map<string, BuyingUnit[]>();
+    for (const u of units) {
+      const list = m.get(u.productId);
+      if (list) list.push(u);
+      else m.set(u.productId, [u]);
+    }
+    return m;
+  }, [units]);
 
-  useEffect(load, [load]);
-  // A page pushed under another never remounts, so a catalogue write while it sits there
-  // would otherwise leave it showing figures from before the change.
-  useInvalidation(DERIVED_SCOPE, load);
-
-  const byProduct = new Map<string, BuyingUnit[]>();
-  for (const u of units) {
-    const list = byProduct.get(u.productId);
-    if (list) list.push(u);
-    else byProduct.set(u.productId, [u]);
-  }
-
-  const reload = useReload(DERIVED_SCOPE, `buying-units:${storeId ?? 'none'}`, load);
-  return { units, byProduct, reload };
+  return { units, byProduct, reload: r.reload, loaded: r.loaded };
 }
 
 export interface BuyingUnit {

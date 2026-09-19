@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { AsyncAction, type AsyncState } from '@/components/ui/AsyncAction';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Button } from '@/components/ui/Button';
@@ -61,13 +62,23 @@ export default function CountGatePage() {
   const { store } = useAuth();
 
   const { activeOrder } = useDraftOrders(store?.id ?? null);
-  const { byProduct } = useSellingUnits(store?.id ?? null);
+  const {
+    byProduct,
+    loaded: unitsLoaded,
+    error: unitsError,
+    reload: reloadUnits,
+  } = useSellingUnits(store?.id ?? null);
 
   const lineIds = useMemo(
     () => (activeOrder?.lines ?? []).map((l) => l.productId),
     [activeOrder?.lines],
   );
-  const { uncounted, reload: reloadCounts } = useUncountedToday(store?.id ?? null, lineIds);
+  const {
+    uncounted,
+    checked,
+    error: countsError,
+    reload: reloadCounts,
+  } = useUncountedToday(store?.id ?? null, lineIds);
   /*
    * RE-ASKED WHENEVER THIS PAGE COMES BACK INTO VIEW.
    *
@@ -215,6 +226,20 @@ export default function CountGatePage() {
 
   const total = remaining.length + lines.length;
 
+  /*
+   * "Everything on this sale is counted" was drawn before the server had said so — the uncounted
+   * list starts empty — and the boxes had no shapes to draw until the item's units arrived.
+   */
+  const status: PageStatus = !checked
+    ? countsError
+      ? { state: 'error', what: 'what still needs counting', error: countsError, onRetry: reloadCounts }
+      : { state: 'loading', what: 'what still needs counting' }
+    : !unitsLoaded
+      ? unitsError
+        ? { state: 'error', what: 'what they are counted in', error: unitsError, onRetry: reloadUnits }
+        : { state: 'loading', what: 'what they are counted in' }
+      : { state: 'ready' };
+
   return (
     <PageScaffold
       onBack={goBack}
@@ -239,6 +264,9 @@ export default function CountGatePage() {
         </InfoPanel>
       )}
 
+      <PageState status={status}>
+        {() => (
+          <>
       {total === 0 ? (
         <InfoPanel tone="success" title="Everything on this sale is counted">
           There is nothing left to count today. Go back and carry on with the sale.
@@ -393,6 +421,9 @@ export default function CountGatePage() {
           </ul>
         </section>
       )}
+          </>
+        )}
+      </PageState>
 
       {/* A CHOICE IS A SHEET: the items still to count, closed the moment one is picked. */}
       <BottomSheet open={picking} onClose={() => setPicking(false)} title="Which item?">

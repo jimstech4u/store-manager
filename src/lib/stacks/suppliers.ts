@@ -1,10 +1,9 @@
 'use client';
 
-import { useCallback, useEffect } from 'react';
-import { useDemandState } from '@academix-admin/state-stack';
-import { useInvalidation, invalidate } from '@/lib/stacks/invalidation';
+import { useCallback, useMemo } from 'react';
+import { invalidate } from '@/lib/stacks/invalidation';
 import { getSupabase } from '@/lib/supabase/client';
-import { useReload } from '@/lib/stacks/resource';
+import { useResource } from '@/lib/stacks/resource';
 
 /**
  * Who a shop buys from.
@@ -34,57 +33,46 @@ export interface Supplier {
 }
 
 export function useSuppliers(storeId: string | null) {
-  const [suppliers, demand, setSuppliers] = useDemandState<Supplier[]>([], {
+  /*
+   * A RESOURCE, so the list says whether it has been read. It started as `[]`, so a picker or a
+   * page said "none yet" before the first answer — the same words as a shop with none — and a read
+   * that failed said it for good. Same key and shape: what was cached carries over.
+   */
+  const r = useResource<Supplier[]>({
     key: `suppliers:${storeId ?? 'none'}`,
     scope: SUPPLIERS_SCOPE,
-    persist: true,
-    deps: [storeId ?? ''],
-    revalidateOnMount: false,
-  });
-
-  const load = useCallback(() => {
-    if (!storeId) return;
-    void demand(async ({ set }) => {
+    enabled: Boolean(storeId),
+    read: async () => {
       const { data, error } = await getSupabase().rpc('store_suppliers', {
         p_store_id: storeId,
         p_include_archived: false,
       });
       if (error) throw error;
-      set(
-        ((data ?? []) as Record<string, unknown>[]).map((r) => ({
-          id: String(r.id),
-          name: String(r.name ?? ''),
-          phone: (r.phone as string | null) ?? null,
-          note: (r.note as string | null) ?? null,
-          status: String(r.status ?? 'active'),
-          deliveries: Number(r.deliveries) || 0,
-          lastAt: (r.last_at as string | null) ?? null,
-        })),
-        { override: true },
-      );
-    });
-  }, [storeId, demand]);
-
-  useEffect(load, [load]);
-  useInvalidation(SUPPLIERS_SCOPE, load);
-
-  /*
-   * THE WRITER KNOWS THE ROW.
-   *
-   * A supplier named mid-delivery lands here directly rather than through a refetch — the delivery
-   * screen never unmounts while the form sits over it, so without this the picker comes back
-   * without the supplier somebody just created.
-   */
-  const add = useCallback(
-    (supplier: Supplier) => {
-      if (suppliers.some((s) => s.id === supplier.id)) return;
-      setSuppliers([...suppliers, supplier].sort((a, b) => a.name.localeCompare(b.name)));
+      return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+        id: String(row.id),
+        name: String(row.name ?? ''),
+        phone: (row.phone as string | null) ?? null,
+        note: (row.note as string | null) ?? null,
+        status: String(row.status ?? 'active'),
+        deliveries: Number(row.deliveries) || 0,
+        lastAt: (row.last_at as string | null) ?? null,
+      }));
     },
-    [suppliers, setSuppliers],
+  });
+  const setList = r.set;
+  const suppliers = useMemo(() => r.data ?? [], [r.data]);
+
+  const add = useCallback(
+    (supplier: Supplier) =>
+      setList((prev) => {
+        const list = prev ?? [];
+        if (list.some((x) => x.id === supplier.id)) return list;
+        return [...list, supplier].sort((a, b) => a.name.localeCompare(b.name));
+      }),
+    [setList],
   );
 
-  const reload = useReload(SUPPLIERS_SCOPE, `suppliers:${storeId ?? 'none'}`, load);
-  return { suppliers, add, reload };
+  return { suppliers, add, reload: r.reload, loaded: r.loaded, loading: r.loading, error: r.error };
 }
 
 /** Name one, or correct one. Returns the existing id when the name is already taken. */

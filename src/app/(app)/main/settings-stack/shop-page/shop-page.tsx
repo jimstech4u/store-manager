@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { PageScaffold } from '@/components/ui/PageScaffold';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
+import { useLoadArea } from '@/components/ui/LoadArea';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
@@ -41,59 +43,66 @@ export default function ShopPage() {
   const [lat, setLat] = useState('');
   const [lng, setLng] = useState('');
   const [zone, setZone] = useState('');
-  const [zones, setZones] = useState<{ name: string; offset_now: string }[]>([]);
   const [decimals, setDecimals] = useState('0');
   const [closing, setClosing] = useState(false);
   const [sales, setSales] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
 
   /*
-   * Read once when the shop arrives, then owned by the form.
+   * Read, then copied once into the form, which owns it from there.
    *
    * Not re-seeded on every change of `store`, or typing a new name would be overwritten the moment
    * the rename lands and the provider re-reads.
+   *
+   * THE FORM WAITS FOR IT. It used to be drawn at once with empty boxes — a shop with no name, no
+   * address and the default clock — and if the read failed it STAYED that way, a Save away from
+   * writing those blanks over the real ones. The clock list's error was not even looked at.
    */
   const shopId = store?.id ?? null;
-  useEffect(() => {
-    if (!shopId) return;
-    let cancelled = false;
-    void (async () => {
-      const { data, error } = await getSupabase()
-        .from('stores')
-        .select('name, address, latitude, longitude, timezone, money_decimals')
-        .eq('id', shopId)
-        .maybeSingle();
-      if (cancelled) return;
-      if (error) {
-        showProblem(messageOf(error, 'Could not read this shop.'));
-        return;
-      }
-      const row = data as {
-        name: string;
-        address: string | null;
-        latitude: number | null;
-        longitude: number | null;
-        timezone: string | null;
-        money_decimals: number | null;
-      } | null;
-      setName(row?.name ?? '');
-      setAddress(row?.address ?? '');
-      setLat(row?.latitude == null ? '' : String(row.latitude));
-      setLng(row?.longitude == null ? '' : String(row.longitude));
-      setZone(row?.timezone ?? 'Africa/Lagos');
-      setDecimals(String(row?.money_decimals ?? 0));
+  const shopArea = useLoadArea(
+    async () => {
+      const supabase = getSupabase();
+      const [{ data, error }, { data: choices, error: choicesError }] = await Promise.all([
+        supabase
+          .from('stores')
+          .select('name, address, latitude, longitude, timezone, money_decimals')
+          .eq('id', shopId as string)
+          .maybeSingle(),
+        // The shortlist the server offers, with each one's offset RIGHT NOW — "Africa/Lagos
+        // (+01:00)" is checkable against a wall clock in a way a bare name is not.
+        supabase.rpc('store_clock_choices'),
+      ]);
+      if (error) throw error;
+      if (choicesError) throw choicesError;
+      return {
+        row: data as {
+          name: string;
+          address: string | null;
+          latitude: number | null;
+          longitude: number | null;
+          timezone: string | null;
+          money_decimals: number | null;
+        } | null,
+        zones: (choices ?? []) as { name: string; offset_now: string }[],
+      };
+    },
+    [shopId],
+    { key: `shop-settings:${shopId ?? 'none'}`, whenNot: !shopId },
+  );
+  const zones = shopArea.data?.zones ?? [];
 
-      // The shortlist the server offers, with each one's offset RIGHT NOW — "Africa/Lagos (+01:00)"
-      // is checkable against a wall clock in a way a bare name is not.
-      const { data: choices } = await getSupabase().rpc('store_clock_choices');
-      if (!cancelled) {
-        setZones((choices ?? []) as { name: string; offset_now: string }[]);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [shopId, showProblem]);
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (seeded.current || !shopArea.data) return;
+    seeded.current = true;
+    const row = shopArea.data.row;
+    setName(row?.name ?? '');
+    setAddress(row?.address ?? '');
+    setLat(row?.latitude == null ? '' : String(row.latitude));
+    setLng(row?.longitude == null ? '' : String(row.longitude));
+    setZone(row?.timezone ?? 'Africa/Lagos');
+    setDecimals(String(row?.money_decimals ?? 0));
+  }, [shopArea.data]);
 
   const closeDialog = useConfirm();
 
@@ -103,10 +112,15 @@ export default function ShopPage() {
 
   const askToClose = async () => {
     // Read before asking, so the question can say what is at stake rather than "are you sure?".
-    const { count } = await getSupabase()
+    const { count, error } = await getSupabase()
       .from('sales')
       .select('id', { count: 'exact', head: true })
       .eq('store_id', store.id);
+    // Not knowing is not "nothing sold": that would ask the lighter question about a trading shop.
+    if (error) {
+      showProblem(messageOf(error, 'Could not check this shop’s sales. Try again.'));
+      return;
+    }
     setSales(count ?? 0);
     setClosing(true);
   };
@@ -137,9 +151,19 @@ export default function ShopPage() {
     }
   };
 
+  const status: PageStatus = shopArea.data
+    ? { state: 'ready' }
+    : shopArea.error
+      ? { state: 'error', what: 'this shop', error: shopArea.error, onRetry: shopArea.reload }
+      : { state: 'loading', what: 'this shop' };
+
   return (
     <PageScaffold onBack={goBack} title="This shop" subtitle={store.name}>
       <ProblemDialog problem={problem} title="Could not change this shop" />
+
+      <PageState status={status}>
+        {() => (
+          <>
 
       <h2 className={styles.section}>What it is called</h2>
       <p className={styles.note}>
@@ -378,6 +402,9 @@ export default function ShopPage() {
           onConfirm={() => void doClose((sales ?? 0) > 0)}
         />
       )}
+          </>
+        )}
+      </PageState>
     </PageScaffold>
   );
 }

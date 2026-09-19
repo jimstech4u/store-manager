@@ -217,3 +217,19 @@
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+
+/* A figure still being worked out, or one that could not be — said, never shown as ₦0. */
+.summaryPending {
+  font-size: var(--text-base);
+  color: var(--text-muted);
+}
+
+.summaryRetry {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}

@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
+import { useReload } from '@/lib/stacks/resource';
 import { ReceiptPreview } from '@/components/receipt/ReceiptPreview';
 import { LogoRejected, normaliseReceiptLogo } from '@/lib/image-pipeline';
 import styles from './settings-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
-import { FullPageMessage } from '@/components/ui/FullPageMessage';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { Explain, InfoPanel } from '@/components/ui/Explain';
@@ -156,7 +157,7 @@ export default function SettingsPage() {
 
   const canConfirm = can('records.confirm');
 
-  useEffect(() => {
+  const load = useCallback(() => {
     if (!store) return;
     demand(async ({ set }) => {
       const supabase = getSupabase();
@@ -186,6 +187,9 @@ export default function SettingsPage() {
       const q = review.data as
         | { products: unknown[]; customers: unknown[]; stock_entries: unknown[] }
         | null;
+      // A failed count is not "nothing waiting", and a failed storefront read is not "not listed":
+      // each keeps what it last knew.
+      const reviewFailed = 'error' in review && Boolean(review.error);
 
       set(
         {
@@ -193,14 +197,25 @@ export default function SettingsPage() {
           // with null, and a null width would render the logo at zero and look like a broken
           // upload.
           settings: { ...row, receipt_logo_width_pct: row.receipt_logo_width_pct ?? 60 },
-          shop: (shopRow.data as StoreRow | null) ?? null,
-          pending: q ? q.products.length + q.customers.length + q.stock_entries.length : 0,
+          shop: shopRow.error
+            ? snapshotRef.current.shop
+            : ((shopRow.data as StoreRow | null) ?? null),
+          pending: reviewFailed
+            ? snapshotRef.current.pending
+            : q
+              ? q.products.length + q.customers.length + q.stock_entries.length
+              : 0,
           error: null,
         },
         { override: true },
       );
     });
   }, [store, canConfirm, demand]);
+
+  useEffect(load, [load]);
+
+  // Try again READS: `demand` skips a key it has already served.
+  const reload = useReload(SETTINGS_SCOPE, `settings:${store?.id ?? 'none'}`, load);
 
   const saveShop = async (next: Partial<StoreRow>) => {
     if (!store || !shop) return;
@@ -258,7 +273,13 @@ export default function SettingsPage() {
   };
 
   if (!store) return null;
-  if (!settings && !error) return <FullPageMessage title="Loading settings" tone="loading" />;
+  // One header; the body waits for the shop's settings.
+  // A first read that failed used to fall through to "ready" and draw the form with nothing in it.
+  const status: PageStatus = settings
+    ? { state: 'ready' }
+    : error
+      ? { state: 'error', what: 'your settings', error, onRetry: reload }
+      : { state: 'loading', what: 'your settings' };
 
   const editable = can('store.settings');
 
@@ -287,13 +308,20 @@ export default function SettingsPage() {
           : undefined
       }
     >
+      <PageState status={status}>
+        {() =>
+          (
+            <>
       <ProblemDialog problem={saveProblem} title="Not saved" />
 
       {/* The LOAD failure stays a panel: there is cached content behind it, and it describes the
           state the page is in rather than something that was just attempted. */}
       {error && (
-        <InfoPanel tone="danger" title="Could not load your settings">
-          {error}
+        <InfoPanel tone="danger" title="Could not refresh your settings">
+          {error}{' '}
+          <Button variant="secondary" size="small" onClick={reload}>
+            Try again
+          </Button>
         </InfoPanel>
       )}
       {saved && (
@@ -824,6 +852,10 @@ export default function SettingsPage() {
       <Button variant="secondary" size="large" fullWidth onClick={() => void signOut()}>
         Sign out
       </Button>
+            </>
+          )
+        }
+      </PageState>
     </PageScaffold>
   );
 }

@@ -1,12 +1,11 @@
 'use client';
 
 import { PageScaffold } from '@/components/ui/PageScaffold';
-import { FullPageMessage } from '@/components/ui/FullPageMessage';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { InfoPanel } from '@/components/ui/Explain';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
 import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
-import { Button } from '@/components/ui/Button';
 import { FloatingAction } from '@/components/ui/FloatingAction';
 import { ClipboardCheckIcon } from '@/components/ui/Icon';
 import { BoxIcon,
@@ -91,8 +90,6 @@ export default function StockPage() {
    */
   useListChannel<Product>('products', browse.items, browse.setItems);
   const products = browse.products;
-  const loading = browse.loading;
-  const error = browse.error;
 
   const sentinelRef = useInfiniteScroll(browse.loadMore, {
     enabled: browse.hasMore && !browse.loading,
@@ -111,25 +108,19 @@ export default function StockPage() {
 
   if (!store) return null;
 
-  if (loading && products.length === 0) {
-    return <FullPageMessage title="Loading your stock" tone="loading" />;
-  }
-
-  if (error && products.length === 0) {
-    return (
-      <FullPageMessage
-        title="Could not load your stock"
-        tone="error"
-        action={
-          <Button fullWidth onClick={browse.reload}>
-            Try again
-          </Button>
-        }
-      >
-        {error}
-      </FullPageMessage>
-    );
-  }
+  /*
+   * ONE HEADER, and the body says what it has. The list shows once it has rows; until the first page
+   * has been read it is loading — not "none yet", which is what an empty list drew before the read
+   * had even started — and a read that failed says so with a way to try again.
+   */
+  const status: PageStatus =
+    browse.items.length > 0
+      ? { state: 'ready' }
+      : browse.error
+        ? { state: 'error', what: 'your stock', error: browse.error, onRetry: () => browse.reload() }
+        : browse.loading || browse.hasMore
+          ? { state: 'loading', what: 'your stock' }
+          : { state: 'ready' };
 
   return (
     <PageScaffold
@@ -179,6 +170,9 @@ export default function StockPage() {
           : []),
       ]}
     >
+      <PageState status={status}>
+        {() => (
+          <>
       {/*
         THE ALARM, and only when there is something to sound it about.
 
@@ -452,6 +446,9 @@ export default function StockPage() {
           onClick={() => void nav.push('count_page')}
         />
       )}
+          </>
+        )}
+      </PageState>
     </PageScaffold>
   );
 }

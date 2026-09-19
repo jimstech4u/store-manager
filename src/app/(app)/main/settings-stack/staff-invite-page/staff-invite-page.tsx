@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useNav } from '@academix-admin/navigation-stack';
-import { useDemandState } from '@academix-admin/state-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
+import { LoadArea, useLoadArea } from '@/components/ui/LoadArea';
+import { useResource } from '@/lib/stacks/resource';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { Explain, InfoPanel } from '@/components/ui/Explain';
@@ -77,20 +79,38 @@ export default function StaffInvitePage() {
   const goBack = useStackBack();
   const { store } = useAuth();
 
-  const [reference, demandReference] = useDemandState<{
+  /*
+   * What can be handed out, and the shop's login domain.
+   *
+   * A resource: it started as no roles and no permissions — an empty role list and a form with no
+   * boxes — and every read's error was ignored, so a failure left it that way for good.
+   */
+  const referenceRes = useResource<{
     roles: Role[];
     permissions: Permission[];
     domain: string | null;
-  }>(
-    { roles: [], permissions: [], domain: null },
-    {
-      key: `staff-reference:${store?.id ?? 'none'}`,
-      scope: SETTINGS_SCOPE,
-      persist: true,
-      deps: [store?.id ?? ''],
-      revalidateOnMount: false,
+  }>({
+    key: `staff-reference:v2:${store?.id ?? 'none'}`,
+    scope: SETTINGS_SCOPE,
+    enabled: Boolean(store),
+    read: async () => {
+      const supabase = getSupabase();
+      const [roles, permissions, domain] = await Promise.all([
+        supabase.rpc('assignable_roles', { p_store_id: store!.id }),
+        supabase.rpc('list_permissions'),
+        supabase.rpc('ensure_login_domain', { p_store_id: store!.id }),
+      ]);
+      if (roles.error) throw roles.error;
+      if (permissions.error) throw permissions.error;
+      if (domain.error) throw domain.error;
+      return {
+        roles: (roles.data ?? []) as Role[],
+        permissions: (permissions.data ?? []) as Permission[],
+        domain: (domain.data as string | null) ?? null,
+      };
     },
-  );
+  });
+  const reference = referenceRes.data ?? { roles: [], permissions: [], domain: null };
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -101,7 +121,6 @@ export default function StaffInvitePage() {
 
   // What the role gives, before the admin touches anything. Kept apart from `allowed` so the page
   // can tell "the role does this" from "somebody chose this".
-  const [rolePermissions, setRolePermissions] = useState<string[]>([]);
   const [allowed, setAllowed] = useState<string[]>([]);
   const [touched, setTouched] = useState(false);
 
@@ -109,25 +128,6 @@ export default function StaffInvitePage() {
   const problem = useProblem();
   const [done, setDone] = useState<{ email: string; warning?: string } | null>(null);
 
-  useEffect(() => {
-    if (!store) return;
-    demandReference(async ({ set }) => {
-      const supabase = getSupabase();
-      const [roles, permissions, domain] = await Promise.all([
-        supabase.rpc('assignable_roles', { p_store_id: store.id }),
-        supabase.rpc('list_permissions'),
-        supabase.rpc('ensure_login_domain', { p_store_id: store.id }),
-      ]);
-      set(
-        {
-          roles: (roles.data ?? []) as Role[],
-          permissions: (permissions.data ?? []) as Permission[],
-          domain: (domain.data as string | null) ?? null,
-        },
-        { override: true },
-      );
-    });
-  }, [store, demandReference]);
 
   // Default to the least powerful role on offer, so a slip of the finger cannot hand somebody the
   // keys to the shop.
@@ -144,20 +144,26 @@ export default function StaffInvitePage() {
    * changed the role afterwards would be the more annoying half of that trade, so once they have
    * touched a box the role stops rewriting their work.
    */
+  /*
+   * READ, NOT ASSUMED. The read's error was ignored and a failure gave the role no boxes — and the
+   * login was then created with none ticked, a person who can sign in and do nothing. The Create
+   * button now waits until the role's boxes are known.
+   */
+  const roleRes = useLoadArea(
+    async () => {
+      const { data, error } = await getSupabase().rpc('role_permission_codes', {
+        p_role_code: roleCode,
+      });
+      if (error) throw error;
+      return ((data ?? []) as { permission_code: string }[]).map((r) => r.permission_code);
+    },
+    [roleCode],
+    { key: `role-permissions:${roleCode}`, scope: SETTINGS_SCOPE, whenNot: !store || !roleCode },
+  );
+  const rolePermissions = useMemo(() => roleRes.data ?? [], [roleRes.data]);
   useEffect(() => {
-    if (!store || !roleCode) return;
-    let cancelled = false;
-    void (async () => {
-      const { data } = await getSupabase().rpc('role_permission_codes', { p_role_code: roleCode });
-      if (cancelled) return;
-      const codes = ((data ?? []) as { permission_code: string }[]).map((r) => r.permission_code);
-      setRolePermissions(codes);
-      if (!touched) setAllowed(codes);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [store, roleCode, touched]);
+    if (roleRes.data && !touched) setAllowed(roleRes.data);
+  }, [roleRes.data, touched]);
 
   const loginPreview = useMemo(() => {
     const clean = (v: string) =>
@@ -239,6 +245,13 @@ export default function StaffInvitePage() {
 
   const byCode = new Map(reference.permissions.map((p) => [p.code, p]));
 
+  // One header; the form waits for what it offers.
+  const status: PageStatus = referenceRes.loaded
+    ? { state: 'ready' }
+    : referenceRes.error
+      ? { state: 'error', what: 'the roles', error: referenceRes.error, onRetry: referenceRes.reload }
+      : { state: 'loading', what: 'the roles' };
+
   return (
     <PageScaffold
       onBack={goBack}
@@ -252,6 +265,10 @@ export default function StaffInvitePage() {
         that failed looked exactly like one that did nothing — and the button gets pressed again.
       */}
       <ProblemDialog problem={problem} title="Not added" />
+
+      <PageState status={status}>
+        {() => (
+          <>
 
       <Field
         label="First name"
@@ -341,6 +358,9 @@ export default function StaffInvitePage() {
         manager, everything you did not tick or untick by hand moves with them.
       </Explain>
 
+      {/* The role's own boxes, on their way or not readable — never shown as none ticked. */}
+      {!roleRes.data && <LoadArea area={roleRes} what="what this role can do" compact>{() => null}</LoadArea>}
+
       {GROUPS.map((group) => (
         <div key={group.title} className={styles.group}>
           <h2 className={styles.groupTitle}>{group.title}</h2>
@@ -375,7 +395,7 @@ export default function StaffInvitePage() {
         </Button>
         <Button
           busy={busy}
-          disabled={!firstName.trim() || password.length < 8}
+          disabled={!firstName.trim() || password.length < 8 || !roleRes.data}
           onClick={() => void create()}
         >
           Create their login
@@ -414,6 +434,9 @@ export default function StaffInvitePage() {
           onConfirm={() => void nav.pop()}
         />
       )}
+          </>
+        )}
+      </PageState>
     </PageScaffold>
   );
 }

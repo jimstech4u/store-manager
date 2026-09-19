@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef } from 'react';
-import { useDemandState } from '@academix-admin/state-stack';
+import { StateStack, useDemandState } from '@academix-admin/state-stack';
 import { getSupabase } from '@/lib/supabase/client';
 import { invalidate } from '@/lib/stacks/invalidation';
 
@@ -90,6 +90,9 @@ export function useBankAccountsState(storeId: string | null) {
 
   const reload = useCallback(async () => {
     if (!storeId) return;
+    // Cleared first, or a second call does nothing: `demand()` skips a key already demanded, so the
+    // refresh on resume and Try again never reached the server.
+    StateStack.core.resetDemand(SETTINGS_SCOPE, `bank-accounts:${storeId}`);
     await demand(async ({ set }) => {
       const { data, error } = await getSupabase().rpc('list_bank_accounts', {
         p_store_id: storeId,

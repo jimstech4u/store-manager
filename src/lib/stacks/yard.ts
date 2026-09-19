@@ -1,10 +1,9 @@
 'use client';
 
-import { useCallback, useEffect } from 'react';
-import { useDemandState } from '@academix-admin/state-stack';
-import { useInvalidation, invalidate } from '@/lib/stacks/invalidation';
+import { useMemo } from 'react';
+import { invalidate } from '@/lib/stacks/invalidation';
 import { getSupabase } from '@/lib/supabase/client';
-import { useReload } from '@/lib/stacks/resource';
+import { useResource } from '@/lib/stacks/resource';
 
 /**
  * The shop's OWN containers — the stack of empty crates standing in the yard.
@@ -127,20 +126,16 @@ function toGroupRow(r: Record<string, unknown>): YardGroupRow {
 
 /** The yard at both grains, in one hook — the page shows whichever the shop counts in. */
 export function useYard(storeId: string | null) {
-  const [yard, demand, setYard] = useDemandState<{ shapes: YardRow[]; groups: YardGroupRow[] }>(
-    { shapes: [], groups: [] },
-    {
-      key: `yard:${storeId ?? 'none'}`,
-      scope: YARD_SCOPE,
-      persist: true,
-      deps: [storeId ?? ''],
-      revalidateOnMount: false,
-    },
-  );
-
-  const load = useCallback(() => {
-    if (!storeId) return;
-    void demand(async ({ set }) => {
+  /*
+   * A RESOURCE. It started as `{ shapes: [], groups: [] }`, so before the first answer the yard page
+   * and the count screen said "nothing to count" — the same words as a shop with no returnable
+   * shapes. Now `loaded` says whether it has been read.
+   */
+  const r = useResource<{ shapes: YardRow[]; groups: YardGroupRow[] }>({
+    key: `yard:v2:${storeId ?? 'none'}`,
+    scope: YARD_SCOPE,
+    enabled: Boolean(storeId),
+    read: async () => {
       const supabase = getSupabase();
       const [{ data: s, error: se }, { data: g, error: ge }] = await Promise.all([
         supabase.rpc('yard_empties', { p_store_id: storeId }),
@@ -148,21 +143,15 @@ export function useYard(storeId: string | null) {
       ]);
       if (se) throw se;
       if (ge) throw ge;
-      set({
+      return {
         shapes: ((s ?? []) as Record<string, unknown>[]).map(toYardRow),
         groups: ((g ?? []) as Record<string, unknown>[]).map(toGroupRow),
-      });
-    });
-  }, [storeId, demand]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  useInvalidation(storeId ? YARD_SCOPE : null, load);
-
-  const reload = useReload(YARD_SCOPE, `yard:${storeId ?? 'none'}`, load);
-  return { shapes: yard.shapes, groups: yard.groups, reload, setYard };
+      };
+    },
+  });
+  const shapes = useMemo(() => r.data?.shapes ?? [], [r.data]);
+  const groups = useMemo(() => r.data?.groups ?? [], [r.data]);
+  return { shapes, groups, reload: r.reload, loaded: r.loaded, error: r.error };
 }
 
 /** Everything the shop says comes back, for the count screen to offer. */

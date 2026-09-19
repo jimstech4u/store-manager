@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNav, useObject } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { Button } from '@/components/ui/Button';
@@ -15,6 +15,9 @@ import { applyCustomerLocally } from '@/lib/stacks/local-effects';
 import styles from './customer-form-page.module.css';
 import { messageOf } from '@/lib/format';
 import { BottomSheet } from '@/components/ui/BottomSheet';
+import { LoadArea, useLoadArea } from '@/components/ui/LoadArea';
+import { DERIVED_SCOPE } from '@/lib/stacks/catalog-stack';
+import { GROUPS_SCOPE } from '@/lib/stacks/product-groups';
 import { productEmptiesOut, type ShapeOut } from '@/lib/stacks/empties';
 import {
   groupsWithReturnables,
@@ -26,6 +29,7 @@ import {
   type ReturnableProduct,
   type GroupUnit,
   groupReturnUnits,
+  LEDGERS_SCOPE,
 } from '@/lib/stacks/customer-ledgers';
 import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
 
@@ -181,9 +185,7 @@ export default function CustomerFormPage() {
    * "three crates and no bottles" is one answer, and it is entered by filling one box of two.
    */
   const [chosenItem, setChosenItem] = useState<ReturnableProduct | null>(null);
-  const [itemShapes, setItemShapes] = useState<ShapeOut[]>([]);
   const [chosenMaker, setChosenMaker] = useState<ReturnableGroup | null>(null);
-  const [makerUnits, setMakerUnits] = useState<GroupUnit[]>([]);
   /*
    * ONE amount for a maker, and the unit it is counted in.
    *
@@ -219,68 +221,72 @@ export default function CustomerFormPage() {
    * product. Both are answers the shop has already given on the product form — this asks nothing
    * new, which is the point: the pools were a second vocabulary that could disagree with the first.
    */
-  const [items, setItems] = useState<ReturnableProduct[]>([]);
-  const [makers, setMakers] = useState<ReturnableGroup[]>([]);
+  const offerArea = useLoadArea<{ items: ReturnableProduct[]; makers: ReturnableGroup[] }>(
+    async () => {
+      const [ps, gs] = await Promise.all([
+        productsWithReturnables(store!.id),
+        groupsWithReturnables(store!.id),
+      ]);
+      return { items: ps, makers: gs };
+    },
+    [store?.id ?? ''],
+    {
+      key: `returnables-offer:${store?.id ?? 'none'}`,
+      // Ticking "comes back" on a product is a catalogue change, which notifies this scope.
+      scope: DERIVED_SCOPE,
+      whenNot: !store,
+    },
+  );
+  /*
+   * Until the offer has been read these are empty, and the composer's guard on `items.length`
+   * keeps the question away rather than showing an empty picker — a shop is never blocked by a
+   * request that did not arrive. The sheets say "loading" in the meantime (below).
+   */
+  const items = offerArea.data?.items ?? [];
+  const makers = offerArea.data?.makers ?? [];
 
+  /*
+   * EVERY RETURNABLE SHAPE OF THE CHOSEN ITEM — the same cached read the item's own page uses
+   * (one key, one shape). It was `useState` filled with `.catch(() => [])`, so a failed read showed
+   * an item with no boxes at all, as if nothing of it came back.
+   */
+  const itemShapesArea = useLoadArea<ShapeOut[]>(
+    () => productEmptiesOut(chosenItem!.productId),
+    [chosenItem?.productId ?? ''],
+    {
+      key: `product-empties-out:${chosenItem?.productId ?? 'none'}`,
+      scope: LEDGERS_SCOPE,
+      whenNot: !chosenItem,
+    },
+  );
+  const itemShapes = itemShapesArea.data ?? [];
+  // A different item starts with empty boxes.
   useEffect(() => {
-    if (!store) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const [ps, gs] = await Promise.all([
-          productsWithReturnables(store.id),
-          groupsWithReturnables(store.id),
-        ]);
-        if (cancelled) return;
-        setItems(ps);
-        setMakers(gs);
-      } catch {
-        /*
-         * Left empty and NOT treated as "nothing comes back".
-         *
-         * The composer below is guarded on `items.length`, so a failed read shows no picker rather
-         * than an empty one — and the required-answer guard only fires when there is something to
-         * answer about, so a shop is never blocked by a request that did not arrive.
-         */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [store]);
-
-  /** Every returnable shape of the chosen item — a box each, the way the count screen asks. */
-  useEffect(() => {
-    if (!chosenItem) return;
-    let cancelled = false;
-    void (async () => {
-      const rows = await productEmptiesOut(chosenItem.productId).catch(() => []);
-      if (!cancelled) {
-        setItemShapes(rows);
-        setByShape({});
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    setByShape({});
   }, [chosenItem]);
 
   /** And the shape-words a maker's containers come back in, so "24 NBL" says 24 of what. */
+  const makerUnitsArea = useLoadArea<GroupUnit[]>(
+    () => groupReturnUnits(chosenMaker!.id),
+    [chosenMaker?.id ?? ''],
+    {
+      key: `group-return-units:${chosenMaker?.id ?? 'none'}`,
+      scope: GROUPS_SCOPE,
+      whenNot: !chosenMaker,
+    },
+  );
+  const makerUnits = useMemo(() => makerUnitsArea.data ?? [], [makerUnitsArea.data]);
+  // A different maker starts from nothing typed.
   useEffect(() => {
-    if (!chosenMaker) return;
-    let cancelled = false;
-    void (async () => {
-      const rows = await groupReturnUnits(chosenMaker.id).catch(() => []);
-      if (!cancelled) {
-        setMakerUnits(rows);
-        setMakerQty('');
-        setMakerUnitId(rows[0]?.storeUnitId ?? null);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    setMakerQty('');
+    setMakerUnitId(null);
   }, [chosenMaker]);
+  // …and counts in the unit most of its items come back in, once that is known.
+  useEffect(() => {
+    if (makerUnits.length > 0 && !makerUnits.some((u) => u.storeUnitId === makerUnitId)) {
+      setMakerUnitId(makerUnits[0].storeUnitId);
+    }
+  }, [makerUnits, makerUnitId]);
 
 
   if (!store) return null;
@@ -692,6 +698,10 @@ export default function CustomerFormPage() {
       {chosenItem && (
         <div className={styles.composer}>
           <p className={styles.composerWho}>{chosenItem.productName}</p>
+          {/* Reading its shapes, or could not — in place, with a retry. Nothing once they are here. */}
+          <LoadArea area={itemShapesArea} what="its shapes" compact>
+            {() => null}
+          </LoadArea>
           <div className={styles.shapeBoxes}>
             {itemShapes.map((sh) => (
               <Field
@@ -738,6 +748,9 @@ export default function CustomerFormPage() {
       {chosenMaker && (
         <div className={styles.composer}>
           <p className={styles.composerWho}>{chosenMaker.name}</p>
+          <LoadArea area={makerUnitsArea} what="what their containers come back in" compact>
+            {() => null}
+          </LoadArea>
 
           {/*
             ONE BOX. The maker is the thing being counted.
@@ -824,6 +837,9 @@ export default function CustomerFormPage() {
         onClose={() => setPicking(null)}
         title="Which of your items?"
       >
+        <LoadArea area={offerArea} what="your items" compact>
+          {() => null}
+        </LoadArea>
         <ul className={styles.pickList}>
           {items.map((it) => (
             <li key={it.productId}>
@@ -852,6 +868,9 @@ export default function CustomerFormPage() {
         onClose={() => setPicking(null)}
         title="Whose containers?"
       >
+        <LoadArea area={offerArea} what="your makers" compact>
+          {() => null}
+        </LoadArea>
         <ul className={styles.pickList}>
           {makers.map((m) => (
             <li key={m.id}>

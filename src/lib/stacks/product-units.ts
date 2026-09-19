@@ -1,12 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { useDemandState } from '@academix-admin/state-stack';
+import { useCallback, useMemo } from 'react';
 import { getSupabase } from '@/lib/supabase/client';
 import { catalogChanged } from '@/lib/stacks/catalog-stack';
-import { invalidate, useInvalidation } from '@/lib/stacks/invalidation';
+import { invalidate } from '@/lib/stacks/invalidation';
 import type { Discount } from '@/components/catalog/DiscountsEditor';
-import { useReload } from '@/lib/stacks/resource';
+import { useResource } from '@/lib/stacks/resource';
 
 /**
  * What a product is bought in and sold in.
@@ -99,42 +98,50 @@ interface ProductUnitRow {
  * another. Persisted: a picker should open on the words the shop uses, not on a spinner.
  */
 export function useStoreUnits(storeId: string | null) {
-  const [units, demandUnits, setUnits] = useDemandState<StoreUnit[]>([], {
+  /*
+   * A RESOURCE, so the list says whether it has been read. It started as `[]`, so a picker or a
+   * page said "none yet" before the first answer — the same words as a shop with none — and a read
+   * that failed said it for good. Same key and shape: what was cached carries over.
+   */
+  const r = useResource<StoreUnit[]>({
     key: `store-units:${storeId ?? 'none'}`,
     scope: 'catalog_flow',
-    persist: true,
-    deps: [storeId ?? ''],
-    revalidateOnMount: false,
-  });
-
-  const load = useCallback(() => {
-    if (!storeId) return;
-    void demandUnits(async ({ set }) => {
-      const { data } = await getSupabase().rpc('store_units_for', { p_store_id: storeId });
-      set((data ?? []) as StoreUnitRow[], { override: true });
-    });
-  }, [storeId, demandUnits]);
-
-  useEffect(load, [load]);
-
-  /**
-   * A unit this shop has just invented, put straight into the list.
-   *
-   * NOT A REFETCH. The shop made this change on this device, so asking the server what it now
-   * looks like is asking a question we already know the answer to — and the round trip is exactly
-   * what made a newly added word missing from the picker until somebody reloaded the page. Another
-   * device's change is a different matter and comes on the next read.
-   */
-  const add = useCallback(
-    (unit: StoreUnit) => {
-      if (units.some((u) => u.id === unit.id)) return;
-      setUnits([...units, unit].sort((a, b) => a.name.localeCompare(b.name)));
+    enabled: Boolean(storeId),
+    read: async () => {
+      // The error used to be dropped, so a failed read looked like a shop with no units.
+      const { data, error } = await getSupabase().rpc('store_units_for', { p_store_id: storeId });
+      if (error) throw error;
+      return (data ?? []) as StoreUnitRow[];
     },
-    [units, setUnits],
+  });
+  const setList = r.set;
+  const units = useMemo(() => r.data ?? [], [r.data]);
+
+  const setUnits = useCallback(
+    (next: StoreUnit[] | ((prev: StoreUnit[]) => StoreUnit[])) =>
+      setList((prev) => (typeof next === 'function' ? next(prev ?? []) : next)),
+    [setList],
   );
 
-  const reload = useReload('catalog_flow', `store-units:${storeId ?? 'none'}`, load);
-  return { units, setUnits, add, reload };
+  const add = useCallback(
+    (unit: StoreUnit) =>
+      setList((prev) => {
+        const list = prev ?? [];
+        if (list.some((u) => u.id === unit.id)) return list;
+        return [...list, unit].sort((a, b) => a.name.localeCompare(b.name));
+      }),
+    [setList],
+  );
+
+  return {
+    units,
+    setUnits,
+    add,
+    reload: r.reload,
+    loaded: r.loaded,
+    loading: r.loading,
+    error: r.error,
+  };
 }
 
 /** A word this shop had no unit for yet. Returns the id, existing or new. */
@@ -209,82 +216,31 @@ export function shapesChanged() {
 }
 
 export function useProductUnits(productId: string | null) {
-  const [units, demandUnits, setUnits] = useDemandState<ProductUnit[]>([], {
-    key: `product-units:${productId ?? 'none'}`,
-    scope: SHAPES_SCOPE,
-    deps: [productId ?? ''],
-    revalidateOnMount: true,
-  });
-
-  const [loaded, demandLoaded, setLoaded] = useDemandState<boolean>(false, {
-    key: `product-units-loaded:${productId ?? 'none'}`,
-    scope: SHAPES_SCOPE,
-    deps: [productId ?? ''],
-  });
-
   /*
-   * WHETHER THIS IS STILL WORKING, AND WHETHER IT FAILED.
+   * A RESOURCE.
    *
-   * The read used to be `const { data } = await ...` with no error check at all, so a request that
-   * failed set an empty list — indistinguishable from a product with no shapes. Opening Goldberg
-   * on a bad connection showed a blank section with no spinner, no message and no way to try again,
-   * and the honest reading of that screen was "this item has no shapes", which is a lie about the
-   * shop's own catalogue.
+   * This kept a separate `loaded` flag that was set to true the moment the read STARTED, not when it
+   * answered — so the shapes screen could decide "this item has no shapes" before it had heard back.
+   * Before that, the read had no error check at all and a failed request set an empty list: Goldberg
+   * on a bad connection showed a blank section, which is a lie about the shop's own catalogue. Now
+   * `loaded` means an answer arrived, and a failure keeps what was known and says so.
    */
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(() => {
-    if (!productId) return;
-    setBusy(true);
-    void demandUnits(async ({ set }) => {
-      const { data, error: err } = await getSupabase().rpc('product_units_for', {
+  const r = useResource<ProductUnit[]>({
+    key: `product-units:v2:${productId ?? 'none'}`,
+    scope: SHAPES_SCOPE,
+    enabled: Boolean(productId),
+    read: async () => {
+      const { data, error } = await getSupabase().rpc('product_units_for', {
         p_product_id: productId,
       });
-      if (err) {
-        /*
-         * The cached list is KEPT and only the error is set — a loader must never blank before it
-         * fetches. A pushed-under page has not remounted, so emptying it on a failed refresh looks
-         * exactly like data that was lost.
-         */
-        setError(err.message);
-        setBusy(false);
-        return;
-      }
+      if (error) throw error;
       const rows = (data ?? []) as ProductUnitRow[];
-      const byId = new Map(rows.map((r) => [r.id, r.store_unit_id]));
-      set(
-        rows.map((r) => toUnit(r, byId)),
-        { override: true },
-      );
-      setError(null);
-      setBusy(false);
-    });
-    void demandLoaded(async ({ set }) => set(true, { override: true }));
-  }, [productId, demandUnits, demandLoaded]);
-
-  useEffect(load, [load]);
-
-  /*
-   * And a save made on another screen reaches this one.
-   *
-   * The product form and the quick-edit screen are two pages reading one set of shapes, and saving
-   * used to tell neither: `catalogChanged()` notifies the DERIVED scope, and these live elsewhere.
-   *
-   * NOT PROVEN TO BE THE REPORTED MISMATCH. A probe saved on one screen and opened the other, and
-   * the shapes were correct WITH THIS REMOVED — both are pushed pages, so each mounts fresh and
-   * `revalidateOnMount` refetches regardless. A screen that stays mounted underneath is the case
-   * this covers, and the one somebody saw is still unexplained.
-   */
-  useInvalidation(SHAPES_SCOPE, load);
-
-  // Both keys: `load` demands each, and a spent demand leaves `busy` on for good.
-  const reload = useReload(
-    SHAPES_SCOPE,
-    [`product-units:${productId ?? 'none'}`, `product-units-loaded:${productId ?? 'none'}`],
-    load,
-  );
-  return { units, setUnits, loaded, setLoaded, loading: busy, error, reload };
+      const byId = new Map(rows.map((row) => [row.id, row.store_unit_id]));
+      return rows.map((row) => toUnit(row, byId));
+    },
+  });
+  const units = useMemo(() => r.data ?? [], [r.data]);
+  return { units, loaded: r.loaded, loading: r.loading, error: r.error, reload: r.reload };
 }
 
 /**
@@ -373,18 +329,26 @@ export function unitGaps(units: ProductUnit[]): ProductUnit[] {
 export async function fetchDiscounts(productId: string): Promise<Discount[]> {
   const supabase = getSupabase();
 
-  const [{ data: tiers }, { data: saleUnits }] = await Promise.all([
-    supabase.rpc('product_price_tiers_for', { p_product_id: productId }),
-    supabase.rpc('product_sale_units_for', { p_product_id: productId }),
-  ]);
+  /*
+   * Every read is CHECKED. They were not, so a failed one came back as "no bands" — and the product
+   * form saves the bands as a whole set, deleting the real ones.
+   */
+  const [{ data: tiers, error: tiersError }, { data: saleUnits, error: saleUnitsError }] =
+    await Promise.all([
+      supabase.rpc('product_price_tiers_for', { p_product_id: productId }),
+      supabase.rpc('product_sale_units_for', { p_product_id: productId }),
+    ]);
+  if (tiersError) throw tiersError;
+  if (saleUnitsError) throw saleUnitsError;
 
   const nameById = new Map(
     ((saleUnits ?? []) as { id: string; name: string }[]).map((u) => [u.id, u.name]),
   );
 
-  const { data: storeUnits } = await supabase.rpc('product_units_for', {
+  const { data: storeUnits, error: storeUnitsError } = await supabase.rpc('product_units_for', {
     p_product_id: productId,
   });
+  if (storeUnitsError) throw storeUnitsError;
   const idByName = new Map(
     ((storeUnits ?? []) as { store_unit_id: string; name: string }[]).map((u) => [
       u.name,

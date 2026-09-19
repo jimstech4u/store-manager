@@ -4,7 +4,7 @@ import { useState } from 'react';
 
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
-import { FullPageMessage } from '@/components/ui/FullPageMessage';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { Button } from '@/components/ui/Button';
 import { Explain, InfoPanel } from '@/components/ui/Explain';
 import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/components/ui/Dialog';
@@ -48,7 +48,7 @@ export default function AccountPage() {
   const { can } = usePermission();
 
   const customerId = (location?.params?.id as string | undefined) ?? null;
-  const { account, history, loading, error, reload } = useCustomerAccount(customerId);
+  const { account, history, error, reload } = useCustomerAccount(customerId);
 
   const nav = useNav();
 
@@ -88,31 +88,26 @@ export default function AccountPage() {
     );
   }
 
-  if (loading && !account) return <FullPageMessage title="Loading the account" tone="loading" />;
+  /*
+   * ONE HEADER; the body waits for the account. Its figures are worked out only from an account
+   * that has been read — never a ₦0 standing in for one that has not.
+   */
+  const status: PageStatus = account
+    ? { state: 'ready' }
+    : error
+      ? { state: 'error', what: 'this account', error, onRetry: () => void reload() }
+      : { state: 'loading', what: 'the account' };
 
-  if (error && !account) {
-    return (
-      <FullPageMessage
-        title="Could not load this account"
-        tone="error"
-        action={<Button fullWidth onClick={() => void reload()}>Try again</Button>}
-      >
-        {error}
-      </FullPageMessage>
-    );
-  }
-  if (!account) return null;
+  const owed = Number(account?.balance ?? 0);
+  const heldTotal = Number(account?.deposits_held) || 0;
 
-  const owed = Number(account.balance);
-  const heldTotal = Number(account.deposits_held) || 0;
-
-  const owes = Number(account.balance) !== 0;
+  const owes = owed !== 0;
 
   return (
     <PageScaffold
       onBack={goBack}
-      title={account.customer.name}
-      subtitle={account.customer.phone}
+      title={account?.customer.name ?? 'Account'}
+      subtitle={account?.customer.phone}
       actions={[
         {
           key: 'refresh',
@@ -130,7 +125,7 @@ export default function AccountPage() {
           Behind the permission that owns customers, because it takes somebody out of everybody
           else's picker too.
         */
-        ...(can('customers.manage')
+        ...(account && can('customers.manage')
           ? [
               {
                 key: 'archive',
@@ -142,6 +137,10 @@ export default function AccountPage() {
           : []),
       ]}
     >
+      <PageState status={status}>
+        {() =>
+          account && (
+          <>
       <ProblemDialog problem={removeProblem} title="Not removed" />
 
       {/*
@@ -399,7 +398,10 @@ export default function AccountPage() {
           ))}
         </ol>
       )}
-
+          </>
+          )
+        }
+      </PageState>
     </PageScaffold>
   );
 }

@@ -147,7 +147,7 @@ export default function ReceivePage() {
   const { byProduct: buyUnits } = useBuyingUnits(store?.id ?? null);
   // Every shape with stock on it, for the "what is already here" line in the picker.
   const { byProduct: shelfShapes } = useSellingUnits(store?.id ?? null);
-  const { suppliers, add: addSupplier } = useSuppliers(store?.id ?? null);
+  const { suppliers, add: addSupplier, loaded: suppliersLoaded } = useSuppliers(store?.id ?? null);
 
   /*
    * OFFERED FOR THE ITEMS ON THIS DELIVERY, not the whole catalogue.
@@ -869,6 +869,7 @@ export default function ReceivePage() {
       )}
 
       <SupplierPicker
+        loading={!suppliersLoaded}
         open={pickingSupplier}
         onClose={() => setPickingSupplier(false)}
         suppliers={suppliers}

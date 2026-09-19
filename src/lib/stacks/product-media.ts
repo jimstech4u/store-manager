@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect } from 'react';
-import { useDemandState } from '@academix-admin/state-stack';
+import { StateStack, useDemandState } from '@academix-admin/state-stack';
 import { CATALOG_SCOPE } from '@/lib/stacks/customer-account';
 import { getSupabase } from '@/lib/supabase/client';
 
@@ -47,7 +47,8 @@ export function useProductImages(productId: string | null) {
     loading: boolean;
     error: string | null;
   }>(
-    { images: [], loading: false, error: null },
+    // `loading` starts TRUE: until the first answer there is no saying "this item has no photos".
+    { images: [], loading: true, error: null },
     {
       key: `product-images:${productId ?? 'none'}`,
       // A shop's own catalogue, alongside the empties pools — it changes when someone changes it,
@@ -64,7 +65,9 @@ export function useProductImages(productId: string | null) {
       setState({ images: [], loading: false, error: null });
       return;
     }
-    await demand(async ({ set }) => {
+    // Cleared first: a spent demand made every later reload a no-op.
+    StateStack.core.resetDemand(CATALOG_SCOPE, `product-images:${productId}`);
+    await demand(async ({ set, get }) => {
       const { data, error: e } = await getSupabase()
         .from('product_media')
         .select('id, path, alt, sort_order')
@@ -74,8 +77,9 @@ export function useProductImages(productId: string | null) {
 
       set(
         {
+          // A failed read KEEPS the photos already shown; it does not say there are none.
           images: e
-            ? []
+            ? get().images
             : ((data as Row[] | null)?.map((r) => ({
                 id: r.id,
                 path: r.path,

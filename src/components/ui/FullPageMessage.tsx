@@ -24,15 +24,21 @@ export function FullPageMessage({
   title,
   children,
   action,
+  inPage = false,
 }: {
   tone?: Tone;
   title: string;
   children?: ReactNode;
   action?: ReactNode;
+  /**
+   * Drawn INSIDE a page, under its header (see `PageMessage`), rather than as the whole screen.
+   * Same message, sized to the body instead of the viewport.
+   */
+  inPage?: boolean;
 }) {
   return (
     <div
-      className={styles.wrap}
+      className={inPage ? styles.inPage : styles.wrap}
       // Loading is announced politely so a screen reader says what is happening without cutting
       // off whatever it was already reading; an error interrupts, because it needs to.
       role={tone === 'error' ? 'alert' : 'status'}

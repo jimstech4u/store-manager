@@ -1,6 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import { getSupabase } from '@/lib/supabase/client';
+import { useResource } from '@/lib/stacks/resource';
 
 /**
  * One vocabulary for "when", resolved on the server.
@@ -94,4 +96,34 @@ export async function customPeriod(
     new Date(`${fromDate}T00:00:00`).toISOString(),
     to.toISOString(),
   );
+}
+
+/**
+ * The window a screen opens on, and the one the shop picks after.
+ *
+ * THE OPENING WINDOW IS A READ like any other — the shop's clock decides what "this month" is — and
+ * three screens each resolved it in an effect whose failure was swallowed or only shown in a dialog.
+ * The period stayed unknown and the whole section under it simply never appeared, with nothing to
+ * press. Here it is loading until known, and a failure carries its own retry.
+ *
+ * Not persisted: "this month" is a fact about now, and last month's window carried into this one is
+ * exactly the wrong report.
+ */
+export function usePeriod(storeId: string | null, initial: PeriodKind = 'this_month') {
+  const opening = useResource<Period>({
+    key: `period:${storeId ?? 'none'}:${initial}`,
+    scope: 'periods',
+    persist: false,
+    enabled: Boolean(storeId),
+    read: () => resolvePeriod(storeId as string, initial),
+  });
+  // What the shop chose on this screen — belongs to the shop it was chosen in.
+  const [chosen, setChosen] = useState<{ storeId: string | null; period: Period } | null>(null);
+  const period = chosen && chosen.storeId === storeId ? chosen.period : opening.data;
+  return {
+    period,
+    setPeriod: (next: Period) => setChosen({ storeId, period: next }),
+    error: period ? null : opening.error,
+    reload: opening.reload,
+  };
 }

@@ -1,7 +1,5 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useDemandState } from '@academix-admin/state-stack';
 import { getSupabase } from '@/lib/supabase/client';
 import { useResource } from '@/lib/stacks/resource';
 import { invalidate } from '@/lib/stacks/invalidation';
@@ -171,46 +169,4 @@ export function useCustomerAccount(customerId: string | null) {
     loading: !r.loaded && !r.error,
     reload: r.reload,
   };
-}
-
-export interface EmptiesPool {
-  id: string;
-  name: string;
-  kind: 'content' | 'container';
-  deposit: string;
-}
-
-/**
- * The pools this shop uses, for the pickers on every empties action.
- *
- * Cached and hydrated too, with a long TTL: a shop's set of pools changes about never, and making
- * every action screen wait on the same query is a spinner over a select box that already knows
- * what it should contain.
- */
-export function useEmptiesPools(storeId: string | null) {
-  const [pools, demandPools] = useDemandState<EmptiesPool[]>([], {
-    key: `pools:${storeId ?? 'none'}`,
-    scope: CATALOG_SCOPE,
-    persist: true,
-    deps: [storeId ?? ''],
-    /*
-     * NO TTL — see `useCustomerAccount`. Ten minutes is worse than thirty seconds here, not
-     * better: the pools change perhaps twice a year, so the timer's only observable effect is to
-     * empty a screen somebody left open.
-     */
-  });
-
-  useEffect(() => {
-    if (!storeId) return;
-    demandPools(async ({ set }) => {
-      const { data } = await getSupabase()
-        .from('empties_categories')
-        .select('id, name, kind, deposit')
-        .eq('store_id', storeId)
-        .order('name');
-      set((data ?? []) as EmptiesPool[], { override: true });
-    });
-  }, [storeId, demandPools]);
-
-  return pools;
 }

@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useDemandState } from '@academix-admin/state-stack';
+import { useResource } from '@/lib/stacks/resource';
+import { DERIVED_SCOPE } from '@/lib/stacks/catalog-stack';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { Explain } from '@/components/ui/Explain';
 import { ChevronRightIcon } from '@/components/ui/Icon';
 import { getSupabase } from '@/lib/supabase/client';
@@ -66,6 +67,32 @@ function when(iso: string) {
   return sameDay ? time : `${at.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}, ${time}`;
 }
 
+/*
+ * THE ITEM'S LEDGER, as a resource.
+ *
+ * It was kept with `revalidateOnMount: false` and no invalidation, on the grounds that a ledger's
+ * past does not change — true, but its PRESENT does: a sale or a delivery adds a row, and the page
+ * never learned of it, so the newest movement was missing until the cache was cleared. A failed
+ * read also wrote an empty list over the rows, and the card said "Nothing recorded yet" before the
+ * first answer. Now it re-reads when stock moves (here or on another till), keeps its rows through a
+ * failure, and says when it does not know yet.
+ */
+function useProductHistory(productId: string) {
+  return useResource<Movement[]>({
+    key: `product-history:v2:${productId}`,
+    scope: DERIVED_SCOPE,
+    enabled: Boolean(productId),
+    read: async () => {
+      const { data, error } = await getSupabase().rpc('product_history', {
+        p_product_id: productId,
+        p_limit: 60,
+      });
+      if (error) throw error;
+      return (data ?? []) as Movement[];
+    },
+  });
+}
+
 export function StockHistory({
   productId,
   unit,
@@ -82,33 +109,22 @@ export function StockHistory({
    */
   onOpenRecord?: (refTable: string | null, refId: string) => void;
 }) {
-  const [history, demandHistory] = useDemandState<Movement[]>([], {
-    key: `product-history:${productId}`,
-    scope: 'catalog_flow',
-    /*
-     * Kept, because a ledger's past does not change.
-     *
-     * Every row here already happened; re-reading them on the way back in is a request that can
-     * only return what is already on screen. New movements arrive by loading again, and the rows
-     * that were there stay there — so the page opens instantly and fills in.
-     */
-    persist: true,
-    deps: [productId],
-    revalidateOnMount: false,
-  });
+  const res = useProductHistory(productId);
+  const history = res.data ?? [];
 
-  useEffect(() => {
-    if (!productId) return;
-    demandHistory(async ({ set }) => {
-      const { data } = await getSupabase().rpc('product_history', {
-        p_product_id: productId,
-        p_limit: 60,
-      });
-      set((data ?? []) as Movement[], { override: true });
-    });
-  }, [productId, demandHistory]);
-
-  if (history.length === 0) return null;
+  // Not read yet, or could not be: said inside the page, under its header — never a blank page.
+  const status: PageStatus = res.loaded
+    ? history.length === 0
+      ? {
+          state: 'empty',
+          title: 'Nothing recorded yet',
+          body: 'Deliveries, sales and counts of this item will be listed here as they happen.',
+        }
+      : { state: 'ready' }
+    : res.error
+      ? { state: 'error', what: 'the history', error: res.error, onRetry: res.reload }
+      : { state: 'loading', what: 'the history' };
+  if (status.state !== 'ready') return <PageState status={status}>{() => null}</PageState>;
 
   return (
     <section className={styles.section}>
@@ -181,36 +197,22 @@ export function StockHistoryCard({
   productId: string;
   onOpen: () => void;
 }) {
-  const [history, demandHistory] = useDemandState<Movement[]>([], {
-    // One row is all this needs, but it shares the history's key so opening the page is instant
-    // rather than fetching the same thing twice.
-    key: `product-history:${productId}`,
-    scope: 'catalog_flow',
-    // Shares the history's key, so opening the page after seeing the card is instant.
-    persist: true,
-    deps: [productId],
-    revalidateOnMount: false,
-  });
-
-  useEffect(() => {
-    if (!productId) return;
-    demandHistory(async ({ set }) => {
-      const { data } = await getSupabase().rpc('product_history', {
-        p_product_id: productId,
-        p_limit: 60,
-      });
-      set((data ?? []) as Movement[], { override: true });
-    });
-  }, [productId, demandHistory]);
-
-  const last = history[0];
+  // The same read as the page, so opening it after seeing the card is instant.
+  const res = useProductHistory(productId);
+  const last = res.data?.[0];
 
   return (
     <button type="button" className={styles.card} onClick={onOpen}>
       <span className={styles.cardBody}>
         <span className={styles.cardLabel}>Stock history</span>
         <span className={styles.cardValue}>
-          {last ? `Last changed ${when(last.at)}` : 'Nothing recorded yet'}
+          {res.data === null
+            ? res.error
+              ? 'Could not load'
+              : 'Loading…'
+            : last
+              ? `Last changed ${when(last.at)}`
+              : 'Nothing recorded yet'}
         </span>
         {last && (
           <span className={styles.cardDetail}>

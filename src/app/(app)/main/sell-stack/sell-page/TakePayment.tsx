@@ -275,7 +275,12 @@ export function TakePayment({
    */
   const nav = useNav();
   const lineIds = useMemo(() => order.lines.map((l) => l.productId), [order.lines]);
-  const { uncounted, reload: reloadCounts } = useUncountedToday(storeId, lineIds);
+  const {
+    uncounted,
+    checked: countsChecked,
+    error: countsError,
+    reload: reloadCounts,
+  } = useUncountedToday(storeId, lineIds);
   /*
    * RE-ASKED WHENEVER THIS PAGE COMES BACK INTO VIEW.
    *
@@ -332,44 +337,31 @@ export function TakePayment({
         throw new Error('This order has not saved to the shop yet. Try again in a moment.');
       }
 
-      const { data, error: err } = await getSupabase().rpc('settle_draft_order', {
-        p_draft_id: order.id,
-        p_payments: payments,
-        // The draft's own client id doubles as the idempotency key: a retry after a timeout
-        // returns the sale already recorded rather than charging the customer twice.
-        p_client_uuid: order.clientUuid,
-      });
-      if (err) throw err;
-
-      /*
-       * THE DEPOSIT GOES TO ITS OWN LEDGER, after the sale and only for a named customer.
-       *
-       * After, because a deposit taken against a sale that failed to settle is money the shop is
-       * recorded as holding for goods that never left. And only for a named customer, because a
-       * deposit is an obligation to somebody — a walk-in handing over crate money is taking their
-       * change back at the counter, not opening an account.
-       *
-       * It ADDS to whatever is already held. The two are rows in one ledger, never a replacement,
-       * which is the whole reason this is a ledger and not a column.
-       */
       const takenNow = (order.deposits ?? []).reduce((sum, d) => {
         const n = Number(d.amount);
         return sum + (Number.isFinite(n) ? n : 0);
       }, 0);
 
-      if (takenNow > 0 && order.customerId && storeId) {
-        const { error: depErr } = await getSupabase().rpc('take_customer_deposit', {
-          p_store_id: storeId,
-          p_customer_id: order.customerId,
-          p_amount: takenNow,
-          p_reason:
-            (order.deposits ?? [])
-              .map((d) => d.note?.trim())
-              .filter(Boolean)
-              .join(', ') || null,
-        });
-        if (depErr) throw depErr;
-      }
+      /*
+       * THE SALE AND ITS DEPOSIT, IN ONE TRANSACTION (0152).
+       *
+       * These were two calls: settle, then take the deposit. A deposit call that failed left the sale
+       * settled and the customer's money recorded nowhere. `settle_draft_with_deposit` does both or
+       * neither, and a retry after a timeout returns the sale already recorded without taking the
+       * deposit twice. The draft's client id is still the idempotency key.
+       */
+      const { data, error: err } = await getSupabase().rpc('settle_draft_with_deposit', {
+        p_draft_id: order.id,
+        p_payments: payments,
+        p_client_uuid: order.clientUuid,
+        p_deposit: takenNow > 0 && order.customerId ? takenNow : null,
+        p_deposit_reason:
+          (order.deposits ?? [])
+            .map((d) => d.note?.trim())
+            .filter(Boolean)
+            .join(', ') || null,
+      });
+      if (err) throw err;
 
       /*
        * A settled sale moves a customer's balance, their empties and the debtor list — so say so
@@ -1014,6 +1006,23 @@ export function TakePayment({
         COUNT FIRST. A condition, not a failure: it is true before anything is pressed, and it stays
         on the page with the way to fix it beside it rather than waiting to be discovered in a dialog.
       */}
+      {/*
+        STILL CHECKING TODAY'S COUNTS. Before the answer the sale is neither counted nor uncounted,
+        and the button waits rather than guessing either way.
+      */}
+      {!countsChecked && (
+        <div className={styles.outstanding} role="status">
+          <span>
+            {countsError ? "Could not check today's counts." : "Checking today's counts…"}
+          </span>
+          {countsError && (
+            <button type="button" className={styles.retryLink} onClick={reloadCounts}>
+              Try again
+            </button>
+          )}
+        </div>
+      )}
+
       {uncounted.length > 0 && (
         <>
           <InfoPanel tone="warning" title="Count the shelf before this is sold">
@@ -1064,6 +1073,7 @@ export function TakePayment({
           busy={busy}
           busyLabel="Recording"
           disabled={
+            !countsChecked ||
             uncounted.length > 0 ||
             // Paid more than the sale while what they owed is still unknown: the extra might be for
             // the old debt rather than change, and nobody can say which until the balance arrives.

@@ -77,7 +77,7 @@ export default function BankFormPage() {
   if (accountId && !settled) {
     return (
       <PageScaffold onBack={goBack} title="Loading this account">
-        <FullPageMessage title="Loading this account" tone="loading" />
+        <FullPageMessage title="Loading this account" tone="loading" inPage />
       </PageScaffold>
     );
   }

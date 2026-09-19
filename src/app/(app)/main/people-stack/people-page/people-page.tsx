@@ -3,11 +3,10 @@
 import { useCallback } from 'react';
 import styles from '../../money-stack/money-page/money-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useListChannel } from '@/hooks/useListChannel';
 import { useNav } from '@academix-admin/navigation-stack';
-import { FullPageMessage } from '@/components/ui/FullPageMessage';
-import { Button } from '@/components/ui/Button';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
 import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
@@ -118,10 +117,6 @@ export default function PeoplePage() {
 
   if (!store) return null;
 
-  if (list.loading && list.items.length === 0) {
-    return <FullPageMessage title="Loading customers" tone="loading" />;
-  }
-
   /*
    * A failed load says so, and offers a way out.
    *
@@ -133,21 +128,19 @@ export default function PeoplePage() {
    * already reading must not replace what they can see — they keep the rows they have, and the
    * next scroll tries again.
    */
-  if (list.error && list.items.length === 0) {
-    return (
-      <FullPageMessage
-        title="Could not load your customers"
-        tone="error"
-        action={
-          <Button fullWidth onClick={() => list.reload()}>
-            Try again
-          </Button>
-        }
-      >
-        {list.error}
-      </FullPageMessage>
-    );
-  }
+  /*
+   * ONE HEADER, and the body says what it has. The list shows once it has rows; until the first page
+   * has been read it is loading — not "none yet", which is what an empty list drew before the read
+   * had even started — and a read that failed says so with a way to try again.
+   */
+  const status: PageStatus =
+    list.items.length > 0
+      ? { state: 'ready' }
+      : list.error
+        ? { state: 'error', what: 'your customers', error: list.error, onRetry: () => list.reload() }
+        : list.loading || list.hasMore
+          ? { state: 'loading', what: 'your customers' }
+          : { state: 'ready' };
 
   return (
     <PageScaffold
@@ -171,6 +164,9 @@ export default function PeoplePage() {
         },
       ]}
     >
+      <PageState status={status}>
+        {() => (
+          <>
       <SearchLauncher
         label="Search customers"
         placeholder="Search by name or phone"
@@ -286,6 +282,9 @@ export default function PeoplePage() {
         * This page IS the list of customers — searching it is what the page does. A chooser on top
         * of it was a second way to search the same people, opened by a button that says "add".
       */}
+          </>
+        )}
+      </PageState>
     </PageScaffold>
   );
 }

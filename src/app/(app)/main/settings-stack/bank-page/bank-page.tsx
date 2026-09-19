@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
-import { FullPageMessage } from '@/components/ui/FullPageMessage';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/components/ui/Dialog';
 import { Explain, InfoPanel } from '@/components/ui/Explain';
@@ -65,9 +65,9 @@ export default function BankPage() {
   if (!store) return null;
   const editable = can('store.settings');
 
-  if (loading && accounts.length === 0) {
-    return <FullPageMessage title="Loading your accounts" tone="loading" />;
-  }
+  // One header; the body waits for the accounts rather than the page being replaced by a spinner.
+  const status: PageStatus =
+    loading && accounts.length === 0 ? { state: 'loading', what: 'your accounts' } : { state: 'ready' };
 
   /*
    * Adding and editing are a PAGE now, not a sheet on this one.
@@ -90,6 +90,10 @@ export default function BankPage() {
           : undefined
       }
     >
+      <PageState status={status}>
+        {() =>
+          (
+            <>
       <Explain label="Why add more than one?">
         Whichever account is marked <strong>Main</strong> is the one offered first when a customer
         pays by transfer. Any other account you add can be picked instead, on the spot, without
@@ -206,6 +210,10 @@ export default function BankPage() {
           }}
         />
       )}
+            </>
+          )
+        }
+      </PageState>
     </PageScaffold>
   );
 }

@@ -3,8 +3,8 @@
 import { useMemo } from 'react';
 import styles from './count-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { FloatingAction } from '@/components/ui/FloatingAction';
-import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { PlusIcon } from '@/components/ui/Icon';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
 import { SearchSheet } from '@/components/ui/SearchSheet';
@@ -104,10 +104,19 @@ export default function CountPage() {
     );
   }
 
-  if (browse.loading && products.length === 0) {
-    return <FullPageMessage title="Loading your products" tone="loading" />;
-  }
-
+  /*
+   * ONE HEADER, and the body says what it has. The list shows once it has rows; until the first page
+   * has been read it is loading — not "none yet", which is what an empty list drew before the read
+   * had even started — and a read that failed says so with a way to try again.
+   */
+  const status: PageStatus =
+    browse.items.length > 0
+      ? { state: 'ready' }
+      : browse.error
+        ? { state: 'error', what: 'your products', error: browse.error, onRetry: () => browse.reload() }
+        : browse.loading || browse.hasMore
+          ? { state: 'loading', what: 'your products' }
+          : { state: 'ready' };
 
   return (
     <PageScaffold
@@ -131,19 +140,12 @@ export default function CountPage() {
         list, and it puts the gesture where a shop has already learnt it.
       */
       actions={[
-        {
-          key: 'add',
-          icon: <PlusIcon />,
-          /*
-            THE REAL FORM, PUSHED, and it asks for the count as one of its required answers — so
-            somebody adding a thing they are looking at records how many there are in the same
-            breath, rather than being asked twice.
-          */
-          onClick: () => void nav.push('product_form_page', { required: 'minimum' }),
-          ariaLabel: 'Something not on this list',
-        },
+        
       ]}
     >
+      <PageState status={status}>
+        {() => (
+          <>
       <InfoPanel tone="info" title="Count the shelf, then we compare">
         Pick a product, count what is actually there, and we will tell you whether it matches what
         your records say it should be.
@@ -242,6 +244,9 @@ export default function CountPage() {
         icon={<ClipboardCheckIcon />}
         onClick={() => void nav.push('yard_page')}
       />
+          </>
+        )}
+      </PageState>
     </PageScaffold>
   );
 }

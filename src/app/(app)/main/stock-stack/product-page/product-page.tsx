@@ -4,10 +4,9 @@ import { LEDGERS_SCOPE } from '@/lib/stacks/customer-ledgers';
 import { useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { StockHistoryCard } from '@/components/stock/StockHistory';
-import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { InfoPanel } from '@/components/ui/Explain';
-import { Button } from '@/components/ui/Button';
 import { PhotoUpload } from '@/components/ui/PhotoUpload';
 import { ChevronRightIcon, EditIcon, TrashIcon } from '@/components/ui/Icon';
 import { getSupabase } from '@/lib/supabase/client';
@@ -60,7 +59,12 @@ export default function ProductPage() {
    * who came to look at the item — a gap found by opening a form nobody had a reason to open is a
    * gap that stays there.
    */
-  const { byProduct } = useSellingUnits(store?.id ?? null);
+  const {
+    byProduct,
+    loaded: unitsLoaded,
+    error: unitsError,
+    reload: reloadUnits,
+  } = useSellingUnits(store?.id ?? null);
   const { units: productUnits } = useProductUnits(productId);
   /*
    * Read into its own area, so a failure says so.
@@ -89,46 +93,39 @@ export default function ProductPage() {
 
   if (!store) return null;
 
-  if (!productId) {
-    // Reachable by editing the URL, since the stack serialises its params there. Better to say so
-    // and offer the way back than to render an empty shell.
-    return (
-      <FullPageMessage title="No product was chosen" tone="error"
-        action={<Button fullWidth onClick={() => nav.pop()}>Back to stock</Button>}>
-        Open a product from the Stock list.
-      </FullPageMessage>
-    );
-  }
+  /*
+   * ONE HEADER, whatever the body has to say. No product chosen is reachable by editing the URL,
+   * since the stack serialises its params there; the header's back arrow is the way out.
+   */
+  const status: PageStatus = !productId
+    ? { state: 'empty', title: 'No product was chosen', body: 'Open a product from the Stock list.' }
+    : product
+      ? unitsLoaded
+        ? { state: 'ready' }
+        : // Its shapes and prices are most of this page; "no shapes yet" before they are read is
+          // a claim about the item nobody has checked.
+          unitsError
+          ? { state: 'error', what: 'its shapes and prices', error: unitsError, onRetry: reloadUnits }
+          : { state: 'loading', what: 'its shapes and prices' }
+      : error
+        ? { state: 'error', what: 'this product', error, onRetry: () => void load() }
+        : loading
+          ? { state: 'loading', what: 'this product' }
+          : {
+              state: 'empty',
+              title: 'That product is gone',
+              body: 'It may have been removed since this page was opened.',
+            };
 
-  if (loading && !product) return <FullPageMessage title="Loading" tone="loading" />;
-
-  if (error && !product) {
-    return (
-      <FullPageMessage title="Could not load this product" tone="error"
-        action={<Button fullWidth onClick={() => void load()}>Try again</Button>}>
-        {error}
-      </FullPageMessage>
-    );
-  }
-
-  if (!product) {
-    return (
-      <FullPageMessage title="That product is gone" tone="error"
-        action={<Button fullWidth onClick={() => nav.pop()}>Back to stock</Button>}>
-        It may have been removed since this page was opened.
-      </FullPageMessage>
-    );
-  }
-
-  const onHand = Number(product.onHand);
+  const onHand = Number(product?.onHand ?? 0);
 
   return (
     <PageScaffold
       onBack={goBack}
-      title={product.name}
-      subtitle={product.categoryName ?? store.name}
+      title={product?.name ?? 'Item'}
+      subtitle={product ? product.categoryName ?? store.name : undefined}
       actions={
-        can('products.manage')
+        product && can('products.manage')
           ? [
               { key: 'edit', icon: <EditIcon />, onClick: () => void nav.push('product_form_page', { id: productId }),
                 ariaLabel: 'Edit this item' },
@@ -138,6 +135,10 @@ export default function ProductPage() {
           : undefined
       }
     >
+      <PageState status={status}>
+        {() =>
+          product && (
+            <>
       {/*
         Removing asks for a reason and warns about stock still on the shelf.
         The server refuses outright while stock remains unless it is told to go ahead, so the
@@ -431,6 +432,10 @@ export default function ProductPage() {
         productName={product.name}
         canManage={can('products.manage')}
       />
+            </>
+          )
+        }
+      </PageState>
     </PageScaffold>
   );
 }

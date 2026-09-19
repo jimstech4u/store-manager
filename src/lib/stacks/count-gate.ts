@@ -1,11 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useMemo } from 'react';
-import { useDemandState } from '@academix-admin/state-stack';
-import { invalidate, useInvalidation } from '@/lib/stacks/invalidation';
+import { useMemo } from 'react';
+import { invalidate } from '@/lib/stacks/invalidation';
 import { whichNeedCount } from '@/lib/stacks/mid-sale';
 import { getSupabase } from '@/lib/supabase/client';
-import { useReload } from '@/lib/stacks/resource';
+import { useResource } from '@/lib/stacks/resource';
 
 /**
  * Which items on an open sale have not been counted today.
@@ -32,33 +31,33 @@ export function useUncountedToday(storeId: string | null, productIds: string[]) 
   const ids = useMemo(() => [...new Set(productIds)].sort(), [productIds]);
   const key = ids.join(',');
 
-  const [uncounted, demand] = useDemandState<string[]>([], {
+  /*
+   * CHECKED, OR NOT YET — never "all counted" by default.
+   *
+   * This started as `[]`, which reads as "nothing on this sale needs counting" — so until the
+   * answer arrived Take payment offered to settle, and a check that FAILED left it saying so for
+   * good. `checked` is false until the server has answered for these exact items. Not persisted:
+   * "counted today" is a fact about today, and a cached yes carried into tomorrow is the bug this
+   * gate was built to prevent.
+   */
+  const r = useResource<string[]>({
     key: `uncounted:${storeId ?? 'none'}:${key}`,
     scope: COUNTS_SCOPE,
     persist: false,
-    deps: [storeId ?? '', key],
-    revalidateOnMount: true,
+    enabled: Boolean(storeId) && ids.length > 0,
+    read: async () => {
+      const owing = await whichNeedCount(ids);
+      return ids.filter((id) => owing.has(id));
+    },
   });
 
-  const load = useCallback(() => {
-    if (!storeId || ids.length === 0) return;
-    void demand(async ({ set }) => {
-      const owing = await whichNeedCount(ids);
-      set(ids.filter((id) => owing.has(id)));
-    });
-    // `key` stands in for `ids`: the same set of products is the same question.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storeId, key, demand]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  useInvalidation(storeId ? COUNTS_SCOPE : null, load);
-
   // No products means nothing can be uncounted, whatever an earlier key left behind.
-  const reload = useReload(COUNTS_SCOPE, `uncounted:${storeId ?? 'none'}:${key}`, load);
-  return { uncounted: ids.length === 0 ? [] : uncounted, reload };
+  return {
+    uncounted: ids.length === 0 ? [] : r.data ?? [],
+    checked: ids.length === 0 || r.loaded,
+    error: r.error,
+    reload: r.reload,
+  };
 }
 
 /* ── Who counted what today, and what has been changed since ─────────────────────── */
@@ -104,100 +103,74 @@ export function useTodaysCounts(storeId: string | null, productIds: string[]) {
   const ids = useMemo(() => [...new Set(productIds)].sort(), [productIds]);
   const key = ids.join(',');
 
-  const [rows, demand] = useDemandState<TodaysCount[]>([], {
+  /*
+   * A resource, not persisted (today's counts must never be carried into tomorrow). It started as
+   * `[]`, which reads exactly like "nobody has counted these today" — so for the moment before the
+   * answer, a counted item offered itself to be counted again. `loaded` tells the two apart.
+   */
+  const r = useResource<TodaysCount[]>({
     key: `todays-counts:${storeId ?? 'none'}:${key}`,
     scope: COUNTS_SCOPE,
     persist: false,
-    deps: [storeId ?? '', key],
-    revalidateOnMount: true,
-  });
-
-  const load = useCallback(() => {
-    if (!storeId || ids.length === 0) return;
-    void demand(async ({ set }) => {
+    enabled: Boolean(storeId) && ids.length > 0,
+    read: async () => {
       const { data, error } = await getSupabase().rpc('todays_counts', { p_product_ids: ids });
       if (error) throw error;
-      set(
-        ((data ?? []) as Record<string, unknown>[]).map((r) => ({
-          productId: r.product_id as string,
-          periodId: r.period_id as string,
-          periodStatus: r.period_status as TodaysCount['periodStatus'],
-          countedBase: Number(r.counted_qty ?? 0),
-          firstBase: Number(r.first_qty ?? 0),
-          countedBy: (r.counted_by_name as string) ?? 'Someone',
-          countedByYou: Boolean(r.counted_by_you),
-          countedAt: r.counted_at as string,
-          firstBy: (r.first_by_name as string) ?? 'Someone',
-          firstAt: (r.first_at as string) ?? (r.counted_at as string),
-          edits: Number(r.edits ?? 0),
-          lastEditedBy: (r.last_edited_by as string | null) ?? null,
-          lastEditedAt: (r.last_edited_at as string | null) ?? null,
-          lastReason: (r.last_reason as string | null) ?? null,
-        })),
-      );
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storeId, key, demand]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  useInvalidation(storeId ? COUNTS_SCOPE : null, load);
+      return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+        productId: row.product_id as string,
+        periodId: row.period_id as string,
+        periodStatus: row.period_status as TodaysCount['periodStatus'],
+        countedBase: Number(row.counted_qty ?? 0),
+        firstBase: Number(row.first_qty ?? 0),
+        countedBy: (row.counted_by_name as string) ?? 'Someone',
+        countedByYou: Boolean(row.counted_by_you),
+        countedAt: row.counted_at as string,
+        firstBy: (row.first_by_name as string) ?? 'Someone',
+        firstAt: (row.first_at as string) ?? (row.counted_at as string),
+        edits: Number(row.edits ?? 0),
+        lastEditedBy: (row.last_edited_by as string | null) ?? null,
+        lastEditedAt: (row.last_edited_at as string | null) ?? null,
+        lastReason: (row.last_reason as string | null) ?? null,
+      }));
+    },
+  });
 
   const byProduct = useMemo(() => {
     const m = new Map<string, TodaysCount>();
-    if (ids.length > 0) for (const r of rows) m.set(r.productId, r);
+    if (ids.length > 0) for (const row of r.data ?? []) m.set(row.productId, row);
     return m;
-  }, [rows, ids.length]);
+  }, [r.data, ids.length]);
 
-  const reload = useReload(COUNTS_SCOPE, `todays-counts:${storeId ?? 'none'}:${key}`, load);
-  return { byProduct, reload };
+  // Nothing to ask about is an answer too: no items, nothing counted.
+  const loaded = ids.length === 0 || r.loaded;
+  return { byProduct, reload: r.reload, loaded, error: r.error };
 }
 
 /** The day's history of one item's count, oldest first. */
 export function useCountTrail(storeId: string | null, productId: string | null) {
-  const [steps, demand] = useDemandState<CountTrailStep[]>([], {
+  const r = useResource<CountTrailStep[]>({
     key: `count-trail:${storeId ?? 'none'}:${productId ?? 'none'}`,
     scope: COUNTS_SCOPE,
     persist: false,
-    deps: [storeId ?? '', productId ?? ''],
-    revalidateOnMount: true,
-  });
-
-  const load = useCallback(() => {
-    if (!storeId || !productId) return;
-    void demand(async ({ set }) => {
+    enabled: Boolean(storeId && productId),
+    read: async () => {
       const { data, error } = await getSupabase().rpc('todays_count_trail', {
         p_product_id: productId,
       });
       if (error) throw error;
-      set(
-        ((data ?? []) as Record<string, unknown>[]).map((r) => ({
-          kind: r.kind as CountTrailStep['kind'],
-          qtyBase: Number(r.qty ?? 0),
-          oldBase: r.old_qty === null || r.old_qty === undefined ? null : Number(r.old_qty),
-          reason: (r.reason as string | null) ?? null,
-          by: (r.by_name as string) ?? 'Someone',
-          byYou: Boolean(r.by_you),
-          at: r.at as string,
-        })),
-      );
-    });
-  }, [storeId, productId, demand]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  useInvalidation(storeId ? COUNTS_SCOPE : null, load);
-
-  const reload = useReload(
-    COUNTS_SCOPE,
-    `count-trail:${storeId ?? 'none'}:${productId ?? 'none'}`,
-    load,
-  );
-  return { steps: productId ? steps : [], reload };
+      return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+        kind: row.kind as CountTrailStep['kind'],
+        qtyBase: Number(row.qty ?? 0),
+        oldBase: row.old_qty === null || row.old_qty === undefined ? null : Number(row.old_qty),
+        reason: (row.reason as string | null) ?? null,
+        by: (row.by_name as string) ?? 'Someone',
+        byYou: Boolean(row.by_you),
+        at: row.at as string,
+      }));
+    },
+  });
+  const steps = useMemo(() => (productId ? (r.data ?? []) : []), [productId, r.data]);
+  return { steps, reload: r.reload, loaded: !productId || r.loaded, error: r.error };
 }
 
 /**

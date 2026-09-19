@@ -50,12 +50,15 @@ export function UnitsEditor({
   units,
   setUnits,
   storeUnits,
+  storeUnitsLoading = false,
   onCreateUnit,
 }: {
   units: ProductUnit[];
   setUnits: (next: ProductUnit[]) => void;
   /** The words this shop already has for how much of something there is. */
   storeUnits: StoreUnit[];
+  /** The shop's units have not been read yet — the picker says loading rather than "none". */
+  storeUnitsLoading?: boolean;
   /** Hands over to whoever can push the form that invents a new one. */
   onCreateUnit: (name: string) => void;
 }) {
@@ -600,6 +603,7 @@ export function UnitsEditor({
         open={picking}
         onClose={() => setPicking(false)}
         units={storeUnits}
+        loading={storeUnitsLoading}
         /*
           Everything already on the item, because there is one list now.
 

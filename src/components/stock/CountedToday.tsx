@@ -1,5 +1,6 @@
 'use client';
 
+import { Button } from '@/components/ui/Button';
 import type { ReactNode } from 'react';
 import { CheckIcon } from '@/components/ui/Icon';
 import { stockInShapes, type SellingUnit } from '@/lib/stacks/selling-units';
@@ -37,7 +38,10 @@ export function CountedToday({
   children?: ReactNode;
 }) {
   // The trail is only interesting once something has replaced something — one count says itself.
-  const { steps } = useCountTrail(storeId, count.edits > 0 ? count.productId : null);
+  const { steps, loaded, error, reload } = useCountTrail(
+    storeId,
+    count.edits > 0 ? count.productId : null,
+  );
 
   const say = (base: number) =>
     shapes.length > 0
@@ -55,6 +59,22 @@ export function CountedToday({
           ? `Counted ${count.edits + 1} times today · this one ${countedByWords(count)}`
           : `Counted ${countedByWords(count)}`}
       </p>
+
+      {/* The trail is on its way, or could not be read — said, rather than left out. */}
+      {count.edits > 0 && !loaded && (
+        <p className={styles.who}>
+          {error ? (
+            <>
+              Could not load the day&rsquo;s counts.{' '}
+              <Button variant="secondary" size="small" onClick={reload}>
+                Try again
+              </Button>
+            </>
+          ) : (
+            'Loading the day’s counts…'
+          )}
+        </p>
+      )}
 
       {count.edits > 0 && steps.length > 0 && (
         <ol className={styles.trail}>

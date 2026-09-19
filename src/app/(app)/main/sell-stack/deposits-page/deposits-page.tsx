@@ -2,8 +2,7 @@
 
 import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
-import { FullPageMessage } from '@/components/ui/FullPageMessage';
-import { Button } from '@/components/ui/Button';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { InfoPanel } from '@/components/ui/Explain';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
 import { SearchSheet } from '@/components/ui/SearchSheet';
@@ -61,27 +60,21 @@ export default function DepositsPage() {
    * words that look exactly like a real answer. A loader until there is one; if the first read
    * fails, the failure and a way to try again, without leaving the page.
    */
-  if (!ledger.loaded) {
-    if (ledger.error) {
-      return (
-        <FullPageMessage
-          title="Could not load the deposits you are holding"
-          tone="error"
-          action={
-            <Button fullWidth onClick={ledger.reload}>
-              Try again
-            </Button>
-          }
-        >
-          {ledger.error}
-        </FullPageMessage>
-      );
-    }
-    return <FullPageMessage title="Loading the deposits you are holding" tone="loading" />;
-  }
+  /*
+   * ONE HEADER; the body waits for the list. Nothing here is said until it has been read — "held
+   * altogether ₦0" and "nothing is out" are answers, and a list that has not arrived is not one.
+   */
+  const status: PageStatus = ledger.loaded
+    ? { state: 'ready' }
+    : ledger.error
+      ? { state: 'error', what: 'the deposits you are holding', error: ledger.error, onRetry: ledger.reload }
+      : { state: 'loading', what: 'the deposits you are holding' };
 
   return (
     <PageScaffold onBack={goBack} title="Deposits" subtitle="Money you are holding">
+      <PageState status={status}>
+        {() => (
+          <>
       <div className={styles.headline}>
         <span className={styles.headlineLabel}>Held altogether</span>
         <span className={styles.headlineValue}>{formatMoney(total)}</span>
@@ -164,6 +157,9 @@ export default function DepositsPage() {
           ))}
         </ul>
       )}
+          </>
+        )}
+      </PageState>
     </PageScaffold>
   );
 }

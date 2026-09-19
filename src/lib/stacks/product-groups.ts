@@ -17,11 +17,10 @@
 
 'use client';
 
-import { useCallback, useEffect } from 'react';
-import { useDemandState } from '@academix-admin/state-stack';
+import { useCallback, useMemo } from 'react';
 import { getSupabase } from '@/lib/supabase/client';
-import { useInvalidation, invalidate } from '@/lib/stacks/invalidation';
-import { useReload } from '@/lib/stacks/resource';
+import { invalidate } from '@/lib/stacks/invalidation';
+import { useResource } from '@/lib/stacks/resource';
 
 export interface ProductGroup {
   id: string;
@@ -39,53 +38,41 @@ export interface ProductGroup {
  * delete it, which is exactly the bug that scope separation exists to prevent.
  */
 export function useProductGroups(storeId: string | null) {
-  const [groups, demandGroups, setGroups] = useDemandState<ProductGroup[]>([], {
+  /*
+   * A RESOURCE, so the list says whether it has been read. It started as `[]`, so a picker or a
+   * page said "none yet" before the first answer — the same words as a shop with none — and a read
+   * that failed said it for good. Same key and shape: what was cached carries over.
+   */
+  const r = useResource<ProductGroup[]>({
     key: `product-groups:${storeId ?? 'none'}`,
     scope: GROUPS_SCOPE,
-    persist: true,
-    deps: [storeId ?? ''],
-    revalidateOnMount: false,
-  });
-
-  const load = useCallback(() => {
-    if (!storeId) return;
-    void demandGroups(async ({ set }) => {
+    enabled: Boolean(storeId),
+    read: async () => {
       const { data, error } = await getSupabase().rpc('store_product_groups', {
         p_store_id: storeId,
       });
       if (error) throw error;
-      set(
-        ((data ?? []) as { id: string; name: string; products: number }[]).map((r) => ({
-          id: r.id,
-          name: r.name,
-          products: Number(r.products) || 0,
-        })),
-        { override: true },
-      );
-    });
-  }, [storeId, demandGroups]);
-
-  useEffect(load, [load]);
-  useInvalidation(GROUPS_SCOPE, load);
-
-  /*
-   * THE WRITER KNOWS THE ROW.
-   *
-   * A group made on the form that pushed over this one lands here directly rather than through a
-   * refetch. The page underneath never unmounts while that form sits on top of it, so without this
-   * nothing tells the picker the shop has a new group — and it was missing until somebody reloaded.
-   * A brand-new group has no products in it, which is a fact, not a guess.
-   */
-  const add = useCallback(
-    (group: ProductGroup) => {
-      if (groups.some((g) => g.id === group.id)) return;
-      setGroups([...groups, group].sort((a, b) => a.name.localeCompare(b.name)));
+      return ((data ?? []) as { id: string; name: string; products: number }[]).map((row) => ({
+        id: row.id,
+        name: row.name,
+        products: Number(row.products) || 0,
+      }));
     },
-    [groups, setGroups],
+  });
+  const setList = r.set;
+  const groups = useMemo(() => r.data ?? [], [r.data]);
+
+  const add = useCallback(
+    (group: ProductGroup) =>
+      setList((prev) => {
+        const list = prev ?? [];
+        if (list.some((g) => g.id === group.id)) return list;
+        return [...list, group].sort((a, b) => a.name.localeCompare(b.name));
+      }),
+    [setList],
   );
 
-  const reload = useReload(GROUPS_SCOPE, `product-groups:${storeId ?? 'none'}`, load);
-  return { groups, add, reload };
+  return { groups, add, reload: r.reload, loaded: r.loaded, loading: r.loading, error: r.error };
 }
 
 /** Which groups one product is in. */

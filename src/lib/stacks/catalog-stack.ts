@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef } from 'react';
-import { useDemandState } from '@academix-admin/state-stack';
+import { StateStack, useDemandState } from '@academix-admin/state-stack';
 import { CATALOG_SCOPE } from '@/lib/stacks/customer-account';
 import { getSupabase } from '@/lib/supabase/client';
 import { usePaginatedList } from '@/hooks/usePaginatedList';
@@ -241,6 +241,8 @@ export function useProduct(productId: string | null) {
 
   const reload = useCallback(async () => {
     if (!productId) return;
+    // Cleared first: a spent demand made every Try again and every refresh on resume a no-op.
+    StateStack.core.resetDemand(CATALOG_SCOPE, `product:${productId}`);
     await demand(async ({ set }) => {
       try {
         set({ product: await fetchProduct(productId), error: null, settled: true }, {

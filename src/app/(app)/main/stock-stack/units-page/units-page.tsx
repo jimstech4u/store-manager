@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
-import { FullPageMessage } from '@/components/ui/FullPageMessage';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { AsyncAction, type AsyncState } from '@/components/ui/AsyncAction';
 import { Button } from '@/components/ui/Button';
 import { UnitsEditor, unitProblems } from '@/components/catalog/UnitsEditor';
@@ -38,8 +38,17 @@ export default function UnitsPage() {
 
   const productId = (location?.params?.id as string | undefined) ?? null;
   const { product, settled } = useProduct(productId);
-  const { units: storeUnits, reload: reloadStoreUnits } = useStoreUnits(store?.id ?? null);
-  const { units: fromServer, loaded } = useProductUnits(productId);
+  const {
+    units: storeUnits,
+    reload: reloadStoreUnits,
+    loaded: storeUnitsLoaded,
+  } = useStoreUnits(store?.id ?? null);
+  const {
+    units: fromServer,
+    loaded,
+    error: unitsError,
+    reload: reloadUnits,
+  } = useProductUnits(productId);
 
   const [units, setUnits] = useState<ProductUnit[]>([]);
   const [state, setState] = useState<AsyncState>('idle');
@@ -53,10 +62,10 @@ export default function UnitsPage() {
    */
   const seeded = useRef(false);
   useEffect(() => {
-    if (seeded.current || fromServer.length === 0) return;
+    if (seeded.current || !loaded) return;
     seeded.current = true;
     setUnits(fromServer);
-  }, [fromServer]);
+  }, [fromServer, loaded]);
 
   /*
    * A unit invented on the pushed form, on its way back.
@@ -78,16 +87,23 @@ export default function UnitsPage() {
   onUnitCreatedRef.current = () => reloadStoreUnits();
 
   if (!store) return null;
-  if (productId && !settled) return <FullPageMessage title="Loading this item" tone="loading" />;
-  if (!productId || !product) return <FullPageMessage title="That item is gone" tone="error" />;
-  if (!loaded && units.length === 0) {
-    return <FullPageMessage title="Loading how you buy and sell it" tone="loading" />;
-  }
+  // One header; the body waits for the item and its shapes.
+  const status: PageStatus =
+    productId && !settled
+      ? { state: 'loading', what: 'this item' }
+      : !productId || !product
+        ? { state: 'empty', title: 'That item is gone' }
+        : !loaded
+          ? unitsError
+            ? { state: 'error', what: 'how you buy and sell it', error: unitsError, onRetry: reloadUnits }
+            : { state: 'loading', what: 'how you buy and sell it' }
+          : { state: 'ready' };
 
   const save = async () => {
     setState('busy');
     setProblem(null);
     try {
+      if (!productId) return;
       await saveProductUnits(productId, units);
       setState('idle');
       void nav.pop();
@@ -100,11 +116,16 @@ export default function UnitsPage() {
   };
 
   return (
-    <PageScaffold onBack={goBack} title="The shapes it comes in" subtitle={product.name}>
+    <PageScaffold onBack={goBack} title="The shapes it comes in" subtitle={product?.name}>
+      <PageState status={status}>
+        {() =>
+          product && (
+            <>
       <UnitsEditor
         units={units}
         setUnits={setUnits}
         storeUnits={storeUnits}
+        storeUnitsLoading={!storeUnitsLoaded}
         onCreateUnit={(name) => void nav.push('unit_form_page', name.trim() ? { name } : undefined)}
       />
 
@@ -123,6 +144,10 @@ export default function UnitsPage() {
           </Button>
         </AsyncAction>
       </div>
+            </>
+          )
+        }
+      </PageState>
     </PageScaffold>
   );
 }

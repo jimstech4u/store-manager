@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { Button } from '@/components/ui/Button';
@@ -13,7 +13,7 @@ import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
-import { customPeriod, resolvePeriod, type Period, type PeriodKind } from '@/lib/stacks/periods';
+import { customPeriod, resolvePeriod, usePeriod, type PeriodKind } from '@/lib/stacks/periods';
 import {
   expensesByCategory,
   listExpenses,
@@ -52,7 +52,9 @@ export default function ExpensesPage() {
   const showProblem = problem.show;
   const confirm = useConfirm();
 
-  const [period, setPeriod] = useState<Period | null>(null);
+  const { period, setPeriod, error: periodError, reload: reloadPeriod } = usePeriod(
+    store?.id ?? null,
+  );
   /** Which row the question is about, AND whether it is being asked — see the dialog below. */
   const [pending, setPending] = useState<Expense | null>(null);
   const [busy, setBusy] = useState(false);
@@ -83,16 +85,6 @@ export default function ExpensesPage() {
    * An EFFECT, not a lazy `useState` initialiser. A first draft used the latter, which fires a
    * network call during render and gives React nothing to clean up if the page leaves first.
    */
-  useEffect(() => {
-    if (!store) return;
-    let alive = true;
-    void resolvePeriod(store.id, 'this_month')
-      .then((p) => alive && setPeriod(p))
-      .catch((e) => showProblem(String(e?.message ?? e)));
-    return () => {
-      alive = false;
-    };
-  }, [store, showProblem]);
 
   if (!store) return null;
 
@@ -166,6 +158,16 @@ export default function ExpensesPage() {
               .catch((e) => showProblem(String(e?.message ?? e)));
           }}
         />
+      )}
+
+      {/* The window itself is still being worked out, or could not be — said, with a way back. */}
+      {!period && (
+        <LoadArea
+          area={{ data: null, loading: !periodError, error: periodError, reload: reloadPeriod }}
+          what="the dates"
+        >
+          {() => null}
+        </LoadArea>
       )}
 
       <LoadArea area={area} what="what the shop spent">

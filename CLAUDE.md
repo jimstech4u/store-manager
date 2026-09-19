@@ -417,7 +417,16 @@ from work that was actually done — a save, a sign-in, an upload. A first versi
 password do not match" is still true afterwards, and it is unmistakably a failure. The signin form
 holds both kinds in one variable and needs both surfaces.
 
-"Could not load" is neither — that is a whole screen with no content, so it is a `FullPageMessage`.
+"Could not load" is neither — and it is NOT a whole-screen replacement. **A page has one
+`PageScaffold` and never returns early to draw a different one.** Its header — title, back,
+actions — is drawn once and stays; the body switches through `<PageState status={status}>{() =>
+content}</PageState>`: loading, or the error with Try again, or an empty state, or the content.
+Pages used to `return <FullPageMessage/>` before their scaffold, which threw the header away — no
+title, no way back while a read was in flight — and a first attempt at fixing that drew a SECOND
+header around the message, which is the same mistake in a different place. academix-web's
+`redeem-codes` is the shape: header, then exactly one of data > loading > error > empty.
+`FullPageMessage` on its own is for screens with no header at all: the app opening, signing in,
+the public receipt and shop pages.
 
 The pattern is academix-web's, and it is worth reading rather than guessing:
 `payment-stack/top-up-page` for errors (`const errorDialog = useDialog()`, `errorDialog.open(<…>)`,

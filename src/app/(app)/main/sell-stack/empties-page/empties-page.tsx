@@ -2,8 +2,7 @@
 
 import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
-import { FullPageMessage } from '@/components/ui/FullPageMessage';
-import { Button } from '@/components/ui/Button';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { InfoPanel } from '@/components/ui/Explain';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
 import { SearchSheet } from '@/components/ui/SearchSheet';
@@ -59,27 +58,21 @@ export default function EmptiesPage() {
    * words that look exactly like a real answer. A loader until there is one; if the first read
    * fails, the failure and a way to try again, without leaving the page.
    */
-  if (!ledger.loaded) {
-    if (ledger.error) {
-      return (
-        <FullPageMessage
-          title="Could not load who is holding your containers"
-          tone="error"
-          action={
-            <Button fullWidth onClick={ledger.reload}>
-              Try again
-            </Button>
-          }
-        >
-          {ledger.error}
-        </FullPageMessage>
-      );
-    }
-    return <FullPageMessage title="Loading who is holding your containers" tone="loading" />;
-  }
+  /*
+   * ONE HEADER; the body waits for the list. Nothing here is said until it has been read — "held
+   * altogether ₦0" and "nothing is out" are answers, and a list that has not arrived is not one.
+   */
+  const status: PageStatus = ledger.loaded
+    ? { state: 'ready' }
+    : ledger.error
+      ? { state: 'error', what: 'who is holding your containers', error: ledger.error, onRetry: ledger.reload }
+      : { state: 'loading', what: 'who is holding your containers' };
 
   return (
     <PageScaffold onBack={goBack} title="Empties" subtitle="Who is holding your containers">
+      <PageState status={status}>
+        {() => (
+          <>
       <InfoPanel
         id="empties.list"
         tone="info"
@@ -177,6 +170,9 @@ export default function EmptiesPage() {
           ))}
         </ul>
       )}
+          </>
+        )}
+      </PageState>
     </PageScaffold>
   );
 }

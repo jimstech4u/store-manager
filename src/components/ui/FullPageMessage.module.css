@@ -10,6 +10,18 @@
   background: var(--bg);
 }
 
+/* Under a page's header: the same message, filling the body rather than the screen. */
+.inPage {
+  min-height: 55dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-6) var(--space-2);
+  text-align: center;
+}
+
 .title {
   font-size: var(--text-lg);
   font-weight: 700;

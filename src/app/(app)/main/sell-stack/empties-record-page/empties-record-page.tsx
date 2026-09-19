@@ -89,7 +89,12 @@ export default function EmptiesRecordPage() {
     onFail: showProblem,
     whenNot: !customerId || !damaged,
   });
-  const held = depositArea.data && depositArea.data.length > 0 ? depositArea.data[0].running : 0;
+  /*
+   * What is held for them — once it has been READ. Taken as ₦0 before the ledger arrived, the fee
+   * below said "the whole ₦4,000 goes on their account" to a customer whose deposit covered it.
+   */
+  const heldKnown = depositArea.data !== null;
+  const held = heldKnown && depositArea.data!.length > 0 ? depositArea.data![0].running : 0;
 
   const { byProduct } = useSellingUnits(store?.id ?? null);
 
@@ -188,7 +193,7 @@ export default function EmptiesRecordPage() {
     parts.length > 0 &&
     !over &&
     (!damaged || why.trim().length > 0) &&
-    (!takeFee || feeAmount > 0) &&
+    (!takeFee || (feeAmount > 0 && heldKnown)) &&
     !busy;
 
   const save = async () => {
@@ -360,7 +365,26 @@ export default function EmptiesRecordPage() {
                         WHERE THE MONEY COMES FROM, said before it is taken — a condition of the form,
                         so it stays on the page rather than arriving as a surprise afterwards.
                       */}
-                      {feeAmount > 0 && (
+                      {feeAmount > 0 && !heldKnown && (
+                        <p className={styles.hint} role="status">
+                          {depositArea.error ? (
+                            <>
+                              Could not check what you hold for them.{' '}
+                              <button
+                                type="button"
+                                className={styles.retry}
+                                onClick={depositArea.reload}
+                              >
+                                Try again
+                              </button>
+                            </>
+                          ) : (
+                            'Checking what you hold for them…'
+                          )}
+                        </p>
+                      )}
+
+                      {feeAmount > 0 && heldKnown && (
                         <InfoPanel
                           tone={onAccount > 0 ? 'warning' : 'info'}
                           title={

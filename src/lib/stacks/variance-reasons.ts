@@ -1,10 +1,9 @@
 'use client';
 
-import { useCallback, useEffect } from 'react';
-import { useDemandState } from '@academix-admin/state-stack';
-import { invalidate, useInvalidation } from '@/lib/stacks/invalidation';
+import { useMemo } from 'react';
+import { invalidate } from '@/lib/stacks/invalidation';
 import { getSupabase } from '@/lib/supabase/client';
-import { useReload } from '@/lib/stacks/resource';
+import { useResource } from '@/lib/stacks/resource';
 
 /**
  * Why the shelf and the records disagree — the shop's list, not ours.
@@ -45,41 +44,28 @@ export interface VariancePart {
 }
 
 export function useVarianceReasons(storeId: string | null) {
-  const [reasons, demand] = useDemandState<VarianceReason[]>([], {
-    key: `variance-reasons:${storeId ?? 'none'}`,
+  // A resource: an empty picker before the first answer read as "this shop has no reasons".
+  const r = useResource<VarianceReason[]>({
+    key: `variance-reasons:v2:${storeId ?? 'none'}`,
     scope: VARIANCE_REASONS_SCOPE,
-    deps: [storeId ?? ''],
-    revalidateOnMount: true,
-  });
-
-  const load = useCallback(() => {
-    if (!storeId) return;
-    void demand(async ({ set }) => {
+    enabled: Boolean(storeId),
+    read: async () => {
       const { data, error } = await getSupabase().rpc('variance_reasons_for', {
         p_store_id: storeId,
       });
       if (error) throw error;
-      set(
-        ((data ?? []) as Record<string, unknown>[]).map((r) => ({
-          id: (r.id as string | null) ?? null,
-          label: r.label as string,
-          hint: (r.hint as string | null) ?? null,
-          treatment: r.treatment as string,
-          direction: r.direction as VarianceDirection,
-          isCustom: Boolean(r.is_custom),
-        })),
-      );
-    });
-  }, [storeId, demand]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  useInvalidation(storeId ? VARIANCE_REASONS_SCOPE : null, load);
-
-  const reload = useReload(VARIANCE_REASONS_SCOPE, `variance-reasons:${storeId ?? 'none'}`, load);
-  return { reasons, reload };
+      return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+        id: (row.id as string | null) ?? null,
+        label: row.label as string,
+        hint: (row.hint as string | null) ?? null,
+        treatment: row.treatment as string,
+        direction: row.direction as VarianceDirection,
+        isCustom: Boolean(row.is_custom),
+      }));
+    },
+  });
+  const reasons = useMemo(() => r.data ?? [], [r.data]);
+  return { reasons, reload: r.reload, loaded: r.loaded, error: r.error };
 }
 
 /** Name a reason this shop uses. It joins the list everywhere a gap is accounted for. */

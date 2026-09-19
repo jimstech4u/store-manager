@@ -1,10 +1,9 @@
 'use client';
 
-import { useCallback, useEffect } from 'react';
-import { useDemandState } from '@academix-admin/state-stack';
-import { useInvalidation, invalidate } from '@/lib/stacks/invalidation';
+import { useCallback, useMemo } from 'react';
+import { invalidate } from '@/lib/stacks/invalidation';
 import { getSupabase } from '@/lib/supabase/client';
-import { useReload } from '@/lib/stacks/resource';
+import { useResource } from '@/lib/stacks/resource';
 
 /**
  * Money that left the shop and bought no stock.
@@ -132,39 +131,44 @@ export async function moneySummary(args: {
 
 /** What the shop has called things before, commonest first, so the composer can offer them. */
 export function useExpenseCategories(storeId: string | null) {
-  const [cats, demand, setCats] = useDemandState<ExpenseCategory[]>([], {
+  /*
+   * A RESOURCE, so the list says whether it has been read. It started as `[]`, so a picker or a
+   * page said "none yet" before the first answer — the same words as a shop with none — and a read
+   * that failed said it for good. Same key and shape: what was cached carries over.
+   */
+  const r = useResource<ExpenseCategory[]>({
     key: `expense-categories:${storeId ?? 'none'}`,
     scope: EXPENSES_SCOPE,
-    persist: true,
-    deps: [storeId ?? ''],
-    revalidateOnMount: false,
-  });
-
-  const load = useCallback(() => {
-    if (!storeId) return;
-    void demand(async ({ set }) => {
+    enabled: Boolean(storeId),
+    read: async () => {
       const { data, error } = await getSupabase().rpc('expense_category_list', {
         p_store_id: storeId,
       });
       if (error) throw error;
-      set(
-        ((data ?? []) as Record<string, unknown>[]).map((r) => ({
-          id: String(r.id),
-          name: String(r.name ?? ''),
-          used: Number(r.used) || 0,
-        })),
-      );
-    });
-  }, [storeId, demand]);
+      return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+        id: String(row.id),
+        name: String(row.name ?? ''),
+        used: Number(row.used) || 0,
+      }));
+    },
+  });
+  const setList = r.set;
+  const categories = useMemo(() => r.data ?? [], [r.data]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const setCategories = useCallback(
+    (next: ExpenseCategory[] | ((prev: ExpenseCategory[]) => ExpenseCategory[])) =>
+      setList((prev) => (typeof next === 'function' ? next(prev ?? []) : next)),
+    [setList],
+  );
 
-  useInvalidation(storeId ? EXPENSES_SCOPE : null, load);
-
-  const reload = useReload(EXPENSES_SCOPE, `expense-categories:${storeId ?? 'none'}`, load);
-  return { categories: cats, reload, setCategories: setCats };
+  return {
+    categories,
+    reload: r.reload,
+    setCategories,
+    loaded: r.loaded,
+    loading: r.loading,
+    error: r.error,
+  };
 }
 
 /**

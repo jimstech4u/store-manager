@@ -2,7 +2,7 @@
 
 import { useLocation } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
-import { FullPageMessage } from '@/components/ui/FullPageMessage';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { useNav } from '@academix-admin/navigation-stack';
 import { StockHistory } from '@/components/stock/StockHistory';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -32,22 +32,20 @@ export default function StockHistoryPage() {
 
   if (!productId) return null;
 
-  if (!product) {
-    // Still fetching is not the same as missing — saying "not found" during the first second sends
-    // somebody back to look for an item that is right there.
-    return settled ? (
-      <PageScaffold onBack={goBack} title="Stock history">
-        <FullPageMessage title="That item could not be found">
-          It may have been removed from your shop.
-        </FullPageMessage>
-      </PageScaffold>
-    ) : (
-      <FullPageMessage title="Opening the history" tone="loading" />
-    );
-  }
+  // Still fetching is not the same as missing — saying "not found" during the first second sends
+  // somebody back to look for an item that is right there.
+  const status: PageStatus = product
+    ? { state: 'ready' }
+    : settled
+      ? { state: 'empty', title: 'That item could not be found', body: 'It may have been removed from your shop.' }
+      : { state: 'loading', what: 'the history' };
 
   return (
-    <PageScaffold onBack={goBack} title="Stock history" subtitle={product.name}>
+    <PageScaffold onBack={goBack} title="Stock history" subtitle={product?.name}>
+      <PageState status={status}>
+        {() =>
+          product && (
+            <>
       <StockHistory
         productId={product.id}
         unit={product.baseUnit}
@@ -59,6 +57,10 @@ export default function StockHistoryPage() {
           if (refTable === 'sales') void nav.push('receipt_page', { id: refId });
         }}
       />
+            </>
+          )
+        }
+      </PageState>
     </PageScaffold>
   );
 }

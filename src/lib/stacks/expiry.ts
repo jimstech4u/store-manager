@@ -1,8 +1,5 @@
 'use client';
 
-import { useCallback, useEffect } from 'react';
-import { useDemandState } from '@academix-admin/state-stack';
-import { useInvalidation } from '@/lib/stacks/invalidation';
 import { getSupabase } from '@/lib/supabase/client';
 /*
  * The DERIVED scope, which is where anything the server computes about the shelf lives.
@@ -12,7 +9,7 @@ import { getSupabase } from '@/lib/supabase/client';
  * `stockMoved()` is the existing publisher for exactly that.
  */
 import { DERIVED_SCOPE, stockMoved } from '@/lib/stacks/catalog-stack';
-import { useReload } from '@/lib/stacks/resource';
+import { useResource } from '@/lib/stacks/resource';
 
 /**
  * What is going off, and when.
@@ -79,45 +76,32 @@ export async function expiringStock(
  * "sell these first", the other is "take these off the shelf".
  */
 export function useExpirySummary(storeId: string | null, withinDays = 30) {
-  const [summary, demand, setSummary] = useDemandState<ExpirySummary | null>(null, {
-    key: `expiry-summary:${storeId ?? 'none'}:${withinDays}`,
+  /*
+   * A resource. `null` from the old hook meant both "not read yet" and "the server had no row", and
+   * a failed read was never reported. Nothing at all to report is an honest all-zero summary.
+   */
+  const r = useResource<ExpirySummary>({
+    key: `expiry-summary:v2:${storeId ?? 'none'}:${withinDays}`,
     scope: DERIVED_SCOPE,
-    persist: true,
-    deps: [storeId ?? '', String(withinDays)],
-    revalidateOnMount: false,
-  });
-
-  const load = useCallback(() => {
-    if (!storeId) return;
-    void demand(async ({ set }) => {
+    enabled: Boolean(storeId),
+    deps: [withinDays],
+    read: async () => {
       const { data, error } = await getSupabase().rpc('expiring_summary', {
         p_store_id: storeId,
         p_within_days: withinDays,
       });
       if (error) throw error;
-      const r = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | undefined;
-      set(
-        r
-          ? {
-              expiredItems: Number(r.expired_items) || 0,
-              expiredValue: Number(r.expired_value) || 0,
-              soonItems: Number(r.soon_items) || 0,
-              soonValue: Number(r.soon_value) || 0,
-              nextDate: (r.next_date as string | null) ?? null,
-            }
-          : null,
-      );
-    });
-  }, [storeId, withinDays, demand]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  useInvalidation(storeId ? DERIVED_SCOPE : null, load);
-
-  const reload = useReload(DERIVED_SCOPE, `expiry-summary:${storeId ?? 'none'}:${withinDays}`, load);
-  return { summary, reload, setSummary };
+      const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | undefined;
+      return {
+        expiredItems: Number(row?.expired_items) || 0,
+        expiredValue: Number(row?.expired_value) || 0,
+        soonItems: Number(row?.soon_items) || 0,
+        soonValue: Number(row?.soon_value) || 0,
+        nextDate: (row?.next_date as string | null) ?? null,
+      };
+    },
+  });
+  return { summary: r.data, reload: r.reload, loaded: r.loaded, error: r.error };
 }
 
 /**

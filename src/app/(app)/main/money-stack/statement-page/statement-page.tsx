@@ -1,21 +1,19 @@
 'use client';
 
-import { useCallback, useEffect } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
-import { useDemandState } from '@academix-admin/state-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
-import { FullPageMessage } from '@/components/ui/FullPageMessage';
-import { Button } from '@/components/ui/Button';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { InfoPanel } from '@/components/ui/Explain';
 import { usePermission } from '@/hooks/usePermission';
 import { CashIcon, ChevronRightIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
-import { type HistoryEvent } from '@/lib/stacks/customer-account';
+import { ACCOUNT_DERIVED_SCOPE, type HistoryEvent } from '@/lib/stacks/customer-account';
 import { useCustomerFromList } from '@/lib/stacks/customer-directory';
 import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
-import { formatDate, formatDateTime, formatMoney, messageOf } from '@/lib/format';
+import { useResource } from '@/lib/stacks/resource';
+import { formatDate, formatDateTime, formatMoney } from '@/lib/format';
 import styles from '../money-page/money-page.module.css';
 
 /**
@@ -58,35 +56,61 @@ export default function StatementPage() {
    * `revalidateOnMount: false` because the loader below runs on mount anyway; leaving it true made
    * the demand fire twice on the same arrival.
    */
-  const [snapshot, demand] = useDemandState<{
+  /*
+   * A RESOURCE (0 is an answer; "not read yet" is not).
+   *
+   * This started as `{ rows: [] }`, so before the first answer the page drew "They owe you ₦0" and
+   * an empty timeline — no receipts, no payments, no deposit — exactly the confident wrong number
+   * the note above warns about. Its `load` was also handed to the refresh on resume and to Try
+   * again, and neither re-read: the demand was already spent. And a failed read replaced what was
+   * on screen with nothing. Now: loading until read, kept through a failed refresh, and re-read
+   * whenever a sale or a payment invalidates the account figures.
+   *
+   * New key (`statement:v2`): the old cached value could be a failure record with no rows.
+   */
+  const statement = useResource<{
     rows: StatementRow[];
     history: HistoryEvent[];
     balance: number | null;
     /** From this page's own read — the fallback when no list has published these customers. */
     name: string | null;
-    error: string | null;
-    settled: boolean;
-  }>(
-    { rows: [], history: [], balance: null, name: null, error: null, settled: false },
-    {
-      key: `statement:${customerId ?? 'none'}`,
-      scope: 'money_flow',
-      persist: true,
-      deps: [customerId ?? ''],
+  }>({
+    key: `statement:v2:${customerId ?? 'none'}`,
+    scope: ACCOUNT_DERIVED_SCOPE,
+    enabled: Boolean(customerId),
+    read: async () => {
+      const supabase = getSupabase();
       /*
-       * NO TTL. It deletes live state rather than marking it stale, so a statement somebody had
-       * open for a minute emptied itself and the page went blank on the way back to it — with
-       * `revalidateOnMount: false` right underneath deliberately NOT refetching. The two together
-       * guaranteed an empty screen. A write says what changed; nothing else needs to.
+       * Receipts AND everything else that moved the balance.
+       *
+       * `customer_statement` returns sales only, so this page — headed "What makes up this
+       * balance" — showed "nothing has been sold" for anyone whose balance came from an opening
+       * figure or a deposit. `customer_history` already unions the rest.
        */
-      revalidateOnMount: false,
+      const [sales, events, account] = await Promise.all([
+        supabase.rpc('customer_statement', { p_store_customer_id: customerId }),
+        supabase.rpc('customer_history', { p_store_customer_id: customerId, p_limit: 100 }),
+        supabase.rpc('customer_account', { p_store_customer_id: customerId }),
+      ]);
+      if (sales.error) throw sales.error;
+      return {
+        rows: (sales.data ?? []) as StatementRow[],
+        // A history failure must not blank the receipts: those are the part a customer is
+        // standing there asking for.
+        history: events.error ? [] : ((events.data ?? []) as HistoryEvent[]),
+        balance: account.error
+          ? null
+          : Number((account.data as { balance: string } | null)?.balance ?? 0),
+        name: account.error
+          ? null
+          : ((account.data as { customer?: { name?: string } } | null)?.customer?.name ?? null),
+      };
     },
-  );
+  });
 
-  const rows = snapshot.rows;
-  const history = snapshot.history;
-  const balance = snapshot.balance;
-  const error = snapshot.error;
+  const rows = statement.data?.rows ?? [];
+  const history = statement.data?.history ?? [];
+  const balance = statement.data?.balance ?? null;
 
   /*
    * The customer's name — from the list that has them, then from this page's own read.
@@ -98,87 +122,21 @@ export default function StatementPage() {
    * the deep link and the hard refresh, where nothing has published anything at all.
    */
   const fromList = useCustomerFromList(customerId);
-  const name = fromList?.display_name ?? snapshot.name ?? 'Customer';
+  const name = fromList?.display_name ?? statement.data?.name ?? 'Customer';
 
-  const load = useCallback(() => {
-    if (!customerId) return;
-    demand(async ({ set }) => {
-      try {
-        const supabase = getSupabase();
-        /*
-         * Receipts AND everything else that moved the balance.
-         *
-         * `customer_statement` returns sales only, so this page — headed "What makes up this
-         * balance" — showed "nothing has been sold" for anyone whose balance came from an opening
-         * figure or a deposit. `customer_history` already unions the rest.
-         */
-        const [sales, events, account] = await Promise.all([
-          supabase.rpc('customer_statement', { p_store_customer_id: customerId }),
-          supabase.rpc('customer_history', { p_store_customer_id: customerId, p_limit: 100 }),
-          supabase.rpc('customer_account', { p_store_customer_id: customerId }),
-        ]);
-        if (sales.error) throw sales.error;
-        set(
-          {
-            rows: (sales.data ?? []) as StatementRow[],
-            // A history failure must not blank the receipts: those are the part a customer is
-            // standing there asking for.
-            history: events.error ? [] : ((events.data ?? []) as HistoryEvent[]),
-            balance: account.error
-              ? null
-              : Number(
-                  (account.data as { balance: string } | null)?.balance ?? 0,
-                ),
-            name: account.error
-              ? null
-              : ((account.data as { customer?: { name?: string } } | null)?.customer?.name ??
-                null),
-            error: null,
-            settled: true,
-          },
-          { override: true },
-        );
-      } catch (e) {
-        set(
-          {
-            rows: [],
-            history: [],
-            balance: null,
-            name: null,
-            error: messageOf(e, 'Could not load this statement.'),
-            settled: true,
-          },
-          { override: true },
-        );
-      }
-    });
-  }, [customerId, demand]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  useLiveRefresh(nav, load);
+  // Another till's payment arrives on the next look; `reload` actually reads.
+  useLiveRefresh(nav, statement.reload);
 
   if (!store || !customerId) return null;
 
-  if (error) {
-    return (
-      <FullPageMessage
-        title="Could not load this statement"
-        tone="error"
-        action={
-          <Button fullWidth onClick={() => void load()}>
-            Try again
-          </Button>
-        }
-      >
-        {error}
-      </FullPageMessage>
-    );
-  }
-
-  if (rows === null) return <FullPageMessage title="Loading their receipts" tone="loading" />;
+  /*
+   * ONE HEADER; the body waits for their receipts, or says it could not read them.
+   */
+  const status: PageStatus = statement.loaded
+    ? { state: 'ready' }
+    : statement.error
+      ? { state: 'error', what: 'this statement', error: statement.error, onRetry: statement.reload }
+      : { state: 'loading', what: 'their statement' };
 
   const owed = rows.reduce((sum, r) => sum + Number(r.outstanding), 0);
 
@@ -218,6 +176,9 @@ export default function StatementPage() {
           : undefined
       }
     >
+      <PageState status={status}>
+        {() => (
+          <>
       {/*
         The customer's REAL balance, not the receipts' share of it.
         
@@ -310,7 +271,9 @@ export default function StatementPage() {
           </ul>
         </>
       )}
-
+          </>
+        )}
+      </PageState>
     </PageScaffold>
   );
 }

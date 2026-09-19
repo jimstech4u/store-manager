@@ -7,6 +7,7 @@ import { Field } from '@/components/ui/Field';
 import { UnitsEditor, unitProblems } from '@/components/catalog/UnitsEditor';
 import { GroupPicker } from '@/components/catalog/GroupPicker';
 import {
+  GROUPS_SCOPE,
   groupsFor,
   setProductGroups,
   useProductGroups,
@@ -19,6 +20,7 @@ import {
   fetchDiscounts,
   saveDiscounts,
   saveProductUnits,
+  SHAPES_SCOPE,
   useProductUnits,
   useStoreUnits,
   type ProductUnit,
@@ -28,6 +30,8 @@ import { getSupabase } from '@/lib/supabase/client';
 import type { Product } from '@/lib/stacks/catalog-stack';
 import styles from './ProductForm.module.css';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
+import { useLoadArea } from '@/components/ui/LoadArea';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { messageOf } from '@/lib/format';
 import { baseQtyByShape, stockInShapes } from '@/lib/shape-quantities';
 
@@ -193,8 +197,13 @@ export function ProductForm({
    * item being edited these arrive from the server; for a new one they start empty and the form
    * refuses to save until at least one thing is sellable.
    */
-  const { units: existingUnits } = useProductUnits(product?.id ?? null);
-  const { units: storeUnits, add: addStoreUnit } = useStoreUnits(storeId);
+  const {
+    units: existingUnits,
+    loaded: existingUnitsLoaded,
+    error: existingUnitsError,
+    reload: reloadExistingUnits,
+  } = useProductUnits(product?.id ?? null);
+  const { units: storeUnits, add: addStoreUnit, loaded: storeUnitsLoaded } = useStoreUnits(storeId);
   /*
    * WHICH GROUPS THIS IS IN — several, on purpose.
    *
@@ -204,7 +213,7 @@ export function ProductForm({
    * takes any NBL bottle, so "who made it" is what the lorry asks when it comes to collect, and
    * "what shelf does it sit on" is a different question entirely.
    */
-  const { groups, add: addGroup } = useProductGroups(storeId ?? null);
+  const { groups, add: addGroup, loaded: groupsLoaded } = useProductGroups(storeId ?? null);
   const [groupIds, setGroupIds] = useState<string[]>([]);
   const [pickingGroups, setPickingGroups] = useState(false);
   const groupPickerId = useId();
@@ -265,22 +274,23 @@ export function ProductForm({
    *
    * Only when editing: a new product has none, and asking the server about an id that does not
    * exist yet is a round trip whose answer is always empty.
+   *
+   * READ, THEN COPIED ONCE into the form. It used to be copied only on success and otherwise left
+   * at none — and the form's save then wrote none over the product's real groups. The form now
+   * waits for this (see `seedStatus`), so what is saved always started from what was there.
    */
+  const editingId = product?.id ?? null;
+  const groupsSeed = useLoadArea(() => groupsFor(editingId as string), [editingId], {
+    key: `product-groups-of:${editingId ?? 'none'}`,
+    scope: GROUPS_SCOPE,
+    whenNot: !editingId,
+  });
+  const groupsSeeded = useRef(false);
   useEffect(() => {
-    if (!product) return;
-    let cancelled = false;
-    void groupsFor(product.id)
-      .then((rows) => {
-        if (!cancelled) setGroupIds(rows.map((g) => g.id));
-      })
-      .catch(() => {
-        /* A product whose groups cannot be read still saves; it just starts with none shown, and
-           the form would then overwrite them. So it is left ALONE rather than cleared. */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [product]);
+    if (groupsSeeded.current || !groupsSeed.data) return;
+    groupsSeeded.current = true;
+    setGroupIds(groupsSeed.data.map((g) => g.id));
+  }, [groupsSeed.data]);
 
   /*
    * Whether the rest of the form has anything to attach itself to.
@@ -358,23 +368,28 @@ export function ProductForm({
     return cleanup;
   }, [nav]);
 
+  // Copied once the server has answered — an answer of none included, which is not the same as
+  // not having heard yet.
   const seeded = useRef(false);
   useEffect(() => {
-    if (seeded.current || existingUnits.length === 0) return;
+    if (seeded.current || !existingUnitsLoaded) return;
     seeded.current = true;
     setUnits(existingUnits);
-  }, [existingUnits]);
+  }, [existingUnits, existingUnitsLoaded]);
 
+  // The discount bands, read and copied once, the same way — a failed read used to leave none, and
+  // saving then deleted every band the item had.
+  const discountsSeed = useLoadArea(() => fetchDiscounts(editingId as string), [editingId], {
+    key: `product-discounts:${editingId ?? 'none'}`,
+    scope: SHAPES_SCOPE,
+    whenNot: !editingId,
+  });
+  const discountsSeeded = useRef(false);
   useEffect(() => {
-    if (!product?.id) return;
-    let live = true;
-    void fetchDiscounts(product.id).then((rows) => {
-      if (live) setDiscounts(rows);
-    });
-    return () => {
-      live = false;
-    };
-  }, [product?.id]);
+    if (discountsSeeded.current || !discountsSeed.data) return;
+    discountsSeeded.current = true;
+    setDiscounts(discountsSeed.data);
+  }, [discountsSeed.data]);
 
   /*
    * The unit a product ROW is measured in.
@@ -687,6 +702,30 @@ export function ProductForm({
     }
   };
 
+  /*
+   * AN ITEM BEING EDITED OPENS ONLY ONCE WHAT IT ALREADY HAS IS KNOWN.
+   *
+   * Shapes, groups and discount bands are each read and copied into the form, and the save writes
+   * all three back as whole sets. Before, the form was usable while they were still arriving — or
+   * after one had failed — so changing the price and pressing Save could replace the item's shapes,
+   * groups or bands with nothing. The page's header stays; this part says what it is waiting for.
+   */
+  const waitFor = (
+    known: boolean,
+    error: string | null,
+    what: string,
+    onRetry: () => void,
+  ): PageStatus | null =>
+    known ? null : error ? { state: 'error', what, error, onRetry } : { state: 'loading', what };
+  const seedStatus: PageStatus = !editingId
+    ? { state: 'ready' }
+    : (waitFor(existingUnitsLoaded, existingUnitsError, 'the shapes it comes in', reloadExistingUnits) ??
+      waitFor(groupsSeed.data !== null, groupsSeed.error, 'its groups', groupsSeed.reload) ??
+      waitFor(discountsSeed.data !== null, discountsSeed.error, 'its discounts', discountsSeed.reload) ?? {
+        state: 'ready',
+      });
+  if (seedStatus.state !== 'ready') return <PageState status={seedStatus}>{() => null}</PageState>;
+
   return (
     <>
       {/*
@@ -875,6 +914,7 @@ export function ProductForm({
       </div>
 
       <GroupPicker
+        loading={!groupsLoaded}
         id={groupPickerId}
         isOpen={pickingGroups}
         close={() => setPickingGroups(false)}
@@ -922,6 +962,7 @@ export function ProductForm({
         units={units}
         setUnits={setUnits}
         storeUnits={storeUnits}
+        storeUnitsLoading={!storeUnitsLoaded}
         onCreateUnit={(unitName) => onCreateUnit?.(unitName)}
       />
 

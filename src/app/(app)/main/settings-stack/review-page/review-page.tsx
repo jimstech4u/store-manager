@@ -1,13 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import styles from './review-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
-import { FullPageMessage } from '@/components/ui/FullPageMessage';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { Button } from '@/components/ui/Button';
 import { Explain, InfoPanel, WorkedExample } from '@/components/ui/Explain';
 import { BoxIcon, CheckIcon, CloseIcon, PeopleIcon } from '@/components/ui/Icon';
-import { useDemandState } from '@academix-admin/state-stack';
+import { useResource } from '@/lib/stacks/resource';
 import { SETTINGS_SCOPE } from '@/lib/stacks/bank-accounts';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
@@ -79,23 +79,26 @@ export default function ReviewPage() {
    * its life being pushed off and returned to. `!queue` renders a full-page "Loading", which meant
    * every single trip back through the queue put a spinner over a list that was already correct.
    */
-  const [snapshot, demand, setSnapshot] = useDemandState<{ queue: Queue | null; error: string | null }>(
-    { queue: null, error: null },
-    {
-      key: `review:${store?.id ?? 'none'}`,
-      scope: SETTINGS_SCOPE,
-      persist: true,
-      deps: [store?.id ?? ''],
-      revalidateOnMount: false,
+  /*
+   * A RESOURCE. It kept its error inside the cached value and never re-read on the way back
+   * (`revalidateOnMount: false`), so a queue somebody else had worked down stayed on screen; a first
+   * read that failed left the page on "Loading" for good, because the page only knew ready or
+   * loading. Now: shown at once from cache, re-read on every visit, kept through a failed refresh.
+   */
+  const res = useResource<Queue>({
+    key: `review:v2:${store?.id ?? 'none'}`,
+    scope: SETTINGS_SCOPE,
+    enabled: Boolean(store),
+    read: async () => {
+      const { data, error: err } = await getSupabase().rpc('pending_review', {
+        p_store_id: store!.id,
+      });
+      if (err) throw err;
+      return data as unknown as Queue;
     },
-  );
-
-  const queue = snapshot.queue;
+  });
+  const queue = res.data;
   const [busy, setBusy] = useState<string | null>(null);
-  // Readable from the loader without becoming a dependency of it — the loader writes the snapshot,
-  // so depending on it would make this page refetch itself forever.
-  const queueRef = useRef(snapshot.queue);
-  queueRef.current = snapshot.queue;
   /*
    * An approval that failed, kept apart from a load that failed.
    *
@@ -112,28 +115,7 @@ export default function ReviewPage() {
    * notice it presses the button again.
    */
   const actionError = useProblem();
-  const error = snapshot.error;
-
-  const load = useCallback(async () => {
-    if (!store) return;
-    await demand(async ({ set }) => {
-      const { data, error: err } = await getSupabase().rpc('pending_review', {
-        p_store_id: store.id,
-      });
-      set(
-        err
-          // The queue survives a failed refresh. It is a list of things awaiting a decision, and
-          // clearing it would read as "nothing left to review" — the opposite of the truth.
-          ? { queue: queueRef.current, error: err.message }
-          : { queue: data as unknown as Queue, error: null },
-        { override: true },
-      );
-    });
-  }, [store, demand]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const error = res.error;
 
   /**
    * Take one row out of the queue, here, without asking for the queue again.
@@ -144,18 +126,14 @@ export default function ReviewPage() {
    * working down it.
    */
   const takeOut = (kind: 'products' | 'customers' | 'stock_entries', id: string) => {
-    const current = queueRef.current;
-    if (!current) return;
-    setSnapshot({
-      queue: {
-        products: current.products.filter((r) => kind !== 'products' || r.id !== id),
-        customers: current.customers.filter((r) => kind !== 'customers' || r.id !== id),
-        stock_entries: current.stock_entries.filter(
-          (r) => kind !== 'stock_entries' || r.id !== id,
-        ),
-      },
-      error: null,
-    });
+    if (!res.data) return;
+    res.set((current) => ({
+      products: (current?.products ?? []).filter((r) => kind !== 'products' || r.id !== id),
+      customers: (current?.customers ?? []).filter((r) => kind !== 'customers' || r.id !== id),
+      stock_entries: (current?.stock_entries ?? []).filter(
+        (r) => kind !== 'stock_entries' || r.id !== id,
+      ),
+    }));
   };
 
   const run = async (key: string, fn: () => Promise<void>) => {
@@ -182,22 +160,35 @@ export default function ReviewPage() {
     );
   }
 
-  if (!queue) return <FullPageMessage title="Loading" tone="loading" />;
+  // One header; the body waits for the queue.
+  const status: PageStatus = queue
+    ? { state: 'ready' }
+    : error
+      ? { state: 'error', what: 'what is waiting', error, onRetry: res.reload }
+      : { state: 'loading', what: 'what is waiting' };
 
-  const total =
-    queue.products.length + queue.customers.length + queue.stock_entries.length;
+  const total = queue
+    ? queue.products.length + queue.customers.length + queue.stock_entries.length
+    : 0;
 
   return (
     <PageScaffold
       onBack={goBack}
       title="Waiting for you"
-      subtitle={total === 0 ? 'Nothing to check' : `${total} to check`}
+      subtitle={!queue ? undefined : total === 0 ? 'Nothing to check' : `${total} to check`}
     >
+      <PageState status={status}>
+        {() =>
+          queue && (
+            <>
       <ProblemDialog problem={actionError} title="Could not do that" />
 
       {error && (
-        <InfoPanel tone="danger" title="Could not load what is waiting">
-          {error}
+        <InfoPanel tone="danger" title="Could not refresh what is waiting">
+          {error}{' '}
+          <Button variant="secondary" size="small" onClick={res.reload}>
+            Try again
+          </Button>
         </InfoPanel>
       )}
 
@@ -419,6 +410,10 @@ export default function ReviewPage() {
           />
         </>
       )}
+            </>
+          )
+        }
+      </PageState>
     </PageScaffold>
   );
 }

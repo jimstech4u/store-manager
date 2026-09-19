@@ -11,6 +11,8 @@ import NavigationBar from '@academix-admin/navigation-bar';
 import { useTheme } from '@/context/ThemeContext';
 import { reportNavBarState } from '@/providers/NavBarState';
 import { usePermission } from '@/hooks/usePermission';
+import { useAuth } from '@/providers/AuthProvider';
+import { useLiveShop } from '@/lib/stacks/live-shop';
 import { TABS, defaultTabFor } from './nav-config';
 import { SellStack } from './sell-stack/sell-stack';
 import { StockStack } from './stock-stack/stock-stack';
@@ -48,6 +50,10 @@ const STACK_COMPONENTS: Record<string, React.ReactElement> = {
 export default function MainShell() {
   const { theme } = useTheme();
   const { can } = usePermission();
+  const { store, user } = useAuth();
+
+  // What another till records reaches this one as it happens — see `useLiveShop`.
+  useLiveShop(store?.id ?? null, user?.id ?? null);
 
   const tabs = useMemo(() => TABS.filter((t) => !t.requires || can(t.requires)), [can]);
   const [active, setActive] = useState(() => defaultTabFor(tabs));

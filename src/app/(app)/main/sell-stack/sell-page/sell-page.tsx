@@ -20,13 +20,13 @@ import { useAsyncAction } from '@/components/ui/AsyncAction';
 import { ProductPicker } from '@/components/catalog/ProductPicker';
 import { findByBarcode } from '@/lib/stacks/mid-sale';
 import { useUncountedToday } from '@/lib/stacks/count-gate';
+import { useTillShapes } from '@/lib/stacks/till-shapes';
 import { BarcodeScanner } from '@/components/catalog/BarcodeScanner';
 import type { ProductFormResult } from '@/components/catalog/ProductForm';
 import { useAuth } from '@/providers/AuthProvider';
 import { FloatingAmount } from '@/components/ui/FloatingAmount';
 import {
   fetchProduct,
-  fetchSaleUnits,
   type Product,
   type SaleUnit,
 } from '@/lib/stacks/catalog-stack';
@@ -35,7 +35,6 @@ import {
   draftTotal,
   lineTotal,
   makeDraftLine,
-  round2,
   type DraftLine,
   useDraftOrders,
 } from '@/lib/stacks/draft-orders';
@@ -142,19 +141,6 @@ export default function SellPage() {
     pickerOps.close();
   });
 
-  /**
-   * Which empties pools each product on the receipt belongs to, keyed by product id.
-   *
-   * `depositPerUnit` is the pool's own figure, carried so the line can OFFER it. It is a starting
-   * point and never a default: a deposit is agreed at the counter and filling one in for the shop
-   * would have the till collect money nobody asked for.
-   */
-  const [returnables, setReturnables] = useState<
-    Record<
-      string,
-      { categoryId: string; categoryName: string; kind: string; depositPerUnit: number | null }[]
-    >
-  >({});
   /*
    * Three dialogs, because three of the four customer actions ask something first.
    *
@@ -304,8 +290,19 @@ export default function SellPage() {
   const [pickingCustomer, setPickingCustomer] = useState(false);
   // Remembers that the picker was opened mid-payment, so choosing someone returns to the
   // sheet instead of dropping the seller back on the order with the payment half-entered.
-  // Sale units per product, fetched once when a product is first added to any order.
-  const [saleUnits, setSaleUnits] = useState<Record<string, SaleUnit[]>>({});
+  /*
+   * The shapes each item is sold in — kept per shop, and read for every line on every open sale,
+   * not only when an item is added. It was `useState`, so after a reload the lines already on a
+   * receipt lost their "Selling as" choice and their half/quarter rules. See `useTillShapes`.
+   */
+  const tillProductIds = useMemo(
+    () => orders.flatMap((o) => o.lines.map((l) => l.productId)),
+    [orders],
+  );
+  const { shapes: saleUnits, ensure: ensureSaleUnits } = useTillShapes(
+    store?.id ?? null,
+    tillProductIds,
+  );
   /*
    * The products this receipt has actually touched — NOT whatever the search is showing.
    *
@@ -445,40 +442,13 @@ export default function SellPage() {
 
     // Fetch the shapes this product is sold in, so the line can offer "Half pack" rather than
     // making the seller work out that it means 6.
-    let units = saleUnits[productId];
-    if (!units) {
-      try {
-        units = await fetchSaleUnits(productId);
-        setSaleUnits((prev) => ({ ...prev, [productId]: units }));
-      } catch {
-        units = [];
-      }
+    let units: SaleUnit[];
+    try {
+      units = await ensureSaleUnits(productId);
+    } catch {
+      units = [];
     }
     const first = units[0];
-
-    // Which empties pools this product belongs to, so the line can ask about crates going out.
-    // Fetched once per product and cached: a receipt often has the same item added repeatedly.
-    if (!returnables[productId]) {
-      const { data } = await getSupabase().rpc('returnables_for_sale', {
-        p_product_id: productId,
-        p_base_qty: 1,
-        p_containers: 1,
-      });
-      setReturnables((prev) => ({
-        ...prev,
-        [productId]: ((data ?? []) as {
-          empties_category_id: string;
-          category_name: string;
-          kind: string;
-          deposit_per_unit: string | number | null;
-        }[]).map((r) => ({
-          categoryId: r.empties_category_id,
-          categoryName: r.category_name,
-          kind: r.kind,
-          depositPerUnit: r.deposit_per_unit == null ? null : Number(r.deposit_per_unit) || null,
-        })),
-      }));
-    }
 
     /*
      * Already on this receipt in the same shape? Add to it rather than starting a second line.
@@ -1129,122 +1099,6 @@ export default function SellPage() {
                               })}
                             </div>
                           </div>
-                        );
-                      })()}
-
-                      {/*
-                        Crates and kegs leaving with the goods — STATED, not asked.
-
-                        This was a number field on every line of every beer sale, and the answer
-                        was the quantity, every time. The unit itself now says whether it comes
-                        back, so three crates sold is three crates owed and the till can simply say
-                        so. What is left is the exception a shop really does meet — the customer
-                        who brought their own — and that is one tap, not a field to fill in.
-                      */}
-                      {(() => {
-                        const unit = saleUnits[line.productId]?.find((u) => u.id === line.saleUnitId);
-                        const container = returnables[line.productId]?.find(
-                          (r) => r.kind === 'container',
-                        );
-                        if (!unit?.isReturnable || !container) return null;
-
-                        const qty = Number(line.qty);
-                        const due = Number.isFinite(qty) ? qty : 0;
-                        // Empty string means nobody has said otherwise, so the quantity stands.
-                        const own = line.containersOut === '0';
-                        const going = own ? 0 : due;
-
-                        const held = Number(line.depositCharged) || 0;
-                        const each = going > 0 ? held / going : 0;
-
-                        /*
-                         * Everything this line owes back, not just the crate.
-                         *
-                         * A crate of beer sends out the bottles as well, and the shop's own pools
-                         * say so. The deposit is one figure covering the lot, and the server splits
-                         * it across them in proportion to what each is worth — so the screen has to
-                         * say that rather than let "per crate" imply the whole sum sits there.
-                         */
-                        const alsoBack = (returnables[line.productId] ?? [])
-                          .filter((r) => r.categoryId !== container.categoryId)
-                          .map((r) => r.categoryName.toLowerCase());
-
-                        return (
-                          <>
-                            <div className={styles.emptiesLine}>
-                              <span>
-                                {going > 0
-                                  ? `${formatQty(going)} ${container.categoryName.toLowerCase()} going out`
-                                  : `No ${container.categoryName.toLowerCase()} going out`}
-                              </span>
-                              <button
-                                type="button"
-                                className={styles.emptiesToggle}
-                                aria-pressed={own}
-                                onClick={() =>
-                                  updateLine(activeOrder.clientUuid, line.key, {
-                                    containersOut: own ? '' : '0',
-                                    // Nothing is going out, so nothing is held against it. Leaving
-                                    // the money behind would charge a customer a deposit on
-                                    // containers they brought themselves.
-                                    ...(own ? {} : { depositCharged: '' }),
-                                  })
-                                }
-                              >
-                                {own ? 'No — ours are going out' : 'They brought their own'}
-                              </button>
-                            </div>
-
-                            {/*
-                              WHAT IS BEING TAKEN AGAINST THEM.
-
-                              A rate, not a price, and it has no fixed value: N125 a crate for one
-                              customer, nothing for the one who has bought here for ten years. The
-                              pool's own figure is offered as a starting point and nothing more —
-                              filling it in automatically would have the till collect money nobody
-                              agreed to.
-
-                              Blank and zero are DIFFERENT here and both are kept: blank is nobody
-                              asked, zero is "on trust", and a shop chasing a crate months later
-                              needs to know which of those happened.
-                            */}
-                            {going > 0 && (
-                              <div className={styles.depositLine}>
-                                <Field
-                                  label={`Deposit per ${container.categoryName.toLowerCase()}`}
-                                  numeric
-                                  prefix="₦"
-                                  value={line.depositCharged === '' ? '' : String(round2(each))}
-                                  placeholder={
-                                    container.depositPerUnit != null
-                                      ? String(container.depositPerUnit)
-                                      : '0'
-                                  }
-                                  hint={
-                                    line.depositCharged === ''
-                                      ? container.depositPerUnit != null
-                                        ? `Usually ₦${formatQty(container.depositPerUnit)} — leave blank if none was taken`
-                                        : 'Leave blank if none was taken'
-                                      : held === 0
-                                        ? 'On trust — nothing collected'
-                                        : alsoBack.length > 0
-                                          ? `${formatMoney(held)} held, covering the ${alsoBack.join(' and ')} as well`
-                                          : `${formatMoney(held)} held on this line`
-                                  }
-                                  onChange={(e) => {
-                                    const v = e.target.value.trim();
-                                    const rate = Number(v);
-                                    updateLine(activeOrder.clientUuid, line.key, {
-                                      depositCharged:
-                                        v === '' || !Number.isFinite(rate)
-                                          ? ''
-                                          : String(round2(rate * going)),
-                                    });
-                                  }}
-                                />
-                              </div>
-                            )}
-                          </>
                         );
                       })()}
 

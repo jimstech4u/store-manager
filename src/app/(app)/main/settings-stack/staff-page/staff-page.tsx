@@ -1,16 +1,16 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
-import { FullPageMessage } from '@/components/ui/FullPageMessage';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { Button } from '@/components/ui/Button';
 import { Explain, InfoPanel } from '@/components/ui/Explain';
 import { PlusIcon, TrashIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
 import { usePermission } from '@/hooks/usePermission';
-import { useDemandState } from '@academix-admin/state-stack';
-import { settingsChanged, SETTINGS_SCOPE } from '@/lib/stacks/bank-accounts';
+import { useResource } from '@/lib/stacks/resource';
+import { SETTINGS_SCOPE } from '@/lib/stacks/bank-accounts';
 import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
 import styles from './staff-page.module.css';
@@ -63,6 +63,13 @@ const ROLE_SUMMARY: Record<string, string> = {
   staff: 'Sells and takes payments. Anything they add waits for a manager to check.',
 };
 
+interface Team {
+  members: Member[];
+  invites: Invitation[];
+  roles: Role[];
+}
+const NO_TEAM: Team = { members: [], invites: [], roles: [] };
+
 export default function StaffPage() {
   const nav = useNav();
   const goBack = useStackBack();
@@ -76,83 +83,48 @@ export default function StaffPage() {
    * their own permissions screen. Three `useState`s meant coming back from that screen re-ran all
    * three calls behind a full-page "Loading your team", over a team that had not changed.
    */
-  const [snapshot, demand, setSnapshot] = useDemandState<{
-    members: Member[];
-    invites: Invitation[];
-    roles: Role[];
-    error: string | null;
-    settled: boolean;
-  }>(
-    { members: [], invites: [], roles: [], error: null, settled: false },
-    {
-      key: `staff:${store?.id ?? 'none'}`,
-      scope: SETTINGS_SCOPE,
-      persist: true,
-      deps: [store?.id ?? ''],
-      revalidateOnMount: false,
-    },
-  );
-
   /*
-   * Readable from the loader without becoming a dependency of it, so a refresh that fails can
-   * keep what was already there instead of emptying the team.
+   * A RESOURCE. The old snapshot stored its own error and a `settled` flag, persisted — so a first
+   * read that failed was kept as a settled, EMPTY team: "you have no staff", on the page somebody
+   * opens to check exactly that, and it stayed until something else invalidated settings. Now the
+   * team is null until read, kept through a failed refresh, and a failure has its own Try again.
    */
-  const snapshotRef = useRef(snapshot);
-  snapshotRef.current = snapshot;
+  const res = useResource<Team>({
+    key: `staff:v2:${store?.id ?? 'none'}`,
+    scope: SETTINGS_SCOPE,
+    enabled: Boolean(store),
+    read: async () => {
+      const supabase = getSupabase();
+      const [m, i, r] = await Promise.all([
+        supabase.rpc('list_staff', { p_store_id: store!.id, p_include_removed: true }),
+        supabase.rpc('list_invitations', { p_store_id: store!.id }),
+        supabase.rpc('assignable_roles', { p_store_id: store!.id }),
+      ]);
+      if (m.error) throw m.error;
+      if (i.error) throw i.error;
+      if (r.error) throw r.error;
+      return {
+        members: (m.data ?? []) as Member[],
+        invites: (i.data ?? []) as Invitation[],
+        roles: (r.data ?? []) as Role[],
+      };
+    },
+  });
 
-  const members = snapshot.members;
-  const invites = snapshot.invites;
-  const roles = snapshot.roles;
-  const error = snapshot.error;
-  const loading = !snapshot.settled;
+  // For the handlers below, which change one row here rather than re-reading the team.
+  const snapshotRef = useRef<Team>(res.data ?? NO_TEAM);
+  snapshotRef.current = res.data ?? NO_TEAM;
+  const setSnapshot = res.set;
+
+  const members = snapshotRef.current.members;
+  const invites = snapshotRef.current.invites;
+  const roles = snapshotRef.current.roles;
+  const error = res.error;
 
   const problem = useProblem();
 
   const removeDialog = useConfirm();
   const [confirmRemove, setConfirmRemove] = useState<Member | null>(null);
-
-  const load = useCallback(async () => {
-    if (!store) return;
-    // A real read, not a re-serve: `load` is called after inviting, removing and role changes.
-    settingsChanged();
-    await demand(async ({ set }) => {
-      try {
-        const supabase = getSupabase();
-        const [m, i, r] = await Promise.all([
-          supabase.rpc('list_staff', { p_store_id: store.id, p_include_removed: true }),
-          supabase.rpc('list_invitations', { p_store_id: store.id }),
-          supabase.rpc('assignable_roles', { p_store_id: store.id }),
-        ]);
-        if (m.error) throw m.error;
-        const assignable = (r.data ?? []) as Role[];
-        set(
-          {
-            members: (m.data ?? []) as Member[],
-            invites: (i.data ?? []) as Invitation[],
-            roles: assignable,
-            error: null,
-            settled: true,
-          },
-          { override: true },
-        );
-      } catch (e) {
-        // Keep the team and say why it did not refresh. Emptying it would read as "you have no
-        // staff" — and this page is where somebody goes to check exactly that.
-        set(
-          {
-            ...snapshotRef.current,
-            error: messageOf(e, 'Could not load your team.'),
-            settled: true,
-          },
-          { override: true },
-        );
-      }
-    });
-  }, [store, demand]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
 
   if (!store) return null;
 
@@ -167,9 +139,12 @@ export default function StaffPage() {
     );
   }
 
-  if (loading && members.length === 0) {
-    return <FullPageMessage title="Loading your team" tone="loading" />;
-  }
+  // One header; the body waits for the team.
+  const status: PageStatus = res.data
+    ? { state: 'ready' }
+    : error
+      ? { state: 'error', what: 'your team', error, onRetry: res.reload }
+      : { state: 'loading', what: 'your team' };
 
   const changeRole = async (member: Member, code: string) => {
     try {
@@ -220,6 +195,10 @@ export default function StaffPage() {
         },
       ]}
     >
+      <PageState status={status}>
+        {() =>
+          (
+            <>
       <Explain label="What do the roles mean?">
         <strong>Staff</strong> serve customers. They can sell and take money, and anything new they
         add — a product, a customer — is saved and usable straight away but marked for a manager to
@@ -238,8 +217,11 @@ export default function StaffPage() {
       </Explain>
 
       {error && (
-        <InfoPanel tone="danger" title="Could not load">
-          {error}
+        <InfoPanel tone="danger" title="Could not refresh your team">
+          {error}{' '}
+          <Button variant="secondary" size="small" onClick={res.reload}>
+            Try again
+          </Button>
         </InfoPanel>
       )}
       {/*
@@ -427,6 +409,10 @@ export default function StaffPage() {
           }}
         />
       )}
+            </>
+          )
+        }
+      </PageState>
     </PageScaffold>
   );
 }

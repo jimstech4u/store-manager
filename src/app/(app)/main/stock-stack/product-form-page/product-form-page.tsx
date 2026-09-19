@@ -2,7 +2,7 @@
 
 import { useLocation, useNav, useObject } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
-import { FullPageMessage } from '@/components/ui/FullPageMessage';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { ProductForm, type ProductFormResult } from '@/components/catalog/ProductForm';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
@@ -62,9 +62,8 @@ export default function ProductFormPage() {
 
   // Editing something whose record has not arrived yet. The form would otherwise mount empty and
   // fill in underneath the seller's fingers.
-  if (productId && !settled) {
-    return <FullPageMessage title="Loading this item" tone="loading" />;
-  }
+  const status: PageStatus =
+    productId && !settled ? { state: 'loading', what: 'this item' } : { state: 'ready' };
 
   return (
     <PageScaffold
@@ -78,6 +77,10 @@ export default function ProductFormPage() {
             : 'Something new for your shelf'
       }
     >
+      <PageState status={status}>
+        {() =>
+          (
+            <>
       <ProductForm
         storeId={store.id}
         product={product}
@@ -132,6 +135,10 @@ export default function ProductFormPage() {
           void nav.pop();
         }}
       />
+            </>
+          )
+        }
+      </PageState>
     </PageScaffold>
   );
 }

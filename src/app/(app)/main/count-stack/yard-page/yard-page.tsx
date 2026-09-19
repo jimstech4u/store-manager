@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { FloatingAction } from '@/components/ui/FloatingAction';
 import { InfoPanel } from '@/components/ui/Explain';
 import { ClipboardCheckIcon } from '@/components/ui/Icon';
@@ -29,7 +30,7 @@ export default function YardPage() {
   const nav = useNav();
   const goBack = useStackBack();
   const { store } = useAuth();
-  const { shapes, groups, reload } = useYard(store?.id ?? null);
+  const { shapes, groups, reload, loaded, error } = useYard(store?.id ?? null);
 
   /*
    * WHICH WAY THE SHOP COUNTS, which is a way of reading as much as a way of counting.
@@ -68,6 +69,13 @@ export default function YardPage() {
 
   const rowsForGrain: (YardGroupRow | YardRow)[] = grain === 'group' ? groups : loose;
 
+  // "No makers here yet" before the yard has been read is a claim nobody has checked.
+  const status: PageStatus = loaded
+    ? { state: 'ready' }
+    : error
+      ? { state: 'error', what: 'your yard', error, onRetry: reload }
+      : { state: 'loading', what: 'your yard' };
+
   return (
     <PageScaffold
       onBack={goBack}
@@ -84,7 +92,7 @@ export default function YardPage() {
         owe, and this is the pile you can walk out and look at.
       </InfoPanel>
 
-      {uncounted > 0 && (
+      {loaded && uncounted > 0 && (
         <InfoPanel tone="warning" title={`${uncounted} of these have never been counted`}>
           Until somebody counts a stack there is nothing to add or take away from, so it has no
           figure. Count it once and every crate in and out afterwards keeps it right.
@@ -119,6 +127,9 @@ export default function YardPage() {
         </button>
       </div>
 
+      <PageState status={status}>
+        {() => (
+          <>
       {rowsForGrain.length === 0 ? (
         <InfoPanel tone="info" title={grain === 'group' ? 'No makers here yet' : 'Nothing here'}>
           {grain === 'group'
@@ -189,6 +200,9 @@ export default function YardPage() {
           stack again — the new count replaces the old one and the history keeps both.
         </InfoPanel>
       )}
+          </>
+        )}
+      </PageState>
 
       {/*
         COUNTING IS A FLOATING BUTTON, like Count on the stock screen.

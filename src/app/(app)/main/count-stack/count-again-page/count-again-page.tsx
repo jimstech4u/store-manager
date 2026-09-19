@@ -3,9 +3,9 @@
 import { useMemo, useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
-import { InfoPanel } from '@/components/ui/Explain';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 import { CountedToday } from '@/components/stock/CountedToday';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -53,10 +53,15 @@ export default function CountAgainPage() {
 
   const productId = (location?.params?.id as string | undefined) ?? null;
   const { product } = useProduct(productId);
-  const { byProduct } = useSellingUnits(store?.id ?? null);
+  const {
+    byProduct,
+    loaded: unitsLoaded,
+    error: unitsError,
+    reload: reloadUnits,
+  } = useSellingUnits(store?.id ?? null);
 
   const ids = useMemo(() => (productId ? [productId] : []), [productId]);
-  const { byProduct: counts, reload } = useTodaysCounts(store?.id ?? null, ids);
+  const { byProduct: counts, reload, loaded, error } = useTodaysCounts(store?.id ?? null, ids);
   // Somebody else may count it while this is open; the figure being replaced must be today's.
   useLiveRefresh(nav, reload);
 
@@ -99,28 +104,45 @@ export default function CountAgainPage() {
 
   if (!store || !productId) return null;
 
-  if (!can('counts.correct')) {
-    return (
-      <PageScaffold onBack={goBack} title="Count it again" subtitle={product?.name}>
-        <InfoPanel tone="info" title="A manager counts the shelf again">
-          Today&rsquo;s count stands until an owner or manager walks the shelf again. That way a figure
-          somebody recorded cannot be quietly replaced — every fresh count is kept with the one
-          before it, and the name of whoever entered each.
-        </InfoPanel>
-      </PageScaffold>
-    );
-  }
-
-  if (!today) {
-    return (
-      <PageScaffold onBack={goBack} title="Count it again" subtitle={product?.name}>
-        <InfoPanel tone="info" title="Nothing counted yet today">
-          {product?.name ?? 'This item'} has not been counted today, so there is nothing to replace.
-          Count it on the item&rsquo;s own screen.
-        </InfoPanel>
-      </PageScaffold>
-    );
-  }
+  /*
+   * ONE HEADER; the body says what it knows.
+   *
+   * "Nothing counted yet today" used to be drawn before today's counts had been read — an empty
+   * list and "nobody counted it" looked the same — and the boxes fell back to a single "How many"
+   * before the item's shapes arrived. Both now wait for their answer.
+   */
+  const status: PageStatus = !can('counts.correct')
+    ? {
+        state: 'empty',
+        title: 'A manager counts the shelf again',
+        body: (
+          <>
+            Today&rsquo;s count stands until an owner or manager walks the shelf again. That way a
+            figure somebody recorded cannot be quietly replaced — every fresh count is kept with the
+            one before it, and the name of whoever entered each.
+          </>
+        ),
+      }
+    : !loaded
+      ? error
+        ? { state: 'error', what: "today's count", error, onRetry: reload }
+        : { state: 'loading', what: "today's count" }
+      : !unitsLoaded
+        ? unitsError
+          ? { state: 'error', what: 'what it is counted in', error: unitsError, onRetry: reloadUnits }
+          : { state: 'loading', what: 'what it is counted in' }
+        : !today
+          ? {
+              state: 'empty',
+              title: 'Nothing counted yet today',
+              body: (
+                <>
+                  {product?.name ?? 'This item'} has not been counted today, so there is nothing to
+                  replace. Count it on the item&rsquo;s own screen.
+                </>
+              ),
+            }
+          : { state: 'ready' };
 
   const chosen = WHY.find((w) => w.code === why) ?? null;
   const reason = chosen
@@ -130,7 +152,7 @@ export default function CountAgainPage() {
         ? `${chosen.label} — ${note.trim()}`
         : chosen.label
     : '';
-  const same = anySaid && Math.abs(newBase - today.countedBase) < 0.0001;
+  const same = anySaid && today !== null && Math.abs(newBase - today.countedBase) < 0.0001;
   const canSave = anySaid && reason.length > 0 && newBase >= 0 && !busy;
 
   const save = async () => {
@@ -149,6 +171,10 @@ export default function CountAgainPage() {
     <PageScaffold onBack={goBack} title="Count it again" subtitle={product?.name}>
       <ProblemDialog problem={problem} title="Could not save this count" />
 
+      <PageState status={status}>
+        {() =>
+          today && (
+            <>
       {/* WHAT STANDS NOW, with the whole day's trail under it — replaced, never deleted. */}
       <CountedToday storeId={store.id} count={today} shapes={shapes} baseUnit={product?.baseUnit} />
 
@@ -227,6 +253,10 @@ export default function CountAgainPage() {
           The figure it replaces, your name and this reason are kept together. Nothing is deleted.
         </p>
       </div>
+            </>
+          )
+        }
+      </PageState>
     </PageScaffold>
   );
 }

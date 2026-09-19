@@ -1,10 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
 import styles from './money-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
-import { FullPageMessage } from '@/components/ui/FullPageMessage';
-import { Button } from '@/components/ui/Button';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
 import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
@@ -12,15 +11,14 @@ import { InfoPanel } from '@/components/ui/Explain';
 import { FilterBar } from '@/components/ui/FilterBar';
 import { FloatingAction } from '@/components/ui/FloatingAction';
 import { usePermission } from '@/hooks/usePermission';
-import { customPeriod, resolvePeriod, type Period } from '@/lib/stacks/periods';
+import { customPeriod, resolvePeriod, usePeriod } from '@/lib/stacks/periods';
 import { salesSummary, type SalesSummary } from '@/lib/stacks/report-readers';
 import { CashIcon, ChartIcon, ChevronRightIcon, ReceiptIcon } from '@/components/ui/Icon';
 import { useAuth } from '@/providers/AuthProvider';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useListChannel } from '@/hooks/useListChannel';
 import { useNav } from '@academix-admin/navigation-stack';
-import { useDemandState } from '@academix-admin/state-stack';
-import { useInvalidation } from '@/lib/stacks/invalidation';
+import { useResource } from '@/lib/stacks/resource';
 import { ACCOUNT_DERIVED_SCOPE } from '@/lib/stacks/customer-account';
 import { usePaginatedList, useInfiniteScroll } from '@/hooks/usePaginatedList';
 import { useProvideCustomers } from '@/lib/stacks/customer-directory';
@@ -60,12 +58,13 @@ export default function MoneyPage() {
    */
   const { can } = usePermission();
 
-  const [period, setPeriod] = useState<Period | null>(null);
-  const [trading, setTrading] = useState<SalesSummary | null>(null);
-
   const goBack = useStackBack();
   const nav = useNav();
   const { store } = useAuth();
+
+  const { period, setPeriod, error: periodError, reload: reloadPeriod } = usePeriod(
+    store?.id ?? null,
+  );
 
   // Browsing here; searching happens in the sheet, where the results get the whole screen.
   const [searchId, searchOps, isSearchOpen] = useSearchController();
@@ -153,22 +152,21 @@ export default function MoneyPage() {
    * Not persisted and revalidated on mount: it is a headline figure that must be right when the
    * screen is looked at, and it is one small row.
    */
-  const [owedRow, demandOwed] = useDemandState<OwedSummary | null>(null, {
-    key: `money-owed:${store?.id ?? 'none'}`,
+  const owedRes = useResource<OwedSummary>({
+    // v2: the old value could be absent after a failed read that was never reported.
+    key: `money-owed:v2:${store?.id ?? 'none'}`,
     scope: ACCOUNT_DERIVED_SCOPE,
-    deps: [store?.id ?? ''],
+    enabled: Boolean(store),
+    read: async () => {
+      // The failure used to be dropped (`const { data } = …`), leaving the headline blank for good.
+      const { data, error } = await getSupabase().rpc('store_money_owed', { p_store_id: store!.id });
+      if (error) throw error;
+      return (
+        ((data ?? []) as OwedSummary[])[0] ?? { owed: '0', owed_by: 0, in_credit: '0', credit_to: 0 }
+      );
+    },
   });
-
-  const loadOwed = useCallback(() => {
-    if (!store) return;
-    void demandOwed(async ({ set }: { set: (v: OwedSummary, o?: { override?: boolean }) => void }) => {
-      const { data } = await getSupabase().rpc('store_money_owed', { p_store_id: store.id });
-      const row = ((data ?? []) as OwedSummary[])[0];
-      if (row) set(row, { override: true });
-    });
-  }, [store, demandOwed]);
-
-  useEffect(loadOwed, [loadOwed]);
+  const owedRow = owedRes.data;
 
   /*
    * The window, and then what it came to.
@@ -177,38 +175,34 @@ export default function MoneyPage() {
    * anything is aggregated against it. A failure here leaves the summary absent rather than showing
    * a nought — a figure nobody produced is worse than no figure.
    */
-  useEffect(() => {
-    if (!store) return;
-    let alive = true;
-    void resolvePeriod(store.id, 'this_month')
-      .then((p) => alive && setPeriod(p))
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, [store]);
 
-  useEffect(() => {
-    if (!store || !period) return;
-    let alive = true;
-    void salesSummary({ storeId: store.id, from: period.fromAt, to: period.toAt })
-      .then((t) => alive && setTrading(t))
-      .catch(() => alive && setTrading(null));
-    return () => {
-      alive = false;
-    };
-  }, [store, period]);
+  /*
+   * WHAT THE PERIOD CAME TO — a resource. It was `useState`, and a failed read set it to `null` and
+   * said nothing, so the figures simply never appeared and nobody could ask again.
+   */
+  const trading = useResource<SalesSummary>({
+    key: `money-trading:${store?.id ?? 'none'}:${period?.fromAt ?? ''}:${period?.toAt ?? ''}`,
+    scope: ACCOUNT_DERIVED_SCOPE,
+    enabled: Boolean(store && period),
+    // No row is the server's answer that nothing was sold in the window — a real nought, read.
+    read: async () =>
+      (await salesSummary({ storeId: store!.id, from: period!.fromAt, to: period!.toAt })) ?? {
+        receipts: 0,
+        billed: 0,
+        paid: 0,
+        owing: 0,
+        voided: 0,
+        corrected: 0,
+        customers: 0,
+        busiestDay: null,
+      },
+  });
   // A payment recorded anywhere in the app changes this figure, so it re-reads rather than sitting
   // on a total that was true when the screen was opened.
-  useInvalidation(ACCOUNT_DERIVED_SCOPE, loadOwed);
 
   const owed = owedRow ? Number(owedRow.owed) : null;
 
   if (!store) return null;
-
-  if (list.loading && list.items.length === 0) {
-    return <FullPageMessage title="Loading balances" tone="loading" />;
-  }
 
   /*
    * A failed load says so, and offers a way out.
@@ -221,21 +215,19 @@ export default function MoneyPage() {
    * already reading must not replace what they can see — they keep the rows they have, and the
    * next scroll tries again.
    */
-  if (list.error && list.items.length === 0) {
-    return (
-      <FullPageMessage
-        title="Could not load who owes you"
-        tone="error"
-        action={
-          <Button fullWidth onClick={() => list.reload()}>
-            Try again
-          </Button>
-        }
-      >
-        {list.error}
-      </FullPageMessage>
-    );
-  }
+  /*
+   * ONE HEADER, and the body says what it has. The list shows once it has rows; until the first page
+   * has been read it is loading — not "none yet", which is what an empty list drew before the read
+   * had even started — and a read that failed says so with a way to try again.
+   */
+  const status: PageStatus =
+    list.items.length > 0
+      ? { state: 'ready' }
+      : list.error
+        ? { state: 'error', what: 'who owes you', error: list.error, onRetry: () => list.reload() }
+        : list.loading || list.hasMore
+          ? { state: 'loading', what: 'who owes you' }
+          : { state: 'ready' };
 
   return (
     <PageScaffold
@@ -257,6 +249,9 @@ export default function MoneyPage() {
         },
       ]}
     >
+      <PageState status={status}>
+        {() => (
+          <>
       <div className={styles.summary}>
         <span className={styles.summaryLabel}>
           Owed to you
@@ -267,9 +262,23 @@ export default function MoneyPage() {
             </span>
           )}
         </span>
-        <span className={styles.summaryValue}>
-          {owed == null ? '—' : formatMoney(owed)}
-        </span>
+        {/* NOT A DASH OR A ZERO WHILE IT IS BEING WORKED OUT — a word for that, or a retry. */}
+        {owed == null ? (
+          <span className={styles.summaryPending} role="status">
+            {owedRes.error ? (
+              <>
+                Could not work it out.{' '}
+                <button type="button" className={styles.summaryRetry} onClick={owedRes.reload}>
+                  Try again
+                </button>
+              </>
+            ) : (
+              'Working it out…'
+            )}
+          </span>
+        ) : (
+          <span className={styles.summaryValue}>{formatMoney(owed)}</span>
+        )}
 
         {/*
           AND WHAT THE SHOP OWES BACK, on its own line rather than netted off.
@@ -295,6 +304,21 @@ export default function MoneyPage() {
         be loaded — which is exactly how the old sales report came to be quietly wrong past a
         thousand rows.
       */}
+      {!period && (
+        <p className={styles.summaryPending} role="status">
+          {periodError ? (
+            <>
+              Could not work out the dates.{' '}
+              <button type="button" className={styles.summaryRetry} onClick={reloadPeriod}>
+                Try again
+              </button>
+            </>
+          ) : (
+            'Working out the dates…'
+          )}
+        </p>
+      )}
+
       {period && (
         <>
           <FilterBar
@@ -307,19 +331,34 @@ export default function MoneyPage() {
             }}
           />
 
-          {trading && (
+          {!trading.data && (
+            <p className={styles.summaryPending} role="status">
+              {trading.error ? (
+                <>
+                  Could not add up this period.{' '}
+                  <button type="button" className={styles.summaryRetry} onClick={trading.reload}>
+                    Try again
+                  </button>
+                </>
+              ) : (
+                'Adding up this period…'
+              )}
+            </p>
+          )}
+
+          {trading.data && (
             <div className={styles.window}>
               <div className={styles.windowFig}>
                 <span className={styles.windowLabel}>Billed</span>
-                <span className={styles.windowValue}>{formatMoney(trading.billed)}</span>
+                <span className={styles.windowValue}>{formatMoney(trading.data.billed)}</span>
               </div>
               <div className={styles.windowFig}>
                 <span className={styles.windowLabel}>Came in</span>
-                <span className={styles.windowValue}>{formatMoney(trading.paid)}</span>
+                <span className={styles.windowValue}>{formatMoney(trading.data.paid)}</span>
               </div>
               <div className={styles.windowFig}>
                 <span className={styles.windowLabel}>Receipts</span>
-                <span className={styles.windowValue}>{trading.receipts}</span>
+                <span className={styles.windowValue}>{trading.data.receipts}</span>
               </div>
             </div>
           )}
@@ -453,6 +492,9 @@ export default function MoneyPage() {
           onClick={() => void nav.push('expenses_page')}
         />
       )}
+          </>
+        )}
+      </PageState>
     </PageScaffold>
   );
 }
