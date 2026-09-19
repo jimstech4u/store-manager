@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { PageScaffold } from '@/components/ui/PageScaffold';
-import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -41,7 +41,7 @@ export default function BankFormPage() {
   const { store } = useAuth();
 
   const accountId = (location?.params?.id as string | undefined) ?? null;
-  const { accounts, settled, write } = useBankAccountsState(store?.id ?? null);
+  const { accounts, settled, error, reload, write } = useBankAccountsState(store?.id ?? null);
   const editing = accountId ? (accounts.find((a) => a.id === accountId) ?? null) : null;
 
   const [form, setForm] = useState(BLANK);
@@ -72,15 +72,19 @@ export default function BankFormPage() {
 
   if (!store) return null;
 
-  // Editing something whose record has not arrived yet. The form would otherwise mount empty and
-  // fill in underneath somebody's fingers.
-  if (accountId && !settled) {
-    return (
-      <PageScaffold onBack={goBack} title="Loading this account">
-        <FullPageMessage title="Loading this account" tone="loading" inPage />
-      </PageScaffold>
-    );
-  }
+  /*
+   * Editing something whose record has not arrived yet: the form would otherwise mount empty and
+   * fill in underneath somebody's fingers. Said in the page, under its own header — it used to be a
+   * second page with a second header.
+   */
+  const status: PageStatus =
+    !accountId || editing
+      ? { state: 'ready' }
+      : !settled
+        ? { state: 'loading', what: 'this account' }
+        : error
+          ? { state: 'error', what: 'this account', error, onRetry: reload }
+          : { state: 'empty', title: 'That account is gone', body: 'It may have been removed.' };
 
   const save = async () => {
     setBusy(true);
@@ -144,6 +148,9 @@ export default function BankFormPage() {
       */}
       <ProblemDialog problem={problem} title="Not saved" />
 
+      <PageState status={status}>
+        {() => (
+          <>
       <Field
         label="Account number"
         numeric
@@ -197,6 +204,9 @@ export default function BankFormPage() {
           Save
         </Button>
       </div>
+          </>
+        )}
+      </PageState>
     </PageScaffold>
   );
 }

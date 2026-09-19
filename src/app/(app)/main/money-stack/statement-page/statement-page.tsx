@@ -5,7 +5,7 @@ import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { InfoPanel } from '@/components/ui/Explain';
 import { usePermission } from '@/hooks/usePermission';
-import { CashIcon, ChevronRightIcon } from '@/components/ui/Icon';
+import { CashIcon, ChevronRightIcon, PeopleIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { ACCOUNT_DERIVED_SCOPE, type HistoryEvent } from '@/lib/stacks/customer-account';
@@ -162,8 +162,19 @@ export default function StatementPage() {
        * summed to zero. The balance card two lines down already draws this distinction; the action
        * had not been told.
        */
-      actions={
-        can('payments.record') && Math.abs(balance ?? owed) > 0
+      actions={[
+        // UP TO THE RECORD THIS BELONGS TO: the customer, with their empties and deposit.
+        ...(customerId
+          ? [
+              {
+                key: 'account',
+                icon: <PeopleIcon />,
+                onClick: () => void nav.push('account_page', { id: customerId }),
+                ariaLabel: 'Their account',
+              },
+            ]
+          : []),
+        ...(can('payments.record') && Math.abs(balance ?? owed) > 0
           ? [
               {
                 key: 'pay',
@@ -173,8 +184,8 @@ export default function StatementPage() {
                 ariaLabel: 'Record a payment',
               },
             ]
-          : undefined
-      }
+          : []),
+      ]}
     >
       <PageState status={status}>
         {() => (
@@ -251,23 +262,44 @@ export default function StatementPage() {
           <ul className={styles.list}>
             {history
               .filter((h) => h.kind !== 'sale')
-              .map((h, i) => (
-                <li key={`${h.ref_table}-${h.ref_id}-${i}`} className={styles.row}>
-                  <span className={styles.rowMain}>
-                    <span className={styles.rowName}>{h.label}</span>
-                    <span className={styles.rowMeta}>
-                      {formatDateTime(h.occurred_at)}
-                      {h.detail ? ` · ${h.detail}` : ''}
-                      {` · ${h.actor}`}
+              .map((h, i) => {
+                const said = (
+                  <>
+                    <span className={styles.rowMain}>
+                      <span className={styles.rowName}>{h.label}</span>
+                      <span className={styles.rowMeta}>
+                        {formatDateTime(h.occurred_at)}
+                        {h.detail ? ` · ${h.detail}` : ''}
+                        {` · ${h.actor}`}
+                      </span>
                     </span>
-                  </span>
-                  <span className={styles.rowMoney}>
-                    {h.amount !== null && Number(h.amount) !== 0
-                      ? formatMoney(Math.abs(Number(h.amount)))
-                      : ''}
-                  </span>
+                    <span className={styles.rowMoney}>
+                      {h.amount !== null && Number(h.amount) !== 0
+                        ? formatMoney(Math.abs(Number(h.amount)))
+                        : ''}
+                    </span>
+                  </>
+                );
+                return (
+                <li key={`${h.ref_table}-${h.ref_id}-${i}`}>
+                  {/* A deposit line opens the deposit it moved; anything else has no page of its own. */}
+                  {h.kind.startsWith('deposit') || h.kind === 'forfeit' ? (
+                    <button
+                      type="button"
+                      className={`${styles.row} ${styles.rowLink}`}
+                      onClick={() => void nav.push('deposit_customer_page', { id: customerId })}
+                    >
+                      {said}
+                      <ChevronRightIcon />
+                    </button>
+                  ) : (
+                    <div className={styles.row}>
+                      {said}
+                    </div>
+                  )}
                 </li>
-              ))}
+                );
+              })}
           </ul>
         </>
       )}

@@ -10,7 +10,6 @@ import styles from './receipt-page.module.css';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { Receipt } from '../sell-page/Receipt';
-import { ReturnIcon } from '@/components/ui/Icon';
 
 /**
  * A receipt, as a page in the stack rather than a sheet.
@@ -52,16 +51,6 @@ export default function ReceiptPage() {
       onBack={goBack}
       title={fresh ? 'Sale recorded' : 'Receipt'}
       subtitle={store.name}
-      /*
-        THE SECOND WAY INTO THE EMPTIES LIST, and the more natural one.
-
-        Somebody reading back a sale is often reading it BECAUSE of the crates — "what went out on
-        this one, and has any of it come back?" The receipt already prints what is expected; this
-        is the way to act on it without hunting for the till's own action.
-      */
-      actions={[
-        
-      ]}
     >
       {fresh && (
         <InfoPanel tone="success" title="Saved">
@@ -70,26 +59,31 @@ export default function ReceiptPage() {
         </InfoPanel>
       )}
 
-      <Receipt saleId={saleId} storeId={store.id} />
-
       {/*
-        THE WAY TO CORRECT IT, behind the permission that already governs voiding.
+        THE WAY TO CORRECT IT, behind the permission that already governs voiding — handed to the
+        receipt so it appears with it, not under the loader before it.
 
         Secondary and below the receipt, because reading one is the job of this screen and
         correcting one is rare. It is a PAGE rather than a sheet: it is a form, it survives a
         rotation, and the keyboard would cover half of a sheet on a phone.
       */}
-      {can('sales.amend') && (
-        <div className={styles.correct}>
-          <Button
-            variant="secondary"
-            fullWidth
-            onClick={() => void nav.push('amend_page', { id: saleId })}
-          >
-            Something on this is wrong
-          </Button>
-        </div>
-      )}
+      <Receipt
+        saleId={saleId}
+        storeId={store.id}
+        after={
+          can('sales.amend') && (
+            <div className={styles.correct}>
+              <Button
+                variant="secondary"
+                fullWidth
+                onClick={() => void nav.push('amend_page', { id: saleId })}
+              >
+                Something on this is wrong
+              </Button>
+            </div>
+          )
+        }
+      />
     </PageScaffold>
   );
 }

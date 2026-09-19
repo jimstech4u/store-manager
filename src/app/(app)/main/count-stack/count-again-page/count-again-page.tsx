@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
+import { BoxIcon } from '@/components/ui/Icon';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { Button } from '@/components/ui/Button';
@@ -168,7 +169,17 @@ export default function CountAgainPage() {
   };
 
   return (
-    <PageScaffold onBack={goBack} title="Count it again" subtitle={product?.name}>
+    <PageScaffold onBack={goBack} title="Count it again" subtitle={product?.name}
+      // UP TO THE RECORD THIS BELONGS TO: the item being counted.
+      actions={[
+        {
+          key: 'item',
+          icon: <BoxIcon />,
+          onClick: () => void nav.push('product_page', { id: productId }),
+          ariaLabel: 'The item',
+        },
+      ]}
+    >
       <ProblemDialog problem={problem} title="Could not save this count" />
 
       <PageState status={status}>

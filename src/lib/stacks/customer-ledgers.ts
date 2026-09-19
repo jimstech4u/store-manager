@@ -161,6 +161,10 @@ export interface EmptiesMove {
   qty: number;
   reason: string | null;
   occurredAt: string;
+  /** The item the containers belong to — null for a maker-level row. */
+  productId: string | null;
+  /** The receipt that sent them out (or whose void took them back) — null when none did (0155). */
+  saleId: string | null;
 }
 
 export function useEmptiesCustomers(storeId: string | null) {
@@ -221,6 +225,8 @@ export async function emptiesLedger(customerId: string): Promise<EmptiesMove[]> 
     qty: Number(r.qty) || 0,
     reason: (r.reason as string | null) ?? null,
     occurredAt: String(r.occurred_at),
+    productId: (r.product_id as string | null) ?? null,
+    saleId: (r.sale_id as string | null) ?? null,
   }));
 }
 

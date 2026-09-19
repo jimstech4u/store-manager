@@ -191,3 +191,17 @@
 .sheetActions > * {
   flex: 1;
 }
+
+/* The receipt behind a line, as on the account's own history. */
+.moveOpen {
+  align-self: flex-start;
+  margin-top: var(--space-1);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--primary, #0b6252);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}

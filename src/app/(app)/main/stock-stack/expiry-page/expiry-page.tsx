@@ -7,6 +7,7 @@ import { PageScaffold } from '@/components/ui/PageScaffold';
 import { Button } from '@/components/ui/Button';
 import { InfoPanel } from '@/components/ui/Explain';
 import { LoadArea, useLoadArea } from '@/components/ui/LoadArea';
+import { RecordLink } from '@/components/ui/RecordLink';
 import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/components/ui/Dialog';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
@@ -93,7 +94,9 @@ export default function ExpiryPage() {
   const renderRow = (l: ExpiringLayer, gone: boolean) => (
     <li key={l.layerId} className={styles.row}>
       <span className={styles.name}>
-        {l.productName}
+        <RecordLink route="product_page" id={l.productId}>
+          {l.productName}
+        </RecordLink>
         <span className={styles.detail}>
           {formatQty(l.remaining)} left of this delivery
           {l.supplier ? ` · from ${l.supplier}` : ''}

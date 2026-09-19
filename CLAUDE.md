@@ -338,9 +338,17 @@ A count of zero is a COUNT, not a movement: `stock_movements` refuses `qty_delta
 to, so `open_stock_by_count` writes the movement only when something moved and always records the
 count.
 
-**Register a pushed route in EVERY stack that can push it.** The product form is reachable from
-four; the unit form it offers to push was registered in two. The symptom is navigation-stack's own
-"Missing route" screen, on the one journey nobody walked.
+**Every page is registered in every tab, once, in `src/app/(app)/main/record-pages.tsx`.** It used
+to be per stack, and a page reached a second tab only after somebody hit navigation-stack's "Missing
+route" screen on the one journey nobody walked. Now each stack's `navLink` holds its front page and
+the pages it always had (via `tabRoutes`, in their ORIGINAL order), and `RECORD_PAGES` arrives
+through `additionalNavLinks`. A new page goes at the END of `RECORD_PAGES`: the URL encodes a route
+by its position, so inserting or reordering sends open URLs to the wrong page.
+
+**A record's name opens it, wherever it is mentioned** (`RecordLink`): the customer on a receipt,
+an item on a receipt or a ledger line, the supplier on a delivery. A page that belongs to a parent
+record has a header action back up to it (a statement, empties or deposit page → the account; a
+count → the item). The next record is one push away, and Back walks back through what was followed.
 
 ## Nothing sells off a shelf nobody has counted today
 

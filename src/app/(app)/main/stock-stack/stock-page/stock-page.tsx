@@ -8,7 +8,7 @@ import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
 import { FloatingAction } from '@/components/ui/FloatingAction';
 import { ClipboardCheckIcon } from '@/components/ui/Icon';
-import { BoxIcon,
+import { AlertIcon, BoxIcon,
   PeopleIcon, ChevronRightIcon, PlusIcon } from '@/components/ui/Icon';
 import { useNav } from '@academix-admin/navigation-stack';
 import { useAuth } from '@/providers/AuthProvider';
@@ -135,6 +135,18 @@ export default function StockPage() {
        * header is where the other action already was.
        */
       actions={[
+        /*
+          GOING OFF, always reachable.
+
+          It was only offered through the banner, which appears only once something is already
+          expiring — so a shop checking ahead, or with nothing close yet, had no way in.
+        */
+        {
+          key: 'expiry',
+          icon: <AlertIcon />,
+          onClick: () => void nav.push('expiry_page'),
+          ariaLabel: 'What is going off',
+        },
         ...(can('stock.receive')
           ? [
               {

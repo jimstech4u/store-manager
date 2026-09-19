@@ -1,0 +1,21 @@
+/*
+ * A name that opens its record. It reads as the page's own text with a quiet underline, not as a
+ * button: it sits inside receipts, ledgers and rows whose job is to be read.
+ */
+.link {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.link:hover,
+.link:focus-visible {
+  text-decoration-style: solid;
+}

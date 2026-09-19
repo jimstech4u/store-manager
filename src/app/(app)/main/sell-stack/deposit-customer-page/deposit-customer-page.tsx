@@ -5,6 +5,7 @@ import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { Button } from '@/components/ui/Button';
 import { InfoPanel } from '@/components/ui/Explain';
+import { PeopleIcon } from '@/components/ui/Icon';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 import { LoadArea, useLoadArea } from '@/components/ui/LoadArea';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -57,7 +58,23 @@ export default function DepositCustomerPage() {
   useLiveRefresh(nav, () => area.reload());
 
   return (
-    <PageScaffold onBack={goBack} title="Deposit">
+    <PageScaffold
+      onBack={goBack}
+      title="Deposit"
+      // UP TO THE RECORD THIS BELONGS TO: the customer, with their statement and empties.
+      actions={
+        customerId
+          ? [
+              {
+                key: 'account',
+                icon: <PeopleIcon />,
+                onClick: () => void nav.push('account_page', { id: customerId }),
+                ariaLabel: 'Their account',
+              },
+            ]
+          : undefined
+      }
+    >
       <ProblemDialog problem={problem} title="Not recorded" />
 
       <LoadArea area={area} what="their deposit">

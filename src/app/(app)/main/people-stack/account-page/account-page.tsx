@@ -8,7 +8,7 @@ import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { Button } from '@/components/ui/Button';
 import { Explain, InfoPanel } from '@/components/ui/Explain';
 import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/components/ui/Dialog';
-import { CashIcon, HistoryIcon, RefreshIcon, ReturnIcon, TrashIcon } from '@/components/ui/Icon';
+import { CashIcon, HistoryIcon, RefreshIcon, ReceiptIcon, ReturnIcon, TrashIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { usePermission } from '@/hooks/usePermission';
@@ -341,6 +341,19 @@ export default function AccountPage() {
           onClick={() => void nav.push('deposit_customer_page', { id: customerId })}
         >
           Deposit
+        </Button>
+
+        {/*
+          THE MONEY SIDE, as a statement: every receipt and what is still open on each — the record
+          this balance is made of. It lived only under Money, so from the customer it was a trip
+          back out and in through another tab.
+        */}
+        <Button
+          variant="secondary"
+          fullWidth
+          onClick={() => void nav.push('statement_page', { id: customerId })}
+        >
+          <ReceiptIcon /> Statement
         </Button>
       </div>
 

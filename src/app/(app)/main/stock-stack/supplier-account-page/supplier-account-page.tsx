@@ -2,6 +2,7 @@
 
 import { useCallback } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
+import { RecordLink } from '@/components/ui/RecordLink';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { Button } from '@/components/ui/Button';
 import { InfoPanel } from '@/components/ui/Explain';
@@ -175,7 +176,9 @@ export default function SupplierAccountPage() {
                             {onSide.map((sh) => (
                               <li key={sh.productUnitId} className={styles.shapeRow}>
                                 <span className={styles.shapeName}>
-                                  {sh.productName}
+                                  <RecordLink route="product_page" id={sh.productId}>
+                                    {sh.productName}
+                                  </RecordLink>
                                   {sh.moved > 0 && (
                                     <span className={styles.shapeMoved}>
                                       {saidAsPart(sh.moved)} already settled

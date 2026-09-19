@@ -2,89 +2,41 @@
 
 import NavigationStack from '@academix-admin/navigation-stack';
 import SellPage from './sell-page/sell-page';
-import ClaimPage from './claim-page/claim-page';
-import ShareWhatsAppPage from './share-whatsapp-page/share-whatsapp-page';
-import ReceiptPage from './receipt-page/receipt-page';
-import AmendPage from './amend-page/amend-page';
-import CountGatePage from './count-gate-page/count-gate-page';
-import CountAgainPage from '../count-stack/count-again-page/count-again-page';
-import TakePaymentPage from './take-payment-page/take-payment-page';
-/*
- * What is still out, receipt by receipt.
- *
- * On the SELL stack because that is where the question arrives: a man walks up to the counter with
- * crates in his hands while a sale is half-built, and the shop needs the stack they belong to
- * without leaving the till.
- */
-import EmptiesPage from './empties-page/empties-page';
-import EmptiesCustomerPage from './empties-customer-page/empties-customer-page';
-import DepositsPage from './deposits-page/deposits-page';
-import DepositCustomerPage from './deposit-customer-page/deposit-customer-page';
-import EmptiesRecordPage from './empties-record-page/empties-record-page';
-import DepositMovePage from './deposit-move-page/deposit-move-page';
-/*
- * The catalogue form, registered in this stack too.
- *
- * A seller asked for something the shop has never entered adds it WITHOUT leaving the receipt, so
- * the form has to be pushable here. Same component, same route key: one form, reached from two
- * stacks, rather than a second nearly-identical one living in sell-stack.
- */
-import ProductFormPage from '../stock-stack/product-form-page/product-form-page';
-/*
- * And the unit form, because the product form offers to push it.
- *
- * A seller adding something the shop measures in a word it has never used — "sachet", "keg" — is
- * offered a way to invent it, and without this that offer led to navigation-stack's unknown-page
- * screen. A route registered in one stack and not another is a dead end that only appears on the
- * journey nobody tested.
- */
-import UnitFormPage from '../stock-stack/unit-form-page/unit-form-page';
-import GroupFormPage from '../stock-stack/group-form-page/group-form-page';
-/*
- * The sales list, registered here too, for the same reason.
- *
- * The till's header action opens what has already been sold. Reaching it by jumping to the money
- * tab would move the whole app out from under a seller mid-sale and leave them to find their way
- * back; pushing it onto THIS stack means one tap back is the receipt they were building.
- */
-import SalesPage from '../money-stack/sales-page/sales-page';
-/*
- * The customer form, registered here as well.
- *
- * A seller who needs to put money on account for somebody the shop has never recorded
- * must be able to add them WITHOUT leaving the receipt they are building. Same component,
- * same route key, reached from two stacks — the pattern the product form already uses.
- */
-import CustomerFormPage from '../people-stack/customer-form-page/customer-form-page';
+import { RECORD_LINKS, tabRoutes } from '../record-pages';
 
-const navLink = {
-  sell_page: SellPage,
-  claim_page: ClaimPage,
-  share_whatsapp_page: ShareWhatsAppPage,
-  receipt_page: ReceiptPage,
-  amend_page: AmendPage,
-  // "Count this one first" — a page, because nothing is typed inside a bottom sheet.
-  count_gate_page: CountGatePage,
-  // Pushed from a counted item on the sale, for a manager who wants to walk the shelf again.
-  count_again_page: CountAgainPage,
-  take_payment_page: TakePaymentPage,
-  empties_page: EmptiesPage,
-  empties_customer_page: EmptiesCustomerPage,
-  deposits_page: DepositsPage,
-  deposit_customer_page: DepositCustomerPage,
-  empties_record_page: EmptiesRecordPage,
-  deposit_move_page: DepositMovePage,
-  product_form_page: ProductFormPage,
-  unit_form_page: UnitFormPage,
-  group_form_page: GroupFormPage,
-  sales_page: SalesPage,
-  customer_form_page: CustomerFormPage,
-};
+/*
+ * The tab's own front page, then the pages this tab has always had, IN THE ORDER IT HAS ALWAYS HAD
+ * THEM — the URL names a route by its position in this list, so reordering it would send a URL
+ * already open in somebody's browser to a different page. Every other page arrives through
+ * `additionalNavLinks` (`record-pages.tsx`) after these, so each record is one push away from any tab.
+ */
+const navLink = tabRoutes({ sell_page: SellPage }, [
+  'sell_page',
+  'claim_page',
+  'share_whatsapp_page',
+  'receipt_page',
+  'amend_page',
+  'count_gate_page',
+  'count_again_page',
+  'take_payment_page',
+  'empties_page',
+  'empties_customer_page',
+  'deposits_page',
+  'deposit_customer_page',
+  'empties_record_page',
+  'deposit_move_page',
+  'product_form_page',
+  'unit_form_page',
+  'group_form_page',
+  'sales_page',
+  'customer_form_page',
+]);
 
 export const SellStack = () => (
   <NavigationStack
     id="sell-stack"
     navLink={navLink}
+    additionalNavLinks={RECORD_LINKS}
     entry="sell_page"
     transition="slide"
     syncHistory

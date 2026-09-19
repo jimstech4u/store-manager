@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
@@ -39,7 +40,12 @@ export default function ShapePricePage() {
   const productId = (location?.params?.id as string | undefined) ?? null;
   const shapeId = (location?.params?.shape as string | undefined) ?? null;
 
-  const { byProduct } = useSellingUnits(store?.id ?? null);
+  const {
+    byProduct,
+    loaded: unitsLoaded,
+    error: unitsError,
+    reload: reloadUnits,
+  } = useSellingUnits(store?.id ?? null);
   const shape = useMemo(
     () => (byProduct.get(productId ?? '') ?? []).find((u) => u.productUnitId === shapeId) ?? null,
     [byProduct, productId, shapeId],
@@ -78,27 +84,40 @@ export default function ShapePricePage() {
     }
   };
 
-  if (!shape) {
-    return (
-      <PageScaffold onBack={goBack} title="Price">
-        <InfoPanel tone="info" title="That shape is not on this item">
-          It may have been removed. Go back and open the item again.
-        </InfoPanel>
-      </PageScaffold>
-    );
-  }
+  /*
+   * ONE HEADER. "That shape is not on this item" used to be its own page, drawn before the shapes
+   * had been read — so every slow open said the shape was gone.
+   */
+  const status: PageStatus = shape
+    ? { state: 'ready' }
+    : !unitsLoaded
+      ? unitsError
+        ? { state: 'error', what: 'this shape', error: unitsError, onRetry: reloadUnits }
+        : { state: 'loading', what: 'this shape' }
+      : {
+          state: 'empty',
+          title: 'That shape is not on this item',
+          body: 'It may have been removed. Go back and open the item again.',
+        };
 
   return (
     <PageScaffold
       onBack={goBack}
-      title={`Price for one ${shape.name.toLowerCase()}`}
+      title={shape ? `Price for one ${shape.name.toLowerCase()}` : 'Price'}
       subtitle={
-        shape.baseQty > 1
-          ? `One ${shape.name.toLowerCase()} is ${shape.baseQty}`
-          : 'The smallest this comes in'
+        !shape
+          ? undefined
+          : shape.baseQty > 1
+            ? `One ${shape.name.toLowerCase()} is ${shape.baseQty}`
+            : 'The smallest this comes in'
       }
     >
       <ProblemDialog problem={problem} title="Not saved" />
+
+      <PageState status={status}>
+        {() =>
+          shape && (
+            <>
 
       <Field
         label={`What one ${shape.name.toLowerCase()} sells for`}
@@ -147,6 +166,10 @@ export default function ShapePricePage() {
           Save the price
         </Button>
       </div>
+            </>
+          )
+        }
+      </PageState>
     </PageScaffold>
   );
 }

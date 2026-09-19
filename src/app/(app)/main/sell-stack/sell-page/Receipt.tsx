@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import styles from './Receipt.module.css';
 import { useNav } from '@academix-admin/navigation-stack';
 import { Button } from '@/components/ui/Button';
 import { WhatsAppIcon } from '@/components/ui/Icon';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
+import { RecordLink } from '@/components/ui/RecordLink';
 import { useResource } from '@/lib/stacks/resource';
 import { ACCOUNT_DERIVED_SCOPE } from '@/lib/stacks/customer-account';
 import { getSupabase } from '@/lib/supabase/client';
@@ -43,6 +44,7 @@ interface SaleDetail {
   account?: { owed_after: string | number } | null;
   lines: {
     id: string;
+    product_id: string;
     product_name: string;
     base_unit: string;
     entered_qty: string;
@@ -65,7 +67,19 @@ interface SaleDetail {
  * The print width comes from the store's setting as a CSS custom property, so an unusual printer
  * gets its real width rather than the nearest preset.
  */
-export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }) {
+export function Receipt({
+  saleId,
+  storeId,
+  after,
+}: {
+  saleId: string;
+  storeId: string;
+  /**
+   * What the page puts under the receipt — drawn only once the receipt is, so no action stands
+   * under a loader acting on a receipt nobody can see yet.
+   */
+  after?: ReactNode;
+}) {
   /*
    * A settled receipt in state-stack, keyed by sale.
    *
@@ -281,9 +295,15 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
           </div>
         )}
 
+        {/*
+          THE RECORDS THIS RECEIPT BELONGS TO, one tap away: the customer's account, and each item.
+          Pushed onto whatever tab this receipt was opened in, so Back returns here.
+        */}
         {customer && (
           <div className={styles.meta}>
-            <span>{customer.name}</span>
+            <RecordLink route="account_page" id={customer.id}>
+              {customer.name}
+            </RecordLink>
             <span>{customer.phone}</span>
           </div>
         )}
@@ -291,7 +311,11 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
         <div className={styles.lines}>
           {lines.map((l) => (
             <div className={styles.line} key={l.id}>
-              <p className={styles.lineName}>{l.product_name}</p>
+              <p className={styles.lineName}>
+                <RecordLink route="product_page" id={l.product_id}>
+                  {l.product_name}
+                </RecordLink>
+              </p>
               <div className={styles.lineDetail} style={narrow ? { display: 'block' } : undefined}>
                 <span>
                   {formatQty(l.entered_qty)}{' '}
@@ -576,6 +600,8 @@ export function Receipt({ saleId, storeId }: { saleId: string; storeId: string }
           Save as PDF
         </Button>
       </div>
+
+      {after}
     </>
   );
 }

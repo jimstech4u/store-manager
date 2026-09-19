@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
+import { BoxIcon } from '@/components/ui/Icon';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { Button } from '@/components/ui/Button';
@@ -521,7 +522,17 @@ export default function CountEntryPage() {
             : null) ?? { state: 'ready' });
 
   return (
-    <PageScaffold onBack={goBack} title={active?.name ?? 'Count'} subtitle="Check the shelf">
+    <PageScaffold onBack={goBack} title={active?.name ?? 'Count'} subtitle="Check the shelf"
+      // UP TO THE RECORD THIS BELONGS TO: the item being counted.
+      actions={[
+        {
+          key: 'item',
+          icon: <BoxIcon />,
+          onClick: () => void nav.push('product_page', { id: productId }),
+          ariaLabel: 'The item',
+        },
+      ]}
+    >
       <ProblemDialog problem={submitError} title="Could not continue" />
 
       <PageState status={status}>
@@ -978,14 +989,16 @@ export default function CountEntryPage() {
         </ul>
       </BottomSheet>
 
+      {/*
+        THE PAGE'S ONE ACTION, only once there is something to act on. It used to stand at the foot
+        of the loader ("Save my count" under "Loading today's count"), and an item already counted
+        got a second "Back" button beside the header's own arrow.
+      */}
+      {status.state === 'ready' && !(today && state === null && !done) && (
       <div className={styles.pageAction}>
         {done ? (
           <Button size="large" fullWidth onClick={() => void nav.pop()}>
             Done
-          </Button>
-        ) : today && state === null ? (
-          <Button size="large" fullWidth variant="secondary" onClick={() => void nav.pop()}>
-            Back
           </Button>
         ) : state === null ? (
           <Button
@@ -1011,6 +1024,7 @@ export default function CountEntryPage() {
           </Button>
         )}
       </div>
+      )}
     </PageScaffold>
   );
 }

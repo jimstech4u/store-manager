@@ -1,8 +1,11 @@
 'use client';
 
+import { useState } from 'react';
 import { useResource } from '@/lib/stacks/resource';
+import { useInfiniteScroll, usePaginatedList } from '@/hooks/usePaginatedList';
 import { DERIVED_SCOPE } from '@/lib/stacks/catalog-stack';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
+import { RecordLink } from '@/components/ui/RecordLink';
 import { Explain } from '@/components/ui/Explain';
 import { ChevronRightIcon } from '@/components/ui/Icon';
 import { getSupabase } from '@/lib/supabase/client';
@@ -27,6 +30,7 @@ import styles from './StockHistory.module.css';
  */
 
 interface Movement {
+  id: string;
   at: string;
   kind: string;
   qty_delta: number;
@@ -43,7 +47,25 @@ interface Movement {
    */
   ref_table: string | null;
   ref_id: string | null;
+  /** For a delivery: who it came from, so the row opens their account (0154). */
+  supplier_id: string | null;
+  supplier_name: string | null;
 }
+
+/*
+ * WHICH KIND OF THING HAPPENED — asked one at a time when that is the question.
+ *
+ * "When did this last come in?" and "what did we open with?" are questions of their own. On an
+ * item that sells all day, the answer to either was buried under hundreds of sales.
+ */
+const FILTERS: { label: string; kinds: string[] | null }[] = [
+  { label: 'Everything', kinds: null },
+  { label: 'Came in', kinds: ['receive', 'return_in', 'transfer_in'] },
+  { label: 'Sold', kinds: ['sale'] },
+  { label: 'Losses', kinds: ['damage', 'repack_loss', 'transfer_out'] },
+  { label: 'Corrections', kinds: ['adjustment'] },
+  { label: 'Opening', kinds: ['opening'] },
+];
 
 /** What each kind of movement is called in the shop, rather than in the schema. */
 const WHAT_HAPPENED: Record<string, string> = {
@@ -77,18 +99,18 @@ function when(iso: string) {
  * first answer. Now it re-reads when stock moves (here or on another till), keeps its rows through a
  * failure, and says when it does not know yet.
  */
-function useProductHistory(productId: string) {
-  return useResource<Movement[]>({
-    key: `product-history:v2:${productId}`,
+function useLastMovement(productId: string) {
+  return useResource<Movement | null>({
+    key: `product-last-movement:${productId}`,
     scope: DERIVED_SCOPE,
     enabled: Boolean(productId),
     read: async () => {
-      const { data, error } = await getSupabase().rpc('product_history', {
+      const { data, error } = await getSupabase().rpc('product_history_page', {
         p_product_id: productId,
-        p_limit: 60,
+        p_limit: 1,
       });
       if (error) throw error;
-      return (data ?? []) as Movement[];
+      return ((data ?? []) as Movement[])[0] ?? null;
     },
   });
 }
@@ -109,22 +131,85 @@ export function StockHistory({
    */
   onOpenRecord?: (refTable: string | null, refId: string) => void;
 }) {
-  const res = useProductHistory(productId);
-  const history = res.data ?? [];
+  /*
+   * THE WHOLE HISTORY, a page at a time (0154).
+   *
+   * It read the newest sixty and stopped, so on an item that sells all day the opening figure and
+   * every delivery were below the cut: the page looked like a list of sales and nothing else.
+   */
+  const [filter, setFilter] = useState(0);
+  const kinds = FILTERS[filter].kinds;
+  const list = usePaginatedList<Movement>({
+    key: `product-history:${productId}:${filter}`,
+    scope: DERIVED_SCOPE,
+    deps: [productId, filter],
+    enabled: Boolean(productId),
+    pageSize: 40,
+    getId: (row) => row.id,
+    fetchPage: async (cursor, limit) => {
+      const c = cursor as { at: string; id: string } | null;
+      const { data, error } = await getSupabase().rpc('product_history_page', {
+        p_product_id: productId,
+        p_kinds: kinds,
+        p_before_at: c?.at ?? null,
+        p_before_id: c?.id ?? null,
+        p_limit: limit,
+      });
+      if (error) throw error;
+      const rows = (data ?? []) as Movement[];
+      const last = rows[rows.length - 1];
+      return { rows, cursor: last ? { at: last.at, id: last.id } : null };
+    },
+  });
+  // In DERIVED_SCOPE: a sale, a delivery or a count here or on another till re-reads what is shown.
+  const more = useInfiniteScroll(list.loadMore, {
+    enabled: list.hasMore && !list.loading,
+    hasMore: list.hasMore,
+    loading: list.loadingMore,
+  });
+  const history = list.items;
 
   // Not read yet, or could not be: said inside the page, under its header — never a blank page.
-  const status: PageStatus = res.loaded
-    ? history.length === 0
-      ? {
-          state: 'empty',
-          title: 'Nothing recorded yet',
-          body: 'Deliveries, sales and counts of this item will be listed here as they happen.',
-        }
-      : { state: 'ready' }
-    : res.error
-      ? { state: 'error', what: 'the history', error: res.error, onRetry: res.reload }
-      : { state: 'loading', what: 'the history' };
-  if (status.state !== 'ready') return <PageState status={status}>{() => null}</PageState>;
+  const status: PageStatus =
+    history.length > 0
+      ? { state: 'ready' }
+      : list.error
+        ? { state: 'error', what: 'the history', error: list.error, onRetry: list.reload }
+        : list.loading || list.hasMore
+          ? { state: 'loading', what: 'the history' }
+          : {
+              state: 'empty',
+              title: filter === 0 ? 'Nothing recorded yet' : `No ${FILTERS[filter].label.toLowerCase()} yet`,
+              body:
+                filter === 0
+                  ? 'Deliveries, sales and counts of this item will be listed here as they happen.'
+                  : 'Nothing of this kind has happened to this item.',
+            };
+
+  const chips = (
+    <div className={styles.chips} role="tablist" aria-label="Which kind">
+      {FILTERS.map((f, i) => (
+        <button
+          key={f.label}
+          type="button"
+          role="tab"
+          aria-selected={filter === i}
+          className={`${styles.chip} ${filter === i ? styles.chipOn : ''}`}
+          onClick={() => setFilter(i)}
+        >
+          {f.label}
+        </button>
+      ))}
+    </div>
+  );
+  if (status.state !== 'ready') {
+    return (
+      <>
+        {chips}
+        <PageState status={status}>{() => null}</PageState>
+      </>
+    );
+  }
 
   return (
     <section className={styles.section}>
@@ -133,6 +218,8 @@ export function StockHistory({
         own line, so nothing quietly disappears. If the shelf disagrees with the records, this is
         where the difference happened.
       </Explain>
+
+      {chips}
 
       <ol className={styles.list}>
         {history.map((row, index) => {
@@ -147,7 +234,7 @@ export function StockHistory({
           const opens = onOpenRecord && row.ref_id ? () => onOpenRecord(row.ref_table, row.ref_id!) : null;
 
           return (
-            <li className={styles.row} key={`${row.at}-${index}`}>
+            <li className={styles.row} key={row.id ?? `${row.at}-${index}`}>
               <span className={`${styles.delta} ${up ? styles.up : styles.down}`}>
                 {up ? '+' : ''}
                 {formatQty(row.qty_delta)}
@@ -162,6 +249,15 @@ export function StockHistory({
                 <span className={styles.who}>
                   {when(row.at)} · {row.actor_name ?? 'Someone'}
                 </span>
+                {/* A delivery belongs to a supplier: their name opens their account. */}
+                {row.supplier_id && (
+                  <span className={styles.who}>
+                    from{' '}
+                    <RecordLink route="supplier_account_page" id={row.supplier_id}>
+                      {row.supplier_name ?? 'the supplier'}
+                    </RecordLink>
+                  </span>
+                )}
                 {row.note && <span className={styles.note}>{row.note}</span>}
               </span>
 
@@ -179,6 +275,18 @@ export function StockHistory({
           );
         })}
       </ol>
+
+      {list.hasMore && (
+        <div ref={more} className={styles.sentinel}>
+          {list.error ? (
+            <button type="button" className={styles.open} onClick={list.loadMore}>
+              Could not load more — try again
+            </button>
+          ) : (
+            'Loading older entries…'
+          )}
+        </div>
+      )}
     </section>
   );
 }
@@ -197,16 +305,16 @@ export function StockHistoryCard({
   productId: string;
   onOpen: () => void;
 }) {
-  // The same read as the page, so opening it after seeing the card is instant.
-  const res = useProductHistory(productId);
-  const last = res.data?.[0];
+  // Only the newest row — the page itself reads the rest, a page at a time.
+  const res = useLastMovement(productId);
+  const last = res.data;
 
   return (
     <button type="button" className={styles.card} onClick={onOpen}>
       <span className={styles.cardBody}>
         <span className={styles.cardLabel}>Stock history</span>
         <span className={styles.cardValue}>
-          {res.data === null
+          {!res.loaded
             ? res.error
               ? 'Could not load'
               : 'Loading…'

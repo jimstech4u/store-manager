@@ -5,7 +5,9 @@ import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { Button } from '@/components/ui/Button';
 import { InfoPanel } from '@/components/ui/Explain';
-import { PlusIcon } from '@/components/ui/Icon';
+import { PeopleIcon, PlusIcon } from '@/components/ui/Icon';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
+import { RecordLink } from '@/components/ui/RecordLink';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 import { LoadArea, useLoadArea } from '@/components/ui/LoadArea';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -76,13 +78,49 @@ export default function EmptiesCustomerPage() {
   const outstanding = useMemo(() => owed.filter((r) => r.owed > 0), [owed]);
   const lines = useMemo(() => rollUpOwed(outstanding), [outstanding]);
 
+  /*
+   * ONE HEADER, and the body waits for both reads. The two record buttons used to be drawn
+   * straight away, greyed out, above two separate spinners — buttons for a figure nobody had seen.
+   */
+  const status: PageStatus =
+    owedArea.data && ledgerArea.data
+      ? { state: 'ready' }
+      : owedArea.error || ledgerArea.error
+        ? {
+            state: 'error',
+            what: 'their empties',
+            error: owedArea.error ?? ledgerArea.error,
+            onRetry: () => {
+              owedArea.reload();
+              ledgerArea.reload();
+            },
+          }
+        : { state: 'loading', what: 'their empties' };
+
   return (
     <PageScaffold
       onBack={goBack}
       title="Empties"
       subtitle="What they are holding, and every move of it"
+      // UP TO THE RECORD THIS BELONGS TO: the customer, with their statement and deposit.
+      actions={
+        customerId
+          ? [
+              {
+                key: 'account',
+                icon: <PeopleIcon />,
+                onClick: () => void nav.push('account_page', { id: customerId }),
+                ariaLabel: 'Their account',
+              },
+            ]
+          : undefined
+      }
     >
       <ProblemDialog problem={problem} title="Not recorded" />
+
+      <PageState status={status}>
+        {() => (
+          <>
 
       <h2 className={styles.section}>Still with them</h2>
 
@@ -180,8 +218,24 @@ export default function EmptiesCustomerPage() {
                           : 'Written off'}{' '}
                       {saidAsPart(m.qty)} {m.qty === 1 ? m.unitName : m.unitPlural}
                     </span>
-                    <span className={styles.moveWho}>{m.productName}</span>
+                    {/* The item, and the receipt that moved them — each one push away. */}
+                    {m.productId ? (
+                      <RecordLink route="product_page" id={m.productId} className={styles.moveWho}>
+                        {m.productName}
+                      </RecordLink>
+                    ) : (
+                      <span className={styles.moveWho}>{m.productName}</span>
+                    )}
                     {m.reason ? <span className={styles.moveWhy}>{m.reason}</span> : null}
+                    {m.saleId && (
+                      <button
+                        type="button"
+                        className={styles.moveOpen}
+                        onClick={() => void nav.push('receipt_page', { id: m.saleId })}
+                      >
+                        See the receipt
+                      </button>
+                    )}
                   </span>
                   <span className={styles.moveWhen}>
                     {new Date(m.occurredAt).toLocaleDateString()}
@@ -192,7 +246,9 @@ export default function EmptiesCustomerPage() {
           )
         }
       </LoadArea>
-
+          </>
+        )}
+      </PageState>
     </PageScaffold>
   );
 }
