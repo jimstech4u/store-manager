@@ -10,7 +10,7 @@ import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 import { LoadArea, useLoadArea } from '@/components/ui/LoadArea';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
-import { emptiesLedger, emptiesOwed, type EmptiesMove } from '@/lib/stacks/customer-ledgers';
+import { emptiesLedger, emptiesOwed, type EmptiesMove, LEDGERS_SCOPE } from '@/lib/stacks/customer-ledgers';
 import { rollUpOwed, saidAsPart, type OwedRow } from '@/lib/empties-rollup';
 
 import styles from './empties-customer-page.module.css';
@@ -42,12 +42,22 @@ export default function EmptiesCustomerPage() {
   const owedArea = useLoadArea<OwedRow[]>(
     () => emptiesOwed(customerId!),
     [customerId],
-    { onFail: showProblem, whenNot: !customerId },
+    {
+      key: `empties-owed:${customerId ?? 'none'}`,
+      scope: LEDGERS_SCOPE,
+      onFail: showProblem,
+      whenNot: !customerId,
+    },
   );
   const ledgerArea = useLoadArea<EmptiesMove[]>(
     () => emptiesLedger(customerId!),
     [customerId],
-    { onFail: showProblem, whenNot: !customerId },
+    {
+      key: `empties-ledger:${customerId ?? 'none'}`,
+      scope: LEDGERS_SCOPE,
+      onFail: showProblem,
+      whenNot: !customerId,
+    },
   );
 
   /*

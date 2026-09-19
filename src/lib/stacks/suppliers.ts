@@ -4,6 +4,7 @@ import { useCallback, useEffect } from 'react';
 import { useDemandState } from '@academix-admin/state-stack';
 import { useInvalidation, invalidate } from '@/lib/stacks/invalidation';
 import { getSupabase } from '@/lib/supabase/client';
+import { useReload } from '@/lib/stacks/resource';
 
 /**
  * Who a shop buys from.
@@ -82,7 +83,8 @@ export function useSuppliers(storeId: string | null) {
     [suppliers, setSuppliers],
   );
 
-  return { suppliers, add, reload: load };
+  const reload = useReload(SUPPLIERS_SCOPE, `suppliers:${storeId ?? 'none'}`, load);
+  return { suppliers, add, reload };
 }
 
 /** Name one, or correct one. Returns the existing id when the name is already taken. */

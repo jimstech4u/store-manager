@@ -5,6 +5,7 @@ import { useDemandState } from '@academix-admin/state-stack';
 import { invalidate, useInvalidation } from '@/lib/stacks/invalidation';
 import { whichNeedCount } from '@/lib/stacks/mid-sale';
 import { getSupabase } from '@/lib/supabase/client';
+import { useReload } from '@/lib/stacks/resource';
 
 /**
  * Which items on an open sale have not been counted today.
@@ -56,7 +57,8 @@ export function useUncountedToday(storeId: string | null, productIds: string[]) 
   useInvalidation(storeId ? COUNTS_SCOPE : null, load);
 
   // No products means nothing can be uncounted, whatever an earlier key left behind.
-  return { uncounted: ids.length === 0 ? [] : uncounted, reload: load };
+  const reload = useReload(COUNTS_SCOPE, `uncounted:${storeId ?? 'none'}:${key}`, load);
+  return { uncounted: ids.length === 0 ? [] : uncounted, reload };
 }
 
 /* ── Who counted what today, and what has been changed since ─────────────────────── */
@@ -149,7 +151,8 @@ export function useTodaysCounts(storeId: string | null, productIds: string[]) {
     return m;
   }, [rows, ids.length]);
 
-  return { byProduct, reload: load };
+  const reload = useReload(COUNTS_SCOPE, `todays-counts:${storeId ?? 'none'}:${key}`, load);
+  return { byProduct, reload };
 }
 
 /** The day's history of one item's count, oldest first. */
@@ -189,7 +192,12 @@ export function useCountTrail(storeId: string | null, productId: string | null) 
 
   useInvalidation(storeId ? COUNTS_SCOPE : null, load);
 
-  return { steps: productId ? steps : [], reload: load };
+  const reload = useReload(
+    COUNTS_SCOPE,
+    `count-trail:${storeId ?? 'none'}:${productId ?? 'none'}`,
+    load,
+  );
+  return { steps: productId ? steps : [], reload };
 }
 
 /**

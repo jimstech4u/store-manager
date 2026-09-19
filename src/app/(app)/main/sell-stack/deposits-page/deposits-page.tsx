@@ -2,12 +2,15 @@
 
 import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
+import { FullPageMessage } from '@/components/ui/FullPageMessage';
+import { Button } from '@/components/ui/Button';
 import { InfoPanel } from '@/components/ui/Explain';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
 import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
+import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { useDepositCustomers, type DepositCustomer } from '@/lib/stacks/customer-ledgers';
 import { formatMoney } from '@/lib/format';
 import styles from './deposits-page.module.css';
@@ -27,7 +30,10 @@ export default function DepositsPage() {
   const nav = useNav();
   const goBack = useStackBack();
   const { store } = useAuth();
-  const { rows } = useDepositCustomers(store?.id ?? null);
+  const ledger = useDepositCustomers(store?.id ?? null);
+  const rows = ledger.rows;
+  // A deposit taken on another till lands here on the next look.
+  useLiveRefresh(nav, ledger.reload);
   /*
    * SEARCHING HAPPENS IN THE VIEWER, not in a box on the page.
    *
@@ -49,6 +55,30 @@ export default function DepositsPage() {
   // it is a liability sitting in the drawer.
   const total = rows.reduce((sum, r) => sum + r.held, 0);
   const holding = rows.filter((r) => r.held > 0);
+
+  /*
+   * NOTHING IS SAID UNTIL IT HAS BEEN READ. Before the first answer this page used to show "Held altogether ₦0" —
+   * words that look exactly like a real answer. A loader until there is one; if the first read
+   * fails, the failure and a way to try again, without leaving the page.
+   */
+  if (!ledger.loaded) {
+    if (ledger.error) {
+      return (
+        <FullPageMessage
+          title="Could not load the deposits you are holding"
+          tone="error"
+          action={
+            <Button fullWidth onClick={ledger.reload}>
+              Try again
+            </Button>
+          }
+        >
+          {ledger.error}
+        </FullPageMessage>
+      );
+    }
+    return <FullPageMessage title="Loading the deposits you are holding" tone="loading" />;
+  }
 
   return (
     <PageScaffold onBack={goBack} title="Deposits" subtitle="Money you are holding">

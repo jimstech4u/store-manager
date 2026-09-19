@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import styles from './TakePayment.module.css';
 import { Button } from '@/components/ui/Button';
 import { useBankAccounts } from '@/lib/stacks/bank-accounts';
@@ -8,8 +8,15 @@ import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
 import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
 import { getSupabase } from '@/lib/supabase/client';
-import { accountsChanged } from '@/lib/stacks/customer-account';
-import { ledgersChanged } from '@/lib/stacks/customer-ledgers';
+import { ACCOUNT_DERIVED_SCOPE, accountsChanged } from '@/lib/stacks/customer-account';
+import {
+  LEDGERS_SCOPE,
+  depositLedger,
+  ledgersChanged,
+  type DepositMove,
+} from '@/lib/stacks/customer-ledgers';
+import { useResource } from '@/lib/stacks/resource';
+import { applySaleLocally } from '@/lib/stacks/local-effects';
 import { stockMoved } from '@/lib/stacks/catalog-stack';
 import { useListNotifier } from '@/hooks/useListChannel';
 import { formatMoney, messageOf } from '@/lib/format';
@@ -99,7 +106,6 @@ export function TakePayment({
   const [draftAccount, setDraftAccount] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const error = useProblem();
-  const [outstanding, setOutstanding] = useState<number | null>(null);
 
   // The charge being composed. Held here rather than as a blank row on the order, so an
   // abandoned half-typed charge never reaches the shop.
@@ -118,29 +124,20 @@ export function TakePayment({
    * twenty is holding twenty-two, and a screen that shows only the new figure invites somebody to
    * type the total instead.
    */
-  const [alreadyHeld, setAlreadyHeld] = useState(0);
-
-  useEffect(() => {
-    const customerId = order.customerId;
-    if (!customerId) {
-      setAlreadyHeld(0);
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      const { data } = await getSupabase().rpc('customer_deposit_ledger', {
-        p_store_customer_id: customerId,
-      });
-      if (cancelled) return;
-      const rows = (data ?? []) as { running: string | number }[];
-      // The reader returns newest first and carries the running balance, so the first row is what
-      // is held now. No arithmetic here: a balance the screen computes is one that disagrees.
-      setAlreadyHeld(rows.length > 0 ? Number(rows[0].running) || 0 : 0);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [order.customerId]);
+  /*
+   * WHAT IS ALREADY HELD FOR THEM — the same cached ledger the deposit pages read (one key, one
+   * shape), so it is on screen at once when it has been read before, and a failed read says so rather
+   * than claiming nothing is held.
+   */
+  const heldLedger = useResource<DepositMove[]>({
+    key: `area:deposit-ledger:${order.customerId ?? 'none'}`,
+    scope: LEDGERS_SCOPE,
+    enabled: Boolean(order.customerId),
+    read: () => depositLedger(order.customerId!),
+  });
+  // Newest first, carrying the running balance: the first row is what is held now.
+  const alreadyHeld =
+    order.customerId && heldLedger.data && heldLedger.data.length > 0 ? heldLedger.data[0].running : 0;
 
   // Told about the one sale this screen creates. Unhandled when nobody is showing that list, which
   // is the correct outcome — it will read the truth the next time it loads.
@@ -167,23 +164,30 @@ export function TakePayment({
    */
   const notifyCustomers = useListNotifier<{ id: string; balance: string }>('customers');
 
-  // What this customer already owes, before today's sale. Fetched when the sheet opens rather
-  // than kept live: it is a decision input at this moment, not a value to watch change.
-  useEffect(() => {
-    if (!order.customerId) {
-      setOutstanding(null);
-      return;
-    }
-    let cancelled = false;
-    getSupabase()
-      .rpc('customer_balance_total', { p_store_customer_id: order.customerId })
-      .then(({ data }) => {
-        if (!cancelled) setOutstanding(Number(data ?? 0));
+  /*
+   * WHAT THIS CUSTOMER ALREADY OWES, before today's sale.
+   *
+   * It was `useState(null)` filled by a read whose failure was swallowed as `Number(data ?? 0)` — so
+   * a read that did not arrive said "owes nothing". That zero then decided whether money handed
+   * over was change or a payment towards the old debt, and was patched into the customer lists as
+   * their new balance. It is a resource now: `null` until the answer arrives (shown as "checking"),
+   * kept for next time, and a failure is a failure with a way to try again.
+   */
+  const balance = useResource<number>({
+    key: `balance:${order.customerId ?? 'none'}`,
+    scope: ACCOUNT_DERIVED_SCOPE,
+    enabled: Boolean(order.customerId),
+    read: async () => {
+      const { data, error } = await getSupabase().rpc('customer_balance_total', {
+        p_store_customer_id: order.customerId,
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [order.customerId]);
+      if (error) throw error;
+      return Number(data ?? 0);
+    },
+  });
+  const outstanding: number | null = order.customerId ? balance.data : null;
+  /* A named customer whose balance has not arrived: the money arithmetic below must not guess. */
+  const balanceUnknown = Boolean(order.customerId) && outstanding === null;
 
   /*
    * AN AMOUNT TYPED BUT NOT YET ADDED STILL COUNTS.
@@ -376,6 +380,62 @@ export function TakePayment({
        * it — ₦200,000 where it should have read ₦247,100. The write is the only thing that knows
        * it happened; every screen guessing on a timer is the arrangement this replaced.
        */
+      const paidTotal = payments.reduce((sum, p) => sum + p.amount, 0);
+
+      /*
+       * THIS DEVICE KNOWS WHAT IT JUST DID — so every screen showing a figure this sale moved says
+       * the new one now, on screen or not: the shelf, what the customer owes, the containers they
+       * took, the deposit taken. The invalidations below then re-read each from the server, which
+       * has the last word — the same figure, or a different one if another till moved it too.
+       */
+      if (storeId) {
+        applySaleLocally({
+          storeId,
+          saleId: data as string,
+          customer: order.customerId
+            ? { id: order.customerId, name: order.customerName || 'Customer' }
+            : null,
+          // What went on account, less whatever paid down an older debt. Only a balance that was
+          // actually read counts towards the second half.
+          balanceDelta: Math.max(0, total - paidTotal) - (outstanding !== null ? towardsOldDebt : 0),
+          deposit:
+            takenNow > 0
+              ? {
+                  amount: takenNow,
+                  reason:
+                    (order.deposits ?? [])
+                      .map((d) => d.note?.trim())
+                      .filter(Boolean)
+                      .join(', ') || null,
+                }
+              : null,
+          stockOut: order.lines.map((l) => ({
+            productId: l.productId,
+            base:
+              (Number(l.qty) || 0) *
+              (Number(l.saleUnitBaseQty) || Number(l.packQty) || 1),
+          })),
+          containersOut: order.lines.flatMap((l) => {
+            const shape = l.saleUnitId
+              ? (byProduct.get(l.productId) ?? []).find((u) => u.productUnitId === l.saleUnitId)
+              : undefined;
+            return shape?.isReturnable
+              ? [
+                  {
+                    productId: l.productId,
+                    productName: l.productName,
+                    productUnitId: shape.productUnitId,
+                    unitName: shape.name,
+                    unitPlural: shape.plural,
+                    baseQty: shape.baseQty,
+                    qty: Number(l.qty) || 0,
+                  },
+                ]
+              : [];
+          }),
+        });
+      }
+
       accountsChanged();
       /*
        * AND THE EMPTIES LIST. A sale in a shape that comes back writes a container row for the
@@ -431,8 +491,8 @@ export function TakePayment({
        * the new balance is that plus whatever went on account just now.
        */
       const wentOnAccount = Math.max(0, total - paidNow);
-      if (order.customerId && wentOnAccount > 0) {
-        const owedNow = String((outstanding ?? 0) + wentOnAccount);
+      if (order.customerId && wentOnAccount > 0 && outstanding !== null) {
+        const owedNow = String(outstanding + wentOnAccount);
         notifyDebtors({ type: 'patch', id: order.customerId, patch: { balance: owedNow } });
         // The People list shows the same figure and is a different list.
         notifyCustomers({ type: 'patch', id: order.customerId, patch: { balance: owedNow } });
@@ -712,6 +772,25 @@ export function TakePayment({
         <span className={styles.dueValue}>{formatMoney(total)}</span>
       </div>
 
+      {/*
+        NEVER A ZERO THAT WAS NOT READ. Until the balance arrives this says it is checking; if it
+        could not be read, it says that and offers to try again — in place, without leaving the sale.
+      */}
+      {balanceUnknown && (
+        <div className={styles.outstanding} role="status">
+          <span>
+            {balance.error
+              ? `Could not check what ${order.customerName || 'this customer'} already owes.`
+              : `Checking what ${order.customerName || 'this customer'} already owes…`}
+          </span>
+          {balance.error && (
+            <button type="button" className={styles.retryLink} onClick={balance.reload}>
+              Try again
+            </button>
+          )}
+        </div>
+      )}
+
       {outstanding !== null && outstanding > 0 && (
         <div className={styles.outstanding}>
           <span>
@@ -986,6 +1065,9 @@ export function TakePayment({
           busyLabel="Recording"
           disabled={
             uncounted.length > 0 ||
+            // Paid more than the sale while what they owed is still unknown: the extra might be for
+            // the old debt rather than change, and nobody can say which until the balance arrives.
+            (balanceUnknown && paid > total) ||
             (!order.customerId && (paid < total || comingBack.length > 0))
           }
           onClick={settle}

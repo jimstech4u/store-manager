@@ -1,5 +1,6 @@
 'use client';
 
+import { DERIVED_SCOPE } from '@/lib/stacks/catalog-stack';
 import { useCallback, useState } from 'react';
 import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
@@ -55,6 +56,8 @@ export default function ExpiryPage() {
 
   const read = useCallback(() => expiringStock(store!.id, days), [store, days]);
   const area = useLoadArea<ExpiringLayer[]>(read, [store?.id ?? '', String(days)], {
+    key: `expiring:${store?.id ?? 'none'}:${days}`,
+    scope: DERIVED_SCOPE,
     onFail: showProblem,
     whenNot: !store,
   });

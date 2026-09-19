@@ -12,6 +12,7 @@ import { getSupabase } from '@/lib/supabase/client';
  * `stockMoved()` is the existing publisher for exactly that.
  */
 import { DERIVED_SCOPE, stockMoved } from '@/lib/stacks/catalog-stack';
+import { useReload } from '@/lib/stacks/resource';
 
 /**
  * What is going off, and when.
@@ -115,7 +116,8 @@ export function useExpirySummary(storeId: string | null, withinDays = 30) {
 
   useInvalidation(storeId ? DERIVED_SCOPE : null, load);
 
-  return { summary, reload: load, setSummary };
+  const reload = useReload(DERIVED_SCOPE, `expiry-summary:${storeId ?? 'none'}:${withinDays}`, load);
+  return { summary, reload, setSummary };
 }
 
 /**

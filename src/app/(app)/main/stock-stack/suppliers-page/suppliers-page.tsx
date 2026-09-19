@@ -1,5 +1,6 @@
 'use client';
 
+import { SUPPLIERS_SCOPE } from '@/lib/stacks/suppliers';
 import { useCallback, useState } from 'react';
 import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
@@ -60,6 +61,8 @@ export default function SuppliersPage() {
   }, [store]);
 
   const area = useLoadArea<SupplierAccount[]>(read, [store?.id], {
+    key: `supplier-accounts:${store?.id ?? 'none'}`,
+    scope: SUPPLIERS_SCOPE,
     onFail: showProblem,
     whenNot: !store,
   });

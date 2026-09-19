@@ -16,6 +16,7 @@ import {
   recordEmpties,
   writeOffEmpties,
   type DepositMove,
+  LEDGERS_SCOPE,
 } from '@/lib/stacks/customer-ledgers';
 import { accountsChanged } from '@/lib/stacks/customer-account';
 import { useSellingUnits, type SellingUnit } from '@/lib/stacks/selling-units';
@@ -76,11 +77,15 @@ export default function EmptiesRecordPage() {
    * records three crates back against an obligation that is already two.
    */
   const area = useLoadArea<OwedRow[]>(() => emptiesOwed(customerId!), [customerId], {
+    key: `empties-owed:${customerId ?? 'none'}`,
+    scope: LEDGERS_SCOPE,
     onFail: showProblem,
     whenNot: !customerId,
   });
   // What the shop is holding of theirs, so the fee can say where it comes from before it is taken.
   const depositArea = useLoadArea<DepositMove[]>(() => depositLedger(customerId!), [customerId], {
+    key: `deposit-ledger:${customerId ?? 'none'}`,
+    scope: LEDGERS_SCOPE,
     onFail: showProblem,
     whenNot: !customerId || !damaged,
   });

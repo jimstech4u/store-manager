@@ -22,6 +22,7 @@ import {
   type CategoryTotal,
   type Expense,
   type MoneySummary,
+  EXPENSES_SCOPE,
 } from '@/lib/stacks/expenses';
 import { formatMoney, messageOf } from '@/lib/format';
 import styles from './expenses-page.module.css';
@@ -67,6 +68,8 @@ export default function ExpensesPage() {
   }, [store, period]);
 
   const area = useLoadArea<Loaded>(read, [store?.id ?? '', period?.label ?? ''], {
+    key: `expenses:${store?.id ?? 'none'}:${period?.label ?? ''}`,
+    scope: EXPENSES_SCOPE,
     onFail: showProblem,
     whenNot: !store || !period,
   });

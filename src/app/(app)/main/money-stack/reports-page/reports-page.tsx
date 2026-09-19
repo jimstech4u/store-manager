@@ -1,5 +1,6 @@
 'use client';
 
+import { ACCOUNT_DERIVED_SCOPE } from '@/lib/stacks/customer-account';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { Button } from '@/components/ui/Button';
@@ -144,6 +145,9 @@ export default function ReportsPage() {
   }, [store, period, which]);
 
   const area = useLoadArea<Loaded>(read, [store?.id ?? '', which, period?.label ?? ''], {
+    key: `report:${store?.id ?? 'none'}:${which}:${period?.label ?? ''}`,
+    // A sale, a payment or a delivery changes a report; those writers all notify this scope.
+    scope: ACCOUNT_DERIVED_SCOPE,
     onFail: showProblem,
     whenNot: !store || !period,
   });

@@ -9,6 +9,7 @@ import { InfoPanel } from '@/components/ui/Explain';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
+import { applyCustomerLocally } from '@/lib/stacks/local-effects';
 import { toWhatsAppNumber } from '@/lib/whatsapp';
 import styles from './share-whatsapp-page.module.css';
 
@@ -73,6 +74,8 @@ export default function ShareWhatsAppPage() {
         // Not fatal. The point of this screen is to reach somebody; failing to note their number
         // is worth saying, not worth stopping for.
         if (error) setProblem(`Sent, but their number could not be saved: ${error.message}`);
+        // Saved: every list and page that shows their number says the new one now.
+        else if (store) applyCustomerLocally({ id: customerId, storeId: store.id, phone: phone.trim() });
       }
 
       /*

@@ -295,16 +295,35 @@ export default function StockPage() {
           {(
             <div className={styles.summary}>
               <span className={styles.summaryLabel}>Stock is worth</span>
-              <span className={styles.summaryValue}>{formatMoney(worth.total)}</span>
-              <span className={styles.summaryNote}>
-                at what it cost you, not what you sell it for
-                {worth.estimated > 0 && (
-                  <>
-                    {' · '}
-                    {formatMoney(worth.estimated)} of it still estimated
-                  </>
-                )}
-              </span>
+              {/*
+                NOT ₦0 WHILE IT IS BEING WORKED OUT. The figure, once there is one; until then a word
+                that cannot be mistaken for it, and if the read failed, a way to try again here.
+              */}
+              {worth.data ? (
+                <>
+                  <span className={styles.summaryValue}>{formatMoney(worth.data.total)}</span>
+                  <span className={styles.summaryNote}>
+                    at what it cost you, not what you sell it for
+                    {worth.data.estimated > 0 && (
+                      <>
+                        {' · '}
+                        {formatMoney(worth.data.estimated)} of it still estimated
+                      </>
+                    )}
+                  </span>
+                </>
+              ) : worth.error ? (
+                <span className={styles.summaryNote}>
+                  Could not work it out.{' '}
+                  <button type="button" className={styles.summaryRetry} onClick={worth.reload}>
+                    Try again
+                  </button>
+                </span>
+              ) : (
+                <span className={styles.summaryNote} role="status">
+                  Working it out…
+                </span>
+              )}
             </div>
           )}
 

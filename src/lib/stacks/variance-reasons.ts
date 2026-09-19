@@ -4,6 +4,7 @@ import { useCallback, useEffect } from 'react';
 import { useDemandState } from '@academix-admin/state-stack';
 import { invalidate, useInvalidation } from '@/lib/stacks/invalidation';
 import { getSupabase } from '@/lib/supabase/client';
+import { useReload } from '@/lib/stacks/resource';
 
 /**
  * Why the shelf and the records disagree — the shop's list, not ours.
@@ -77,7 +78,8 @@ export function useVarianceReasons(storeId: string | null) {
 
   useInvalidation(storeId ? VARIANCE_REASONS_SCOPE : null, load);
 
-  return { reasons, reload: load };
+  const reload = useReload(VARIANCE_REASONS_SCOPE, `variance-reasons:${storeId ?? 'none'}`, load);
+  return { reasons, reload };
 }
 
 /** Name a reason this shop uses. It joins the list everywhere a gap is accounted for. */

@@ -1,5 +1,6 @@
 'use client';
 
+import { ACCOUNT_DERIVED_SCOPE } from '@/lib/stacks/customer-account';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { CustomerPicker } from '@/components/customers/CustomerPicker';
@@ -64,6 +65,8 @@ export default function AmendPage() {
   }, [saleId]);
 
   const area = useLoadArea<{ doc: SaleDocument | null; revs: Revision[] }>(read, [saleId ?? ''], {
+    key: `amend:${saleId ?? 'none'}`,
+    scope: ACCOUNT_DERIVED_SCOPE,
     onFail: showProblem,
     whenNot: !saleId,
   });

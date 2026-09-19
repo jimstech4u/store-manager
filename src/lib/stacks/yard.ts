@@ -4,6 +4,7 @@ import { useCallback, useEffect } from 'react';
 import { useDemandState } from '@academix-admin/state-stack';
 import { useInvalidation, invalidate } from '@/lib/stacks/invalidation';
 import { getSupabase } from '@/lib/supabase/client';
+import { useReload } from '@/lib/stacks/resource';
 
 /**
  * The shop's OWN containers — the stack of empty crates standing in the yard.
@@ -160,7 +161,8 @@ export function useYard(storeId: string | null) {
 
   useInvalidation(storeId ? YARD_SCOPE : null, load);
 
-  return { shapes: yard.shapes, groups: yard.groups, reload: load, setYard };
+  const reload = useReload(YARD_SCOPE, `yard:${storeId ?? 'none'}`, load);
+  return { shapes: yard.shapes, groups: yard.groups, reload, setYard };
 }
 
 /** Everything the shop says comes back, for the count screen to offer. */

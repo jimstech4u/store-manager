@@ -12,6 +12,24 @@ wrong even by a session that reads nothing else.
    `nav.provideObject` / `useObject` — always with a database fallback, because `isProvided` is
    false on a cold start and a deep link.
 
+## Reads say nothing until they know, and writes land here first
+
+- **A read goes through `useResource`** (`src/lib/stacks/resource.ts`) or `useLoadArea`: `null`
+  until the first answer, persisted, a failed refresh keeps what is shown, Try again is `reload()`.
+  **Never a made-up `0` or `[]`.** Take payment read a customer's balance with the failure
+  swallowed as `Number(data ?? 0)`, so a read that did not arrive said "owes nothing" — and that
+  zero decided whether money handed over was change or a debt payment, and was patched into the
+  lists as their balance. The stock screen said "worth ₦0", Deposits "held ₦0", Empties "nothing is
+  out" before their first answer. A loader, or "Checking…", until `loaded`.
+- **A `reload` that does not reset the demand does nothing.** Seventeen hooks handed out their `load`
+  as `reload`; `demand()` skips a key already demanded, so every Try again and every refresh on
+  resume was a no-op — which is why another till's sale, deposit or count never arrived. Use
+  `useReload` (older hooks) or `useResource` (does it itself).
+- **The writer applies what it did everywhere it shows** (`src/lib/stacks/local-effects.ts`), then
+  invalidates for the server's word. A sale moves stock, a balance, containers and a deposit on this
+  phone the moment it settles; a product or customer edit renames every list that names it.
+- The full pattern: `USAGE_PATTERN.md` → state-stack → *store-manager: `useResource`*.
+
 ## The traps that have actually cost time
 
 - **One key = one hook = one shape.** Two `useDemandState` calls on one key with different value
@@ -211,18 +229,23 @@ keeping — the rule alone is forgettable, the bug behind it is not.
 ## The library comes first
 
 `@academix-admin/*` is not a folder of helpers to reach past. Before building anything that looks
-like a sheet, a picker, a list, a dialog or a nav surface:
+like a sheet, a picker, a list, a dialog, a nav surface or a state hook:
 
-1. **Read what the package already does.** Its source and its README, not a guess from the name.
-   Most of what gets hand-rolled here already exists — `selection-viewer` brings its own search
-   box, and a second one was built on top of it before anybody looked.
+1. **Read [`../USAGE_PATTERN.md`](../USAGE_PATTERN.md) first**, then the package's source if you
+   need more. That file is written from the source and from how this app and academix-web actually
+   use each package; several package READMEs describe APIs the code does not have (dialog-viewer,
+   bottom-viewer, navigation-bar, sidebar, side-drawer), so do not trust a README over it. Most of
+   what gets hand-rolled here already exists — `selection-viewer` brings its own search box, and a
+   second one was built on top of it before anybody looked.
 2. **Use it.** The site uses `selection-viewer`, `search-viewer`, `bottom-viewer` and
    `dialog-viewer`. A hand-made bottom sheet is a bug, not a shortcut.
 3. **If the capability is missing, or the package is wrong, FIX THE PACKAGE.** Not a wrapper, not
    a copy, not a `!important` in app CSS reaching into the package's DOM. Make the change
    non-breaking — additive props with defaults that preserve today's behaviour — then publish it,
-   then depend on the published version. A patch in the app is only acceptable when a library fix
-   is genuinely impossible without breaking the library.
+   then depend on the published version, and add the new capability to `USAGE_PATTERN.md`. A patch
+   in the app is only acceptable when a library fix is genuinely impossible without breaking the
+   library — and then it goes under that package's *Gaps* in `USAGE_PATTERN.md`, so the next person
+   reads it as a workaround rather than the design.
 4. **A package never learns about store-manager.** That is the Library Charter, and it is what
    makes 2 and 3 safe to do.
 

@@ -1,8 +1,7 @@
 'use client';
 
-import { useCallback, useEffect } from 'react';
-import { useDemandState } from '@academix-admin/state-stack';
-import { useInvalidation, invalidate } from '@/lib/stacks/invalidation';
+import { invalidate } from '@/lib/stacks/invalidation';
+import { useResource } from '@/lib/stacks/resource';
 import { getSupabase } from '@/lib/supabase/client';
 import type { OwedRow } from '@/lib/empties-rollup';
 
@@ -54,40 +53,36 @@ export interface DepositMove {
  * back?", which is the question somebody opens this screen holding.
  */
 export function useDepositCustomers(storeId: string | null) {
-  const [rows, demand] = useDemandState<DepositCustomer[]>([], {
+  /*
+   * A RESOURCE, so the list says whether it has been read.
+   *
+   * It started as `[]`, which the page shows as "nobody's deposit is held" — the same words before
+   * the first answer, after a failed read, and when it is genuinely true. And `reload` did not read:
+   * the demand was already spent, so the refresh on resume was a no-op and a deposit taken on
+   * another till never arrived. Same key, same shape: what was cached carries straight over.
+   */
+  const r = useResource<DepositCustomer[]>({
     key: `deposit-customers:${storeId ?? 'none'}`,
     scope: LEDGERS_SCOPE,
-    persist: true,
-    deps: [storeId ?? ''],
-    revalidateOnMount: false,
-  });
-
-  const load = useCallback(() => {
-    if (!storeId) return;
-    void demand(async ({ set }) => {
+    enabled: Boolean(storeId),
+    read: async () => {
       const { data, error } = await getSupabase().rpc('customers_with_deposits', {
         p_store_id: storeId,
       });
       if (error) throw error;
-      set(
-        ((data ?? []) as Record<string, unknown>[]).map((r) => ({
-          customerId: String(r.store_customer_id),
-          name: String(r.customer_name ?? ''),
-          phone: (r.phone as string | null) ?? null,
-          held: Number(r.held) || 0,
-          taken: Number(r.taken_total) || 0,
-          given: Number(r.given_total) || 0,
-          retained: Number(r.retained_total) || 0,
-          lastAt: (r.last_at as string | null) ?? null,
-        })),
-        { override: true },
-      );
-    });
-  }, [storeId, demand]);
-
-  useEffect(load, [load]);
-  useInvalidation(LEDGERS_SCOPE, load);
-  return { rows, reload: load };
+      return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+        customerId: String(row.store_customer_id),
+        name: String(row.customer_name ?? ''),
+        phone: (row.phone as string | null) ?? null,
+        held: Number(row.held) || 0,
+        taken: Number(row.taken_total) || 0,
+        given: Number(row.given_total) || 0,
+        retained: Number(row.retained_total) || 0,
+        lastAt: (row.last_at as string | null) ?? null,
+      }));
+    },
+  });
+  return { rows: r.data ?? [], loaded: r.loaded, loading: r.loading, error: r.error, reload: r.reload };
 }
 
 export async function depositLedger(customerId: string): Promise<DepositMove[]> {
@@ -169,38 +164,27 @@ export interface EmptiesMove {
 }
 
 export function useEmptiesCustomers(storeId: string | null) {
-  const [rows, demand] = useDemandState<EmptiesCustomer[]>([], {
+  // A resource for the same two reasons as the deposits list above.
+  const r = useResource<EmptiesCustomer[]>({
     key: `empties-customers:${storeId ?? 'none'}`,
     scope: LEDGERS_SCOPE,
-    persist: true,
-    deps: [storeId ?? ''],
-    revalidateOnMount: false,
-  });
-
-  const load = useCallback(() => {
-    if (!storeId) return;
-    void demand(async ({ set }) => {
+    enabled: Boolean(storeId),
+    read: async () => {
       const { data, error } = await getSupabase().rpc('customers_with_empties', {
         p_store_id: storeId,
       });
       if (error) throw error;
-      set(
-        ((data ?? []) as Record<string, unknown>[]).map((r) => ({
-          customerId: String(r.store_customer_id),
-          name: String(r.customer_name ?? ''),
-          phone: (r.phone as string | null) ?? null,
-          stillOut: Number(r.still_out) || 0,
-          shapesOut: Number(r.shapes_out) || 0,
-          lastAt: (r.last_at as string | null) ?? null,
-        })),
-        { override: true },
-      );
-    });
-  }, [storeId, demand]);
-
-  useEffect(load, [load]);
-  useInvalidation(LEDGERS_SCOPE, load);
-  return { rows, reload: load };
+      return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+        customerId: String(row.store_customer_id),
+        name: String(row.customer_name ?? ''),
+        phone: (row.phone as string | null) ?? null,
+        stillOut: Number(row.still_out) || 0,
+        shapesOut: Number(row.shapes_out) || 0,
+        lastAt: (row.last_at as string | null) ?? null,
+      }));
+    },
+  });
+  return { rows: r.data ?? [], loaded: r.loaded, loading: r.loading, error: r.error, reload: r.reload };
 }
 
 /** What one customer owes, shape by shape, with the group so a screen can roll it up. */

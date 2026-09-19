@@ -2,6 +2,8 @@
 
 import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
+import { FullPageMessage } from '@/components/ui/FullPageMessage';
+import { Button } from '@/components/ui/Button';
 import { InfoPanel } from '@/components/ui/Explain';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
 import { SearchSheet } from '@/components/ui/SearchSheet';
@@ -29,9 +31,10 @@ export default function EmptiesPage() {
   const nav = useNav();
   const goBack = useStackBack();
   const { store } = useAuth();
-  const { rows, reload } = useEmptiesCustomers(store?.id ?? null);
+  const ledger = useEmptiesCustomers(store?.id ?? null);
+  const rows = ledger.rows;
   // Another till's sale lands here on the next look, not on a reload somebody has to remember.
-  useLiveRefresh(nav, reload);
+  useLiveRefresh(nav, ledger.reload);
   /*
    * SEARCHING HAPPENS IN THE VIEWER, not in a box on the page.
    *
@@ -50,6 +53,30 @@ export default function EmptiesPage() {
   };
 
   const stillOut = rows.filter((r) => r.stillOut > 0);
+
+  /*
+   * NOTHING IS SAID UNTIL IT HAS BEEN READ. Before the first answer this page used to show "Nothing is out" and "no containers have gone out yet" —
+   * words that look exactly like a real answer. A loader until there is one; if the first read
+   * fails, the failure and a way to try again, without leaving the page.
+   */
+  if (!ledger.loaded) {
+    if (ledger.error) {
+      return (
+        <FullPageMessage
+          title="Could not load who is holding your containers"
+          tone="error"
+          action={
+            <Button fullWidth onClick={ledger.reload}>
+              Try again
+            </Button>
+          }
+        >
+          {ledger.error}
+        </FullPageMessage>
+      );
+    }
+    return <FullPageMessage title="Loading who is holding your containers" tone="loading" />;
+  }
 
   return (
     <PageScaffold onBack={goBack} title="Empties" subtitle="Who is holding your containers">

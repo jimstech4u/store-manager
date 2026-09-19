@@ -11,7 +11,7 @@ import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { getSupabase } from '@/lib/supabase/client';
-import { supplierEmptiesSent, type SupplierEmptiesRow } from '@/lib/stacks/suppliers';
+import { supplierEmptiesSent, type SupplierEmptiesRow, SUPPLIERS_SCOPE } from '@/lib/stacks/suppliers';
 import { saidAsPart } from '@/lib/empties-rollup';
 import { formatMoney } from '@/lib/format';
 import styles from './supplier-account-page.module.css';
@@ -72,6 +72,8 @@ export default function SupplierAccountPage() {
   }, [supplierId]);
 
   const account = useLoadArea(readAccount, [supplierId], {
+    key: `supplier-account:${supplierId ?? 'none'}`,
+    scope: SUPPLIERS_SCOPE,
     onFail: showProblem,
     whenNot: !supplierId,
   });
@@ -79,7 +81,12 @@ export default function SupplierAccountPage() {
   const empties = useLoadArea<SupplierEmptiesRow[]>(
     () => supplierEmptiesSent(supplierId!),
     [supplierId],
-    { onFail: showProblem, whenNot: !supplierId },
+    {
+      key: `supplier-empties:${supplierId ?? 'none'}`,
+      scope: SUPPLIERS_SCOPE,
+      onFail: showProblem,
+      whenNot: !supplierId,
+    },
   );
 
   useLiveRefresh(nav, () => {

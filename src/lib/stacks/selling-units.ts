@@ -3,6 +3,7 @@
 import { useCallback, useEffect } from 'react';
 import { useDemandState } from '@academix-admin/state-stack';
 import { getSupabase } from '@/lib/supabase/client';
+import { useReload, useResource } from '@/lib/stacks/resource';
 import { useInvalidation } from '@/lib/stacks/invalidation';
 import { DERIVED_SCOPE } from '@/lib/stacks/catalog-stack';
 
@@ -142,7 +143,8 @@ export function useSellingUnits(storeId: string | null) {
     else byProduct.set(u.productId, [u]);
   }
 
-  return { units, byProduct, reload: load };
+  const reload = useReload(DERIVED_SCOPE, `selling-units:${storeId ?? 'none'}`, load);
+  return { units, byProduct, reload };
 }
 
 /**
@@ -224,7 +226,8 @@ export function useUnitGaps(storeId: string | null) {
   // would otherwise leave it showing figures from before the change.
   useInvalidation(DERIVED_SCOPE, load);
 
-  return { gaps, reload: load };
+  const reload = useReload(DERIVED_SCOPE, `unit-gaps:${storeId ?? 'none'}`, load);
+  return { gaps, reload };
 }
 
 export interface UnitGap {
@@ -281,7 +284,8 @@ export function useBuyingUnits(storeId: string | null) {
     else byProduct.set(u.productId, [u]);
   }
 
-  return { units, byProduct, reload: load };
+  const reload = useReload(DERIVED_SCOPE, `buying-units:${storeId ?? 'none'}`, load);
+  return { units, byProduct, reload };
 }
 
 export interface BuyingUnit {
@@ -314,42 +318,32 @@ interface BuyingUnitRow {
  * what that quantity cost, and cost lives in FIFO layers a browser never sees.
  */
 export function useStockWorth(storeId: string | null) {
-  const [worth, demandWorth] = useDemandState<StockWorth>(
-    { total: 0, estimated: 0, items: 0, itemsInStock: 0 },
-    {
-      key: `stock-worth:${storeId ?? 'none'}`,
-      scope: DERIVED_SCOPE,
-      persist: true,
-      deps: [storeId ?? ''],
-      revalidateOnMount: false,
-    },
-  );
-
-  const load = useCallback(() => {
-    if (!storeId) return;
-    void demandWorth(async ({ set }) => {
-      const { data } = await getSupabase().rpc('stock_worth', { p_store_id: storeId });
+  /*
+   * A RESOURCE, not a figure that starts at ₦0.
+   *
+   * The stock screen said "Stock is worth ₦0" until the answer arrived — a figure indistinguishable
+   * from a shop with an empty shelf — and a read that failed left it there for good, because the
+   * failure was dropped (`const { data } = …` with the error ignored). A delivery, a sale or a count
+   * all invalidate the derived scope, which re-reads this behind what is shown.
+   */
+  return useResource<StockWorth>({
+    key: `stock-worth:${storeId ?? 'none'}`,
+    scope: DERIVED_SCOPE,
+    enabled: Boolean(storeId),
+    read: async () => {
+      const { data, error } = await getSupabase().rpc('stock_worth', { p_store_id: storeId });
+      if (error) throw error;
       const row = (data ?? [])[0] as
         | { total_value: string; estimated_value: string; items: number; items_in_stock: number }
         | undefined;
-      if (!row) return;
-      set(
-        {
-          total: Number(row.total_value),
-          estimated: Number(row.estimated_value),
-          items: Number(row.items),
-          itemsInStock: Number(row.items_in_stock),
-        },
-        { override: true },
-      );
-    });
-  }, [storeId, demandWorth]);
-
-  useEffect(load, [load]);
-  // A delivery, a sale or a count all move it, and all invalidate the derived scope.
-  useInvalidation(DERIVED_SCOPE, load);
-
-  return worth;
+      return {
+        total: Number(row?.total_value ?? 0),
+        estimated: Number(row?.estimated_value ?? 0),
+        items: Number(row?.items ?? 0),
+        itemsInStock: Number(row?.items_in_stock ?? 0),
+      };
+    },
+  });
 }
 
 export interface StockWorth {

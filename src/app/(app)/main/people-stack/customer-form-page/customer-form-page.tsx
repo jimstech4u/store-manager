@@ -11,6 +11,7 @@ import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
 import { useListNotifier } from '@/hooks/useListChannel';
+import { applyCustomerLocally } from '@/lib/stacks/local-effects';
 import styles from './customer-form-page.module.css';
 import { messageOf } from '@/lib/format';
 import { BottomSheet } from '@/components/ui/BottomSheet';
@@ -421,6 +422,12 @@ export default function CustomerFormPage() {
        * Sent before leaving: the people screen may be the page underneath, and it should already
        * show them by the time the back animation finishes.
        */
+      /*
+       * WHAT THEY OWE FROM BEFORE IS ALREADY ON THEIR ACCOUNT. This said `'0'` for every new
+       * customer, so somebody added with ₦40,000 owed from the old book showed as clear until the
+       * list happened to re-read.
+       */
+      const openingBalance = (Number(owes) || 0) - (Number(owedThem) || 0);
       notifyPeople({
         type: 'upsert',
         row: {
@@ -428,8 +435,17 @@ export default function CustomerFormPage() {
           display_name: customer.name,
           business_name: business.trim() || null,
           phone: customer.phone,
-          balance: '0',
+          balance: String(openingBalance),
         },
+      });
+      // Every list that names customers, on screen or not.
+      applyCustomerLocally({
+        id: customer.id,
+        storeId: store.id,
+        name: customer.name,
+        phone: customer.phone,
+        business: business.trim() || null,
+        openingBalance,
       });
 
       if (attachToSale && created.isProvided) created.getter()?.(customer);

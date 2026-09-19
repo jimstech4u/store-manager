@@ -1,5 +1,6 @@
 'use client';
 
+import { LEDGERS_SCOPE } from '@/lib/stacks/customer-ledgers';
 import { useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
@@ -69,6 +70,9 @@ export default function ProductPage() {
    * arrived.
    */
   const outArea = useLoadArea<ShapeOut[]>(() => productEmptiesOut(productId!), [productId], {
+    key: `product-empties-out:${productId ?? 'none'}`,
+    // A sale sends containers out, a return brings them back; both notify the ledgers.
+    scope: LEDGERS_SCOPE,
     whenNot: !productId,
   });
   const sellingUnits = byProduct.get(productId ?? '') ?? [];

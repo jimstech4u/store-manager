@@ -4,6 +4,7 @@ import { useCallback, useEffect } from 'react';
 import { useDemandState } from '@academix-admin/state-stack';
 import { useInvalidation, invalidate } from '@/lib/stacks/invalidation';
 import { getSupabase } from '@/lib/supabase/client';
+import { useReload } from '@/lib/stacks/resource';
 
 /**
  * Money that left the shop and bought no stock.
@@ -162,7 +163,8 @@ export function useExpenseCategories(storeId: string | null) {
 
   useInvalidation(storeId ? EXPENSES_SCOPE : null, load);
 
-  return { categories: cats, reload: load, setCategories: setCats };
+  const reload = useReload(EXPENSES_SCOPE, `expense-categories:${storeId ?? 'none'}`, load);
+  return { categories: cats, reload, setCategories: setCats };
 }
 
 /**

@@ -20,6 +20,7 @@ import {
   type StaffChargeDirection,
   type StaffChargeRow,
   type StaffOwing,
+  STAFF_SCOPE,
 } from '@/lib/stacks/staff-charges';
 import { formatMoney, messageOf } from '@/lib/format';
 import styles from './staff-charges-page.module.css';
@@ -51,6 +52,8 @@ export default function StaffChargesPage() {
 
   const read = useCallback(() => staffChargesOwed(store!.id), [store]);
   const area = useLoadArea<StaffOwing[]>(read, [store?.id ?? ''], {
+    key: `staff-owing:${store?.id ?? 'none'}`,
+    scope: STAFF_SCOPE,
     onFail: showProblem,
     whenNot: !store,
   });

@@ -7,6 +7,7 @@ import { ProductForm, type ProductFormResult } from '@/components/catalog/Produc
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { useListNotifier } from '@/hooks/useListChannel';
+import { applyProductLocally } from '@/lib/stacks/local-effects';
 import { useProduct, type Product } from '@/lib/stacks/catalog-stack';
 
 /**
@@ -111,6 +112,9 @@ export default function ProductFormPage() {
            * matter and arrives on the next read.
            */
           notifyProducts({ type: 'upsert', row: result.row });
+          // And every other cache that shows it — the item's own page, the stock list even when
+          // it is not on screen. The shop's re-read then confirms it.
+          applyProductLocally(result.row);
 
           /*
            * And whoever asked for the result gets it.

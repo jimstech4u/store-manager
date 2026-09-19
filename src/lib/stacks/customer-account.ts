@@ -1,10 +1,10 @@
 'use client';
 
-import { useCallback, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useDemandState } from '@academix-admin/state-stack';
 import { getSupabase } from '@/lib/supabase/client';
+import { useResource } from '@/lib/stacks/resource';
 import { invalidate } from '@/lib/stacks/invalidation';
-import { messageOf } from '@/lib/format';
 
 /**
  * One customer's whole position, and the events behind it.
@@ -129,99 +129,47 @@ export function accountsChanged() {
  */
 export function useCustomerAccount(customerId: string | null) {
   /*
-   * The demand loader, as intended — no workaround.
+   * A RESOURCE, for two faults the old loader had.
    *
-   * state-stack hydrates the last figures for this customer, so the page opens with their balance
-   * already drawn and corrects it a moment later rather than showing a spinner over a number that
-   * was very nearly right. `accountsChanged()` invalidates the scope, and as of state-stack 0.2.3
-   * that makes every mounted consumer re-run its loader — which is what invalidation should have
-   * meant all along.
+   * A refresh that failed WIPED the account: it wrote `{ account: null, history: [] }` over what was
+   * on screen, so a customer's page went blank on a flaky connection — the rule this app already had
+   * ("a loader never blanks") broken by the one screen a dispute is settled on. And `reload` did not
+   * read: the demand was already spent, so the Try again button and the refresh on resume did
+   * nothing at all.
    *
-   * Two things were wrong here before and both are gone: driving the fetch by hand because
-   * `demand()` would not re-fire after a clear (fixed in the package), and a `loading` flag that
-   * could never clear on the error path.
+   * New key (`account:v2`): the old cached value could be a failure record with `account: null`,
+   * which read back as "loaded" would render an account that is not there.
    */
-  const [state, demand] = useDemandState<{
-    account: CustomerAccount | null;
-    history: HistoryEvent[];
-    error: string | null;
-    settled: boolean;
-  }>(
-    { account: null, history: [], error: null, settled: false },
-    {
-      key: `account:${customerId ?? 'none'}`,
-      scope: ACCOUNT_DERIVED_SCOPE,
-      persist: true,
-      deps: [customerId ?? ''],
-      /*
-       * NO TTL. It deletes live state; it does not mark it stale.
-       *
-       * Half a minute of "long enough not to refetch on every step" reads as a caching tweak and
-       * behaves as a timer that empties the screen: the value is GONE when it expires, so the next
-       * look starts from nothing and the page blanks on the way back to it — the very thing the
-       * persisted cache exists to prevent. Staleness is handled by saying what changed, which is
-       * what `accountsChanged()` does.
-       */
-
+  const r = useResource<{ account: CustomerAccount; history: HistoryEvent[] }>({
+    key: `account:v2:${customerId ?? 'none'}`,
+    scope: ACCOUNT_DERIVED_SCOPE,
+    enabled: Boolean(customerId),
+    read: async () => {
+      const supabase = getSupabase();
+      // Together: a page that showed the balance and then filled the history in a moment later
+      // would jump under someone already reading it.
+      const [a, h] = await Promise.all([
+        supabase.rpc('customer_account', { p_store_customer_id: customerId }),
+        supabase.rpc('customer_history', { p_store_customer_id: customerId, p_limit: 200 }),
+      ]);
+      if (a.error) throw a.error;
+      if (h.error) throw h.error;
+      return { account: a.data as CustomerAccount, history: (h.data ?? []) as HistoryEvent[] };
     },
-  );
-
-  const load = useCallback(() => {
-    if (!customerId) return;
-    demand(async ({ set }) => {
-      try {
-        const supabase = getSupabase();
-        // Together: a page that showed the balance and then filled the history in a moment later
-        // would jump under someone already reading it.
-        const [a, h] = await Promise.all([
-          supabase.rpc('customer_account', { p_store_customer_id: customerId }),
-          supabase.rpc('customer_history', { p_store_customer_id: customerId, p_limit: 200 }),
-        ]);
-        if (a.error) throw a.error;
-        if (h.error) throw h.error;
-        set(
-          {
-            account: a.data as CustomerAccount,
-            history: (h.data ?? []) as HistoryEvent[],
-            error: null,
-            settled: true,
-          },
-          // A customer who has just paid everything off genuinely HAS a zero balance and an empty
-          // history; without this state-stack would read that as "no value" and keep the figures
-          // from before they paid.
-          { override: true },
-        );
-      } catch (e) {
-        set(
-          {
-            account: null,
-            history: [],
-            error: messageOf(e, 'Could not load this account.'),
-            settled: true,
-          },
-          { override: true },
-        );
-      }
-    });
-  }, [customerId, demand]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  });
 
   return {
-    account: state.account,
-    history: state.history,
-    error: state.error,
+    account: r.data?.account ?? null,
+    history: r.data?.history ?? [],
+    error: r.error,
+    loaded: r.loaded,
     /*
-     * `settled` rather than a separate flag.
-     *
-     * It is part of the same value the loader writes, so it cannot get out of step with it — which
-     * is exactly how the previous version hung: a `loading` boolean that the error path never
-     * cleared, leaving a spinner over a request that had finished.
+     * Not loaded and not failed IS loading — including the first frame before the read has
+     * started. A page that checks `loading`, then `error`, then reads `account` must never fall
+     * through to an account that is not there.
      */
-    loading: !state.settled && state.account === null,
-    reload: load,
+    loading: !r.loaded && !r.error,
+    reload: r.reload,
   };
 }
 

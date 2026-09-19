@@ -9,7 +9,7 @@ import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 import { LoadArea, useLoadArea } from '@/components/ui/LoadArea';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
-import { depositLedger, type DepositMove } from '@/lib/stacks/customer-ledgers';
+import { depositLedger, type DepositMove, LEDGERS_SCOPE } from '@/lib/stacks/customer-ledgers';
 import { formatMoney } from '@/lib/format';
 import styles from './deposit-customer-page.module.css';
 
@@ -36,7 +36,12 @@ export default function DepositCustomerPage() {
   const area = useLoadArea<DepositMove[]>(
     () => depositLedger(customerId!),
     [customerId],
-    { onFail: showProblem, whenNot: !customerId },
+    {
+    key: `deposit-ledger:${customerId ?? 'none'}`,
+    scope: LEDGERS_SCOPE,
+      onFail: showProblem,
+      whenNot: !customerId,
+    },
   );
 
   const moves = area.data ?? [];

@@ -13,7 +13,7 @@ import { LoadArea, useLoadArea } from '@/components/ui/LoadArea';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
-import { countableEmpties, countYard, type CountPart, type CountableShape } from '@/lib/stacks/yard';
+import { countableEmpties, countYard, type CountPart, type CountableShape, YARD_SCOPE } from '@/lib/stacks/yard';
 import { messageOf } from '@/lib/format';
 import styles from './yard-count-page.module.css';
 
@@ -66,6 +66,8 @@ export default function YardCountPage() {
 
   const read = useCallback(() => countableEmpties(store!.id), [store]);
   const area = useLoadArea<CountableShape[]>(read, [store?.id ?? ''], {
+    key: `yard-countable:${store?.id ?? 'none'}`,
+    scope: YARD_SCOPE,
     onFail: showProblem,
     whenNot: !store,
   });

@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { RefreshIcon } from '@/components/ui/Icon';
-import { messageOf } from '@/lib/format';
+import { useResource } from '@/lib/stacks/resource';
 import styles from './LoadArea.module.css';
 
 /**
@@ -43,7 +43,17 @@ export interface Area<T> {
 }
 
 /**
- * Reads something, once, and again on demand.
+ * Reads something, keeps it, and reads it again on demand.
+ *
+ * BACKED BY STATE-STACK NOW, persisted under `key`. It held its answer in `useState`, so a reload —
+ * or a page the stack restored after one — came back empty: a spinner where the content had been, a
+ * scroll position restored against nothing, and every read done again from scratch. The last answer
+ * is on screen the moment the page is, and a fresh read replaces it behind the scenes. See
+ * `useResource`, which this is a thin shape over.
+ *
+ * `key` names the VALUE — include every id the read depends on. `scope` is what a writer invalidates
+ * to make this re-read (`ledgersChanged()` → `customer_ledgers`); left out, only `reload()` and a
+ * remount read again.
  *
  * `onFail` is called with the message so the page can open its dialog. It is fired from the fetch,
  * not from a render, which is what stops a failed read reopening the dialog on every keystroke
@@ -52,56 +62,22 @@ export interface Area<T> {
 export function useLoadArea<T>(
   read: () => Promise<T>,
   deps: readonly unknown[],
-  options: { onFail?: (message: string) => void; whenNot?: boolean } = {},
+  options: {
+    key: string;
+    scope?: string;
+    onFail?: (message: string) => void;
+    whenNot?: boolean;
+  },
 ): Area<T> {
-  const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [attempt, setAttempt] = useState(0);
-
-  /*
-   * Held in refs so they are not dependencies.
-   *
-   * `read` is a fresh closure every render and `onFail` usually comes from a hook that returns a
-   * new object each time — listing either would refetch on every render, which is the loop that
-   * cleared the return-units composer on every keystroke.
-   */
-  const readRef = useRef(read);
-  readRef.current = read;
-  const failRef = useRef(options.onFail);
-  failRef.current = options.onFail;
-
-  const held = options.whenNot === true;
-
-  useEffect(() => {
-    if (held) return;
-    let cancelled = false;
-    setLoading(true);
-    void (async () => {
-      try {
-        const got = await readRef.current();
-        if (cancelled) return;
-        setData(got);
-        setError(null);
-      } catch (e) {
-        if (cancelled) return;
-        // The cached value is KEPT. Only the error is set.
-        const said = messageOf(e, 'That could not be read.');
-        setError(said);
-        failRef.current?.(said);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attempt, held, ...deps]);
-
-  const reload = useCallback(() => setAttempt((n) => n + 1), []);
-
-  return { data, loading, error, reload };
+  const r = useResource<T>({
+    key: `area:${options.key}`,
+    scope: options.scope ?? 'areas',
+    read,
+    deps,
+    enabled: options.whenNot !== true,
+    onFail: options.onFail,
+  });
+  return { data: r.data, loading: r.loading, error: r.error, reload: r.reload };
 }
 
 /**

@@ -148,3 +148,14 @@
   text-underline-offset: 2px;
   cursor: pointer;
 }
+
+/* Try again, in place, for a stock value that could not be worked out. */
+.summaryRetry {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}

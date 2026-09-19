@@ -21,6 +21,7 @@ import { useCallback, useEffect } from 'react';
 import { useDemandState } from '@academix-admin/state-stack';
 import { getSupabase } from '@/lib/supabase/client';
 import { useInvalidation, invalidate } from '@/lib/stacks/invalidation';
+import { useReload } from '@/lib/stacks/resource';
 
 export interface ProductGroup {
   id: string;
@@ -83,7 +84,8 @@ export function useProductGroups(storeId: string | null) {
     [groups, setGroups],
   );
 
-  return { groups, add, reload: load };
+  const reload = useReload(GROUPS_SCOPE, `product-groups:${storeId ?? 'none'}`, load);
+  return { groups, add, reload };
 }
 
 /** Which groups one product is in. */

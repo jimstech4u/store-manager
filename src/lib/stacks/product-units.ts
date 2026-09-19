@@ -6,6 +6,7 @@ import { getSupabase } from '@/lib/supabase/client';
 import { catalogChanged } from '@/lib/stacks/catalog-stack';
 import { invalidate, useInvalidation } from '@/lib/stacks/invalidation';
 import type { Discount } from '@/components/catalog/DiscountsEditor';
+import { useReload } from '@/lib/stacks/resource';
 
 /**
  * What a product is bought in and sold in.
@@ -132,7 +133,8 @@ export function useStoreUnits(storeId: string | null) {
     [units, setUnits],
   );
 
-  return { units, setUnits, add, reload: load };
+  const reload = useReload('catalog_flow', `store-units:${storeId ?? 'none'}`, load);
+  return { units, setUnits, add, reload };
 }
 
 /** A word this shop had no unit for yet. Returns the id, existing or new. */
@@ -276,7 +278,13 @@ export function useProductUnits(productId: string | null) {
    */
   useInvalidation(SHAPES_SCOPE, load);
 
-  return { units, setUnits, loaded, setLoaded, loading: busy, error, reload: load };
+  // Both keys: `load` demands each, and a spent demand leaves `busy` on for good.
+  const reload = useReload(
+    SHAPES_SCOPE,
+    [`product-units:${productId ?? 'none'}`, `product-units-loaded:${productId ?? 'none'}`],
+    load,
+  );
+  return { units, setUnits, loaded, setLoaded, loading: busy, error, reload };
 }
 
 /**

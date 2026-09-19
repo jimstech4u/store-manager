@@ -510,3 +510,15 @@
   padding: 0;
   list-style: none;
 }
+
+/* Try again, in place — a read that did not arrive is retried without leaving the sale. */
+.retryLink {
+  margin-left: var(--space-2);
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}

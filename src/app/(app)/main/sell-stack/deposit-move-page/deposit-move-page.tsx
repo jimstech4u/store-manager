@@ -15,6 +15,7 @@ import {
   settleDeposit,
   takeDeposit,
   type DepositMove,
+  LEDGERS_SCOPE,
 } from '@/lib/stacks/customer-ledgers';
 import { formatMoney, messageOf } from '@/lib/format';
 import styles from './deposit-move-page.module.css';
@@ -45,6 +46,8 @@ export default function DepositMovePage() {
   // Read here, not handed over: what is held moves as the shop works, and a form that settles
   // against a stale figure is one that refuses at the server after somebody has counted the cash.
   const area = useLoadArea<DepositMove[]>(() => depositLedger(customerId!), [customerId], {
+    key: `deposit-ledger:${customerId ?? 'none'}`,
+    scope: LEDGERS_SCOPE,
     onFail: showProblem,
     whenNot: !customerId,
   });
