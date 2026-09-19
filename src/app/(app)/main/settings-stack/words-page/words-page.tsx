@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
@@ -50,17 +51,6 @@ export default function WordsPage() {
   const [edits, setEdits] = useState<Record<string, { name: string; plural: string }>>({});
 
   if (!store) return null;
-
-  if (!can('products.manage')) {
-    return (
-      <PageScaffold onBack={goBack} title="Words you measure in">
-        <InfoPanel tone="info" title="Ask the owner">
-          These words appear on every product and every receipt, so changing them is an owner&rsquo;s
-          job.
-        </InfoPanel>
-      </PageScaffold>
-    );
-  }
 
   const add = async () => {
     setBusy(true);
@@ -124,6 +114,20 @@ export default function WordsPage() {
     }
   };
 
+  const status: PageStatus = !can('products.manage')
+    ? {
+        // Said inside the page's own header — it used to be a second page with a second header.
+        state: 'empty',
+        title: 'Ask the owner',
+        body: (
+          <>
+            These words appear on every product and every receipt, so changing them is an owner&rsquo;s
+            job.
+          </>
+        ),
+      }
+    : { state: 'ready' };
+
   return (
     <PageScaffold
       onBack={goBack}
@@ -131,6 +135,10 @@ export default function WordsPage() {
       subtitle="Crate, bottle, dirica, paint — whatever you say"
     >
       <ProblemDialog problem={problem} title="Not changed" />
+
+      <PageState status={status}>
+        {() => (
+          <>
 
       {retiring && (
         <ConfirmDialog
@@ -261,6 +269,9 @@ export default function WordsPage() {
           <PlusIcon /> Add a word
         </Button>
       )}
+          </>
+        )}
+      </PageState>
     </PageScaffold>
   );
 }

@@ -42,15 +42,33 @@ export interface CustomerAccount {
   deposits_held: number;
 }
 
+/**
+ * The ledger page a history line belongs to, if it has one — so a deposit line opens the deposit
+ * and a containers line opens their empties. A sale opens its receipt instead (`ref_table`).
+ */
+export function ledgerPageFor(kind: string): 'deposit_customer_page' | 'empties_customer_page' | null {
+  if (kind.startsWith('deposit_')) return 'deposit_customer_page';
+  if (kind.startsWith('empties_')) return 'empties_customer_page';
+  return null;
+}
+
 export interface HistoryEvent {
   occurred_at: string;
+  // Read from the ledgers the shop keeps now (0156): charges, opening debts, deposits and
+  // containers, beside sales and payments.
   kind:
     | 'sale'
     | 'payment'
     | 'refund'
+    | 'charge'
+    | 'excess'
+    | 'opening'
     | 'deposit_taken'
     | 'deposit_returned'
-    | 'forfeit';
+    | 'deposit_kept'
+    | 'empties_returned'
+    | 'empties_written_off'
+    | 'empties_out';
   label: string;
   detail: string | null;
   amount: string | null;

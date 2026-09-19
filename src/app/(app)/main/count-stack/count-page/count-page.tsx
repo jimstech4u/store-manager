@@ -5,7 +5,6 @@ import styles from './count-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { FloatingAction } from '@/components/ui/FloatingAction';
-import { PlusIcon } from '@/components/ui/Icon';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
 import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
@@ -94,23 +93,23 @@ export default function CountPage() {
 
   if (!store) return null;
 
-  if (!can('stock.count')) {
-    return (
-      <PageScaffold onBack={goBack} title="Count" subtitle="Check the shelf against the records">
-        <InfoPanel tone="info" title="Not part of your job here">
-          Counting stock and closing the day is done by a manager or the owner.
-        </InfoPanel>
-      </PageScaffold>
-    );
-  }
-
   /*
    * ONE HEADER, and the body says what it has. The list shows once it has rows; until the first page
    * has been read it is loading — not "none yet", which is what an empty list drew before the read
    * had even started — and a read that failed says so with a way to try again.
    */
-  const status: PageStatus =
-    browse.items.length > 0
+  const status: PageStatus = !can('stock.count')
+    ? {
+        // Said inside the page's own header — it used to be a second page with a second header.
+        state: 'empty',
+        title: 'Not part of your job here',
+        body: (
+          <>
+            Counting stock and closing the day is done by a manager or the owner.
+          </>
+        ),
+      }
+    : browse.items.length > 0
       ? { state: 'ready' }
       : browse.error
         ? { state: 'error', what: 'your products', error: browse.error, onRetry: () => browse.reload() }

@@ -2,9 +2,10 @@
 
 import { ACCOUNT_DERIVED_SCOPE } from '@/lib/stacks/customer-account';
 import { useCallback, useMemo, useState } from 'react';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { Button } from '@/components/ui/Button';
-import { Explain, InfoPanel } from '@/components/ui/Explain';
+import { Explain } from '@/components/ui/Explain';
 import { PrinterIcon } from '@/components/ui/Icon';
 import { FilterBar } from '@/components/ui/FilterBar';
 import { LoadArea, useLoadArea } from '@/components/ui/LoadArea';
@@ -251,19 +252,26 @@ export default function ReportsPage() {
 
   if (!store) return null;
 
-  if (!can('reports.view')) {
-    return (
-      <PageScaffold onBack={goBack} title="Reports">
-        <InfoPanel tone="info" title="Not part of your job here">
-          Reports are for whoever runs the shop. Ask them if you need one.
-        </InfoPanel>
-      </PageScaffold>
-    );
-  }
+  const status: PageStatus = !can('reports.view')
+    ? {
+        // Said inside the page's own header — it used to be a second page with a second header.
+        state: 'empty',
+        title: 'Not part of your job here',
+        body: (
+          <>
+            Reports are for whoever runs the shop. Ask them if you need one.
+          </>
+        ),
+      }
+    : { state: 'ready' };
 
   return (
     <PageScaffold onBack={goBack} title="Reports" subtitle="On paper, or as a PDF">
       <ProblemDialog problem={problem} title="Could not build that report" />
+
+      <PageState status={status}>
+        {() => (
+          <>
 
       <Explain label="How do I get a PDF?">
         Press Print and choose &ldquo;Save as PDF&rdquo; in the dialog your device opens. It is real
@@ -379,6 +387,9 @@ export default function ReportsPage() {
           )
         }
       </LoadArea>
+          </>
+        )}
+      </PageState>
     </PageScaffold>
   );
 }

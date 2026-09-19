@@ -8,7 +8,7 @@ import { usePermission } from '@/hooks/usePermission';
 import { CashIcon, ChevronRightIcon, PeopleIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
-import { ACCOUNT_DERIVED_SCOPE, type HistoryEvent } from '@/lib/stacks/customer-account';
+import { ACCOUNT_DERIVED_SCOPE, ledgerPageFor, type HistoryEvent } from '@/lib/stacks/customer-account';
 import { useCustomerFromList } from '@/lib/stacks/customer-directory';
 import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
@@ -282,12 +282,12 @@ export default function StatementPage() {
                 );
                 return (
                 <li key={`${h.ref_table}-${h.ref_id}-${i}`}>
-                  {/* A deposit line opens the deposit it moved; anything else has no page of its own. */}
-                  {h.kind.startsWith('deposit') || h.kind === 'forfeit' ? (
+                  {/* A deposit or containers line opens its ledger; anything else has no page of its own. */}
+                  {ledgerPageFor(h.kind) ? (
                     <button
                       type="button"
                       className={`${styles.row} ${styles.rowLink}`}
-                      onClick={() => void nav.push('deposit_customer_page', { id: customerId })}
+                      onClick={() => void nav.push(ledgerPageFor(h.kind)!, { id: customerId })}
                     >
                       {said}
                       <ChevronRightIcon />

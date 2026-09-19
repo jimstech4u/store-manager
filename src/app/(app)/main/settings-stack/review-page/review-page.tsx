@@ -149,19 +149,20 @@ export default function ReviewPage() {
 
   if (!store) return null;
 
-  if (!can('records.confirm')) {
-    return (
-      <PageScaffold onBack={goBack} title="Waiting for approval">
-        <InfoPanel tone="info" title="A manager handles this">
-          Anything you add is saved and usable straight away. A manager or the owner checks it
-          afterwards — you do not need to wait for them before serving a customer.
-        </InfoPanel>
-      </PageScaffold>
-    );
-  }
-
   // One header; the body waits for the queue.
-  const status: PageStatus = queue
+  const status: PageStatus = !can('records.confirm')
+    ? {
+        // Said inside the page's own header — it used to be a second page with a second header.
+        state: 'empty',
+        title: 'A manager handles this',
+        body: (
+          <>
+            Anything you add is saved and usable straight away. A manager or the owner checks it
+            afterwards — you do not need to wait for them before serving a customer.
+          </>
+        ),
+      }
+    : queue
     ? { state: 'ready' }
     : error
       ? { state: 'error', what: 'what is waiting', error, onRetry: res.reload }

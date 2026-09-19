@@ -128,19 +128,20 @@ export default function StaffPage() {
 
   if (!store) return null;
 
-  if (!can('staff.manage')) {
-    return (
-      <PageScaffold onBack={goBack} title="Your team">
-        <InfoPanel tone="info" title="Only the owner manages staff">
-          Adding people and changing what they can do is the owner&apos;s job. Ask them if
-          something needs to change.
-        </InfoPanel>
-      </PageScaffold>
-    );
-  }
-
   // One header; the body waits for the team.
-  const status: PageStatus = res.data
+  const status: PageStatus = !can('staff.manage')
+    ? {
+        // Said inside the page's own header — it used to be a second page with a second header.
+        state: 'empty',
+        title: 'Only the owner manages staff',
+        body: (
+          <>
+            Adding people and changing what they can do is the owner&apos;s job. Ask them if
+            something needs to change.
+          </>
+        ),
+      }
+    : res.data
     ? { state: 'ready' }
     : error
       ? { state: 'error', what: 'your team', error, onRetry: res.reload }
@@ -184,16 +185,20 @@ export default function StaffPage() {
         const active = members.filter((m) => m.status === 'active').length;
         return `${active} ${active === 1 ? 'person' : 'people'}`;
       })()}
-      actions={[
-        {
-          key: 'add',
-          icon: <PlusIcon />,
-          onClick: () => {
-            void nav.push('staff_invite_page');
-          },
-          ariaLabel: 'Add someone to your team',
-        },
-      ]}
+      actions={
+        can('staff.manage')
+          ? [
+              {
+                key: 'add',
+                icon: <PlusIcon />,
+                onClick: () => {
+                  void nav.push('staff_invite_page');
+                },
+                ariaLabel: 'Add someone to your team',
+              },
+            ]
+          : undefined
+      }
     >
       <PageState status={status}>
         {() =>

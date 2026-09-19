@@ -6,7 +6,7 @@ import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { Button } from '@/components/ui/Button';
-import { Explain, InfoPanel } from '@/components/ui/Explain';
+import { Explain } from '@/components/ui/Explain';
 import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/components/ui/Dialog';
 import { CashIcon, HistoryIcon, RefreshIcon, ReceiptIcon, ReturnIcon, TrashIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -15,6 +15,7 @@ import { usePermission } from '@/hooks/usePermission';
 import { useAuth } from '@/providers/AuthProvider';
 import {
   accountsChanged,
+  ledgerPageFor,
   useCustomerAccount,
 } from '@/lib/stacks/customer-account';
 import { formatMoney, formatQty, messageOf } from '@/lib/format';
@@ -78,21 +79,18 @@ export default function AccountPage() {
 
 
   if (!store) return null;
-  if (!customerId) {
-    return (
-      <PageScaffold onBack={goBack} title="No customer chosen">
-        <InfoPanel tone="info" title="Open a customer from the People list">
-          This page shows one customer&apos;s account.
-        </InfoPanel>
-      </PageScaffold>
-    );
-  }
 
   /*
    * ONE HEADER; the body waits for the account. Its figures are worked out only from an account
    * that has been read — never a ₦0 standing in for one that has not.
    */
-  const status: PageStatus = account
+  const status: PageStatus = !customerId
+    ? {
+        state: 'empty',
+        title: 'Open a customer from the People list',
+        body: 'This page shows one customer’s account.',
+      }
+    : account
     ? { state: 'ready' }
     : error
       ? { state: 'error', what: 'this account', error, onRetry: () => void reload() }
@@ -372,7 +370,12 @@ export default function AccountPage() {
                 <span className={styles.eventLabel}>{h.label}</span>
                 <span
                   className={`${styles.eventAmount} ${
-                    h.kind === 'payment' ? styles.in : h.kind === 'sale' ? styles.out : ''
+                    // Money that lowers what they owe reads as in; what raises it, as out.
+                    h.kind === 'payment' || h.kind === 'excess'
+                      ? styles.in
+                      : h.kind === 'sale' || h.kind === 'charge' || h.kind === 'opening'
+                        ? styles.out
+                        : ''
                   }`}
                 >
                   {h.amount !== null && Number(h.amount) !== 0
@@ -405,6 +408,16 @@ export default function AccountPage() {
                   onClick={() => void nav.push('receipt_page', { id: h.ref_id })}
                 >
                   See the receipt
+                </button>
+              )}
+              {/* A deposit or containers line opens the ledger it moved (0156). */}
+              {ledgerPageFor(h.kind) && (
+                <button
+                  type="button"
+                  className={styles.eventOpen}
+                  onClick={() => void nav.push(ledgerPageFor(h.kind)!, { id: customerId })}
+                >
+                  {ledgerPageFor(h.kind) === 'deposit_customer_page' ? 'See the deposit' : 'See the empties'}
                 </button>
               )}
             </li>

@@ -2,6 +2,7 @@
 
 import { useLocation } from '@academix-admin/navigation-stack';
 import { useNav } from '@academix-admin/navigation-stack';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { InfoPanel } from '@/components/ui/Explain';
 import { Button } from '@/components/ui/Button';
@@ -36,15 +37,14 @@ export default function ReceiptPage() {
 
   if (!store) return null;
 
-  if (!saleId) {
-    return (
-      <PageScaffold onBack={goBack} title="No receipt chosen">
-        <InfoPanel tone="info" title="Open a sale to see its receipt">
-          Receipts are reached from a sale, or from the money screen.
-        </InfoPanel>
-      </PageScaffold>
-    );
-  }
+  // No sale named (an edited URL): said inside the page's one header.
+  const status: PageStatus = saleId
+    ? { state: 'ready' }
+    : {
+        state: 'empty',
+        title: 'Open a sale to see its receipt',
+        body: 'Receipts are reached from a sale, or from the money screen.',
+      };
 
   return (
     <PageScaffold
@@ -52,6 +52,10 @@ export default function ReceiptPage() {
       title={fresh ? 'Sale recorded' : 'Receipt'}
       subtitle={store.name}
     >
+      <PageState status={status}>
+        {() =>
+          saleId && (
+            <>
       {fresh && (
         <InfoPanel tone="success" title="Saved">
           The stock has come off your shelf, and anything unpaid is on the customer&rsquo;s
@@ -84,6 +88,10 @@ export default function ReceiptPage() {
           )
         }
       />
+            </>
+          )
+        }
+      </PageState>
     </PageScaffold>
   );
 }
