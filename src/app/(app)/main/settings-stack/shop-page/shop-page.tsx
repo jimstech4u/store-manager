@@ -367,7 +367,14 @@ export default function ShopPage() {
             books stay readable.
           </p>
           <div className={styles.actions}>
-            <Button variant="danger" fullWidth onClick={() => void askToClose()}>
+            {/* Busy while the shop is being closed: the dialog is already gone by then. */}
+            <Button
+              variant="danger"
+              fullWidth
+              busy={busy}
+              busyLabel="Closing this shop"
+              onClick={() => void askToClose()}
+            >
               Close this shop
             </Button>
           </div>

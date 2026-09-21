@@ -129,8 +129,13 @@ export default function ProductPage() {
           ? [
               { key: 'edit', icon: <EditIcon />, onClick: () => void nav.push('product_form_page', { id: productId }),
                 ariaLabel: 'Edit this item' },
-              { key: 'remove', icon: <TrashIcon />, onClick: () => setRemoving(true),
-                ariaLabel: 'Remove this item' },
+              /*
+                Not offered again while the last one is still going. The dialog closes the moment
+                it is confirmed, so the bin was live again for the second the archive took — and a
+                second tap sends a second `archive_product` for an item already gone.
+              */
+              { key: 'remove', icon: <TrashIcon />, onClick: () => { if (!busy) setRemoving(true); },
+                ariaLabel: busy ? 'Removing this item' : 'Remove this item' },
             ]
           : undefined
       }
