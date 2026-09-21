@@ -264,11 +264,21 @@ export default function EmptiesCustomerPage() {
                   <span className={`${styles.dot} ${styles[m.direction]}`} aria-hidden="true" />
                   <span className={styles.moveBody}>
                     <span className={styles.moveWhat}>
-                      {m.direction === 'out'
-                        ? 'Took'
-                        : m.direction === 'returned'
-                          ? 'Brought back'
-                          : 'Written off'}{' '}
+                      {/*
+                        SAID FROM THE RIGHT DIRECTION (0157). A row where the customer left their
+                        own crates with the shop read "Took 3 crates", and the shop handing them
+                        back read "Brought back" — both exactly inverted, because the reader did not
+                        carry the side and the screen assumed the common one.
+                      */}
+                      {m.direction === 'damaged'
+                        ? 'Written off'
+                        : m.side === 'we_hold'
+                          ? m.direction === 'out'
+                            ? 'Left with you'
+                            : 'Given back to them'
+                          : m.direction === 'out'
+                            ? 'Took'
+                            : 'Brought back'}{' '}
                       {saidAsPart(m.qty)} {m.qty === 1 ? m.unitName : m.unitPlural}
                     </span>
                     {/* The item, and the receipt that moved them — each one push away. */}

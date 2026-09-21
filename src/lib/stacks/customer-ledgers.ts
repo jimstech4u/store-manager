@@ -165,6 +165,13 @@ export interface EmptiesMove {
   productId: string | null;
   /** The receipt that sent them out (or whose void took them back) — null when none did (0155). */
   saleId: string | null;
+  /**
+   * Which way this movement ran (0157).
+   *
+   *   `they_hold`  ours, out with them — "Took", "Brought back"
+   *   `we_hold`    theirs, left with us — the same rows read backwards without this
+   */
+  side: 'they_hold' | 'we_hold';
 }
 
 export function useEmptiesCustomers(storeId: string | null) {
@@ -227,6 +234,7 @@ export async function emptiesLedger(customerId: string): Promise<EmptiesMove[]> 
     occurredAt: String(r.occurred_at),
     productId: (r.product_id as string | null) ?? null,
     saleId: (r.sale_id as string | null) ?? null,
+    side: (r.side as 'they_hold' | 'we_hold') ?? 'they_hold',
   }));
 }
 
