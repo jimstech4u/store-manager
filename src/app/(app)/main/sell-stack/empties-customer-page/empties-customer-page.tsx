@@ -78,7 +78,22 @@ export default function EmptiesCustomerPage() {
 
   const owed = useMemo(() => owedArea.data ?? [], [owedArea.data]);
   const outstanding = useMemo(() => owed.filter((r) => r.owed > 0), [owed]);
-  const lines = useMemo(() => rollUpOwed(outstanding), [outstanding]);
+  const rolled = useMemo(() => rollUpOwed(outstanding), [outstanding]);
+
+  /*
+   * TWO OBLIGATIONS, NEVER ONE NUMBER.
+   *
+   * A customer holding 55 of our crates while we hold 65 of theirs read as "120 crates still with
+   * them" — the roll-up bucketed by maker and shape and said nothing about which way each ran. One
+   * of those figures is what a breakage fee is worked out from, so the two are kept apart here and
+   * the recording buttons act on what THEY hold, which is the only side this page can settle.
+   */
+  const lines = useMemo(() => rolled.filter((l) => l.side === 'they_hold'), [rolled]);
+  const oursWithUs = useMemo(() => rolled.filter((l) => l.side === 'we_hold'), [rolled]);
+  const theirsOutstanding = useMemo(
+    () => outstanding.filter((r) => (r.side ?? 'they_hold') === 'they_hold'),
+    [outstanding],
+  );
 
   /*
    * ONE HEADER, and the body waits for both reads. The two record buttons used to be drawn
@@ -143,7 +158,10 @@ export default function EmptiesCustomerPage() {
               */}
               <ul className={styles.said}>
                 {lines.map((l, i) => (
-                  <li key={`${l.label}-${l.unit}-${i}`} className={l.isPart ? styles.part : styles.whole}>
+                  <li
+                    key={`${l.side}-${l.label}-${l.unit}-${i}`}
+                    className={l.isPart ? styles.part : styles.whole}
+                  >
                     <span className={styles.saidQty}>{l.said}</span>
                     <span className={styles.saidWhat}>
                       {l.label} {l.unit.toLowerCase()}
@@ -169,6 +187,35 @@ export default function EmptiesCustomerPage() {
       </LoadArea>
 
       {/*
+        THEIRS, IN OUR YARD — the other direction, said as its own thing.
+
+        It used to be added into the line above, so a screen that should have read "they hold 55,
+        we hold 65" said "120 still with them". Nothing here settles it: it comes back to them when
+        they collect, or against what they take next.
+      */}
+      {oursWithUs.length > 0 && (
+        <>
+          <h2 className={styles.section}>Theirs, in your yard</h2>
+          <ul className={styles.said}>
+            {oursWithUs.map((l, i) => (
+              <li
+                key={`ours-${l.label}-${l.unit}-${i}`}
+                className={l.isPart ? styles.part : styles.whole}
+              >
+                <span className={styles.saidQty}>{l.said}</span>
+                <span className={styles.saidWhat}>
+                  {l.label} {l.unit.toLowerCase()}
+                </span>
+                {l.products.length > 1 && (
+                  <span className={styles.saidFrom}>{l.products.join(' + ')}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {/*
         BOTH PUSH A PAGE. They were a bottom sheet with a select, a quantity and a reason in it,
         which is a FORM — and the rule here is that a form is a page and a sheet is for choosing
         from a list. On a phone the keyboard covers half a sheet, dragging to reach a field reads as
@@ -178,7 +225,7 @@ export default function EmptiesCustomerPage() {
         {canOpen('empties_record_page') && (
           <Button
             fullWidth
-            disabled={outstanding.length === 0}
+            disabled={theirsOutstanding.length === 0}
             onClick={() =>
               void nav.push('empties_record_page', { id: customerId, direction: 'returned' })
             }
@@ -195,7 +242,7 @@ export default function EmptiesCustomerPage() {
           <Button
             variant="danger"
             fullWidth
-            disabled={outstanding.length === 0}
+            disabled={theirsOutstanding.length === 0}
             onClick={() =>
               void nav.push('empties_record_page', { id: customerId, direction: 'damaged' })
             }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
@@ -19,7 +19,9 @@ import {
   useCustomerAccount,
 } from '@/lib/stacks/customer-account';
 import { formatMoney, formatQty, messageOf } from '@/lib/format';
-import { saidAsPart } from '@/lib/empties-rollup';
+import { rollUpOwed, type OwedRow } from '@/lib/empties-rollup';
+import { LoadArea, useLoadArea } from '@/components/ui/LoadArea';
+import { emptiesOwed, LEDGERS_SCOPE } from '@/lib/stacks/customer-ledgers';
 import { getSupabase } from '@/lib/supabase/client';
 import { useListNotifier } from '@/hooks/useListChannel';
 import styles from './account-page.module.css';
@@ -50,6 +52,23 @@ export default function AccountPage() {
 
   const customerId = (location?.params?.id as string | undefined) ?? null;
   const { account, history, error, reload } = useCustomerAccount(customerId);
+
+  /*
+   * The containers, from the ledger rather than from the account summary: the summary reports a
+   * quantity per shape with no side, and the two sides are separate obligations. Same key as the
+   * empties screen, so opening either after the other costs nothing.
+   */
+  const owedArea = useLoadArea<OwedRow[]>(() => emptiesOwed(customerId as string), [customerId], {
+    key: `empties-owed:${customerId ?? 'none'}`,
+    scope: LEDGERS_SCOPE,
+    whenNot: !customerId,
+  });
+  const rolled = useMemo(
+    () => rollUpOwed((owedArea.data ?? []).filter((r) => r.owed > 0)),
+    [owedArea.data],
+  );
+  const theyHold = useMemo(() => rolled.filter((l) => l.side === 'they_hold'), [rolled]);
+  const weHold = useMemo(() => rolled.filter((l) => l.side === 'we_hold'), [rolled]);
 
   const nav = useNav();
 
@@ -240,26 +259,56 @@ export default function AccountPage() {
         customer, and a crate is a crate whether or not money sits against it. That is the whole
         reason the two are separate ledgers now.
       */}
+      {/*
+        WHICH WAY EACH OBLIGATION RUNS.
+
+        `customer_account` reports a quantity per shape and not whose containers they are, so a
+        customer holding 55 of our crates while we held 65 of theirs produced two rows that looked
+        identical — same product, same shape — and React drew one of them. Read here from the same
+        ledger the empties screen uses (`customer_empties_owed`), which carries the side.
+      */}
       <h2 className={styles.section}>Empties still out</h2>
-      {account.empties.length === 0 ? (
-        <p className={styles.sectionNote}>Nothing of yours is with this customer.</p>
-      ) : (
-        <ul className={styles.list}>
-          {account.empties.map((e) => (
-            <li key={`${e.product_unit_id ?? e.group}-${e.unit}`} className={styles.row}>
-              <div className={styles.rowMain}>
-                <p className={styles.rowName}>
-                  {e.product} {Number(e.qty) === 1 ? e.unit.toLowerCase() : e.unit_plural.toLowerCase()}
-                </p>
-                <p className={styles.rowNote}>
-                  {e.group ?? 'no maker set'}
-                  {e.product_id === null && ' · carried across from your book'}
-                </p>
-              </div>
-              <span className={styles.rowQty}>{saidAsPart(Number(e.qty))}</span>
-            </li>
-          ))}
-        </ul>
+      <LoadArea area={owedArea} what="what they are holding" compact>
+        {() =>
+          theyHold.length === 0 ? (
+            <p className={styles.sectionNote}>Nothing of yours is with this customer.</p>
+          ) : (
+            <ul className={styles.list}>
+              {theyHold.map((l, i) => (
+                <li key={`they-${l.label}-${l.unit}-${i}`} className={styles.row}>
+                  <div className={styles.rowMain}>
+                    <p className={styles.rowName}>
+                      {l.label} {l.unit.toLowerCase()}
+                    </p>
+                    {l.products.length > 1 && (
+                      <p className={styles.rowNote}>{l.products.join(' + ')}</p>
+                    )}
+                  </div>
+                  <span className={styles.rowQty}>{l.said}</span>
+                </li>
+              ))}
+            </ul>
+          )
+        }
+      </LoadArea>
+
+      {weHold.length > 0 && (
+        <>
+          <h2 className={styles.section}>Theirs, in your yard</h2>
+          <ul className={styles.list}>
+            {weHold.map((l, i) => (
+              <li key={`we-${l.label}-${l.unit}-${i}`} className={styles.row}>
+                <div className={styles.rowMain}>
+                  <p className={styles.rowName}>
+                    {l.label} {l.unit.toLowerCase()}
+                  </p>
+                  {l.products.length > 1 && <p className={styles.rowNote}>{l.products.join(' + ')}</p>}
+                </div>
+                <span className={styles.rowQty}>{l.said}</span>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
 
       {/* ── Actions ─────────────────────────────────────────────────────────── */}

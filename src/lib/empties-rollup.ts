@@ -56,6 +56,15 @@ export interface OwedLine {
   isPart: boolean;
   /** Which products fed this line, so a screen can show the working. */
   products: string[];
+  /**
+   * Whose containers this line is about — carried out so a screen never prints the two together.
+   *
+   * A customer holding 55 of our crates while we hold 65 of theirs was rolled into "120 crates":
+   * the bucket key was the maker and the shape, and said nothing about which way the obligation
+   * ran. One number, made of two opposite facts, and it is the number a breakage fee is worked out
+   * from.
+   */
+  side: 'they_hold' | 'we_hold';
 }
 
 /**
@@ -103,7 +112,14 @@ export function saidAsPart(n: number): string {
 export function rollUpOwed(input: OwedRow[]): OwedLine[] {
   const buckets = new Map<
     string,
-    { unit: string; unitOne: string; group: string | null; whole: number; products: Set<string> }
+    {
+      unit: string;
+      unitOne: string;
+      group: string | null;
+      whole: number;
+      products: Set<string>;
+      side: 'they_hold' | 'we_hold';
+    }
   >();
   const parts: OwedLine[] = [];
 
@@ -128,7 +144,8 @@ export function rollUpOwed(input: OwedRow[]): OwedLine[] {
      * twelve, and two others can both say "bottle" and mean one. It is the pair that identifies
      * "the thing everyone at this counter means", which is what may be added up.
      */
-    const key = `${r.groupId ?? `product:${r.productId}`}|${r.baseQty}|${r.unitPlural.toLowerCase()}`;
+    const side = r.side ?? 'they_hold';
+    const key = `${side}|${r.groupId ?? `product:${r.productId}`}|${r.baseQty}|${r.unitPlural.toLowerCase()}`;
 
     if (whole > 0) {
       const b = buckets.get(key) ?? {
@@ -137,6 +154,7 @@ export function rollUpOwed(input: OwedRow[]): OwedLine[] {
         group: r.groupName,
         whole: 0,
         products: new Set<string>(),
+        side,
       };
       b.whole += whole;
       b.products.add(r.productName);
@@ -159,6 +177,7 @@ export function rollUpOwed(input: OwedRow[]): OwedLine[] {
         said: saidAsPart(rest),
         isPart: true,
         products: [r.productName],
+        side,
       });
     }
   }
@@ -171,6 +190,7 @@ export function rollUpOwed(input: OwedRow[]): OwedLine[] {
     said: String(b.whole),
     isPart: false,
     products: [...b.products],
+    side: b.side,
   }));
 
   // Biggest obligation first — that is the one a conversation at the counter starts with. Parts
@@ -183,7 +203,9 @@ export function rollUpOwed(input: OwedRow[]): OwedLine[] {
 
 /** The whole thing as one sentence: "8 NBL crates, ½ Goldberg crate, 4 Goldberg bottles". */
 export function owedInWords(rows: OwedRow[]): string {
-  const lines = rollUpOwed(rows);
+  // One side at a time: "nothing" for a customer who holds none of ours is true even while we hold
+  // some of theirs, and saying the two in one breath is what produced a figure nobody recognised.
+  const lines = rollUpOwed(rows).filter((l) => l.side === 'they_hold');
   if (lines.length === 0) return 'nothing';
   return lines
     .map((l) => `${l.said} ${l.label} ${l.unit.toLowerCase()}`)

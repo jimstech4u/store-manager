@@ -392,6 +392,13 @@ shop's "still out" list filled with obligations nobody owed and nobody could cle
 0090 is its writer. The money is NOT recorded as a payment: it was handed over for broken bottles,
 and allocating it would pay down whatever sale happened to be oldest.
 
+**THE TWO SIDES NEVER ADD UP.** `they_hold` is ours, out with them; `we_hold` is theirs, left with
+us. They settle separately — a customer holding 55 of our crates while we hold 65 of theirs owes 55
+and is owed 65 — and `rollUpOwed` bucketed by maker and shape alone, so both screens said "120
+crates still with them". A breakage fee is worked out from that figure. `side` is part of the bucket
+key and rides out on every line; the empties screen and the account each list the two apart, and the
+recording buttons act on what THEY hold, which is the only side those screens can settle.
+
 **Returns are counted in SHAPES, one box each.** "Five crates and three bottles" is what somebody
 says while stacking them by the door. One box in the pool's smallest unit made the seller multiply
 by twelve and add, at a counter, and then told them the answer was not a shape the pool accepts. The
