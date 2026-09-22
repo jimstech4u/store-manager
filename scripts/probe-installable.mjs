@@ -33,7 +33,9 @@ try {
   const m = await res.json();
   check('it asks for a window of its own', m.display === 'standalone', m.display);
   check('it has a launch colour, so no white flash', Boolean(m.background_color), m.background_color);
-  check('it starts at the front door', m.start_url === '/', m.start_url);
+  // The APP, not the public marketplace: `/` knows nothing about a session, so the installed app
+  // opened a shopfront with a Sign in button and read as being logged out on every launch.
+  check('it starts in the app', m.start_url === '/main', m.start_url);
   const sizes = (m.icons ?? []).map((i) => `${i.sizes}/${i.purpose}`);
   check('it offers a 192 and a 512', sizes.some((s) => s.startsWith('192')) && sizes.some((s) => s.startsWith('512')), sizes.join(' '));
   check('and one a launcher may crop', (m.icons ?? []).some((i) => i.purpose === 'maskable'));
@@ -69,6 +71,34 @@ try {
   await ios.waitForTimeout(2500);
   const iosText = (await ios.locator('body').innerText()).replace(/\s+/g, ' ');
   check('an iPhone is shown how to install', /Add to Home Screen/i.test(iosText) && /Share/i.test(iosText));
+
+  // ══ 2b. Each browser is told what IT can do ══════════════════════════════════════
+  // An iPhone in Chrome cannot install at all: the Home Screen belongs to Safari on iOS.
+  const iosChrome = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+    userAgent:
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/122.0 Mobile/15E148 Safari/604.1',
+  });
+  await iosChrome.goto(BASE, { waitUntil: 'domcontentloaded' });
+  await iosChrome.waitForTimeout(2500);
+  const chromeText = (await iosChrome.locator('body').innerText()).replace(/\s+/g, ' ');
+  check('an iPhone in Chrome is told only Safari can', /only Safari can add/i.test(chromeText));
+  check('… and is offered a way over', /Open in Safari/i.test(chromeText) && /Copy the link/i.test(chromeText));
+
+  // An Android browser that has not offered its own install still says where its menu is.
+  const android = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+    userAgent:
+      'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36',
+  });
+  await android.goto(BASE, { waitUntil: 'domcontentloaded' });
+  await android.waitForTimeout(2500);
+  const androidText = (await android.locator('body').innerText()).replace(/\s+/g, ' ');
+  check('an Android browser is shown its menu', /Install app|Add to Home screen/i.test(androidText), androidText.slice(0, 60));
 
   // ══ 3 & 4. The service worker, and a screen with the network cut ══════════════════
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });

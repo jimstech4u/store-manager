@@ -6,6 +6,7 @@ import styles from './(market)/market.module.css';
 import { MarketShell } from './(market)/MarketShell';
 import { InstallApp } from '@/components/ui/InstallApp';
 import { Button } from '@/components/ui/Button';
+import { useAuth } from '@/providers/AuthProvider';
 import { SearchField, useDebounced } from '@/components/ui/SearchField';
 import { InfoPanel } from '@/components/ui/Explain';
 import { Thumb } from '@/components/ui/Thumb';
@@ -33,6 +34,7 @@ import { formatMoney } from '@/lib/format';
  */
 export default function MarketplacePage() {
   const router = useRouter();
+  const { session } = useAuth();
   const [query, setQuery] = useState('');
   const debounced = useDebounced(query);
   const [category, setCategory] = useState<string | null>(null);
@@ -84,21 +86,38 @@ export default function MarketplacePage() {
               accounts straight in one place.
             </p>
             <div className={styles.heroActions}>
-              <Button
-                size="large"
-                className={styles.heroPrimary}
-                onClick={() => router.push('/login?mode=signup')}
-              >
-                Open a shop
-              </Button>
-              <Button
-                size="large"
-                variant="secondary"
-                className={styles.heroSecondary}
-                onClick={() => router.push('/login')}
-              >
-                Sign in
-              </Button>
+              {/*
+                SIGNED IN ALREADY? Then the thing to offer is the shop, not a sign-in form. This page
+                is public and people browse it, so it does not redirect — it just stops pretending
+                not to know them.
+              */}
+              {session ? (
+                <Button
+                  size="large"
+                  className={styles.heroPrimary}
+                  onClick={() => router.push('/main')}
+                >
+                  Go to my shop
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    size="large"
+                    className={styles.heroPrimary}
+                    onClick={() => router.push('/login?mode=signup')}
+                  >
+                    Open a shop
+                  </Button>
+                  <Button
+                    size="large"
+                    variant="secondary"
+                    className={styles.heroSecondary}
+                    onClick={() => router.push('/login')}
+                  >
+                    Sign in
+                  </Button>
+                </>
+              )}
             </div>
 
             {/*

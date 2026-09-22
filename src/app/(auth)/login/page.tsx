@@ -1,9 +1,10 @@
 'use client';
 
-import { Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { Suspense, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import NavigationStack from '@academix-admin/navigation-stack';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
+import { useAuth } from '@/providers/AuthProvider';
 import SignIn from './signin/signin';
 import SignUp from './signup/signup';
 import Verify from './verify/verify';
@@ -30,6 +31,21 @@ const navLink = {
 
 function AuthStack() {
   const params = useSearchParams();
+  const router = useRouter();
+  const { loading, session } = useAuth();
+
+  /*
+   * ALREADY SIGNED IN — go to the shop rather than asking for the password again.
+   *
+   * Reached by anything that points at sign-in without checking first: the marketplace's own
+   * button, a bookmark, and (before its start_url was fixed) every launch of the installed app.
+   * Typing a password you have already typed is the clearest possible way for an app to say it
+   * has forgotten you, when it has not.
+   */
+  useEffect(() => {
+    if (!loading && session) router.replace('/main');
+  }, [loading, session, router]);
+
   // The marketplace's "Open a shop" lands here expecting the sign-up form, not sign-in.
   const entry = params.get('mode') === 'signup' ? 'signup' : 'signin';
 

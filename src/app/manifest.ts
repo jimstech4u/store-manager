@@ -23,7 +23,15 @@ export default function manifest(): MetadataRoute.Manifest {
     name: 'Store Manager',
     short_name: 'Store Manager',
     description: 'Stock, sales and accounts for distribution businesses.',
-    start_url: '/',
+    /*
+     * THE APP, not the marketplace.
+     *
+     * This was `/`, which is the public page people browse shops on — it knows nothing about a
+     * session, so every launch of the installed app opened a shopfront with a Sign in button and
+     * read exactly like being logged out. `/main` is the shop's own screen; it sends anybody
+     * without a session to sign in, and everybody else straight to their till.
+     */
+    start_url: '/main',
     scope: '/',
     display: 'standalone',
     background_color: '#0b6252',

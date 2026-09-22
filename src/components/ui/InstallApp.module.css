@@ -47,3 +47,9 @@
   font-size: var(--text-sm);
   color: var(--text-muted);
 }
+
+/* Two ways forward side by side: hand over to Safari, or take the address away with you. */
+.row {
+  display: flex;
+  gap: var(--space-2);
+}

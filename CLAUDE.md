@@ -554,6 +554,18 @@ one tap beside WhatsApp instead of finding a tab. `InstallApp` offers it on the 
 Settings — one tap on Android through `beforeinstallprompt`, and on iPhone the two steps Apple leaves
 to us, since there is no install API there. Both disappear once it is installed.
 
+**The installed app starts at `/main`, not `/`.** `/` is the public marketplace and knows nothing
+about a session, so every launch of the installed app opened a shopfront with a Sign in button —
+which reads exactly like being logged out, and was reported as that. Sign-in also sends anybody who
+already has a session straight on, rather than asking for a password it does not need.
+
+**INSTALLING IS PER-PLATFORM, and the app says which.** Android hands us the install itself
+(`beforeinstallprompt`, only once the site qualifies: HTTPS, manifest with 192 and 512 icons, a
+worker with a fetch handler) — one tap. iOS has no API at all and never has: Safari installs from
+its Share sheet, so two steps is the shortest honest offer. Chrome, Firefox and Edge on iPhone
+CANNOT install — the Home Screen is Safari's alone there — so they are told that and handed over
+(`x-safari-…`, with the link to copy in case the browser ignores it).
+
 **The service worker caches the SHELL, never the shop's data.** state-stack already keeps what each
 screen read, in IndexedDB, and knows when it is stale; a second copy in a worker would be a second
 answer to "what does this shop owe", ageing on its own. Pages are cached BY PATH: navigation-stack

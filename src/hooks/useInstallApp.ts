@@ -3,18 +3,20 @@
 import { useCallback, useEffect, useState } from 'react';
 
 /**
- * PUTTING THIS ON THE PHONE, in as few taps as the platform allows.
+ * PUTTING THIS ON THE PHONE, in as few taps as each platform allows — and saying so honestly.
  *
- * ANDROID / CHROME  the browser hands us the install itself (`beforeinstallprompt`), so it is ONE
- *                   tap: our button calls it and the system sheet appears. The event fires once and
- *                   must be kept — asking for it later is not possible.
- * iOS / SAFARI      there is no such event and no API. Apple keeps installing behind Share → Add to
- *                   Home Screen, so the honest thing is to say those two steps and nothing more.
- * ALREADY INSTALLED nothing is offered. `display-mode: standalone` is how a launched app knows it
- *                   is one; iOS answers `navigator.standalone` instead.
- *
- * `installed` flips as soon as the browser says so, so the button can thank somebody rather than
- * sitting there inviting them to do what they have just done.
+ * ANDROID / CHROME     the browser hands us the install itself (`beforeinstallprompt`), so it is ONE
+ *                      tap. The event fires only when the site qualifies — HTTPS, a manifest with a
+ *                      192 and a 512 icon, a service worker with a fetch handler — and it fires
+ *                      once, so it is kept when it comes.
+ * ANDROID, NO EVENT    the same browsers still install from their own menu. Rather than showing
+ *                      nothing (which reads as "this cannot be installed"), we say where it is.
+ * iOS / SAFARI         no API exists. Apple keeps installing inside the Share sheet, so the two
+ *                      steps are the whole offer, and two is as short as Apple allows.
+ * iOS / ANOTHER BROWSER Chrome, Firefox and Edge on iPhone CANNOT install — the Home Screen is
+ *                      Safari's alone. The useful thing is to say so and help them get there.
+ * ALREADY INSTALLED    nothing is offered. `display-mode: standalone` is how a launched app knows
+ *                      it is one; iOS answers `navigator.standalone` instead.
  */
 
 interface InstallEvent extends Event {
@@ -22,7 +24,13 @@ interface InstallEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
-export type InstallWay = 'one-tap' | 'ios-steps' | 'installed' | 'not-offered';
+export type InstallWay =
+  | 'one-tap'
+  | 'browser-menu'
+  | 'ios-steps'
+  | 'ios-needs-safari'
+  | 'installed'
+  | 'not-offered';
 
 const isStandalone = () => {
   if (typeof window === 'undefined') return false;
@@ -33,22 +41,34 @@ const isStandalone = () => {
   );
 };
 
-const isIosSafari = () => {
+/** iPhone or iPad, including an iPad reporting itself as a Mac with a touch screen. */
+const isIos = () => {
   if (typeof navigator === 'undefined') return false;
   const ua = navigator.userAgent;
-  const iOS = /iPad|iPhone|iPod/.test(ua) || (ua.includes('Macintosh') && 'ontouchend' in document);
-  // Chrome and Firefox on iOS cannot install at all — only Safari's own Share sheet can.
-  return iOS && !/CriOS|FxiOS|EdgiOS/.test(ua);
+  return /iPad|iPhone|iPod/.test(ua) || (ua.includes('Macintosh') && 'ontouchend' in document);
+};
+
+/** Another browser on iOS: it renders with WebKit but cannot reach Add to Home Screen. */
+const isIosButNotSafari = () => isIos() && /CriOS|FxiOS|EdgiOS|OPiOS|GSA/.test(navigator.userAgent);
+
+/** A phone or tablet, where a home-screen icon is the point. */
+const isHandheld = () => {
+  if (typeof navigator === 'undefined') return false;
+  return /Android|iPad|iPhone|iPod/.test(navigator.userAgent) || isIos();
 };
 
 export function useInstallApp() {
   const [event, setEvent] = useState<InstallEvent | null>(null);
   const [installed, setInstalled] = useState(false);
   const [ios, setIos] = useState(false);
+  const [iosElsewhere, setIosElsewhere] = useState(false);
+  const [handheld, setHandheld] = useState(false);
 
   useEffect(() => {
     setInstalled(isStandalone());
-    setIos(isIosSafari());
+    setIos(isIos());
+    setIosElsewhere(isIosButNotSafari());
+    setHandheld(isHandheld());
 
     const held = (e: Event) => {
       // Chrome shows its own bar otherwise, at its own moment; the app asks when the shop asks.
@@ -77,13 +97,29 @@ export function useInstallApp() {
     return outcome === 'accepted';
   }, [event]);
 
+  /**
+   * Hand an iPhone over to Safari, which is the only browser there that can install.
+   *
+   * `x-safari-https:` is Apple's own scheme for opening a page in Safari from another app. It is
+   * not a standard and a browser may ignore it, so whatever calls this must keep the address in
+   * front of somebody as well — which is why `InstallApp` copies the link in the same breath.
+   */
+  const openInSafari = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    window.location.href = `x-safari-${window.location.origin}`;
+  }, []);
+
   const way: InstallWay = installed
     ? 'installed'
     : event
       ? 'one-tap'
-      : ios
-        ? 'ios-steps'
-        : 'not-offered';
+      : iosElsewhere
+        ? 'ios-needs-safari'
+        : ios
+          ? 'ios-steps'
+          : handheld
+            ? 'browser-menu'
+            : 'not-offered';
 
-  return { way, install, installed };
+  return { way, install, openInSafari, installed };
 }
