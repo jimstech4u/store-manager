@@ -16,6 +16,16 @@
 import { chromium } from '@playwright/test';
 import { readFileSync, writeFileSync } from 'node:fs';
 
+const env = Object.fromEntries(
+  readFileSync('.env.local', 'utf8')
+    .split(/\r?\n/)
+    .filter((l) => l && !l.startsWith('#') && l.includes('='))
+    .map((l) => {
+      const i = l.indexOf('=');
+      return [l.slice(0, i).trim(), l.slice(i + 1).trim().replace(/^["']|["']$/g, '')];
+    }),
+);
+
 const BASE = process.argv[2] ?? 'http://localhost:3101';
 const SW = 'public/sw.js';
 const NEW_VERSION = 'v-probe';
@@ -58,7 +68,32 @@ try {
   const notNow = p.getByRole('button', { name: /Not now/i }).first();
   check('and it can be put off', (await notNow.count()) > 0);
 
+  // ── "Not now" means not now ──────────────────────────────────────────────────────
+  await notNow.click();
+  await p.waitForTimeout(2500);
+  const afterNotNow = (await p.locator('body').innerText()).replace(/\s+/g, ' ');
+  check('saying not now puts it away', !afterNotNow.includes('A new version is ready'));
+  check('and leaves the app where it was', /sign in|email|password/i.test(afterNotNow), afterNotNow.slice(0, 60));
+  const stillWaiting = await p.evaluate(async () => {
+    const reg = await navigator.serviceWorker.getRegistration();
+    return Boolean(reg?.waiting);
+  });
+  check('the new version is still there, waiting', stillWaiting);
+
+  // It asks again after the wait the shop chose; the wait itself is a timer, so what is checked
+  // here is that asking again brings the dialog back rather than the page having moved on.
+  await p.evaluate(() => {
+    window.dispatchEvent(new Event('visibilitychange'));
+  });
+
   // ── Yes ──────────────────────────────────────────────────────────────────────────
+  // Reload to be asked again without waiting out the reminder — the same page, the same waiting
+  // worker. (A reload while one waits does not install it: it needs every page to let go.)
+  await p.reload({ waitUntil: 'domcontentloaded' });
+  await p.waitForTimeout(5000);
+  const askedAgain = (await p.locator('body').innerText()).replace(/\s+/g, ' ');
+  check('it is offered again on the next look', askedAgain.includes('A new version is ready'), askedAgain.slice(0, 60));
+
   const reloads = [];
   p.on('load', () => reloads.push(1));
   await p.getByRole('button', { name: /Update now/i }).first().click();

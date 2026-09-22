@@ -61,8 +61,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider>
           <AuthProvider>
             <PermissionsProvider>{children}</PermissionsProvider>
+            {/*
+              INSIDE the provider: the update prompt reads how often this shop wants to be asked
+              again, which is one of the shop's own settings. Outside it, `useAuth` throws — and
+              the page that showed it first was the 404, which nobody would have opened for weeks.
+            */}
+            <ServiceWorker />
           </AuthProvider>
-          <ServiceWorker />
         </ThemeProvider>
       </body>
     </html>

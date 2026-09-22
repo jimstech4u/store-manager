@@ -249,3 +249,28 @@
   font-weight: 600;
   cursor: pointer;
 }
+
+/*
+ * A choice on this screen, shaped like the ones on the shop's own settings page — same height,
+ * same border, same 52px target, so the two screens do not read as two products.
+ */
+.field {
+  display: grid;
+  gap: var(--space-1);
+  margin-bottom: var(--space-4);
+}
+
+.select {
+  width: 100%;
+  min-height: var(--touch-comfortable, 52px);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.select:disabled {
+  opacity: 0.6;
+}

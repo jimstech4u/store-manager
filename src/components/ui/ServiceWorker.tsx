@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { ConfirmDialog, useConfirm } from '@/components/ui/Dialog';
+import { useRemindAfterMinutes } from '@/hooks/useRemindAfterMinutes';
 
 /**
  * Registers the service worker — what makes the app open at all on a dead signal — and tells the
@@ -18,7 +19,9 @@ import { ConfirmDialog, useConfirm } from '@/components/ui/Dialog';
 export function ServiceWorker() {
   const pathname = usePathname();
   const [waiting, setWaiting] = useState<ServiceWorker | null>(null);
-  const [asked, setAsked] = useState(false);
+  /** False while the shop is being left alone after saying "Not now". */
+  const [hushed, setHushed] = useState(false);
+  const remindAfter = useRemindAfterMinutes();
   const reloading = useRef(false);
   const updateDialog = useConfirm();
 
@@ -105,6 +108,16 @@ export function ServiceWorker() {
     };
   }, [enabled]);
 
+  /*
+   * The wait after "Not now". Cleared if the shop relaunches in the meantime — the update goes in
+   * on the way through and there is nothing left to ask about.
+   */
+  useEffect(() => {
+    if (!hushed) return;
+    const again = setTimeout(() => setHushed(false), remindAfter * 60_000);
+    return () => clearTimeout(again);
+  }, [hushed, remindAfter]);
+
   const relaunch = useCallback(() => {
     if (!waiting) return;
     reloading.current = true;
@@ -112,13 +125,14 @@ export function ServiceWorker() {
   }, [waiting]);
 
   /*
-   * ASKED, NEVER IMPOSED.
+   * ASKED AGAIN, as often as the shop said.
    *
-   * This is a till. Reloading somebody mid-sale to deliver an improvement is the app putting itself
-   * first: the draft would survive (it is kept on the device) but the moment in front of a customer
-   * would not. "Not now" is a real answer — the version waits, and the next launch takes it.
+   * "Not now" has to be a real answer — but an answer never asked again is how a shop ends up
+   * running a version from March, and the reason for a version is usually that something in the
+   * last one was wrong. Half an hour to begin with; a shop that would rather be asked at closing
+   * time sets twelve hours (Settings → Remind me about updates).
    */
-  if (!waiting || asked) return null;
+  if (!waiting || hushed) return null;
 
   return (
     <ConfirmDialog
@@ -128,7 +142,7 @@ export function ServiceWorker() {
       confirmText="Update now"
       cancelText="Not now"
       tone="primary"
-      onDismiss={() => setAsked(true)}
+      onDismiss={() => setHushed(true)}
       onConfirm={relaunch}
     />
   );

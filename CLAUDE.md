@@ -566,6 +566,18 @@ which is what closing and reopening an app has always meant. It looks again when
 the app rather than on a timer, since a till left open on a counter is never relaunched.
 `probe-update-prompt.mjs` ships a genuinely different worker to a running app and walks it.
 
+**AND IT ASKS AGAIN, AS OFTEN AS THE SHOP SAID.** "Not now" that is never asked again is how a till
+ends up running a version from March, and the reason for a version is usually that something in the
+last one was wrong. So "Not now" hushes the dialog for `store_settings.update_reminder_minutes`
+(0158) — 30 minutes by default, or an hour, four hours, twelve, chosen in Settings. `useRemindAfterMinutes`
+READS the settings screen's own cached snapshot rather than fetching: a round trip on every start-up,
+on every screen, to learn how long to wait for something that may never happen is a cost the shop
+pays for nothing. **It therefore declares that key in the settings screen's exact shape.** Declaring
+the shared key with `null` as its initial value handed the settings screen a null where it expected
+`{ settings, shop, pending, error }`, and the whole app died after sign-in with "Cannot read
+properties of null". One key, one shape — a reader either declares the shape or leaves the key alone.
+`probe-update-reminder-setting.mjs` saves a choice as a shop does and reads it back from the database.
+
 **AN INSTALLED APP UPDATES ITSELF, EXCEPT ITS MANIFEST.** Pages are fetched network-first, so a
 launch with a signal always gets the newest build, and build files are content-hashed. The worker is
 re-checked on launch (and at most daily), takes over at once and drops older caches. The MANIFEST is

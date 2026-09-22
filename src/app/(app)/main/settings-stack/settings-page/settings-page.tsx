@@ -51,7 +51,17 @@ interface Settings {
   show_transfer_details: boolean;
   receipt_logo_path: string | null;
   receipt_logo_width_pct: number;
+  /** How long after "Not now" a waiting app update asks again, in minutes (0158). */
+  update_reminder_minutes: number;
 }
+
+/** What the shop can choose from. Minutes, so a fifth is a number rather than a migration. */
+const REMIND_AFTER: { minutes: number; label: string }[] = [
+  { minutes: 30, label: 'Every 30 minutes' },
+  { minutes: 60, label: 'Every hour' },
+  { minutes: 240, label: 'Every 4 hours' },
+  { minutes: 720, label: 'Twice a day' },
+];
 
 /**
  * Store settings — role-gated, and stored in the database rather than on the device.
@@ -198,7 +208,11 @@ export default function SettingsPage() {
           // Defaulted here as well as in the column: a settings row written before 0046 comes back
           // with null, and a null width would render the logo at zero and look like a broken
           // upload.
-          settings: { ...row, receipt_logo_width_pct: row.receipt_logo_width_pct ?? 60 },
+          settings: {
+            ...row,
+            receipt_logo_width_pct: row.receipt_logo_width_pct ?? 60,
+            update_reminder_minutes: row.update_reminder_minutes ?? 30,
+          },
           shop: shopRow.error
             ? snapshotRef.current.shop
             : ((shopRow.data as StoreRow | null) ?? null),
@@ -257,6 +271,7 @@ export default function SettingsPage() {
           show_transfer_details: settings.show_transfer_details,
           receipt_logo_path: settings.receipt_logo_path,
           receipt_logo_width_pct: settings.receipt_logo_width_pct,
+          update_reminder_minutes: settings.update_reminder_minutes,
         })
         .eq('store_id', store.id);
       if (err) throw err;
@@ -340,6 +355,41 @@ export default function SettingsPage() {
         moment it has done its job.
       */}
       <InstallSection />
+
+      {/*
+        HOW OFTEN A WAITING UPDATE ASKS AGAIN.
+
+        A new version announces itself and waits, because taking over mid-sale swaps the code under
+        somebody serving a customer. "Not now" therefore has to be a real answer — and an answer
+        never asked again is how a shop ends up running a version from March.
+      */}
+      {settings && (
+        <>
+          <h2 className={styles.section}>Remind me about updates</h2>
+          <div className={styles.field}>
+            <label className={styles.label} htmlFor="update-reminder">
+              After &ldquo;Not now&rdquo;, ask again
+            </label>
+            <select
+              id="update-reminder"
+              className={styles.select}
+              value={String(settings.update_reminder_minutes)}
+              disabled={!editable}
+              onChange={(e) => patch({ update_reminder_minutes: Number(e.target.value) })}
+            >
+              {REMIND_AFTER.map((r) => (
+                <option key={r.minutes} value={r.minutes}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+            <p className={styles.sectionNote}>
+              An update is never taken while you are in the middle of something — it waits to be let
+              in, and comes with the next launch anyway.
+            </p>
+          </div>
+        </>
+      )}
 
       {can('store.settings') && (
         <>
