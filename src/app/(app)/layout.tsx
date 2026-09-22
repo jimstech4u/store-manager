@@ -38,12 +38,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       setMustChange(undefined);
       return;
     }
-    const { data, error } = await getSupabase().rpc('my_membership');
-    const row = (data as { must_change_password: boolean; login_email: string | null }[] | null)?.[0];
-    // A failed read must not lock somebody out of their own shop. The database enforces every
-    // permission anyway; this flag only decides whether to interrupt.
-    setMustChange(error ? false : Boolean(row?.must_change_password));
-    setLoginEmail(row?.login_email ?? null);
+    /*
+     * A READ THAT FAILS IS STILL AN ANSWER TO THIS QUESTION: do not interrupt.
+     *
+     * The returned `error` was handled and a THROWN one was not — and with no signal the call
+     * throws rather than returning. `mustChange` then stayed `undefined`, which this gate reads as
+     * "not asked yet", so the app sat on "Opening your shop" for ever: a shop with its own till
+     * cached on the device, locked out by a question nobody could answer. The database enforces
+     * every permission regardless; this flag only decides whether to interrupt.
+     */
+    try {
+      const { data, error } = await getSupabase().rpc('my_membership');
+      const row = (data as { must_change_password: boolean; login_email: string | null }[] | null)?.[0];
+      setMustChange(error ? false : Boolean(row?.must_change_password));
+      setLoginEmail(row?.login_email ?? null);
+    } catch {
+      setMustChange(false);
+    }
   }, [session]);
 
   useEffect(() => {

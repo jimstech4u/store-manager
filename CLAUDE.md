@@ -559,6 +559,13 @@ about a session, so every launch of the installed app opened a shopfront with a 
 which reads exactly like being logged out, and was reported as that. Sign-in also sends anybody who
 already has a session straight on, rather than asking for a password it does not need.
 
+**A NEW VERSION ASKS BEFORE IT TAKES OVER.** A waiting worker does NOT `skipWaiting()`: swapping
+the files under a running page is swapping them under a till halfway through a sale. The app notices
+one waiting, says so, and only an answer moves it on — "Not now" leaves it for the next launch,
+which is what closing and reopening an app has always meant. It looks again when the shop returns to
+the app rather than on a timer, since a till left open on a counter is never relaunched.
+`probe-update-prompt.mjs` ships a genuinely different worker to a running app and walks it.
+
 **AN INSTALLED APP UPDATES ITSELF, EXCEPT ITS MANIFEST.** Pages are fetched network-first, so a
 launch with a signal always gets the newest build, and build files are content-hashed. The worker is
 re-checked on launch (and at most daily), takes over at once and drops older caches. The MANIFEST is

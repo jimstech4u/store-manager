@@ -22,7 +22,7 @@
  * STATIC FILES ARE CACHE-FIRST: Next puts a hash in every name, so a file that exists cannot change.
  */
 
-const VERSION = 'v4'; // bumped when what is cached changes: old caches are dropped on activate
+const VERSION = 'v5'; // bumped when what is cached changes: old caches are dropped on activate
 const SHELL = `shell-${VERSION}`;
 const STATIC = `static-${VERSION}`;
 /*
@@ -51,7 +51,15 @@ self.addEventListener('install', (event) => {
           cache.add(new Request(path, { cache: 'reload' })).catch(() => {}),
         ),
       );
-      await self.skipWaiting();
+      /*
+       * NOT `skipWaiting()` HERE.
+       *
+       * Taking over the moment a new version lands swaps the files under a page that is already
+       * running — a till halfway through a sale, reaching for a screen it has not loaded yet. So a
+       * new worker WAITS, the app notices and asks ("Update ready — Reload"), and only an answer
+       * moves it on (`skip-waiting` below). An app nobody answers gets it on its next launch, which
+       * is what closing and reopening has always meant.
+       */
     })(),
   );
 });
@@ -144,6 +152,11 @@ async function fromCacheFirst(request) {
  */
 self.addEventListener('message', (event) => {
   const data = event.data;
+  // The shop said yes to the new version.
+  if (data && data.type === 'skip-waiting') {
+    void self.skipWaiting();
+    return;
+  }
   if (!data || data.type !== 'warm' || typeof data.path !== 'string') return;
   event.waitUntil(
     (async () => {
