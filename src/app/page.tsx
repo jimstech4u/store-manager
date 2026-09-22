@@ -35,6 +35,25 @@ import { formatMoney } from '@/lib/format';
 export default function MarketplacePage() {
   const router = useRouter();
   const { session } = useAuth();
+
+  /*
+   * LAUNCHED AS AN APP? Then this page is not what was asked for.
+   *
+   * The manifest starts the installed app at `/main`, but a phone that installed it BEFORE that
+   * keeps the old start_url — Android re-reads the manifest in its own time, and iOS reads it once,
+   * at install. So an app installed a day ago still opens the public marketplace and still looks
+   * logged out, and no amount of fixing the manifest reaches it.
+   *
+   * `display-mode: standalone` is true only when this is running as the installed app, never in a
+   * browser tab — so a shop browsing the marketplace in Safari is left alone.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const asApp =
+      window.matchMedia?.('(display-mode: standalone)').matches ||
+      (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+    if (asApp) router.replace('/main');
+  }, [router]);
   const [query, setQuery] = useState('');
   const debounced = useDebounced(query);
   const [category, setCategory] = useState<string | null>(null);

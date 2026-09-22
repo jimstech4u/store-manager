@@ -100,6 +100,23 @@ try {
   const androidText = (await android.locator('body').innerText()).replace(/\s+/g, ' ');
   check('an Android browser is shown its menu', /Install app|Add to Home screen/i.test(androidText), androidText.slice(0, 60));
 
+  // ══ 2c. An app installed BEFORE the start_url was fixed ══════════════════════════
+  // Its phone still launches `/`. Android re-reads the manifest in its own time; iOS reads it once,
+  // at install — so the app itself has to notice it is the installed app and go where it belongs.
+  const old = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await old.addInitScript(() => {
+    // What the installed app reports, and a browser tab never does.
+    const real = window.matchMedia.bind(window);
+    window.matchMedia = (q) =>
+      q === '(display-mode: standalone)' ? { matches: true, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, onchange: null, dispatchEvent: () => false } : real(q);
+  });
+  await old.goto(BASE, { waitUntil: 'domcontentloaded' });
+  await old.waitForTimeout(4000);
+  // `/main` when there is a session, `/login` when there is not — either way it has left the
+  // marketplace, which is the shopfront and not the app.
+  const landed = new URL(old.url()).pathname;
+  check('an older install launching at / leaves the shopfront', landed === '/main' || landed === '/login', landed);
+
   // ══ 3 & 4. The service worker, and a screen with the network cut ══════════════════
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const p = await ctx.newPage();

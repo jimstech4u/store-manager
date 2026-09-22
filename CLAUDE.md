@@ -559,6 +559,14 @@ about a session, so every launch of the installed app opened a shopfront with a 
 which reads exactly like being logged out, and was reported as that. Sign-in also sends anybody who
 already has a session straight on, rather than asking for a password it does not need.
 
+**AN INSTALLED APP UPDATES ITSELF, EXCEPT ITS MANIFEST.** Pages are fetched network-first, so a
+launch with a signal always gets the newest build, and build files are content-hashed. The worker is
+re-checked on launch (and at most daily), takes over at once and drops older caches. The MANIFEST is
+the exception: Android re-reads it in its own time and iOS reads it once, at install — so a change
+to `start_url`, the name or the icon never reaches a phone that installed before it. Anything that
+must reach old installs has to be done IN THE APP: `/` sends a standalone launch to `/main` itself,
+which is what heals every app installed while `start_url` was still `/`.
+
 **INSTALLING IS PER-PLATFORM, and the app says which.** Android hands us the install itself
 (`beforeinstallprompt`, only once the site qualifies: HTTPS, manifest with 192 and 512 icons, a
 worker with a fetch handler) — one tap. iOS has no API at all and never has: Safari installs from

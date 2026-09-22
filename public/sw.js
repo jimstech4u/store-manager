@@ -109,12 +109,29 @@ async function fromNetworkFirst(request) {
   }
 }
 
+/*
+ * Build files are named by their contents, so every deploy adds a new set and none of the old ones
+ * can ever be asked for again. Left alone they pile up on the phone for ever. There is no date on a
+ * cache entry to sort by, so past a generous ceiling the lot is dropped: the app is online at that
+ * moment (it just fetched something), and what it needs comes straight back on the next request.
+ */
+const STATIC_CEILING = 400;
+
+async function pruneStatic(cache) {
+  const keys = await cache.keys();
+  if (keys.length <= STATIC_CEILING) return;
+  await Promise.all(keys.map((k) => cache.delete(k)));
+}
+
 async function fromCacheFirst(request) {
   const cache = await caches.open(STATIC);
   const hit = await cache.match(request);
   if (hit) return hit;
   const fresh = await fetch(request);
-  if (fresh && fresh.ok) cache.put(request, fresh.clone());
+  if (fresh && fresh.ok) {
+    await cache.put(request, fresh.clone());
+    await pruneStatic(cache);
+  }
   return fresh;
 }
 
