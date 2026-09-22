@@ -1,0 +1,49 @@
+/*
+ * The install offer. One button where the platform allows one, two lines where Apple does not.
+ */
+.wrap {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.step {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.stepNumber {
+  flex: none;
+  width: 1.4em;
+  height: 1.4em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--primary, #0b6252);
+  color: #fff;
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.done {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.note {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}

@@ -546,3 +546,9 @@
 .bannerCategories .bannerTitle {
   font-size: var(--text-base);
 }
+
+/* The install offer under the hero's two actions: its own line, not a third button beside them. */
+.heroInstall {
+  margin-top: var(--space-3);
+  max-width: 22rem;
+}

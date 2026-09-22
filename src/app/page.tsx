@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import styles from './(market)/market.module.css';
 import { MarketShell } from './(market)/MarketShell';
+import { InstallApp } from '@/components/ui/InstallApp';
 import { Button } from '@/components/ui/Button';
 import { SearchField, useDebounced } from '@/components/ui/SearchField';
 import { InfoPanel } from '@/components/ui/Explain';
@@ -98,6 +99,15 @@ export default function MarketplacePage() {
               >
                 Sign in
               </Button>
+            </div>
+
+            {/*
+              PUT IT ON THE PHONE, offered where somebody first meets the product — one tap on
+              Android, and on iPhone the two steps Apple leaves to us. Drawn only when it can
+              actually be done, so an installed app and a desktop browser see nothing.
+            */}
+            <div className={styles.heroInstall}>
+              <InstallApp label="Add to my home screen" />
             </div>
           </div>
         </section>

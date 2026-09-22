@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>No signal for this screen</title>
+    <!--
+      EVERY BYTE OF THIS PAGE IS IN THIS FILE.
+
+      It is what the service worker serves when a screen has never been opened on this phone and
+      there is nothing to fetch it with. A stylesheet or a script would be one more thing to fetch,
+      on the one occasion when fetching is exactly what cannot happen.
+    -->
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: #f6f8f7;
+        color: #12201d;
+        font: 16px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        text-align: center;
+      }
+      main { max-width: 22rem; display: grid; gap: 12px; justify-items: center; }
+      .mark { width: 64px; height: 64px; border-radius: 16px; }
+      h1 { margin: 4px 0 0; font-size: 1.25rem; }
+      p { margin: 0; color: #4a5a56; }
+      a {
+        margin-top: 8px;
+        padding: 12px 20px;
+        border-radius: 10px;
+        background: #0b6252;
+        color: #fff;
+        text-decoration: none;
+        font-weight: 600;
+      }
+      @media (prefers-color-scheme: dark) {
+        body { background: #0f1413; color: #eef2f1; }
+        p { color: #9fb0ac; }
+        a { background: #8fcbbe; color: #0f1413; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img class="mark" src="/icons/icon-192.png" alt="" />
+      <h1>No signal for this screen</h1>
+      <p>
+        Anything you have already used still opens, showing what it last knew. This one has not been
+        opened on this phone yet, so there is nothing to show until the signal is back.
+      </p>
+      <a href="/">Go to the app</a>
+    </main>
+  </body>
+</html>

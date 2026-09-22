@@ -12,7 +12,7 @@ import {
 } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { getSupabase } from '@/lib/supabase/client';
-import { StateStack } from '@academix-admin/state-stack';
+import { StateStack, useDemandState } from '@academix-admin/state-stack';
 import { messageOf, setMoneyDecimals } from '@/lib/format';
 
 /**
@@ -112,9 +112,57 @@ async function clearStoreScopes() {
   await Promise.all(STORE_SCOPED.map((scope) => StateStack.core.clearScope(scope)));
 }
 
+/**
+ * WHICH SHOP TO OPEN, given the shops this person works in.
+ *
+ * Lifted out of the read that fetches them. It used to live at the end of `loadStores`, so it only
+ * ever ran on a SUCCESSFUL read — and a cold start with no signal, where the list comes back from
+ * the device rather than the server, chose nothing. Every page begins `if (!store) return null`, so
+ * the app opened to its own tab bar over three blank pages.
+ *
+ *   A CHOICE MADE IN THIS SESSION IS SACRED, even into an unfinished shop — somebody who switched
+ *   there to finish setting it up must not be pulled back out.
+ *   THEN WHERE THEY WERE LAST, if that shop is still theirs and is not a half-made one standing
+ *   beside a working one (which is how a mistyped shop answered every sign-in with a setup wizard).
+ *   THEN the first finished shop, and only then the first of any.
+ */
+function chooseStore(list: StoreSummary[], current: string | null): string | null {
+  if (current && list.some((s) => s.id === current)) return current;
+
+  const ready = list.filter((s) => s.onboardedAt);
+  const preferred = (id: string | null) => {
+    if (!id) return null;
+    const found = list.find((s) => s.id === id);
+    if (!found) return null;
+    if (!found.onboardedAt && ready.length > 0) return null;
+    return found.id;
+  };
+
+  let remembered: string | null = null;
+  try {
+    remembered = localStorage.getItem(LAST_STORE_KEY);
+  } catch {
+    /* storage blocked — fall through */
+  }
+  return preferred(remembered) ?? ready[0]?.id ?? list[0]?.id ?? null;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
-  const [stores, setStores] = useState<StoreSummary[]>([]);
+  /*
+   * WHICH SHOPS THIS PERSON WORKS IN — kept on the device, per person.
+   *
+   * A cold start with no signal cannot ask, and the app has to open somewhere. Persisted so the
+   * till opens on the shop they were last in; keyed by the person signed in, and dropped on sign-out
+   * (below), because a shop phone is shared and the next person must not see the last one's shops.
+   */
+  const [stores, , setStores] = useDemandState<StoreSummary[]>([], {
+    key: 'auth:stores',
+    scope: 'auth_flow',
+    persist: true,
+    deps: [session?.user.id ?? ''],
+    revalidateOnMount: false,
+  });
   const [storeId, setStoreId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -148,8 +196,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .eq('stores.status', 'active');
 
     if (err) {
+      /*
+       * KEPT. Emptying the list here said "this person belongs to no shop", and the layout reads
+       * that as somebody who has not made one yet — so a signed-in shop with no signal was sent to
+       * the create-a-shop wizard, over its own till. A read that failed is not an answer.
+       */
       setError(err.message);
-      setStores([]);
       return;
     }
 
@@ -200,39 +252,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
      * A half-made shop is not lost by this — it is still in the switcher, and choosing it there
      * lands on its setup, which is the one context where that screen is what somebody asked for.
      */
-    const ready = list.filter((s) => s.onboardedAt);
-    const preferred = (id: string | null) => {
-      if (!id) return null;
-      const found = list.find((s) => s.id === id);
-      if (!found) return null;
-      if (!found.onboardedAt && ready.length > 0) return null;
-      return found.id;
-    };
-
-    setStoreId((current) => {
-      /*
-       * A CHOICE MADE IN THIS SESSION IS SACRED, even into an unfinished shop.
-       *
-       * Running `current` through the same preference was a fresh bug in the fix: `loadStores` runs
-       * again on every auth event, so somebody who deliberately switched to their half-made shop to
-       * finish setting it up was pulled straight back out of it, and the shop became unreachable
-       * rather than merely unlucky. The preference is about what to open when NOBODY has said — a
-       * cold sign-in — not about second-guessing somebody who just pressed a button.
-       */
-      if (current && list.some((s) => s.id === current)) return current;
-
-      let remembered: string | null = null;
-      try {
-        remembered = localStorage.getItem(LAST_STORE_KEY);
-      } catch {
-        /* storage blocked — fall through */
-      }
-      const back = preferred(remembered);
-      if (back) return back;
-
-      return ready[0]?.id ?? list[0]?.id ?? null;
-    });
-  }, []);
+    setStoreId((current) => chooseStore(list, current));
+    // `setStores` comes from state-stack and is stable; it is listed because the rule is right.
+  }, [setStores]);
 
   useEffect(() => {
     const supabase = getSupabase();
@@ -278,7 +300,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       sub.subscription.unsubscribe();
     };
-  }, [loadStores]);
+  }, [loadStores, setStores]);
+
+  /*
+   * A list without a choice is the offline cold start: the read failed, but the shops came back from
+   * the device. Nothing here overrides a choice already made — `chooseStore` keeps it.
+   */
+  useEffect(() => {
+    if (stores.length === 0) return;
+    setStoreId((current) => chooseStore(stores, current));
+  }, [stores]);
 
   const selectStore = useCallback((id: string) => {
     setStoreId((previous) => {

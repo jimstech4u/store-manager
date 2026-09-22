@@ -547,6 +547,33 @@ tries has ten empty fields on it for the nine that do not apply this time.
 The shop names each one as it adds it. That is also why the fees are stored by name rather than
 summed into a total — "loading" and "union levy" mean something to the person reading it back.
 
+## An app on the phone, not a page in a browser
+
+Installed (`src/app/manifest.ts`, `public/sw.js`), this opens from the home screen in its own window:
+one tap beside WhatsApp instead of finding a tab. `InstallApp` offers it on the landing page and in
+Settings — one tap on Android through `beforeinstallprompt`, and on iPhone the two steps Apple leaves
+to us, since there is no install API there. Both disappear once it is installed.
+
+**The service worker caches the SHELL, never the shop's data.** state-stack already keeps what each
+screen read, in IndexedDB, and knows when it is stale; a second copy in a worker would be a second
+answer to "what does this shop owe", ageing on its own. Pages are cached BY PATH: navigation-stack
+writes the whole stack into `?nav=`, so caching by full URL stored hundreds of keys and matched none.
+`/main` is precached and the current path is warmed on each move, because every screen after the
+first is a client-side move the browser never fetches.
+
+**A failed read must not decide who you are.** Offline the shop list could not be fetched, the list
+was emptied, and the layout read "no shops" as "has not made one yet" — sending a signed-in shop to
+the create-a-shop wizard over its own till. The list is now kept on the device per person, a failed
+read keeps what it had, and `needsStore` requires an answer rather than an absence. Choosing WHICH
+shop to open is about the list, not about the read that fetched it (`chooseStore`), or a cold start
+with no signal chooses nothing and every page renders `null` behind the tab bar.
+
+**Nothing pushes a page while the app is starting up.** The till offers its count screen when a line
+needs counting, and guarded that on `nav.isActiveStack()` — which reports whether the stack syncs
+history, true of all four tabs at once. On boot it pushed onto whichever tab the shop had actually
+opened, and that history entry then swallowed the next Back press. `useIsActiveStack()`
+(navigation-stack 0.19.0) is the question that was meant.
+
 ## Nobody meets a door they cannot open
 
 Three layers, one map (`ROUTE_NEEDS` in `lib/permissions.ts`, each entry the permission that page's

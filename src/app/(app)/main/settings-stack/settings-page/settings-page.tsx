@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState, useRef } from 'react';
 import { useReload } from '@/lib/stacks/resource';
 import { ReceiptPreview } from '@/components/receipt/ReceiptPreview';
 import { LogoRejected, normaliseReceiptLogo } from '@/lib/image-pipeline';
+import { InstallApp } from '@/components/ui/InstallApp';
+import { useInstallApp } from '@/hooks/useInstallApp';
 import styles from './settings-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
@@ -329,6 +331,15 @@ export default function SettingsPage() {
           Everyone in this shop will see these settings, on any device.
         </InfoPanel>
       )}
+
+      {/*
+        ON THE PHONE ITSELF — for everybody, not just the owner.
+
+        A seller reaching the till through a browser tab is the one thing that makes this feel like
+        a website. `InstallApp` draws nothing once it is installed, so this section disappears the
+        moment it has done its job.
+      */}
+      <InstallSection />
 
       {can('store.settings') && (
         <>
@@ -867,5 +878,25 @@ export default function SettingsPage() {
         }
       </PageState>
     </PageScaffold>
+  );
+}
+
+/**
+ * The heading goes with the offer.
+ *
+ * `InstallApp` decides whether there is anything to say; without this the section title sat on the
+ * screen of a shop that had already installed it, over nothing.
+ */
+function InstallSection() {
+  const { way } = useInstallApp();
+  if (way === 'installed' || way === 'not-offered') return null;
+  return (
+    <>
+      <h2 className={styles.section}>This app on your phone</h2>
+      <InstallApp
+        label="Put this on my phone"
+        note="It opens from your home screen like any other app — full screen, and it starts from what it last knew even on a bad line."
+      />
+    </>
   );
 }

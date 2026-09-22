@@ -15,7 +15,7 @@ import { getSupabase } from '@/lib/supabase/client';
  * that failure shows up as a screen that renders briefly with someone else's data.
  */
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { loading, session, stores, store, signOut } = useAuth();
+  const { loading, session, stores, store, error, signOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -51,7 +51,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [askMembership]);
 
   const needsAccount = !loading && !session;
-  const needsStore = !loading && !!session && stores.length === 0;
+  /*
+   * "You have no shop" is a claim, and it needs an answer to make it. With no signal the read fails
+   * and the list is empty — which used to route a signed-in shop to the create-a-shop wizard, the
+   * one screen it could not possibly want. An error means we do not know, so nothing is claimed.
+   */
+  const needsStore = !loading && !!session && stores.length === 0 && !error;
   const needsOnboarding =
     !loading && !!store && !store.onboardedAt && !pathname.startsWith('/setup');
 

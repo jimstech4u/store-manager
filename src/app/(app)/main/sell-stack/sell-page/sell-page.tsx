@@ -5,7 +5,7 @@ import styles from './sell-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
-import { useOverlayRoute } from '@academix-admin/navigation-stack';
+import { useIsActiveStack, useOverlayRoute } from '@academix-admin/navigation-stack';
 import { useIsTop, useNav, scrollIntoViewBelow } from '@academix-admin/navigation-stack';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
@@ -258,6 +258,15 @@ export default function SellPage() {
    * underneath would land on top of whatever the seller is actually looking at.
    */
   const tillIsTop = useIsTop();
+  /*
+   * IS THE TILL THE TAB ON SCREEN?
+   *
+   * `nav.isActiveStack()` reads as that and is not: it says the stack syncs history, which is true
+   * of all four tabs at once. So on start-up — while the group was still settling which tab to show
+   * — the till pushed this offer onto whatever tab the shop had actually opened, and the history
+   * entry it created then ate the next Back press. `useIsActiveStack` (0.19.0) is the real question.
+   */
+  const tillTabShowing = useIsActiveStack();
   const offeredCount = useRef<{ order: string | null; ids: Set<string> }>({
     order: null,
     ids: new Set(),
@@ -267,13 +276,13 @@ export default function SellPage() {
     if (offeredCount.current.order !== activeOrder.clientUuid) {
       offeredCount.current = { order: activeOrder.clientUuid, ids: new Set() };
     }
-    if (!tillIsTop || !nav.isActiveStack()) return;
+    if (!tillIsTop || !tillTabShowing) return;
     const fresh = needCount.filter((id) => !offeredCount.current.ids.has(id));
     if (fresh.length === 0) return;
     fresh.forEach((id) => offeredCount.current.ids.add(id));
     const newest = [...activeOrder.lines].reverse().find((l) => fresh.includes(l.productId));
     void nav.push('count_gate_page', { focus: newest?.productId ?? fresh[0] });
-  }, [needCount, tillIsTop, activeOrder, nav]);
+  }, [needCount, tillIsTop, tillTabShowing, activeOrder, nav]);
 
   const [askCloseTab, setAskCloseTab] = useState(false);
   /*
