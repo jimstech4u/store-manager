@@ -742,3 +742,22 @@ free, then start.
 
 Before saying it is done: `npx tsc --noEmit`, `npx next lint`, `npx next build`, and the probes
 for the areas touched.
+
+### Known stale probes, and one thing unverified (2026-09-23)
+
+Two probes fail for reasons that have nothing to do with what they test. A probe that fails for a
+stale reason is a probe nobody reads, so either retarget or quarantine them — do not leave them
+failing.
+
+| Probe | Why it fails | What it should do instead |
+|---|---|---|
+| `probe-people.mjs` | Waits for a **People tab** retired on 2026-09-12 (the tabs are Sell, Stock, Money, More). Probe last touched 2026-08-22. | Reach the people screens where they live now — registered in `settings-stack`, from the Customers section on the settings screen. |
+| `probe-after-sale.mjs` | Waits for a button reading **Take payment**. That label is conditional: it reads `Count N items first` whenever anything on the till needs counting, which the count-gate flow introduced on 2026-09-16. Probe last touched 2026-09-09. | Either clear the count gate first, or match the label the till actually shows. |
+
+**UNVERIFIED, and it undercuts the offline promise if it is true.** iOS evicts IndexedDB for sites
+that have not been used for about seven days. state-stack persists there, so an iPhone shop that
+uses Safari WITHOUT installing could come back after a week to an empty cache — and "a screen you
+have already used still opens with no signal" quietly stops being true. Installed home-screen apps
+are treated differently, which is one more argument for the install prompt. Nobody has tested what
+this app does after eviction. It is testable; test it before relying on the claim.
+
