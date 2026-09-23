@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import Header, { type HeaderAction } from '@academix-admin/header';
-import { Scaffold } from '@academix-admin/navigation-stack';
+import { Scaffold, useNavOptional } from '@academix-admin/navigation-stack';
 import styles from './PageScaffold.module.css';
 import { useTheme } from '@/context/ThemeContext';
 
@@ -60,6 +60,19 @@ export function PageScaffold({
   headerScrolls?: boolean;
   children: ReactNode;
 }) {
+  /*
+   * EVERY PAGE NAMES ITSELF, because every page already tells this component what it is called.
+   *
+   * The browser's title, the back/forward list and anything reading the document title were all
+   * saying the same thing on all 53 screens — the app is one URL, so one name. The name is right
+   * here in the header the page asked for, so no screen has to remember to do anything.
+   *
+   * `useNavOptional` rather than `useNav`: this shell is also rendered by the marketplace, outside
+   * any stack, where `useNav()` throws.
+   */
+  const nav = useNavOptional();
+  nav?.title(title);
+
   const { theme } = useTheme();
 
   /*
