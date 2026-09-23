@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useDemandState } from '@academix-admin/state-stack';
-import { useInvalidation } from '@/lib/stacks/invalidation';
+import { useInvalidation } from '@academix-admin/state-stack';
 import { DERIVED_SCOPE, fetchSaleUnits, type SaleUnit } from '@/lib/stacks/catalog-stack';
 
 /**

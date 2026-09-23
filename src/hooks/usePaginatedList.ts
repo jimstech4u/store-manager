@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useInfiniteScrollObserver } from '@academix-admin/navigation-stack';
 import { useDemandState } from '@academix-admin/state-stack';
-import { useInvalidation } from '@/lib/stacks/invalidation';
+import { useInvalidation } from '@academix-admin/state-stack';
 import { messageOf } from '@/lib/format';
 
 /**

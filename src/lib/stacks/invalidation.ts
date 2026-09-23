@@ -1,14 +1,13 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
 import { StateStack } from '@academix-admin/state-stack';
 
 /**
  * Saying that something changed, without throwing away what is on screen.
  *
- * Every "x changed" function here used to call `StateStack.core.clearScope`, which DELETES every
- * cached value in the scope. For a hook that refetches on mount that is merely redundant. For a
- * paginated list it is destructive, and it produced the bug this exists to fix:
+ * Every "x changed" function in this folder used to call `StateStack.core.clearScope`, which DELETES
+ * every cached value in the scope. For a hook that refetches on mount that is merely redundant. For
+ * a paginated list it is destructive, and it produced the bug this exists to fix:
  *
  *   THE STOCK LIST VANISHED AFTER ANY CATALOGUE WRITE. `catalogChanged()` cleared `catalog_flow`,
  *   and the products list lived in it — so saving a unit deleted the list, and coming back gave a
@@ -21,60 +20,13 @@ import { StateStack } from '@academix-admin/state-stack';
  * A cache is dropped for exactly one reason — the data must not be seen again, which means signing
  * out or switching shop. `AuthProvider` still clears for that, and should. Everything else is
  * staleness, and the answer to staleness is to re-read, keeping what is on screen until the new
- * answer arrives. That is what the codebase's own rule already says: a loader must never blank
- * before it fetches.
- */
-
-const listeners = new Map<string, Set<() => void>>();
-
-/**
- * Tell everything holding data in this scope to re-read.
+ * answer arrives.
  *
- * Synchronous and best-effort: a screen that is not mounted hears nothing, which is correct — it
- * will read fresh when it mounts.
+ * THE LISTENER BUS THAT USED TO LIVE HERE IS NOW state-stack's (0.4.0). It had nothing in it that
+ * knew about this app, and the package already owned the other half — `invalidateScope` marks the
+ * keys stale. Screens that own their loader import `useInvalidation` from the package directly; what
+ * is left here is this project's own word for the thing.
  */
 export function invalidate(scope: string) {
-  /*
-   * Let every demand-backed cache in this scope run its loader again.
-   *
-   * `useDemandState`'s `demand()` returns early once a key has been demanded, so telling a screen
-   * to load again does nothing on its own — which is why replacing `clearScope` with a plain
-   * notification silently stopped every derived cache from ever refreshing. `invalidateScope`
-   * (state-stack 0.3.0) clears the flag and keeps the value, which is the whole point: re-read
-   * without blanking.
-   */
   StateStack.core.invalidateScope(scope);
-
-  const set = listeners.get(scope);
-  if (!set) return;
-  // Copied before iterating: a listener may unsubscribe itself as it runs.
-  for (const fn of [...set]) fn();
-}
-
-/**
- * Re-read whenever this scope is invalidated.
- *
- * The callback is held in a ref so a caller can pass an inline closure without resubscribing on
- * every render — the subscription follows the scope, not the function identity.
- */
-export function useInvalidation(scope: string | null, onChanged: () => void) {
-  const ref = useRef(onChanged);
-  ref.current = onChanged;
-
-  useEffect(() => {
-    if (!scope) return;
-
-    const fn = () => ref.current();
-    let set = listeners.get(scope);
-    if (!set) {
-      set = new Set();
-      listeners.set(scope, set);
-    }
-    set.add(fn);
-
-    return () => {
-      set.delete(fn);
-      if (set.size === 0) listeners.delete(scope);
-    };
-  }, [scope]);
 }
