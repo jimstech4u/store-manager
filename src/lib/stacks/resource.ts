@@ -1,9 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { StateStack, getDefaultStorage, useDemandState } from '@academix-admin/state-stack';
-import { useInvalidation } from '@academix-admin/state-stack';
-import { messageOf } from '@/lib/format';
+import { useCallback, useRef } from 'react';
+import { StateStack, getDefaultStorage, useDemandResource } from '@academix-admin/state-stack';
 
 /**
  * ONE WAY TO READ SOMETHING — kept, shown straight away next time, and honest while it loads.
@@ -63,72 +61,38 @@ export function useResource<T>(opts: {
   persist?: boolean;
 }): Resource<T> {
   const { key, scope, enabled = true, persist = true } = opts;
-  const deps = opts.deps ?? [];
 
-  const [data, demand, setData] = useDemandState<T | null>(null, {
-    key,
-    scope,
-    persist,
-    deps: [key, ...deps],
-    // Show what was kept, and read again behind it every time the page is opened.
-    revalidateOnMount: true,
-  });
-
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Refs, so a fresh closure every render is not a reason to read again.
   const readRef = useRef(opts.read);
   readRef.current = opts.read;
   const failRef = useRef(opts.onFail);
   failRef.current = opts.onFail;
 
-  const load = useCallback(() => {
-    if (!enabled) return;
-    demand(async ({ set }) => {
-      setLoading(true);
-      try {
-        const got = await readRef.current();
-        // `override`: an empty answer is an answer. A customer who has paid everything off has an
-        // empty history, and must not keep the one from before.
-        set(got, { override: true });
-        setError(null);
-      } catch (e) {
-        // KEPT. Only the error is set; the last answer stays on screen.
-        const said = messageOf(e, 'That could not be read.');
-        setError(said);
-        failRef.current?.(said);
-      } finally {
-        setLoading(false);
-      }
-    });
-    // `key` stands for the value; `deps` are already folded into the demand's own reset.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, demand, key]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  const reload = useCallback(() => {
-    if (!enabled) return;
-    StateStack.core.resetDemand(scope, key);
-    load();
-  }, [enabled, scope, key, load]);
-
-  // A writer anywhere said this scope changed: read again, keeping what is shown.
-  useInvalidation(enabled ? scope : null, reload);
-
-  const set = useCallback(
-    (next: T | ((prev: T | null) => T)) => {
-      setData((prev) =>
-        typeof next === 'function' ? (next as (p: T | null) => T)(prev) : next,
-      );
+  const res = useDemandResource<T>(
+    // `read` is this project's own signature: no signal, because a Supabase call is not abortable
+    // the way a fetch is. The library cancels by ignoring a superseded answer, which is the part
+    // that matters — a screen left and returned to must not take whichever reply lands second.
+    () => readRef.current(),
+    {
+      key,
+      scope,
+      enabled,
+      persist,
+      deps: opts.deps ? [...opts.deps] : [],
+      fallbackMessage: 'That could not be read.',
+      onError: (message) => failRef.current?.(message),
     },
-    [setData],
   );
 
-  return { data, loaded: data !== null, loading, error, reload, set };
+  const set = useCallback(
+    (next: T | ((prev: T | null) => T)) => res.setData(next),
+    [res],
+  );
+
+  const reload = useCallback(() => {
+    void res.refetch();
+  }, [res]);
+
+  return { data: res.data, loaded: res.loaded, loading: res.loading, error: res.error, reload, set };
 }
 
 /**

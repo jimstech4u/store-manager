@@ -57,6 +57,35 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        {/*
+          THE INSTALLED APP NEVER SHOWS THE SHOPFRONT ON ITS WAY IN.
+
+          `/` is the public marketplace. An app installed before `start_url` became `/main` still
+          launches here, and the redirect that heals that used to live in an effect — which runs
+          after hydration, which is long after the server's HTML has been painted. So opening the
+          app meant a full screen of somebody else's shops, and then the till: reported as "a flash
+          of marketplace before /main".
+
+          This runs in the HEAD, before the body it would have painted even exists. `display-mode:
+          standalone` is true only in the installed app and never in a browser tab, so a person
+          genuinely browsing the marketplace is untouched — including a signed-in one, who gets a
+          "Go to my shop" button rather than a redirect, because this page is public and people
+          browse it.
+
+          `location.replace`, not `href`: the shopfront must not become a back destination inside
+          the app, where Back belongs to the navigation stack.
+        */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{if(location.pathname!=='/')return;" +
+              "var app=(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)" +
+              "||window.navigator.standalone===true;" +
+              "if(app)location.replace('/main');}catch(e){}})();",
+          }}
+        />
+      </head>
       <body>
         <ThemeProvider>
           <AuthProvider>

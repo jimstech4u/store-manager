@@ -167,6 +167,15 @@ self.addEventListener('message', (event) => {
     void self.skipWaiting();
     return;
   }
+  /*
+   * WHICH BUILD AM I? Asked of the WAITING worker, so the app can tell one pending update from
+   * another and remember what it has already asked about. Without a name for the version, "not now"
+   * can only be remembered for as long as the page lives.
+   */
+  if (data && data.type === 'version') {
+    if (event.ports && event.ports[0]) event.ports[0].postMessage(VERSION);
+    return;
+  }
   if (!data || data.type !== 'warm' || typeof data.path !== 'string') return;
   event.waitUntil(
     (async () => {

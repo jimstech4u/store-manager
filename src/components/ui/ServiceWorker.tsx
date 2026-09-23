@@ -16,9 +16,63 @@ import { useRemindAfterMinutes } from '@/hooks/useRemindAfterMinutes';
  * and the hours lost to that are not worth the fidelity — `next build && next start` exercises the
  * real thing when it needs exercising.
  */
+
+/** Where a postponed version is remembered, so "not now" survives a reload. */
+const HUSH_PREFIX = 'sw-hush:';
+
+/** Ask a worker which build it is. Returns null if it does not answer. */
+function versionOf(worker: ServiceWorker): Promise<string | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (v: string | null) => {
+      if (settled) return;
+      settled = true;
+      resolve(v);
+    };
+    try {
+      const channel = new MessageChannel();
+      channel.port1.onmessage = (e) => done(typeof e.data === 'string' ? e.data : null);
+      worker.postMessage({ type: 'version' }, [channel.port2]);
+      // A worker from before this message existed will never reply, and must not leave the app
+      // waiting on it for ever.
+      setTimeout(() => done(null), 2000);
+    } catch {
+      done(null);
+    }
+  });
+}
+
+/** Until when this build has been put off, or 0. Storage can throw; a failure means "not hushed". */
+function hushedUntil(version: string): number {
+  try {
+    return Number(localStorage.getItem(HUSH_PREFIX + version)) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function hushUntil(version: string, until: number) {
+  try {
+    localStorage.setItem(HUSH_PREFIX + version, String(until));
+    /*
+     * Forget every other build while we are here. One key per version would otherwise accumulate
+     * one entry per deploy for as long as the app is installed, and none of them can ever matter
+     * again: a version that is no longer waiting is a version already running or already gone.
+     */
+    for (let i = localStorage.length - 1; i >= 0; i -= 1) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(HUSH_PREFIX) && k !== HUSH_PREFIX + version) localStorage.removeItem(k);
+    }
+  } catch {
+    // A shop in a private window is asked again sooner. That is the whole cost.
+  }
+}
+
 export function ServiceWorker() {
   const pathname = usePathname();
   const [waiting, setWaiting] = useState<ServiceWorker | null>(null);
+  /** Which build is waiting — the name that makes "not now" mean one specific version. */
+  const [version, setVersion] = useState<string | null>(null);
   /** False while the shop is being left alone after saying "Not now". */
   const [hushed, setHushed] = useState(false);
   const remindAfter = useRemindAfterMinutes();
@@ -51,12 +105,39 @@ export function ServiceWorker() {
   useEffect(() => {
     if (!enabled) return;
     let registration: ServiceWorkerRegistration | null = null;
+    let dropped = false;
 
     /** A new version has finished downloading and is waiting for us to say when. */
-    const ready = (worker: ServiceWorker | null) => {
+    const ready = async (worker: ServiceWorker | null) => {
       // Only when something is ALREADY running: on a first visit there is no "new" version, just
       // the app arriving.
-      if (worker && navigator.serviceWorker.controller) setWaiting(worker);
+      if (!worker || !navigator.serviceWorker.controller) return;
+
+      const v = await versionOf(worker);
+      if (dropped) return;
+
+      /*
+       * ASKED ONCE PER VERSION, NOT ONCE PER PAGE.
+       *
+       * "Not now" used to live in React state, so it was forgotten the moment anything reloaded —
+       * and this app reloads often: a relaunch, a tab change, coming back to a phone that dropped
+       * the page. The shop set an interval of twelve hours and got asked again on the next screen.
+       * The answer is remembered against the BUILD it was given about, so the same version stays
+       * put away for as long as the shop asked, and a genuinely newer one still gets through at
+       * once.
+       */
+      const until = v ? hushedUntil(v) : 0;
+      const left = until - Date.now();
+
+      setWaiting(worker);
+      setVersion(v);
+      setHushed(left > 0);
+      if (left > 0) {
+        // Come back to it when the wait is up, without needing anything else to happen.
+        setTimeout(() => {
+          if (!dropped) setHushed(false);
+        }, left);
+      }
     };
 
     const register = async () => {
@@ -66,11 +147,11 @@ export function ServiceWorker() {
         // An app that cannot cache still works; it just needs the network. Nothing to say here.
         return;
       }
-      ready(registration.waiting);
+      void ready(registration.waiting);
       registration.addEventListener('updatefound', () => {
         const installing = registration?.installing;
         installing?.addEventListener('statechange', () => {
-          if (installing.state === 'installed') ready(installing);
+          if (installing.state === 'installed') void ready(installing);
         });
       });
     };
@@ -102,21 +183,12 @@ export function ServiceWorker() {
     navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
 
     return () => {
+      dropped = true;
       window.removeEventListener('load', register);
       document.removeEventListener('visibilitychange', lookAgain);
       navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
     };
   }, [enabled]);
-
-  /*
-   * The wait after "Not now". Cleared if the shop relaunches in the meantime — the update goes in
-   * on the way through and there is nothing left to ask about.
-   */
-  useEffect(() => {
-    if (!hushed) return;
-    const again = setTimeout(() => setHushed(false), remindAfter * 60_000);
-    return () => clearTimeout(again);
-  }, [hushed, remindAfter]);
 
   const relaunch = useCallback(() => {
     if (!waiting) return;
@@ -124,10 +196,15 @@ export function ServiceWorker() {
     waiting.postMessage({ type: 'skip-waiting' });
   }, [waiting]);
 
+  const putOff = useCallback(() => {
+    setHushed(true);
+    if (version) hushUntil(version, Date.now() + remindAfter * 60_000);
+  }, [version, remindAfter]);
+
   /*
-   * ASKED AGAIN, as often as the shop said.
+   * ASKED AGAIN, AS OFTEN AS THE SHOP SAID — and not once more than that.
    *
-   * "Not now" has to be a real answer — but an answer never asked again is how a shop ends up
+   * "Not now" has to be a real answer, but an answer never asked again is how a shop ends up
    * running a version from March, and the reason for a version is usually that something in the
    * last one was wrong. Half an hour to begin with; a shop that would rather be asked at closing
    * time sets twelve hours (Settings → Remind me about updates).
@@ -142,7 +219,7 @@ export function ServiceWorker() {
       confirmText="Update now"
       cancelText="Not now"
       tone="primary"
-      onDismiss={() => setHushed(true)}
+      onDismiss={putOff}
       onConfirm={relaunch}
     />
   );

@@ -752,6 +752,9 @@ failing.
 | Probe | Why it fails | What it should do instead |
 |---|---|---|
 | `probe-people.mjs` | Waits for a **People tab** retired on 2026-09-12 (the tabs are Sell, Stock, Money, More). Probe last touched 2026-08-22. | Reach the people screens where they live now — registered in `settings-stack`, from the Customers section on the settings screen. |
+| `probe-account-history.mjs` | Ignores the base-URL argument and goes to port 3100 regardless. | Take `process.argv[2]`, as the other probes do. |
+| `probe-ledgers.mjs` | **Fails on main, cause not investigated** (checked 2026-09-23 with a control build): "a shape with one product is named by the product, not the maker" finds nothing, then the walk times out on a `fill`. Not staleness as far as anyone has looked — it may be a real defect. | Investigate before trusting the empties naming rules. |
+| `probe-loading-states.mjs` | **Fails on main** (same control): its walk drifts — `[account-page]` shows the People list, `[deposit-customer]` shows Settings — then four screens come back empty and it times out. Most likely it predates People moving into `settings-stack` on 2026-09-11. | Re-target the walk at where those pages live now. |
 | `probe-after-sale.mjs` | Waits for a button reading **Take payment**. That label is conditional: it reads `Count N items first` whenever anything on the till needs counting, which the count-gate flow introduced on 2026-09-16. Probe last touched 2026-09-09. | Either clear the count gate first, or match the label the till actually shows. |
 
 **UNVERIFIED, and it undercuts the offline promise if it is true.** iOS evicts IndexedDB for sites

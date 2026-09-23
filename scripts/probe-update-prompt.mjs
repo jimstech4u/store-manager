@@ -109,19 +109,40 @@ try {
   });
   check('the new version is still there, waiting', stillWaiting);
 
-  // It asks again after the wait the shop chose; the wait itself is a timer, so what is checked
-  // here is that asking again brings the dialog back rather than the page having moved on.
-  await p.evaluate(() => {
-    window.dispatchEvent(new Event('visibilitychange'));
-  });
+  // ── "Not now" MEANS NOT NOW, ACROSS RELOADS ──────────────────────────────────────
+  //
+  // This is the part that was broken while looking correct. The answer lived in React state, so a
+  // reload forgot it — and this app reloads constantly: a tab change, a relaunch, coming back to a
+  // phone that dropped the page. A shop that chose twelve hours was asked again on the next screen.
+  // The answer is remembered against the BUILD it was given about.
+  await p.reload({ waitUntil: 'domcontentloaded' });
+  await p.waitForTimeout(6000);
+  const afterReload = (await p.locator('body').innerText()).replace(/\s+/g, ' ');
+  check(
+    'a reload does not ask again about the same version',
+    !afterReload.includes('A new version is ready'),
+    afterReload.slice(0, 60),
+  );
+  check('and the app is usable, not stuck behind a dialog', /sign in|email|password/i.test(afterReload));
+
+  const remembered = await p.evaluate(() =>
+    Object.keys(localStorage).filter((k) => k.startsWith('sw-hush:')),
+  );
+  check('the postponed version is remembered by name', remembered.length === 1, remembered.join(', '));
 
   // ── Yes ──────────────────────────────────────────────────────────────────────────
-  // Reload to be asked again without waiting out the reminder — the same page, the same waiting
-  // worker. (A reload while one waits does not install it: it needs every page to let go.)
+  // Forget the postponement rather than waiting out the shop's reminder interval — the same page,
+  // the same waiting worker. (A reload while one waits does not install it: it needs every page to
+  // let go.)
+  await p.evaluate(() => {
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith('sw-hush:'))
+      .forEach((k) => localStorage.removeItem(k));
+  });
   await p.reload({ waitUntil: 'domcontentloaded' });
-  await p.waitForTimeout(5000);
+  await p.waitForTimeout(6000);
   const askedAgain = (await p.locator('body').innerText()).replace(/\s+/g, ' ');
-  check('it is offered again on the next look', askedAgain.includes('A new version is ready'), askedAgain.slice(0, 60));
+  check('once the wait is over it is offered again', askedAgain.includes('A new version is ready'), askedAgain.slice(0, 60));
 
   const reloads = [];
   p.on('load', () => reloads.push(1));

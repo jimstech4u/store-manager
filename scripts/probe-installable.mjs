@@ -117,6 +117,24 @@ try {
   const landed = new URL(old.url()).pathname;
   check('an older install launching at / leaves the shopfront', landed === '/main' || landed === '/login', landed);
 
+  /*
+   * AND IT NEVER PAINTS THE SHOPFRONT ON THE WAY.
+   *
+   * Leaving `/` is not enough if the marketplace is drawn first. The redirect used to live in an
+   * effect, which runs after hydration — so the installed app opened on a full screen of other
+   * people's shops and then jumped to the till. Reported as "a flash of marketplace before /main".
+   *
+   * Checked in the HTML itself rather than by racing a screenshot: the redirect must appear in the
+   * document BEFORE the markup it would otherwise paint, because a browser runs a blocking script
+   * in the head before the body it precedes exists.
+   */
+  const html = await fetch(`${BASE}/`).then((r) => r.text());
+  const atRedirect = html.indexOf("display-mode: standalone");
+  const atShopfront = html.indexOf('Buy from shops near you');
+  check('the installed app is sent on before the shopfront exists', atRedirect > -1 && atRedirect < atShopfront, `redirect@${atRedirect} shopfront@${atShopfront}`);
+  check('and it only fires for the installed app, not a browser tab', html.includes('window.navigator.standalone'));
+
+
   // ══ 3 & 4. The service worker, and a screen with the network cut ══════════════════
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const p = await ctx.newPage();
