@@ -22,7 +22,17 @@
  * STATIC FILES ARE CACHE-FIRST: Next puts a hash in every name, so a file that exists cannot change.
  */
 
-const VERSION = 'v5'; // bumped when what is cached changes: old caches are dropped on activate
+/*
+ * THE BUILD THIS WORKER CAME FROM. Substituted by `scripts/build-sw.mjs` before every build.
+ *
+ * It used to be a hand-written 'v5', and that is why a deploy never announced itself. A browser
+ * decides a worker is NEW by comparing the bytes of the file it fetches with the one it installed.
+ * Ship the same bytes and there is no update — no `updatefound`, nothing reaches `waiting`, and the
+ * dialog that asks to relaunch has nothing to ask about. Four deploys went out that way.
+ *
+ * Old caches are dropped on activate, so a new build also clears the last one's shell.
+ */
+const VERSION = '__BUILD_VERSION__';
 const SHELL = `shell-${VERSION}`;
 const STATIC = `static-${VERSION}`;
 /*

@@ -28,6 +28,7 @@ const env = Object.fromEntries(
 
 const BASE = process.argv[2] ?? 'http://localhost:3101';
 const SW = 'public/sw.js';
+const TEMPLATE = 'sw/sw.template.js';
 const NEW_VERSION = 'v-probe';
 
 let failed = 0;
@@ -35,6 +36,34 @@ const check = (what, ok, detail = '') => {
   console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${what}${detail ? ` — ${detail}` : ''}`);
   if (!ok) failed += 1;
 };
+
+/*
+ * ── FIRST: CAN A DEPLOY BE NOTICED AT ALL? ────────────────────────────────────────
+ *
+ * Everything below tests what happens once the browser sees a different worker. None of it means
+ * anything if real deploys ship the same worker — which is exactly what happened: VERSION was a
+ * hand-written 'v5', four deploys went out byte-identical, and no shop was ever told. The dialog
+ * worked perfectly and was never shown.
+ */
+const served = await fetch(`${BASE}/sw.js`).then((r) => r.text());
+const servedVersion = /const VERSION = '([^']*)'/.exec(served)?.[1] ?? '';
+check(
+  'the worker carries the build it came from, not a constant',
+  /^[0-9a-f]{7,40}$|^t[0-9]+$/.test(servedVersion),
+  servedVersion || '(none)',
+);
+
+// And two different commits really do produce two different workers.
+const template = readFileSync(TEMPLATE, 'utf8');
+const stamp = (sha) => template.replaceAll('__BUILD_VERSION__', sha);
+check(
+  'two builds are two different workers',
+  stamp('aaaaaaaaaaaa') !== stamp('bbbbbbbbbbbb'),
+);
+check(
+  'and nothing is left unstamped',
+  !stamp('aaaaaaaaaaaa').includes('__BUILD_VERSION__'),
+);
 
 const original = readFileSync(SW, 'utf8');
 const browser = await chromium.launch();

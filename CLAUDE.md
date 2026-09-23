@@ -578,6 +578,18 @@ the shared key with `null` as its initial value handed the settings screen a nul
 properties of null". One key, one shape — a reader either declares the shape or leaves the key alone.
 `probe-update-reminder-setting.mjs` saves a choice as a shop does and reads it back from the database.
 
+**A DEPLOY ONLY EXISTS IF THE WORKER'S BYTES CHANGE.** `VERSION` was hand-written (`'v5'`), so
+every deploy that did not happen to edit `sw.js` shipped a byte-identical worker — and a browser
+decides a worker is new by comparing bytes. No `updatefound`, nothing reaching `waiting`, nothing
+for the dialog to announce. Four deploys went out that way and it was noticed from the outside, not
+from here, because the feature worked perfectly and was simply never triggered. The worker is now a
+TEMPLATE (`sw/sw.template.js`) stamped with the commit by `scripts/build-sw.mjs`, which runs as
+`prebuild` — so `npm run build`, which is what Vercel runs, cannot produce an unstamped one.
+`public/sw.js` is generated and gitignored. The version is the COMMIT, not a timestamp: rebuilding
+the same code must not ask a shop to relaunch for nothing. `probe-update-prompt.mjs` checks the
+served worker carries a build id rather than a constant — the rest of that probe tests what happens
+after a change the old setup never made.
+
 **AN INSTALLED APP UPDATES ITSELF, EXCEPT ITS MANIFEST.** Pages are fetched network-first, so a
 launch with a signal always gets the newest build, and build files are content-hashed. The worker is
 re-checked on launch (and at most daily), takes over at once and drops older caches. The MANIFEST is
