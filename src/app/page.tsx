@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import styles from './(market)/market.module.css';
 import { MarketShell } from './(market)/MarketShell';
-import { InstallApp } from '@/components/ui/InstallApp';
+import { InstallStrip } from '@/components/ui/InstallStrip';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/providers/AuthProvider';
 import { SearchField, useDebounced } from '@/components/ui/SearchField';
@@ -137,15 +137,6 @@ export default function MarketplacePage() {
                   </Button>
                 </>
               )}
-            </div>
-
-            {/*
-              PUT IT ON THE PHONE, offered where somebody first meets the product — one tap on
-              Android, and on iPhone the two steps Apple leaves to us. Drawn only when it can
-              actually be done, so an installed app and a desktop browser see nothing.
-            */}
-            <div className={styles.heroInstall}>
-              <InstallApp label="Add to my home screen" />
             </div>
           </div>
         </section>
@@ -326,6 +317,13 @@ export default function MarketplacePage() {
           </div>
         </div>
       </main>
+
+      {/*
+        The offer to install, at the foot rather than in the hero. It used to sit under "Open a shop"
+        as two lines of grey instructions on a dark photograph — permanently on, nothing to tap on
+        Android, competing with the buttons this page exists for.
+      */}
+      <InstallStrip />
     </MarketShell>
   );
 }
