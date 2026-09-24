@@ -1,0 +1,47 @@
+/* A directory section: quiet, readable, and made of real links. */
+.wrap {
+  padding: var(--space-6, 24px) var(--space-4, 16px);
+  border-top: 1px solid var(--border, #e5e7eb);
+  background: var(--surface, #fff);
+}
+
+.heading {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text, #111827);
+}
+
+.sub {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: var(--text-muted, #6b7280);
+}
+
+.list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.shop {
+  display: inline-block;
+  padding: 8px 14px;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 999px;
+  font-size: 14px;
+  color: var(--primary, #0b6252);
+  text-decoration: none;
+  /* A thumb, not a mouse. */
+  min-height: 40px;
+  line-height: 24px;
+}
+
+.shop:hover,
+.shop:focus-visible {
+  border-color: var(--primary, #0b6252);
+  background: color-mix(in srgb, var(--primary, #0b6252) 6%, transparent);
+}

@@ -6,6 +6,14 @@ import { AuthProvider } from '@/providers/AuthProvider';
 import { PermissionsProvider } from '@/providers/PermissionsProvider';
 
 export const metadata: Metadata = {
+  /*
+   * WHAT A RELATIVE URL IS RELATIVE TO.
+   *
+   * A canonical and an og:url have to be absolute — a link preview is fetched by a server somewhere
+   * else, and "/s/7R8U2A" means nothing to it. Next resolves relative ones against this; without it
+   * they resolve against localhost, which is both wrong and invisible until somebody shares a link.
+   */
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'https://store-manager.vercel.app'),
   title: 'Store Manager',
   description: 'Stock, sales and accounts for distribution businesses.',
   applicationName: 'Store Manager',
