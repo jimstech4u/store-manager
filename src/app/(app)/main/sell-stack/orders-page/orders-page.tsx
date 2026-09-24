@@ -33,6 +33,14 @@ export default function OrdersPage() {
   const { claimByCode } = useDraftOrders(store?.id ?? null);
 
   const [busy, setBusy] = useState<string | null>(null);
+  /*
+   * The order being asked about, and the whole of what says the question is up.
+   *
+   * `ConfirmDialog` opens itself on mount — mounted means asked — so this is what decides whether
+   * it is on the page at all. Rendering it unconditionally and holding a separate "is it open"
+   * flag put the dialog on screen the moment this page did, over an empty list, asking about
+   * nothing.
+   */
   const [toDecline, setToDecline] = useState<OnlineOrder | null>(null);
   const declineDialog = useConfirm();
   const problem = useProblem();
@@ -54,12 +62,14 @@ export default function OrdersPage() {
     }
   };
 
-  const decline = async () => {
-    if (!toDecline) return;
-    setBusy(toDecline.id);
+  /*
+   * Takes the order rather than reading it back from state: by the time this runs the dialog has
+   * already closed and cleared it. Passing it in is what makes that ordering irrelevant.
+   */
+  const decline = async (order: OnlineOrder) => {
+    setBusy(order.id);
     try {
-      await declineOrder(toDecline.id);
-      setToDecline(null);
+      await declineOrder(order.id);
     } catch (e) {
       problem.show(e instanceof Error ? e.message : 'That order could not be declined.');
     } finally {
@@ -110,10 +120,7 @@ export default function OrdersPage() {
                     size="large"
                     fullWidth
                     disabled={busy === order.id}
-                    onClick={() => {
-                      setToDecline(order);
-                      declineDialog.open();
-                    }}
+                    onClick={() => setToDecline(order)}
                   >
                     Decline
                   </Button>
@@ -128,16 +135,18 @@ export default function OrdersPage() {
         Asked before declining, because the shopper is told and it cannot be taken back. Accepting
         needs no such question: the next screen is the till, where anything can still be changed.
       */}
-      <ConfirmDialog
-        controller={declineDialog}
-        title="Decline this order?"
-        message="The shopper will be told it was not accepted. Nothing has been sold and no stock moves."
-        confirmText="Decline it"
-        cancelText="Keep it"
-        tone="danger"
-        onConfirm={() => void decline()}
-        onDismiss={() => setToDecline(null)}
-      />
+      {toDecline && (
+        <ConfirmDialog
+          controller={declineDialog}
+          title="Decline this order?"
+          message="The shopper will be told it was not accepted. Nothing has been sold and no stock moves."
+          confirmText="Decline it"
+          cancelText="Keep it"
+          tone="danger"
+          onConfirm={() => void decline(toDecline)}
+          onDismiss={() => setToDecline(null)}
+        />
+      )}
       <ProblemDialog problem={problem} title="Could not answer this order" />
     </PageScaffold>
   );

@@ -240,6 +240,23 @@ try {
       /no orders waiting/i.test(text) || /accept and open at the till/i.test(text),
       /no orders waiting/i.test(text) ? 'none waiting' : 'orders listed',
     );
+
+    /*
+     * AND ASKS NOTHING ON ARRIVAL.
+     *
+     * `ConfirmDialog` opens itself on mount — mounted means asked — so a page that renders one
+     * unconditionally puts a question on screen the moment it opens. This page did: "Decline this
+     * order?" over an empty list, about no order, and confirming it did nothing. Nothing was wrong
+     * in the data, so only looking at the screen could have found it.
+     */
+    const dialogs = await p.locator('.dialog-overlay').count();
+    check('and asks nothing the moment it opens', dialogs === 0, `${dialogs} dialog(s) up`);
+
+    /*
+     * AND RESOLVES. "Loading orders" for ever is what an interrupted read looked like — no error,
+     * because nothing failed. The empty state or a list; never the spinner.
+     */
+    check('and it is not still loading', !/loading orders/i.test(text), text.slice(0, 60));
   }
 } catch (e) {
   check('the probe ran to the end', false, e.message);

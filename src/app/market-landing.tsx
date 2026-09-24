@@ -7,7 +7,11 @@ import { MarketShell } from './(market)/MarketShell';
 import { InstallStrip } from '@/components/ui/InstallStrip';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/providers/AuthProvider';
-import { SearchField, useDebounced } from '@/components/ui/SearchField';
+import { SearchLauncher } from '@/components/ui/SearchLauncher';
+import { SearchSheet } from '@/components/ui/SearchSheet';
+import { useSearchController } from '@academix-admin/search-viewer';
+import { ProductCard } from '@/components/market/ProductCard';
+import { productHref } from '@/lib/marketplace/links';
 import { InfoPanel } from '@/components/ui/Explain';
 import { Thumb } from '@/components/ui/Thumb';
 import { SearchIcon } from '@/components/ui/Icon';
@@ -15,11 +19,24 @@ import { LogoMark } from '@/components/ui/Logo';
 import { useInfiniteScroll } from '@/hooks/usePaginatedList';
 import {
   fetchPublicCategories,
+  fetchPublicProductPage,
+  fetchPublicStorePage,
   usePublicProducts,
   usePublicStores,
   type PublicCategory,
+  type PublicProduct,
+  type PublicStore,
 } from '@/lib/stacks/storefront';
-import { formatMoney } from '@/lib/format';
+
+/**
+ * One thing a marketplace search can find.
+ *
+ * A shopper typing does not know whether the word in their head is a shop or a product, so the
+ * search answers with both rather than making them choose a tab first.
+ */
+type MarketHit =
+  | { kind: 'shop'; shop: PublicStore }
+  | { kind: 'product'; product: PublicProduct };
 
 /**
  * The marketplace landing page.
@@ -54,13 +71,16 @@ export default function MarketLanding() {
       (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
     if (asApp) router.replace('/main');
   }, [router]);
-  const [query, setQuery] = useState('');
-  const debounced = useDebounced(query);
+  /*
+   * Search is its own surface here too — see the note on the shop page. The chips still narrow the
+   * page; searching finds a shop or a product and goes to it.
+   */
+  const [searchId, searchOps, isSearchOpen] = useSearchController();
   const [category, setCategory] = useState<string | null>(null);
   const [categories, setCategories] = useState<PublicCategory[]>([]);
 
-  const stores = usePublicStores(debounced);
-  const products = usePublicProducts({ query: debounced, category });
+  const stores = usePublicStores('');
+  const products = usePublicProducts({ query: '', category });
 
   useEffect(() => {
     void fetchPublicCategories().then(setCategories).catch(() => setCategories([]));
@@ -70,7 +90,7 @@ export default function MarketLanding() {
     enabled: products.hasMore && !products.loading,
   });
 
-  const searching = debounced.trim() !== '' || category !== null;
+  const searching = category !== null;
   const nothingPublished =
     !stores.loading &&
     !products.loading &&
@@ -78,20 +98,15 @@ export default function MarketLanding() {
     products.items.length === 0 &&
     !searching;
 
-  const heading = useMemo(() => {
-    if (category) return category;
-    if (debounced.trim()) return `Results for “${debounced.trim()}”`;
-    return 'What shops are selling';
-  }, [category, debounced]);
+  const heading = useMemo(() => category ?? 'What shops are selling', [category]);
 
   return (
     <MarketShell
       search={
-        <SearchField
-          value={query}
-          onChange={setQuery}
-          placeholder="Search products, categories or shops"
+        <SearchLauncher
           label="Search the marketplace"
+          placeholder="Search products, categories or shops"
+          onOpen={searchOps.open}
         />
       }
     >
@@ -141,6 +156,107 @@ export default function MarketLanding() {
           </div>
         </section>
       )}
+
+      {/*
+        SHOPS AND PRODUCTS IN ONE SEARCH, because a shopper does not know which one they are
+        typing. "Ashabi" is a shop and "Gulder" is a product, and asking somebody to pick a tab
+        before they have typed is asking them to answer a question about our database.
+        
+        Shops come first and only on the first page: there are few of them, the server caps the
+        list, and a shop is a bigger answer than any single product. Paging past that is products,
+        which is the long list.
+      */}
+      <SearchSheet<MarketHit>
+        id={searchId}
+        isOpen={isSearchOpen}
+        onClose={searchOps.close}
+        placeholder="Search products, categories or shops"
+        maxWidth="960px"
+        onInitialData={(text) => {
+          const t = text.trim().toLowerCase();
+          if (!t) return [];
+          const hits: MarketHit[] = [];
+          for (const shop of stores.items) {
+            if (shop.name.toLowerCase().includes(t)) hits.push({ kind: 'shop', shop });
+          }
+          for (const product of products.items) {
+            if (product.name.toLowerCase().includes(t)) hits.push({ kind: 'product', product });
+          }
+          return hits;
+        }}
+        localDataDeps={[stores.items, products.items]}
+        queryData={async (cursor, text) => {
+          const after = (cursor as { name: string; id: string } | undefined) ?? null;
+          const page = await fetchPublicProductPage({ query: text, after });
+          const hits: MarketHit[] = [];
+          // Shops on the first page only — see the note above.
+          if (!after) {
+            for (const shop of await fetchPublicStorePage(text, 8)) hits.push({ kind: 'shop', shop });
+          }
+          for (const product of page.rows) hits.push({ kind: 'product', product });
+          return { data: hits, cursor: page.cursor ?? undefined };
+        }}
+        keyOf={(hit) => (hit.kind === 'shop' ? `shop:${hit.shop.id}` : `product:${hit.product.id}`)}
+        renderResults={(hits) => {
+          const shops = hits.filter((h) => h.kind === 'shop');
+          const found = hits.filter((h) => h.kind === 'product');
+          return (
+            <div key="results">
+              {shops.length > 0 && (
+                <>
+                  <p className={styles.sectionNote}>
+                    {shops.length} {shops.length === 1 ? 'shop' : 'shops'}
+                  </p>
+                  <div className={styles.storeGrid}>
+                    {shops.map((h) => h.kind === 'shop' && (
+                      <button
+                        key={h.shop.id}
+                        type="button"
+                        className={styles.card}
+                        onClick={() => {
+                          searchOps.close();
+                          router.push(`/s/${h.shop.code}`);
+                        }}
+                      >
+                        <span className={styles.storeCover}>
+                          <Thumb path={h.shop.cover_path} name={h.shop.name} ratio="16 / 9" />
+                        </span>
+                        <span className={styles.cardName}>{h.shop.name}</span>
+                        <span className={styles.cardMeta}>
+                          {h.shop.product_count}{' '}
+                          {h.shop.product_count === 1 ? 'item' : 'items'} · code {h.shop.code}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {found.length > 0 && (
+                <>
+                  <p className={styles.sectionNote}>
+                    {found.length} {found.length === 1 ? 'item' : 'items'}
+                  </p>
+                  <div className={styles.grid}>
+                    {found.map((h) => h.kind === 'product' && (
+                      <ProductCard
+                        key={h.product.id}
+                        product={h.product}
+                        showShop
+                        onOpen={(picked) => {
+                          searchOps.close();
+                          router.push(productHref(picked));
+                        }}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        }}
+        emptyText="No shop or product matches that."
+      />
 
       <main className={styles.body}>
         <div className={styles.inner}>
@@ -252,34 +368,12 @@ export default function MarketLanding() {
               ) : (
                 <div className={styles.grid}>
                   {products.items.map((p) => (
-                    <button
+                    <ProductCard
                       key={p.id}
-                      type="button"
-                      className={styles.card}
-                      onClick={() => router.push(`/s/${p.store_code}`)}
-                    >
-                      <span className={styles.cardMedia}>
-                        <Thumb path={p.image_path} name={p.name} ratio="1 / 1" />
-                      </span>
-                      <span className={styles.cardName}>{p.name}</span>
-                      <span className={styles.storeTag}>{p.store_name}</span>
-                      {p.price && (
-                        <span className={styles.cardPrice}>
-                          {formatMoney(p.price)}
-                          <span className={styles.cardMeta}> / {p.unit_label}</span>
-                        </span>
-                      )}
-                      <span className={styles.tags}>
-                        <span
-                          className={`${styles.tag} ${p.in_stock ? styles.tagIn : styles.tagOut}`}
-                        >
-                          {p.in_stock ? 'In stock' : 'Out of stock'}
-                        </span>
-                        {p.has_bulk && (
-                          <span className={`${styles.tag} ${styles.tagBulk}`}>Bulk price</span>
-                        )}
-                      </span>
-                    </button>
+                      product={p}
+                      showShop
+                      onOpen={(picked) => router.push(productHref(picked))}
+                    />
                   ))}
                 </div>
               )}

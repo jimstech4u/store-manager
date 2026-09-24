@@ -103,7 +103,17 @@ try {
   check('and it promises no shop setup', /not be asked to set up a shop/i.test(signupText));
 
   // ══ 4. A real account, confirmed out of band ══════════════════════════════════════
-  const made = await admin('admin/users', { email: EMAIL, password: PASSWORD, email_confirm: true });
+  /*
+   * `signed_up_as` because that is what the real sign-up form sets, and it is what tells the app
+   * shell this person is a shopper rather than a shop that has not been made yet. Creating the user
+   * without it would be testing a path no real shopper takes.
+   */
+  const made = await admin('admin/users', {
+    email: EMAIL,
+    password: PASSWORD,
+    email_confirm: true,
+    user_metadata: { signed_up_as: 'customer' },
+  });
   check('the probe could create its shopper', made.status === 200, `${made.status}`);
   const userId = made.body?.id ?? null;
   note('shopper', `${EMAIL} ${userId ?? ''}`);

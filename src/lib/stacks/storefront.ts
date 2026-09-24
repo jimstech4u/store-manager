@@ -165,6 +165,48 @@ export function usePublicProducts({
   });
 }
 
+/**
+ * ONE PAGE OF PRODUCTS, WITHOUT A HOOK.
+ *
+ * `usePublicProducts` keeps a list for a screen: persisted, scoped, restored on reload. A search
+ * viewer wants none of that — it owns its own results, throws them away when it closes, and pages
+ * them by handing back the cursor it was given. So the request itself is lifted out here and both
+ * use it, rather than a second copy of the same call drifting from this one.
+ */
+export async function fetchPublicProductPage(opts: {
+  query: string;
+  storeId?: string | null;
+  category?: string | null;
+  after?: { name: string; id: string } | null;
+  limit?: number;
+}): Promise<{ rows: PublicProduct[]; cursor: { name: string; id: string } | null }> {
+  const { data, error } = await getSupabase().rpc('public_products', {
+    p_query: opts.query.trim() || null,
+    p_store_id: opts.storeId ?? null,
+    p_category: opts.category ?? null,
+    p_after_name: opts.after?.name ?? null,
+    p_after_id: opts.after?.id ?? null,
+    p_limit: opts.limit ?? 24,
+  });
+  if (error) throw error;
+  const rows = (data ?? []) as PublicProduct[];
+  const last = rows[rows.length - 1];
+  return { rows, cursor: last ? { name: last.name, id: last.id } : null };
+}
+
+/** The same, for shops. One page, no cursor — the server caps the list. */
+export async function fetchPublicStorePage(query: string, limit = 20): Promise<PublicStore[]> {
+  const { data, error } = await getSupabase().rpc('public_stores_near', {
+    p_lat: null,
+    p_lon: null,
+    p_query: query.trim() || null,
+    p_within_km: null,
+    p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as PublicStore[];
+}
+
 export async function fetchPublicCategories(storeId?: string | null): Promise<PublicCategory[]> {
   const { data, error } = await getSupabase().rpc('public_categories', {
     p_store_id: storeId ?? null,

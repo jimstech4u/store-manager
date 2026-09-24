@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { ServiceWorker } from '@/components/ui/ServiceWorker';
+import { StateStackRouter } from '@/providers/StateStackRouter';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { AuthProvider } from '@/providers/AuthProvider';
 import { PermissionsProvider } from '@/providers/PermissionsProvider';
@@ -95,6 +96,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
+        {/* First, and above everything that reads state: it registers the pathname hook that
+            state-stack scopes by, and that has to happen before the first hook renders. */}
+        <StateStackRouter />
         <ThemeProvider>
           <AuthProvider>
             <PermissionsProvider>{children}</PermissionsProvider>

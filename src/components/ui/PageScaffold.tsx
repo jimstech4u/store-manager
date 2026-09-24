@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import Header, { type HeaderAction } from '@academix-admin/header';
-import { Scaffold, useNavOptional } from '@academix-admin/navigation-stack';
+import { Scaffold, useNavTitle } from '@academix-admin/navigation-stack';
 import styles from './PageScaffold.module.css';
 import { useTheme } from '@/context/ThemeContext';
 
@@ -67,11 +67,14 @@ export function PageScaffold({
    * saying the same thing on all 53 screens — the app is one URL, so one name. The name is right
    * here in the header the page asked for, so no screen has to remember to do anything.
    *
-   * `useNavOptional` rather than `useNav`: this shell is also rendered by the marketplace, outside
-   * any stack, where `useNav()` throws.
+   * `useNavTitle` (navigation-stack 1.6.0) rather than `useNavOptional()` and a call in the render
+   * body. The old form put "Cannot update a component (`NavigationStack`) while rendering a
+   * different component (`PageScaffold`)" on the console of every screen in the app: naming the
+   * page told the stack's subscribers, and telling them is a setState. The hook applies the name
+   * after the render, and does nothing outside a stack — which this shell needs, because the
+   * marketplace renders it too.
    */
-  const nav = useNavOptional();
-  nav?.title(title);
+  useNavTitle(title);
 
   const { theme } = useTheme();
 

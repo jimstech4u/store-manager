@@ -15,7 +15,7 @@ import { getSupabase } from '@/lib/supabase/client';
  * that failure shows up as a screen that renders briefly with someone else's data.
  */
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { loading, session, stores, store, error, signOut } = useAuth();
+  const { loading, storesLoading, session, stores, store, error, signOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -36,15 +36,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   /*
    * IS THIS A SHOPPER RATHER THAN A SHOP?
    *
-   * A third kind of person now signs in here, and they have no store — which until now meant one
-   * thing: "you have not made your shop yet", and a redirect to the wizard. A shopper sent there is
-   * being asked to open a business to buy a crate of drinks.
+   * A third kind of person signs in here now, and they have no store — which until they existed
+   * meant one thing: "you have not made your shop yet", and a redirect to the wizard. A shopper
+   * sent there is being asked to open a business in order to buy a crate of drinks.
    *
-   * `undefined` is "not asked", and the redirect waits for the answer rather than guessing. Asked
-   * ONLY when there is no store, so the overwhelmingly common case — somebody who works at a shop,
-   * opening the till — pays nothing for it.
+   * READ FROM THE SESSION, WHICH IS ALREADY HERE. The first version asked the database, and that
+   * was a mistake worth recording: it put an ASYNC STEP in front of a redirect that had always been
+   * synchronous, and the answer could land a second or two later — by which time a real shop had
+   * been sitting on `/main` and was then thrown into the shop wizard. Caught by a probe that
+   * watched the address after signing in, not by reading the code.
+   *
+   * It grants nothing. User metadata is client-writable, so nothing may be permitted on the
+   * strength of it; it chooses between two public screens. Every permission is still decided by the
+   * database from `auth.uid()`.
    */
-  const [isShopper, setIsShopper] = useState<boolean | undefined>(undefined);
+  const isShopper = session?.user?.user_metadata?.signed_up_as === 'customer';
 
   const askMembership = useCallback(async () => {
     if (!session) {
@@ -80,55 +86,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
    * and the list is empty — which used to route a signed-in shop to the create-a-shop wizard, the
    * one screen it could not possibly want. An error means we do not know, so nothing is claimed.
    */
-  const needsStore = !loading && !!session && stores.length === 0 && !error;
+  const needsStore = !loading && !storesLoading && !!session && stores.length === 0 && !error;
   const needsOnboarding =
     !loading && !!store && !store.onboardedAt && !pathname.startsWith('/setup');
 
   useEffect(() => {
-    if (!needsStore) {
-      setIsShopper(undefined);
-      return;
-    }
-    /*
-     * Said at sign-up, and free to read — it is already in the session. Somebody who chose "order
-     * from shops" is a shopper from that moment, before they have ever placed an order and before
-     * there is a shopper record to find.
-     */
-    if (session?.user?.user_metadata?.signed_up_as === 'customer') {
-      setIsShopper(true);
-      return;
-    }
-    let alive = true;
-    void (async () => {
-      try {
-        const { data, error: err } = await getSupabase().rpc('my_customer_account');
-        if (!alive) return;
-        /*
-         * A FAILED READ FALLS BACK TO THE OLD BEHAVIOUR, which is the shop wizard.
-         *
-         * Everywhere else in this codebase a failed read is "we do not know" and nothing is
-         * claimed. Not here: the only other option is to stay on "One moment" for ever, and a
-         * screen that never resolves is worse than a wrong screen somebody can walk out of. A
-         * shopper who lands in the wizard can leave it; a shopper on a spinner cannot.
-         */
-        setIsShopper(err ? false : ((data ?? []) as unknown[]).length > 0);
-      } catch {
-        if (alive) setIsShopper(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [needsStore, session]);
-
-  useEffect(() => {
     if (needsAccount) router.replace('/login');
-    else if (needsStore) {
-      // Back to the marketplace for a shopper; the shop wizard for anybody else. Nothing moves
-      // until the question has an answer.
-      if (isShopper === true) router.replace('/');
-      else if (isShopper === false) router.replace('/setup');
-    } else if (needsOnboarding) router.replace('/setup/opening');
+    // Back to the marketplace for a shopper; the shop wizard for anybody else.
+    else if (needsStore) router.replace(isShopper ? '/' : '/setup');
+    else if (needsOnboarding) router.replace('/setup/opening');
   }, [needsAccount, needsStore, needsOnboarding, isShopper, router]);
 
   if (loading || (session && mustChange === undefined)) {

@@ -199,19 +199,28 @@ a {
 }
 
 /*
- * The underline is kept where it does the work it was there for.
+ * The underline is kept in PROSE and nowhere else.
  *
  * It was on every link, which made cards, rows and buttons-that-are-links look like scribbled-on
- * text. But the reason it existed is real: a link INSIDE a sentence identified only by colour is
- * invisible to somebody who cannot see the colour. So prose keeps it, and so does hover and focus
- * everywhere — the affordance is still there, it just is not shouted on a page of link-shaped cards.
+ * text. The reason it existed is still real for one case: a link INSIDE a sentence, identified only
+ * by colour, is invisible to somebody who cannot see the colour. So prose keeps it.
+ *
+ * Nothing underlines on hover or on a click. A link that grows an underline under the pointer is
+ * the web's oldest tell that a page is a document, and on a screen of cards it reads as the card
+ * breaking rather than responding. Colour, the cursor and the card's own hover state already say
+ * the thing is live.
  */
 p a,
 li > a:not([class]) {
   text-decoration: underline;
 }
 
-a:hover,
+/*
+ * KEYBOARD FOCUS IS NOT A CLICK. `:focus-visible` deliberately does not match a mouse click in any
+ * current browser — only keyboard focus and equivalents — so this is the one case left, and it is
+ * the one that a person tabbing through the page cannot do without. It sits alongside the focus
+ * ring below rather than replacing it.
+ */
 a:focus-visible {
   text-decoration: underline;
 }

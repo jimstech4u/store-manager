@@ -36,7 +36,9 @@ export function SearchSheet<T>({
   queryData,
   keyOf,
   renderRow,
+  renderResults,
   emptyText,
+  maxWidth = '720px',
 }: {
   id: string;
   isOpen: boolean;
@@ -56,8 +58,20 @@ export function SearchSheet<T>({
     text: string,
   ) => Promise<{ data: T[]; cursor?: unknown }>;
   keyOf: (row: T) => string;
-  renderRow: (row: T) => ReactNode;
+  /** One result, drawn as a row. Ignored when `renderResults` is given. */
+  renderRow?: (row: T) => ReactNode;
+  /**
+   * ALL the results at once, for a surface where a list of rows is the wrong shape.
+   *
+   * A row is right for a customer, a sale or a stock line — text, scanned down a column. It is
+   * wrong for a shop's catalogue, where the picture and the price are the point and a phone fits
+   * two across. Rather than teach this wrapper about grids, the caller that wants one lays out its
+   * own; everything else keeps the rows it already had.
+   */
+  renderResults?: (rows: T[]) => ReactNode;
   emptyText: string;
+  /** Wider for a grid than for a column of rows. */
+  maxWidth?: string;
 }) {
   const { theme } = useTheme();
   const dark = theme === 'dark';
@@ -101,7 +115,7 @@ export function SearchSheet<T>({
       layoutProp={{
         gapBetweenSearchAndContent: '16px',
         searchBackground: dark ? '#121817' : '#ffffff',
-        maxWidth: '720px',
+        maxWidth,
       }}
       childrenDirection="vertical"
       zIndex={1000}
@@ -109,9 +123,9 @@ export function SearchSheet<T>({
       ariaLabel={placeholder}
       onResult={setResults}
     >
-      {results.map((r) => (
-        <div key={keyOf(r.data)}>{renderRow(r.data)}</div>
-      ))}
+      {renderResults
+        ? renderResults(results.map((r) => r.data))
+        : results.map((r) => <div key={keyOf(r.data)}>{renderRow?.(r.data)}</div>)}
     </SearchViewer>
   );
 }

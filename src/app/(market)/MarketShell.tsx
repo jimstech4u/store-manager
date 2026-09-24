@@ -26,7 +26,7 @@ export function MarketShell({
   search?: ReactNode;
 }) {
   const router = useRouter();
-  const { session, stores } = useAuth();
+  const { session, stores, loading } = useAuth();
   const { count } = useCart();
 
   return (
@@ -60,7 +60,20 @@ export function MarketShell({
               {count > 0 && <span className={styles.basketCount}>{count > 99 ? '99+' : count}</span>}
             </Link>
 
-            {session ? (
+            {/*
+              NOTHING IS CLAIMED UNTIL THE SESSION IS KNOWN.
+              
+              `session` is null while the provider is still working it out, which is
+              indistinguishable from "signed out" — so arriving here from the till showed "Sign in ·
+              Open a shop" for a moment and then replaced it with "My shop". Being offered a sign-in
+              by an app you are signed into reads as having been logged out.
+              
+              A placeholder of the same width holds the space, so the bar does not jump when the
+              answer lands either.
+            */}
+            {loading ? (
+              <span className={styles.actionsPlaceholder} aria-hidden="true" />
+            ) : session ? (
               /*
                 A SIGNED-IN PERSON HERE IS NOT NECESSARILY A SHOP.
                 

@@ -1,5 +1,69 @@
-/* The three things a shopper does with a product, in the order they do them. */
+/* The things a shopper does with a product, in the order they do them: how many, then take it,
+   then keep it or send it. */
 .wrap { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+
+/* ── How many ─────────────────────────────────────────────────────────────────────── */
+
+.qtyRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.qtyLabel {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted, #6b7280);
+}
+
+.unit {
+  font-size: 14px;
+  color: var(--text-muted, #6b7280);
+  overflow-wrap: anywhere;
+}
+
+.qty {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border-strong, #cbd5e1);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-left: auto;
+}
+
+.qty button {
+  /* Full touch target on both steppers: this is used one-handed, often while standing up. */
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--text, #111827);
+  font: inherit;
+  font-size: 20px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.qty button:hover { background: var(--surface-sunken, #f1f5f4); }
+
+/* Typed, not just stepped — forty crates is not forty taps. It sizes to about four digits, which
+   is more than any real order and less than a box that invites a paragraph. */
+.qty input {
+  width: 3.5ch;
+  height: 44px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text, #111827);
+  font: inherit;
+  font-family: var(--font-numeric, inherit);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 16px;
+  text-align: center;
+}
+
+.qty input:focus-visible { outline: 2px solid var(--primary, #0b6252); outline-offset: -2px; }
 
 .add {
   width: 100%;
@@ -14,6 +78,8 @@
   cursor: pointer;
   min-height: 48px;
 }
+
+.add:disabled { opacity: 0.55; cursor: default; }
 
 .note { margin: 0; font-size: 13px; color: var(--text-muted, #6b7280); }
 

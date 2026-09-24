@@ -45,6 +45,14 @@ interface AuthContextValue {
   selectStore: (storeId: string) => void;
   /** False once the first auth + store load has settled, either way. */
   loading: boolean;
+  /**
+   * The store list on hand is not this user's yet — so "they have no shop" cannot be said.
+   *
+   * Distinct from `loading`, which covers the first load only. Signing in reads the stores again
+   * with `loading` already false, and both before and during that read the list is still the
+   * previous, empty one.
+   */
+  storesLoading: boolean;
   error: string | null;
   refreshStores: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -156,15 +164,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * till opens on the shop they were last in; keyed by the person signed in, and dropped on sign-out
    * (below), because a shop phone is shared and the next person must not see the last one's shops.
    */
-  const [stores, , setStores] = useDemandState<StoreSummary[]>([], {
-    key: 'auth:stores',
-    scope: 'auth_flow',
-    persist: true,
-    deps: [session?.user.id ?? ''],
-    revalidateOnMount: false,
-  });
+  /*
+   * THE LIST AND WHOSE IT IS, IN ONE VALUE.
+   *
+   * It was the list alone, with the owner's id kept beside it in ordinary React state. That cannot
+   * be right, and it was not: this value comes from state-stack and lands a frame after a plain
+   * `useState`, so there was one render holding an EMPTY list already marked as this user's — and
+   * the app shell read that frame as "this person has no shop" and sent a shop owner to the
+   * create-a-shop wizard, where they then stayed.
+   *
+   * One value, one update, no frame in between. The same rule as everywhere else here: one key,
+   * one hook, one shape.
+   */
+  const [held, , setHeld] = useDemandState<{ uid: string | null; list: StoreSummary[] }>(
+    { uid: null, list: [] },
+    {
+      key: 'auth:stores',
+      scope: 'auth_flow',
+      persist: true,
+      deps: [session?.user.id ?? ''],
+      revalidateOnMount: false,
+    },
+  );
+  const stores = held?.list ?? [];
+  /** The list on hand is not this user's yet, so nothing can be concluded from it. */
+  const storesLoading = !!session && held?.uid !== session.user.id;
   const [storeId, setStoreId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
   const [error, setError] = useState<string | null>(null);
 
   // Guards the store-scope clear on the very first store selection: there is nothing stale to
@@ -174,10 +201,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadStores = useCallback(async (uid: string | null) => {
     if (!uid) {
-      setStores([]);
+      setHeld({ uid: null, list: [] });
       setStoreId(null);
       return;
     }
+
 
     const supabase = getSupabase();
     const { data, error: err } = await supabase
@@ -202,6 +230,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
        * the create-a-shop wizard, over its own till. A read that failed is not an answer.
        */
       setError(err.message);
+      /*
+       * Marked as this user's even though the read FAILED, so the app stops waiting. `error` is
+       * what says the list is not to be trusted, and `needsStore` already refuses to claim "no
+       * shop" while it is set. Leaving it unmarked would hold every routing decision for ever on a
+       * bad connection.
+       */
+      setHeld({ uid, list: [] });
       return;
     }
 
@@ -234,7 +269,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
      */
     list.sort((a, b) => a.name.localeCompare(b.name));
 
-    setStores(list);
+    setHeld({ uid, list });
     setError(null);
 
     /*
@@ -253,8 +288,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
      * lands on its setup, which is the one context where that screen is what somebody asked for.
      */
     setStoreId((current) => chooseStore(list, current));
-    // `setStores` comes from state-stack and is stable; it is listed because the rule is right.
-  }, [setStores]);
+    // `setHeld` comes from state-stack and is stable; it is listed because the rule is right.
+  }, [setHeld]);
 
   useEffect(() => {
     const supabase = getSupabase();
@@ -279,7 +314,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(nextSession);
 
       if (event === 'SIGNED_OUT') {
-        setStores([]);
+        setHeld({ uid: null, list: [] });
         setStoreId(null);
         hadStore.current = false;
         // Sign-out must leave nothing of the previous user behind: on a shared device — which is
@@ -300,7 +335,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       sub.subscription.unsubscribe();
     };
-  }, [loadStores, setStores]);
+  }, [loadStores, setHeld]);
 
   /*
    * A list without a choice is the offline cold start: the read failed, but the shops came back from
@@ -380,11 +415,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       store,
       selectStore,
       loading,
+      storesLoading,
       error,
       refreshStores,
       signOut,
     }),
-    [session, stores, store, selectStore, loading, error, refreshStores, signOut],
+    [session, stores, store, selectStore, loading, storesLoading, error, refreshStores, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -30,6 +30,15 @@ export function BottomSheet({
   footer,
   /** Blocks backdrop and drag dismissal — for a step that must not be lost by a stray tap. */
   dismissible = true,
+  /**
+   * How wide it may get on a big screen. The default suits a form; a sheet that is mostly a
+   * PICTURE wants more of the window than a column of fields does.
+   *
+   * It can never make the sheet narrower than the window, whatever is passed: the element is
+   * already full width and this is only a cap. So a value in `dvw` widens a desktop without
+   * touching a phone, where the sheet still fills the screen.
+   */
+  maxWidth = '640px',
 }: {
   open: boolean;
   onClose: () => void;
@@ -37,6 +46,7 @@ export function BottomSheet({
   children: ReactNode;
   footer?: ReactNode;
   dismissible?: boolean;
+  maxWidth?: string;
 }) {
   const titleId = useId();
 
@@ -60,7 +70,7 @@ export function BottomSheet({
       layoutProp={{
         backgroundColor: 'var(--surface)',
         handleColor: 'var(--border-strong)',
-        maxWidth: '640px',
+        maxWidth,
         maxHeight: '92dvh',
       }}
     >

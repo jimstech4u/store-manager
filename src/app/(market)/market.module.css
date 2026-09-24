@@ -470,9 +470,11 @@
   color: var(--primary);
 }
 
+/* No underline on hover — see globals.css. It brightens instead, which says the same thing
+   without the page looking like a document. */
 .backLink:hover {
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  color: var(--primary-strong, var(--primary));
+  opacity: 0.85;
 }
 
 /* ── Section banners ──────────────────────────────────────────────────────────────── */
@@ -591,4 +593,12 @@
   font-weight: 700;
   line-height: 14px;
   text-align: center;
+}
+
+/* Holds the width of the account actions while the session is still being worked out, so the top
+   bar does not jump when the answer lands. Same height as a small Button. */
+.actionsPlaceholder {
+  display: inline-block;
+  width: 6.5rem;
+  height: var(--touch-min);
 }
