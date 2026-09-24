@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useNav } from '@academix-admin/navigation-stack';
 import { AuthShell } from '@/components/auth/AuthShell';
 import { Button } from '@/components/ui/Button';
@@ -10,6 +10,7 @@ import { InfoPanel } from '@/components/ui/Explain';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 import { getSupabase } from '@/lib/supabase/client';
 import { isStaffAddress } from '@/lib/auth/staff-address';
+import { safeNext } from '@/lib/auth/after-sign-in';
 import styles from './signin.module.css';
 import { messageOf } from '@/lib/format';
 
@@ -24,6 +25,12 @@ import { messageOf } from '@/lib/format';
 export default function SignIn() {
   const nav = useNav();
   const router = useRouter();
+  /*
+   * WHERE TO GO BACK TO. Signing in is shared by all three kinds of person here, so this screen
+   * cannot know where anyone belongs — whatever sent them says so. A shopper interrupted at
+   * checkout comes back to their basket rather than to somebody's till.
+   */
+  const next = safeNext(useSearchParams().get('next'));
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -53,7 +60,7 @@ export default function SignIn() {
         password,
       });
       if (err) throw err;
-      router.replace('/main');
+      router.replace(next);
     } catch (err: unknown) {
       const message = messageOf(err, 'Something went wrong');
 
@@ -140,10 +147,24 @@ export default function SignIn() {
         </div>
       </form>
 
+      {/*
+        TWO WAYS TO BE NEW, because they are two different intentions and one form cannot serve
+        both: opening a shop needs a business, ordering from shops needs a name and a number. The
+        sign-IN above is shared — one password box, one answer to "who are you" — and only the
+        signing up divides.
+      */}
       <div className={styles.switcher}>
         New here?{' '}
         <button type="button" className={styles.switchButton} onClick={() => nav.push('signup')}>
-          Create an account
+          Open a shop
+        </button>
+        {' · '}
+        <button
+          type="button"
+          className={styles.switchButton}
+          onClick={() => nav.push('signup', { as: 'customer' })}
+        >
+          Order from shops
         </button>
       </div>
     </AuthShell>

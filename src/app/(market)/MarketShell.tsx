@@ -61,8 +61,20 @@ export function MarketShell({
             </Link>
 
             {session ? (
-              <Button size="small" onClick={() => router.push(stores.length ? '/main' : '/setup')}>
-                {stores.length ? 'My shop' : 'Set up my shop'}
+              /*
+                A SIGNED-IN PERSON HERE IS NOT NECESSARILY A SHOP.
+                
+                This used to offer "Set up my shop" to anyone signed in with no store, which is now
+                the shopper's normal state — they signed up to order from shops, and were met with
+                an invitation to open one. With no store the useful thing is their own orders; the
+                way to open a shop is still on the landing page, where somebody looking for it is.
+              */
+              <Button
+                size="small"
+                variant={stores.length ? 'primary' : 'secondary'}
+                onClick={() => router.push(stores.length ? '/main' : '/orders')}
+              >
+                {stores.length ? 'My shop' : 'My orders'}
               </Button>
             ) : (
               <>

@@ -4,6 +4,7 @@ import { Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import NavigationStack from '@academix-admin/navigation-stack';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
+import { safeNext } from '@/lib/auth/after-sign-in';
 import { useAuth } from '@/providers/AuthProvider';
 import SignIn from './signin/signin';
 import SignUp from './signup/signup';
@@ -42,9 +43,14 @@ function AuthStack() {
    * Typing a password you have already typed is the clearest possible way for an app to say it
    * has forgotten you, when it has not.
    */
+  /*
+   * `next`, not `/main`. This guard raced the sign-in screen's own redirect and sometimes won: a
+   * shopper who signed in from their basket was carried to a till instead, and then bounced on to
+   * the shop wizard. Both now send them to the same place, so which one wins does not matter.
+   */
   useEffect(() => {
-    if (!loading && session) router.replace('/main');
-  }, [loading, session, router]);
+    if (!loading && session) router.replace(safeNext(params.get('next')));
+  }, [loading, session, router, params]);
 
   // The marketplace's "Open a shop" lands here expecting the sign-up form, not sign-in.
   const entry = params.get('mode') === 'signup' ? 'signup' : 'signin';

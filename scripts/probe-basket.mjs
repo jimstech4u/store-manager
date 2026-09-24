@@ -19,6 +19,11 @@
  *   · <a href> is not underlined by default
  *   · the shop's Sell header carries an Orders action that opens the orders page
  *
+ * WAITS ARE `domcontentloaded` PLUS A PAUSE, never `networkidle`. Once the service worker is
+ * registered — which it is, a second after the first page — it can hold a connection open long
+ * enough that the network never goes idle, and the probe then fails on a wait rather than on
+ * anything it was asked to check.
+ *
  *     node scripts/probe-basket.mjs [http://localhost:3101]
  */
 
@@ -89,7 +94,7 @@ try {
   const [first, second] = products;
 
   // ══ 2. The empty basket ═══════════════════════════════════════════════════════════
-  await p.goto(`${BASE}/cart`, { waitUntil: 'networkidle' });
+  await p.goto(`${BASE}/cart`, { waitUntil: 'domcontentloaded' });
   await p.waitForTimeout(2500);
   check('the basket page answers', /basket/i.test(await p.locator('h1').first().innerText()));
   check('and says it is empty', /nothing in it/i.test(await p.locator('main').innerText()));
@@ -98,7 +103,7 @@ try {
 
   // ══ 3. Add two products, through the buttons a shopper uses ═══════════════════════
   for (const path of [first, second]) {
-    await p.goto(`${BASE}${path}`, { waitUntil: 'networkidle' });
+    await p.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' });
     await p.waitForTimeout(2500);
 
     const add = p.getByRole('button', { name: /add .* to basket/i }).first();
@@ -117,7 +122,7 @@ try {
   const save = p.getByRole('button', { name: /save this/i }).first();
   if (await save.count()) await save.click();
   await p.waitForTimeout(800);
-  await p.reload({ waitUntil: 'networkidle' });
+  await p.reload({ waitUntil: 'domcontentloaded' });
   await p.waitForTimeout(2500);
   check('a saved product is still saved after a reload', (await p.getByRole('button', { name: /remove from saved/i }).count()) > 0);
 
@@ -127,7 +132,7 @@ try {
   if (await badge.count()) check('and it reads 2', (await badge.innerText()).trim() === '2', (await badge.innerText()).trim());
 
   // ══ 5. One shop, one block, two lines ═════════════════════════════════════════════
-  await p.goto(`${BASE}/cart`, { waitUntil: 'networkidle' });
+  await p.goto(`${BASE}/cart`, { waitUntil: 'domcontentloaded' });
   await p.waitForTimeout(2500);
   check('both products are in the basket', (await p.locator('main section li').count()) === 2, `${await p.locator('main section li').count()} line(s)`);
   check('and under one shop, because they came from one shop', (await p.locator('main section').count()) === 1);
@@ -139,7 +144,7 @@ try {
   check('the stepper raises a line', (await p.locator('main section [class*="qty"] > span').first().innerText()).trim() === '2');
 
   // ══ 6. It survives a reload ═══════════════════════════════════════════════════════
-  await p.reload({ waitUntil: 'networkidle' });
+  await p.reload({ waitUntil: 'domcontentloaded' });
   await p.waitForTimeout(3000);
   check('the basket survives a reload', (await p.locator('main section li').count()) === 2);
   check('and so does the raised quantity', (await p.locator('main section [class*="qty"] > span').first().innerText()).trim() === '2');
@@ -208,7 +213,7 @@ try {
   check('links are not underlined by default', underlined === 0, `${underlined} underlined`);
 
   // ══ 10. The shop's side: Orders in the Sell header ════════════════════════════════
-  await p.goto(`${BASE}/login`, { waitUntil: 'networkidle' });
+  await p.goto(`${BASE}/login`, { waitUntil: 'domcontentloaded' });
   await p.waitForTimeout(1500);
   await p.locator('input[type="email"]').first().fill(env.SAMPLE_EMAIL);
   await p.locator('input[type="password"]').first().fill(env.SAMPLE_PASSWORD);

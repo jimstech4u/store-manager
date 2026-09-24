@@ -41,8 +41,13 @@ check('the root shows no back arrow', (await backArrow().count()) === 0);
 check('but it does show a way out', (await page.getByRole('button', { name: /close/i }).count()) > 0);
 await page.screenshot({ path: 'shots/auth-signin.png' });
 
-// ── Create an account is a PUSH, so back returns ────────────────────────────────────
-await page.getByRole('button', { name: 'Create an account' }).click();
+// ── Opening a shop is a PUSH, so back returns ───────────────────────────────────────
+/*
+ * "Create an account" became two buttons when a third kind of person arrived: a shop opens a shop,
+ * a shopper orders from them. Signing IN is still one screen for all of them — only the signing up
+ * divides — so this probe walks both branches from the same root.
+ */
+await page.getByRole('button', { name: 'Open a shop' }).click();
 await page.waitForTimeout(1200);
 
 check('create-account is a pushed screen', /Create your account/i.test(await body()));
@@ -54,8 +59,19 @@ await page.waitForTimeout(1200);
 check('the arrow pops back to sign-in', /Welcome back/i.test(await body()));
 check('and the arrow is gone again at the root', (await backArrow().count()) === 0);
 
+// ── The shopper's own way in, from the same root ────────────────────────────────────
+await page.getByRole('button', { name: 'Order from shops' }).click();
+await page.waitForTimeout(1200);
+const shopperText = await body();
+check('a shopper gets their own sign-up', /Create your shopper account/i.test(shopperText));
+check('which does not offer to set up a shop', !/set up your shop in the next step/i.test(shopperText));
+check('and says so plainly', /not be asked to set up a shop/i.test(shopperText));
+await backArrow().click();
+await page.waitForTimeout(1200);
+check('and it pops back to the same sign-in', /Welcome back/i.test(await body()));
+
 // ── Browser back moves between STEPS, not out of the flow ───────────────────────────
-await page.getByRole('button', { name: 'Create an account' }).click();
+await page.getByRole('button', { name: 'Open a shop' }).click();
 await page.waitForTimeout(1200);
 await page.goBack();
 await page.waitForTimeout(1400);

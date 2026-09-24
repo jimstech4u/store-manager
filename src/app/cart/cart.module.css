@@ -206,3 +206,128 @@
   color: var(--text-muted);
   cursor: default;
 }
+
+/* ── An order already sent ────────────────────────────────────────────────────────── */
+
+.sent {
+  border: 1px solid var(--success);
+  border-radius: var(--radius);
+  background: var(--success-subtle);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.sentTitle {
+  font-weight: 700;
+  color: var(--success);
+  margin-bottom: var(--space-2);
+}
+
+.sentBody {
+  font-size: var(--text-sm);
+}
+
+.code {
+  font-family: var(--font-numeric);
+  font-size: var(--text-base);
+  letter-spacing: 0.04em;
+}
+
+.sentNote {
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.track {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--touch-min);
+  margin-top: var(--space-2);
+  font-weight: 600;
+  color: var(--primary);
+}
+
+/* ── Who the shop should ask for ──────────────────────────────────────────────────── */
+
+.who {
+  padding: var(--space-4);
+  border-top: 1px solid var(--border);
+  background: var(--surface-sunken);
+}
+
+.whoTitle {
+  font-weight: 700;
+  margin-bottom: var(--space-3);
+}
+
+.whoField {
+  display: block;
+  margin-bottom: var(--space-3);
+}
+
+.whoField > span {
+  display: block;
+  margin-bottom: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.whoField input {
+  width: 100%;
+  min-height: var(--touch-min);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--text-base);
+}
+
+.whoActions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.whoCancel,
+.whoSave {
+  flex: 1;
+  min-height: var(--touch-min);
+  border-radius: var(--radius);
+  font-weight: 600;
+}
+
+.whoCancel {
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.whoSave {
+  background: var(--primary);
+  color: var(--primary-text);
+}
+
+.whoSave:disabled {
+  opacity: 0.6;
+}
+
+/* ── What went wrong ──────────────────────────────────────────────────────────────── */
+
+.failed {
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--border);
+  background: var(--danger-subtle);
+  color: var(--danger);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+/* What sending does and does not mean — said once, under the whole basket, rather than
+   repeated under every shop's button. */
+.foot {
+  margin-top: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}

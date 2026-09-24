@@ -7,6 +7,7 @@ import { AuthShell } from '@/components/auth/AuthShell';
 import { Button } from '@/components/ui/Button';
 import { InfoPanel } from '@/components/ui/Explain';
 import { getSupabase } from '@/lib/supabase/client';
+import { safeNext } from '@/lib/auth/after-sign-in';
 import styles from './verify.module.css';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 import { messageOf } from '@/lib/format';
@@ -35,6 +36,12 @@ export default function Verify() {
   // Only the address travels, which is all this screen needs and the only part that is not
   // secret. The password stays on the screen that asked for it.
   const email = (location?.params?.email as string | undefined) ?? '';
+  /*
+   * Where this person was going before the code screen interrupted them. A shopper verified here
+   * and then dropped at `/main` is immediately asked to create a shop, which is the one thing they
+   * came here not to do.
+   */
+  const next = safeNext(location?.params?.next as string | undefined);
 
   const [digits, setDigits] = useState('');
   const [busy, setBusy] = useState(false);
@@ -80,7 +87,7 @@ export default function Verify() {
         type: 'email',
       });
       if (error) throw error;
-      router.replace('/main');
+      router.replace(next);
     } catch (e) {
       problem.show(
         e instanceof Error

@@ -33,6 +33,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [mustChange, setMustChange] = useState<boolean | undefined>(undefined);
   const [loginEmail, setLoginEmail] = useState<string | null>(null);
 
+  /*
+   * IS THIS A SHOPPER RATHER THAN A SHOP?
+   *
+   * A third kind of person now signs in here, and they have no store — which until now meant one
+   * thing: "you have not made your shop yet", and a redirect to the wizard. A shopper sent there is
+   * being asked to open a business to buy a crate of drinks.
+   *
+   * `undefined` is "not asked", and the redirect waits for the answer rather than guessing. Asked
+   * ONLY when there is no store, so the overwhelmingly common case — somebody who works at a shop,
+   * opening the till — pays nothing for it.
+   */
+  const [isShopper, setIsShopper] = useState<boolean | undefined>(undefined);
+
   const askMembership = useCallback(async () => {
     if (!session) {
       setMustChange(undefined);
@@ -72,10 +85,51 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     !loading && !!store && !store.onboardedAt && !pathname.startsWith('/setup');
 
   useEffect(() => {
+    if (!needsStore) {
+      setIsShopper(undefined);
+      return;
+    }
+    /*
+     * Said at sign-up, and free to read — it is already in the session. Somebody who chose "order
+     * from shops" is a shopper from that moment, before they have ever placed an order and before
+     * there is a shopper record to find.
+     */
+    if (session?.user?.user_metadata?.signed_up_as === 'customer') {
+      setIsShopper(true);
+      return;
+    }
+    let alive = true;
+    void (async () => {
+      try {
+        const { data, error: err } = await getSupabase().rpc('my_customer_account');
+        if (!alive) return;
+        /*
+         * A FAILED READ FALLS BACK TO THE OLD BEHAVIOUR, which is the shop wizard.
+         *
+         * Everywhere else in this codebase a failed read is "we do not know" and nothing is
+         * claimed. Not here: the only other option is to stay on "One moment" for ever, and a
+         * screen that never resolves is worse than a wrong screen somebody can walk out of. A
+         * shopper who lands in the wizard can leave it; a shopper on a spinner cannot.
+         */
+        setIsShopper(err ? false : ((data ?? []) as unknown[]).length > 0);
+      } catch {
+        if (alive) setIsShopper(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [needsStore, session]);
+
+  useEffect(() => {
     if (needsAccount) router.replace('/login');
-    else if (needsStore) router.replace('/setup');
-    else if (needsOnboarding) router.replace('/setup/opening');
-  }, [needsAccount, needsStore, needsOnboarding, router]);
+    else if (needsStore) {
+      // Back to the marketplace for a shopper; the shop wizard for anybody else. Nothing moves
+      // until the question has an answer.
+      if (isShopper === true) router.replace('/');
+      else if (isShopper === false) router.replace('/setup');
+    } else if (needsOnboarding) router.replace('/setup/opening');
+  }, [needsAccount, needsStore, needsOnboarding, isShopper, router]);
 
   if (loading || (session && mustChange === undefined)) {
     return <FullPageMessage title="Opening your shop" tone="loading" />;
