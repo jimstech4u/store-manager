@@ -52,6 +52,20 @@ if (!template.includes(PLACEHOLDER)) {
   process.exit(1);
 }
 
+const output = template.replaceAll(PLACEHOLDER, version);
+
+/*
+ * Next evaluates its config more than once per build, so this runs more than once. Writing the same
+ * bytes again is harmless but says so three times, which makes a build log read like a fault.
+ */
+let current = null;
+try {
+  current = readFileSync(OUT, 'utf8');
+} catch {
+  // Not written yet, which is the normal case on a clean checkout.
+}
+if (current === output) process.exit(0);
+
 mkdirSync(dirname(OUT), { recursive: true });
-writeFileSync(OUT, template.replaceAll(PLACEHOLDER, version));
+writeFileSync(OUT, output);
 console.log(`[build-sw] public/sw.js written for build ${version}`);

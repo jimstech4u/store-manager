@@ -20,6 +20,27 @@ import { useRemindAfterMinutes } from '@/hooks/useRemindAfterMinutes';
 /** Where a postponed version is remembered, so "not now" survives a reload. */
 const HUSH_PREFIX = 'sw-hush:';
 
+/**
+ * HOW LONG AFTER OPENING AN UPDATE COUNTS AS "ALREADY THERE".
+ *
+ * Relaunching is when the browser checks for a new worker, so a shop that opens the app after iOS
+ * has thrown it out of memory is told about an update within a second or two of the app appearing —
+ * before they have done anything at all. Being interrupted to be asked about a version you have not
+ * had time to need is noise, and it trains people to dismiss the one dialog that matters.
+ *
+ * Inside this window the new version is left alone. It is ALREADY DOWNLOADED and waiting, and a
+ * waiting worker takes over by itself once every page using the old one has gone — which is what
+ * closing the app does. So the update arrives on the next launch, silently, which is how an app is
+ * supposed to update.
+ *
+ * Nothing is skipped and nothing is reloaded here: forcing the new worker to activate under a page
+ * still running the old bundle would leave that page asking a purged cache for its lazy chunks.
+ */
+const STARTUP_GRACE_MS = 20_000;
+
+/** When this page started. Module scope: one page, one start. */
+const startedAt = Date.now();
+
 /** Ask a worker which build it is. Returns null if it does not answer. */
 function versionOf(worker: ServiceWorker): Promise<string | null> {
   return new Promise((resolve) => {
@@ -112,6 +133,13 @@ export function ServiceWorker() {
       // Only when something is ALREADY running: on a first visit there is no "new" version, just
       // the app arriving.
       if (!worker || !navigator.serviceWorker.controller) return;
+
+      /*
+       * A version that was ready before the shop had done anything is not news. It installs itself
+       * on the next launch — see STARTUP_GRACE_MS. This is also why a browser tab that is merely
+       * refreshed says nothing, while one left open for a day still gets asked.
+       */
+      if (Date.now() - startedAt < STARTUP_GRACE_MS) return;
 
       const v = await versionOf(worker);
       if (dropped) return;

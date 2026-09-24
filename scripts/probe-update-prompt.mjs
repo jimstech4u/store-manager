@@ -83,13 +83,42 @@ try {
   const before = await p.evaluate(() => caches.keys());
   check('nothing is waiting on a first visit', !(await p.locator('body').innerText()).includes('A new version is ready'));
 
-  // ── A deploy: a different worker on the server, while this app is open ────────────
-  writeFileSync(SW, original.replace(/const VERSION = '[^']+'/, `const VERSION = '${NEW_VERSION}'`));
+  /*
+   * ── A DEPLOY THAT LANDS WHILE THE APP IS STARTING UP ─────────────────────────────
+   *
+   * Relaunching is exactly when the browser looks for a new worker, so a shop reopening the app
+   * after iOS threw it out of memory was told about an update a second after the app appeared,
+   * before they had done anything. Reported as "we already opened fresh and still get asked".
+   *
+   * The version still installs and still waits; it simply says nothing, and takes over by itself on
+   * the next launch, once the page holding the old one has gone.
+   */
+  writeFileSync(SW, original.replace(/const VERSION = '[^']+'/, `const VERSION = 'v-probe-a'`));
   await p.evaluate(async () => {
     const reg = await navigator.serviceWorker.getRegistration();
     await reg?.update();
   });
-  await p.waitForTimeout(4000);
+  await p.waitForTimeout(5000);
+
+  check(
+    'a version that arrives during startup does NOT interrupt',
+    !(await p.locator('body').innerText()).includes('A new version is ready'),
+  );
+  check(
+    'but it IS installed and waiting, for the next launch',
+    await p.evaluate(async () => Boolean((await navigator.serviceWorker.getRegistration())?.waiting)),
+  );
+
+  // ── And now one that lands while the shop is USING the app ───────────────────────
+  // Past the startup window, where an update is news rather than noise.
+  await p.waitForTimeout(17000);
+
+  writeFileSync(SW, original.replace(/const VERSION = '[^']+'/, `const VERSION = 'v-probe-b'`));
+  await p.evaluate(async () => {
+    const reg = await navigator.serviceWorker.getRegistration();
+    await reg?.update();
+  });
+  await p.waitForTimeout(5000);
 
   const asked = p.getByText('A new version is ready').first();
   check('the app says a new version is ready', (await asked.count()) > 0);
@@ -109,40 +138,43 @@ try {
   });
   check('the new version is still there, waiting', stillWaiting);
 
-  // ── "Not now" MEANS NOT NOW, ACROSS RELOADS ──────────────────────────────────────
+  // ── "Not now" IS REMEMBERED AGAINST THE BUILD ────────────────────────────────────
   //
-  // This is the part that was broken while looking correct. The answer lived in React state, so a
-  // reload forgot it — and this app reloads constantly: a tab change, a relaunch, coming back to a
-  // phone that dropped the page. A shop that chose twelve hours was asked again on the next screen.
-  // The answer is remembered against the BUILD it was given about.
-  await p.reload({ waitUntil: 'domcontentloaded' });
-  await p.waitForTimeout(6000);
-  const afterReload = (await p.locator('body').innerText()).replace(/\s+/g, ' ');
-  check(
-    'a reload does not ask again about the same version',
-    !afterReload.includes('A new version is ready'),
-    afterReload.slice(0, 60),
-  );
-  check('and the app is usable, not stuck behind a dialog', /sign in|email|password/i.test(afterReload));
-
+  // It used to live in React state, so a reload forgot it — and this app reloads constantly: a tab
+  // change, a relaunch, coming back to a phone that dropped the page. A shop that chose twelve hours
+  // was asked again on the next screen.
   const remembered = await p.evaluate(() =>
     Object.keys(localStorage).filter((k) => k.startsWith('sw-hush:')),
   );
-  check('the postponed version is remembered by name', remembered.length === 1, remembered.join(', '));
+  check('the postponed version is remembered by name', remembered.length === 1, remembered.join(', ') || '(none)');
+
+  await p.reload({ waitUntil: 'domcontentloaded' });
+  await p.waitForTimeout(6000);
+  const afterReload = (await p.locator('body').innerText()).replace(/\s+/g, ' ');
+  check('a reload does not ask again', !afterReload.includes('A new version is ready'), afterReload.slice(0, 60));
+  check('and the app is usable, not stuck behind a dialog', /sign in|email|password/i.test(afterReload));
 
   // ── Yes ──────────────────────────────────────────────────────────────────────────
-  // Forget the postponement rather than waiting out the shop's reminder interval — the same page,
-  // the same waiting worker. (A reload while one waits does not install it: it needs every page to
-  // let go.)
+  //
+  // A THIRD version, arriving while the shop is using the app — which is the only way a dialog
+  // appears now. Reloading to get one back would land inside the startup window, where a waiting
+  // version deliberately says nothing.
   await p.evaluate(() => {
     Object.keys(localStorage)
       .filter((k) => k.startsWith('sw-hush:'))
       .forEach((k) => localStorage.removeItem(k));
   });
-  await p.reload({ waitUntil: 'domcontentloaded' });
+  await p.waitForTimeout(21000);
+
+  writeFileSync(SW, original.replace(/const VERSION = '[^']+'/, `const VERSION = '${NEW_VERSION}'`));
+  await p.evaluate(async () => {
+    const reg = await navigator.serviceWorker.getRegistration();
+    await reg?.update();
+  });
   await p.waitForTimeout(6000);
+
   const askedAgain = (await p.locator('body').innerText()).replace(/\s+/g, ' ');
-  check('once the wait is over it is offered again', askedAgain.includes('A new version is ready'), askedAgain.slice(0, 60));
+  check('a version arriving mid-use is announced', askedAgain.includes('A new version is ready'), askedAgain.slice(0, 60));
 
   const reloads = [];
   p.on('load', () => reloads.push(1));

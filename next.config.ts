@@ -1,4 +1,19 @@
 import type { NextConfig } from "next";
+import { execFileSync } from "node:child_process";
+
+/*
+ * WRITE THE SERVICE WORKER HERE, where it cannot be skipped.
+ *
+ * It was a `prebuild` script, which npm runs for `npm run build` — and not for `npx next build`,
+ * which is what a person types. Every local build since quietly served a STALE public/sw.js: the
+ * template had the handler that answers "which build are you", the served worker did not, and the
+ * feature that depends on it failed with no error anywhere. Vercel runs `npm run build` so
+ * production was right, which is the worst shape for a bug like this — it only lies to whoever is
+ * testing.
+ *
+ * next.config is evaluated by every build and every dev server, however it was started.
+ */
+execFileSync(process.execPath, ["scripts/build-sw.mjs"], { stdio: "inherit" });
 
 /**
  * Security headers, enforced from the start.
