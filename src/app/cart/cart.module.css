@@ -1,0 +1,208 @@
+/* =====================================================================================
+   The basket, which is really several baskets — one per shop.
+
+   Each seller gets its own bordered block with its own total and its own send button, because
+   each is a separate order to a separate business. The grouping is not a layout choice that
+   could be swapped for a flat list later; it is what the page means.
+   ===================================================================================== */
+
+.wrap {
+  flex: 1;
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-4) calc(var(--space-7) + var(--safe-bottom));
+}
+
+.title {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: var(--space-2);
+}
+
+.summary {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  margin-bottom: var(--space-5);
+}
+
+/* ── Empty ────────────────────────────────────────────────────────────────────────── */
+
+.empty {
+  padding: var(--space-7) var(--space-4);
+  text-align: center;
+}
+
+.emptyTitle {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  margin-bottom: var(--space-2);
+}
+
+.emptyNote {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  margin-bottom: var(--space-5);
+}
+
+.browse {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--touch-min);
+  padding: 0 var(--space-5);
+  border-radius: var(--radius);
+  background: var(--primary);
+  color: var(--primary-text);
+  font-weight: 600;
+}
+
+/* ── One seller's block ───────────────────────────────────────────────────────────── */
+
+.seller {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  margin-bottom: var(--space-4);
+  overflow: hidden;
+}
+
+.sellerHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-sunken);
+}
+
+.sellerName {
+  font-weight: 700;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.remove {
+  flex: none;
+  min-height: var(--touch-min);
+  padding: 0 var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--danger);
+  background: none;
+}
+
+/* ── Lines ────────────────────────────────────────────────────────────────────────── */
+
+.lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.line {
+  display: grid;
+  /* Name takes what is left; the stepper and the price are fixed so the column of prices lines
+     up down the block and can be read without tracking across. */
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.line:last-child {
+  border-bottom: none;
+}
+
+.lineName {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.qty {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.qty button {
+  /* Full touch target on both steppers: this is used one-handed, often while walking. */
+  width: var(--touch-min);
+  height: var(--touch-min);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--text);
+  background: none;
+}
+
+.qty button:hover {
+  background: var(--surface-sunken);
+}
+
+.qty > span {
+  min-width: 2ch;
+  text-align: center;
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.linePrice {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* ── Foot of a seller's block ─────────────────────────────────────────────────────── */
+
+.sellerFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-top: 1px solid var(--border);
+  background: var(--surface-sunken);
+}
+
+.total {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+
+/* An unpriced line is said out loud rather than folded into the number, so nobody reads the
+   total as the whole bill. */
+.plus {
+  font-family: inherit;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.checkout {
+  flex: 1;
+  min-width: 12rem;
+  min-height: var(--touch-min);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius);
+  background: var(--primary);
+  color: var(--primary-text);
+  font-weight: 600;
+}
+
+.checkout:disabled {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
+  cursor: default;
+}

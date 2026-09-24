@@ -1,10 +1,12 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
 import styles from './market.module.css';
 import { Button } from '@/components/ui/Button';
 import { Logo } from '@/components/ui/Logo';
+import { useCart } from '@/lib/marketplace/cart';
 import { useAuth } from '@/providers/AuthProvider';
 
 /**
@@ -25,6 +27,7 @@ export function MarketShell({
 }) {
   const router = useRouter();
   const { session, stores } = useAuth();
+  const { count } = useCart();
 
   return (
     <div className={styles.page}>
@@ -42,6 +45,21 @@ export function MarketShell({
           <span className={styles.topSpacer} />
 
           <div className={styles.topActions}>
+            {/*
+              THE BASKET IS ALWAYS REACHABLE, and always before the account actions.
+
+              A shopper who has added something and then wandered two shops deep needs it from
+              wherever they are; hunting for it is how a basket is abandoned. It is a real <a
+              href> so it survives a crawler, a middle-click and a shared link — the same reason
+              every other route on the public side is.
+            */}
+            <Link className={styles.basket} href="/cart" aria-label={count > 0 ? `Basket, ${count} items` : 'Basket'}>
+              <BasketIcon />
+              {/* The number appears only when there is one. A badge reading 0 is noise that
+                  trains people to ignore the badge. */}
+              {count > 0 && <span className={styles.basketCount}>{count > 99 ? '99+' : count}</span>}
+            </Link>
+
             {session ? (
               <Button size="small" onClick={() => router.push(stores.length ? '/main' : '/setup')}>
                 {stores.length ? 'My shop' : 'Set up my shop'}
@@ -78,5 +96,20 @@ export function MarketShell({
         Store Manager — stock, sales and accounts for distribution businesses.
       </footer>
     </div>
+  );
+}
+
+/** A basket, drawn rather than imported: the app's icon set is for the signed-in side. */
+function BasketIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M6 8h12l-1.2 10.2a2 2 0 0 1-2 1.8H9.2a2 2 0 0 1-2-1.8L6 8Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <path d="M9 8V6.5a3 3 0 0 1 6 0V8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
   );
 }

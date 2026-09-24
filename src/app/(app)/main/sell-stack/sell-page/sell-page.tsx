@@ -11,7 +11,8 @@ import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
 import { CameraIcon, CloseIcon, MinusIcon, PlusIcon, ReceiptIcon, CashIcon,
-  ReturnIcon } from '@/components/ui/Icon';
+  ReturnIcon, BoxIcon } from '@/components/ui/Icon';
+import { usePendingOrderCount } from '@/lib/stacks/online-orders';
 import { CustomerPicker } from '@/components/customers/CustomerPicker';
 import { CustomerTabs } from '@/components/sell/CustomerTabs';
 import { ShareOrder } from '@/components/sell/ShareOrder';
@@ -72,6 +73,11 @@ export default function SellPage() {
   const goBack = useStackBack();
   const nav = useNav();
   const { store } = useAuth();
+  /*
+   * How many orders are waiting, for the badge. Its own small read rather than the list, because the
+   * till asks on every visit and the list is opened rarely.
+   */
+  const pendingOrders = usePendingOrderCount(store?.id ?? null).data ?? 0;
   const {
     orders,
     activeOrder,
@@ -710,6 +716,23 @@ export default function SellPage() {
        * related page is what has already been sold.
        */
       actions={[
+        /*
+          ORDERS ASKED FOR FROM THE MARKETPLACE.
+          
+          First, and badged, because it is the only action here that somebody ELSE started and that
+          is waiting on this shop. A sale at the counter can be begun whenever; an order sitting
+          unanswered is a shopper waiting, and the count is how the till says so without a screen
+          having to be opened to find out.
+          
+          Nothing is drawn when there are none: a badge showing 0 is furniture.
+        */
+        {
+          key: 'orders',
+          icon: <BoxIcon />,
+          onClick: () => void nav.push('orders_page'),
+          ariaLabel: pendingOrders ? `${pendingOrders} orders waiting` : 'Orders from the marketplace',
+          badge: pendingOrders > 0 ? String(pendingOrders) : undefined,
+        },
         {
           key: 'sales',
           icon: <ReceiptIcon />,

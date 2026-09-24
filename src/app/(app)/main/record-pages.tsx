@@ -24,6 +24,7 @@ import YardCountPage from './count-stack/yard-count-page/yard-count-page';
 import ReceiptPage from './sell-stack/receipt-page/receipt-page';
 import AmendPage from './sell-stack/amend-page/amend-page';
 import ClaimPage from './sell-stack/claim-page/claim-page';
+import OrdersPage from './sell-stack/orders-page/orders-page';
 import ShareWhatsAppPage from './sell-stack/share-whatsapp-page/share-whatsapp-page';
 import CountGatePage from './sell-stack/count-gate-page/count-gate-page';
 import TakePaymentPage from './sell-stack/take-payment-page/take-payment-page';
@@ -150,6 +151,13 @@ export const RECORD_PAGES: Record<string, ComponentType> = gateAll({
   bank_page: BankPage,
   bank_form_page: BankFormPage,
   words_page: WordsPage,
+  /*
+   * LAST, and it must stay last. A route is written into the URL as its POSITION in this map, so a
+   * page inserted anywhere but the end sends every URL after it to a different page — including one
+   * a phone restored from a stack it persisted before the deploy. This one was first written into
+   * the Sell tab's own list, which would have shifted every record page above by one.
+   */
+  orders_page: OrdersPage,
 });
 
 /** Handed to each stack's `additionalNavLinks` — one array, so its identity never changes. */

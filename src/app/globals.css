@@ -194,8 +194,26 @@ button {
 
 a {
   color: var(--primary);
-  text-decoration: underline;      /* underlined, so a link is not identified by colour alone */
+  text-decoration: none;
   text-underline-offset: 2px;
+}
+
+/*
+ * The underline is kept where it does the work it was there for.
+ *
+ * It was on every link, which made cards, rows and buttons-that-are-links look like scribbled-on
+ * text. But the reason it existed is real: a link INSIDE a sentence identified only by colour is
+ * invisible to somebody who cannot see the colour. So prose keeps it, and so does hover and focus
+ * everywhere — the affordance is still there, it just is not shouted on a page of link-shaped cards.
+ */
+p a,
+li > a:not([class]) {
+  text-decoration: underline;
+}
+
+a:hover,
+a:focus-visible {
+  text-decoration: underline;
 }
 
 /* ── Focus ─────────────────────────────────────────────────────────────────────────── */

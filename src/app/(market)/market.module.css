@@ -552,3 +552,43 @@
   margin-top: var(--space-3);
   max-width: 22rem;
 }
+
+/* ── Basket ───────────────────────────────────────────────────────────────────────── */
+
+/* Icon-only at every width. The two account actions beside it are words and already fill a
+   phone's top bar; a third set of words would push one of them off. */
+.basket {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: var(--touch-min);
+  height: var(--touch-min);
+  border-radius: var(--radius-full);
+  color: var(--text);
+}
+
+.basket:hover {
+  background: var(--surface-sunken);
+}
+
+.basketCount {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-full);
+  /* A ring in the bar's own colour, so the badge reads as sitting on top of the basket rather
+     than merging with its outline. */
+  border: 2px solid var(--surface);
+  background: var(--primary);
+  color: var(--primary-text);
+  font-family: var(--font-numeric);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+}

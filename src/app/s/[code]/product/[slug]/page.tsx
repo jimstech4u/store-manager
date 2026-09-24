@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getProduct, getShopProducts, imageUrl, productHref, productIdFromSlug } from '@/lib/marketplace/server';
 import { MarketShell } from '@/app/(market)/MarketShell';
+import { ProductActions } from '@/components/market/ProductActions';
 import styles from './product.module.css';
 
 /**
@@ -145,6 +146,13 @@ export default async function Page({ params }: Params) {
         </p>
 
         {product.has_bulk && <p className={styles.bulk}>Cheaper per unit when you buy more.</p>}
+
+        {/*
+          The only part of this page that is not static. Everything above is server-rendered so a
+          crawler and a link preview can read it; taking, saving and sending are a shopper's business
+          and need the browser.
+        */}
+        <ProductActions product={product} />
 
         <Link className={styles.cta} href={`/s/${code}`}>
           See everything from {product.store_name}

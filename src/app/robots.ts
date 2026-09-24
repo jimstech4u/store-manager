@@ -32,6 +32,7 @@ export default function robots(): MetadataRoute.Robots {
           '/r/',        // a receipt someone was sent, by token
           '/t/',        // a delivery being tracked, by token
           '/track',
+          '/cart',      // one person's basket, on one device — nothing to find here
           '/api/',
         ],
       },

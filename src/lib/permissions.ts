@@ -139,6 +139,11 @@ export const ROUTE_NEEDS: Readonly<Record<string, Permission>> = {
   deposit_move_page: 'deposits.manage',
   empties_record_page: 'deposits.manage',
   customer_form_page: 'customers.manage',
+  /*
+   * Answering an order from the marketplace IS selling: accepting it opens it at the till, and the
+   * next thing that happens is money and stock. So it asks for exactly what the till asks for.
+   */
+  orders_page: 'sales.record',
 };
 
 export function roleCan(role: Role | null | undefined, permission: Permission): boolean {
