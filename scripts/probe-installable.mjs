@@ -69,8 +69,13 @@ try {
 
   // The install offer on the landing page: on iPhone it is the two steps, since Apple has no prompt.
   await ios.waitForTimeout(2500);
+  // The offer lives in a strip at the foot now, and its steps are folded behind "How" — it used to
+  // be two lines of grey instructions permanently on the hero.
+  const iosHow = ios.getByRole('button', { name: /^How$/ }).first();
+  if (await iosHow.count()) await iosHow.click();
+  await ios.waitForTimeout(600);
   const iosText = (await ios.locator('body').innerText()).replace(/\s+/g, ' ');
-  check('an iPhone is shown how to install', /Add to Home Screen/i.test(iosText) && /Share/i.test(iosText));
+  check('an iPhone is shown how to install', /Add to Home Screen/i.test(iosText) && /Share/i.test(iosText), iosText.slice(0, 60));
 
   // ══ 2b. Each browser is told what IT can do ══════════════════════════════════════
   // An iPhone in Chrome cannot install at all: the Home Screen belongs to Safari on iOS.
@@ -83,6 +88,9 @@ try {
   });
   await iosChrome.goto(BASE, { waitUntil: 'domcontentloaded' });
   await iosChrome.waitForTimeout(2500);
+  const chromeHow = iosChrome.getByRole('button', { name: /^How$/ }).first();
+  if (await chromeHow.count()) await chromeHow.click();
+  await iosChrome.waitForTimeout(600);
   const chromeText = (await iosChrome.locator('body').innerText()).replace(/\s+/g, ' ');
   check('an iPhone in Chrome is told only Safari can', /only Safari can add/i.test(chromeText));
   check('… and is offered a way over', /Open in Safari/i.test(chromeText) && /Copy the link/i.test(chromeText));
@@ -97,6 +105,9 @@ try {
   });
   await android.goto(BASE, { waitUntil: 'domcontentloaded' });
   await android.waitForTimeout(2500);
+  const androidHow = android.getByRole('button', { name: /^How$/ }).first();
+  if (await androidHow.count()) await androidHow.click();
+  await android.waitForTimeout(600);
   const androidText = (await android.locator('body').innerText()).replace(/\s+/g, ' ');
   check('an Android browser is shown its menu', /Install app|Add to Home screen/i.test(androidText), androidText.slice(0, 60));
 
@@ -129,8 +140,15 @@ try {
    * in the head before the body it precedes exists.
    */
   const html = await fetch(`${BASE}/`).then((r) => r.text());
-  const atRedirect = html.indexOf("display-mode: standalone");
-  const atShopfront = html.indexOf('Buy from shops near you');
+  const atRedirect = html.indexOf('display-mode: standalone');
+  /*
+   * The BODY's copy, not the head's. This compared against the first occurrence anywhere, and once
+   * the page gained an og:title the phrase appeared in a meta tag first — so the check reported the
+   * redirect as coming too late while it was in fact still in <head>, doing exactly its job. A
+   * measurement that moves when something unrelated changes is not measuring what it claims.
+   */
+  const bodyAt = html.indexOf('<body');
+  const atShopfront = html.indexOf('Buy from shops near you', bodyAt);
   check('the installed app is sent on before the shopfront exists', atRedirect > -1 && atRedirect < atShopfront, `redirect@${atRedirect} shopfront@${atShopfront}`);
   check('and it only fires for the installed app, not a browser tab', html.includes('window.navigator.standalone'));
 

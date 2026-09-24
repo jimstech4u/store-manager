@@ -920,6 +920,19 @@ export default function SettingsPage() {
         </p>
       </div>
 
+      {/*
+        A WAY OUT TO THE PUBLIC SIDE, and back again.
+        
+        The marketplace is the same site — a shop's own products are listed there — but from inside
+        the app there was no route to it at all, so the only way to see how your shop looks to a
+        shopper was to type the address. Going there signed in shows "My shop" rather than "Sign in",
+        so the way back is one tap.
+      */}
+      <a className={styles.marketLink} href="/" target="_blank" rel="noopener noreferrer">
+        See the marketplace
+        <span className={styles.marketNote}>How shoppers find you, and what your shop looks like to them</span>
+      </a>
+
       <Button variant="secondary" size="large" fullWidth onClick={() => void signOut()}>
         Sign out
       </Button>

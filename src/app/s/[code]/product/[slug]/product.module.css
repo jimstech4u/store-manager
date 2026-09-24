@@ -1,0 +1,67 @@
+/* A product page: readable first, on a phone, before anything else. */
+.wrap {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--space-4, 16px);
+  padding-bottom: 96px;
+}
+
+.crumbs {
+  font-size: 13px;
+  color: var(--text-muted, #6b7280);
+  margin-bottom: 12px;
+}
+.crumbs a { color: inherit; }
+
+.product { display: flex; flex-direction: column; gap: 8px; }
+
+.image {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 14px;
+  background: var(--surface-2, #f3f4f6);
+}
+
+.name { margin: 8px 0 0; font-size: 22px; font-weight: 700; color: var(--text, #111827); }
+.shop { margin: 0; font-size: 14px; color: var(--text-muted, #6b7280); }
+.shop a { color: var(--primary, #0b6252); }
+
+.price { margin: 6px 0 0; font-size: 26px; font-weight: 700; color: var(--text, #111827); }
+.unit { font-size: 14px; font-weight: 400; color: var(--text-muted, #6b7280); }
+
+.inStock { margin: 0; font-size: 14px; color: var(--primary, #0b6252); font-weight: 600; }
+.outOfStock { margin: 0; font-size: 14px; color: var(--text-muted, #6b7280); }
+.bulk { margin: 0; font-size: 14px; color: var(--text-muted, #6b7280); }
+
+.cta {
+  margin-top: 14px;
+  display: inline-block;
+  text-align: center;
+  padding: 13px 18px;
+  border-radius: 12px;
+  background: var(--primary, #0b6252);
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.more { margin-top: 28px; border-top: 1px solid var(--border, #e5e7eb); padding-top: 16px; }
+.moreHeading { margin: 0 0 10px; font-size: 16px; font-weight: 700; }
+.moreList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+
+.moreLink {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 12px;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 10px;
+  text-decoration: none;
+  color: var(--text, #111827);
+  font-size: 14px;
+  min-height: 44px;
+  align-items: center;
+}
+.morePrice { color: var(--text-muted, #6b7280); white-space: nowrap; }

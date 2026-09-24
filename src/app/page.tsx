@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import MarketLanding from './market-landing';
 import ShopDirectory from '@/components/market/ShopDirectory';
+import ProductList from '@/components/market/ProductList';
 
 /**
  * THE MARKETPLACE, ANSWERED ON THE SERVER FIRST.
@@ -47,6 +48,12 @@ export default function Page() {
   return (
     <>
       <MarketLanding />
+      {/*
+        Real products with real prices, in the document. The grid above is fetched in the browser, so
+        a crawler reading this page saw no shop, no product and no price — and a marketplace that
+        never names a price is a marketplace nobody searching for one can find.
+      */}
+      <ProductList heading="What shops are selling" limit={36} />
       <ShopDirectory />
     </>
   );

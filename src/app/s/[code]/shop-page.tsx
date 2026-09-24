@@ -9,6 +9,8 @@ import { SearchField, useDebounced } from '@/components/ui/SearchField';
 import { InfoPanel } from '@/components/ui/Explain';
 import { Thumb } from '@/components/ui/Thumb';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
+import Link from 'next/link';
+import { productHref } from '@/lib/marketplace/links';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { ChevronLeftIcon, SearchIcon } from '@/components/ui/Icon';
 import { useInfiniteScroll } from '@/hooks/usePaginatedList';
@@ -182,20 +184,27 @@ export default function StorefrontPage({ code }: { code: string }) {
           ) : (
             <div className={styles.grid}>
               {products.items.map((p) => (
-                <button
+                /*
+                 * A LINK, not a button — and the app still opens a sheet.
+                 *
+                 * A crawler follows `href` and never an onClick, so a catalogue made of buttons is a
+                 * catalogue nothing can walk. This is a real address a person can copy, send, or open
+                 * in a new tab, and it is the same address the product's own page answers on.
+                 *
+                 * For somebody already here, the default is prevented and the sheet opens as before:
+                 * no navigation, no reload, nothing lost. The URL is replaced rather than pushed
+                 * because the sheet pushes its own history entry, and two would mean two back presses
+                 * to close one sheet.
+                 */
+                <Link
                   key={p.id}
-                  type="button"
+                  href={productHref(p)}
                   className={styles.card}
-                  onClick={() => {
+                  onClick={(e) => {
+                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+                    e.preventDefault();
                     setOpenProduct(p);
-                    // A product a shopper is looking at deserves a URL. Replace rather than push:
-                    // the Sheet already pushes its own history entry for the back gesture, and a
-                    // second entry would mean two back presses to close one sheet.
-                    window.history.replaceState(
-                      window.history.state,
-                      '',
-                      `?item=${encodeURIComponent(p.id)}`,
-                    );
+                    window.history.replaceState(window.history.state, '', productHref(p));
                   }}
                 >
                   <span className={styles.cardMedia}>
@@ -217,7 +226,7 @@ export default function StorefrontPage({ code }: { code: string }) {
                       <span className={`${styles.tag} ${styles.tagBulk}`}>Cheaper in bulk</span>
                     )}
                   </span>
-                </button>
+                </Link>
               ))}
             </div>
           )}

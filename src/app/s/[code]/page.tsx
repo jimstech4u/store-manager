@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { getShop, getShopProducts, imageUrl } from '@/lib/marketplace/server';
 import ShopPage from './shop-page';
+import ProductList from '@/components/market/ProductList';
 
 /**
  * A SHOP, ANSWERED ON THE SERVER.
@@ -56,5 +57,17 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 
 export default async function Page({ params }: Params) {
   const { code } = await params;
-  return <ShopPage code={code} />;
+  const shop = await getShop(code);
+
+  return (
+    <>
+      <ShopPage code={code} />
+      {/*
+        The grid inside ShopPage is fetched in the browser, so nothing reading the document sees a
+        single product. This is the same catalogue, rendered here, as plain links with prices — for
+        a crawler, and for anybody whose JavaScript has not arrived yet.
+      */}
+      {shop && <ProductList storeId={shop.id} heading={`Everything from ${shop.name}`} />}
+    </>
+  );
 }

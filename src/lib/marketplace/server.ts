@@ -1,4 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
+import { productHref, productIdFromSlug, slugify } from './links';
+
+export { productHref, productIdFromSlug, slugify };
 
 /**
  * THE PUBLIC MARKETPLACE, READ ON A SERVER.
@@ -30,10 +33,13 @@ export interface ShopForSeo {
 export interface ProductForSeo {
   id: string;
   name: string;
+  category: string | null;
   price: string | null;
   unit_label: string;
   in_stock: boolean;
+  has_bulk: boolean;
   image_path: string | null;
+  store_id: string;
   store_name: string;
   store_code: string;
 }
@@ -57,21 +63,40 @@ export async function getShop(code: string): Promise<ShopForSeo | null> {
   }
 }
 
-export async function getShopProducts(storeId: string, limit = 24): Promise<ProductForSeo[]> {
+export async function getShopProducts(storeId: string | null, limit = 24): Promise<ProductForSeo[]> {
   try {
     const client = db();
     if (!client) return [];
     const { data, error } = await client.rpc('public_products', {
-      p_store_id: storeId,
+      p_store_id: storeId ?? null,
       p_query: null,
       p_category: null,
-      p_cursor: null,
       p_limit: limit,
     });
     if (error) throw error;
     return (data ?? []) as ProductForSeo[];
   } catch {
     return [];
+  }
+}
+
+/**
+ * One product, for its own page.
+ *
+ * `public_product` (0159) rather than listing a shop's catalogue and discarding all but one — fine
+ * for a shop with twenty products, wrong for one with two thousand. Same visibility rules as the
+ * list, so a crawler and a passer-by see exactly the same thing.
+ */
+export async function getProduct(id: string): Promise<ProductForSeo | null> {
+  try {
+    const client = db();
+    if (!client) return null;
+    const { data, error } = await client.rpc('public_product', { p_id: id });
+    if (error) throw error;
+    const rows = (data ?? []) as ProductForSeo[];
+    return rows[0] ?? null;
+  } catch {
+    return null;
   }
 }
 
