@@ -47,3 +47,6 @@ shots/
 
 # Written by scripts/build-sw.mjs at build time, stamped with the commit.
 public/sw.js
+
+# A backup the update probe used to make. It writes the worker back itself now.
+public/sw.js.bak
