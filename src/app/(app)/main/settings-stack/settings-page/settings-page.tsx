@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { useReload } from '@/lib/stacks/resource';
 import { ReceiptPreview } from '@/components/receipt/ReceiptPreview';
 import { LogoRejected, normaliseReceiptLogo } from '@/lib/image-pipeline';
@@ -77,7 +78,27 @@ const REMIND_AFTER: { minutes: number; label: string }[] = [
 export default function SettingsPage() {
   const nav = useNav();
   const goBack = useStackBack();
-  const { store, user, signOut } = useAuth();
+  const { store, stores, selectStore, user, signOut } = useAuth();
+  const router = useRouter();
+  /** Which shop is being switched to, so the row can say so and the rest cannot be tapped. */
+  const [switching, setSwitching] = useState<string | null>(null);
+
+  /*
+   * Switching empties the previous shop's cached data first — that is what makes the wait real and
+   * worth showing. Afterwards the till is the right place to land: it is the screen this app is
+   * for, and staying on Settings under a new shop's name invites reading the previous shop's
+   * settings as the new one's.
+   */
+  const switchTo = async (id: string) => {
+    if (id === store?.id) return;
+    setSwitching(id);
+    try {
+      await selectStore(id);
+      router.push('/main');
+    } finally {
+      setSwitching(null);
+    }
+  };
   const { can, canOpen, role } = usePermission();
   const { theme, storedTheme, setTheme } = useTheme();
   const hiddenNotices = useHiddenNotices();
@@ -918,6 +939,64 @@ export default function SettingsPage() {
         <p className={styles.sectionNote}>
           {ROLE_LABEL[role ?? 'staff']} — {ROLE_DESCRIPTION[role ?? 'staff']}
         </p>
+      </div>
+
+      {/*
+        YOUR SHOPS — and the two things you could not do with them.
+        
+        A person can work in more than one: an owner with a second business, somebody who is staff
+        at one shop and owner of another. The database has supported that from the start —
+        `store_members` is many-to-many and `selectStore` exists — and there was no way to reach
+        either. No switcher anywhere in the app, and `/setup` reachable only by having no shop at
+        all, so an owner could not open their second one.
+        
+        Switching empties the previous shop's cached data BEFORE it changes, so no figure, list or
+        open till from one shop can appear under another's name.
+      */}
+      <div className={styles.group}>
+        <h2 className={styles.section}>Your shops</h2>
+
+        {stores.map((s) => {
+          const here = s.id === store?.id;
+          return (
+            <button
+              key={s.id}
+              type="button"
+              className={here ? styles.shopHere : styles.shopRow}
+              disabled={here || switching !== null}
+              onClick={() => void switchTo(s.id)}
+            >
+              <span className={styles.shopName}>{s.name}</span>
+              <span className={styles.shopMeta}>
+                {here
+                  ? 'You are working here'
+                  : switching === s.id
+                    ? 'Switching…'
+                    : !s.onboardedAt
+                      ? 'Not finished setting up'
+                      : ROLE_LABEL[s.role]}
+              </span>
+            </button>
+          );
+        })}
+
+        {/*
+          Only an owner is offered a new shop. Staff at somebody else's shop opening a business from
+          inside their employer's app is not a thing anybody asked for, and the button would be a
+          question they have to think about on a screen they came to for something else.
+        */}
+        {role === 'owner' && (
+          <button
+            type="button"
+            className={styles.shopAdd}
+            onClick={() => router.push('/setup')}
+          >
+            Open another shop
+            <span className={styles.sectionNote}>
+              A separate business with its own stock, prices, customers and money
+            </span>
+          </button>
+        )}
       </div>
 
       {/*

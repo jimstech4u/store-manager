@@ -69,6 +69,62 @@ export function usePendingOrderCount(storeId: string | null) {
   });
 }
 
+export interface OnlineOrderLine {
+  product_id: string;
+  name: string;
+  unit: string;
+  qty: number;
+  unit_price: string;
+  line_total: string;
+  /** What the shop last RECORDED having. Not a promise — see the note on the page. */
+  in_stock: number;
+}
+
+export interface OnlineOrderDetail {
+  id: string;
+  code: string;
+  customer_name: string | null;
+  customer_phone: string | null;
+  note: string | null;
+  status: 'open' | 'settled' | 'cancelled';
+  created_at: string;
+  total: string;
+  lines: OnlineOrderLine[];
+}
+
+/**
+ * ONE ORDER, IN FULL, so the shop can see what it is answering.
+ *
+ * The queue shows a name and a total, and Accept under it. Nobody should commit stock on the
+ * strength of a total: what matters is which products, how many, and whether the shop has them.
+ */
+export function useOnlineOrder(draftId: string | null) {
+  return useResource<OnlineOrderDetail | null>({
+    key: `online-order:${draftId ?? 'none'}`,
+    scope: ONLINE_ORDERS_SCOPE,
+    enabled: Boolean(draftId),
+    deps: [draftId ?? ''],
+    read: async () => {
+      const { data, error } = await getSupabase().rpc('online_order_detail', { p_draft_id: draftId });
+      if (error) throw error;
+      return ((data ?? []) as OnlineOrderDetail[])[0] ?? null;
+    },
+  });
+}
+
+/**
+ * Take it.
+ *
+ * One call, because accepting is two things that must not come apart: the shop's customer record
+ * for this shopper is found or made, and the draft is claimed to the till. Doing the second without
+ * the first is what recorded a sale against nobody.
+ */
+export async function acceptOnlineOrder(draftId: string): Promise<void> {
+  const { error } = await getSupabase().rpc('accept_online_order', { p_draft_id: draftId });
+  if (error) throw error;
+  onlineOrdersChanged();
+}
+
 /**
  * Turn it down.
  *

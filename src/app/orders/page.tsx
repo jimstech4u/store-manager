@@ -30,7 +30,7 @@ export default function MyOrdersPage() {
   const list = orders.data ?? [];
 
   return (
-    <MarketShell>
+    <MarketShell back={{ to: '/', label: 'Back to shopping' }} title="Your orders">
       <main className={styles.wrap}>
         <h1 className={styles.title}>Your orders</h1>
 

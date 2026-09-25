@@ -105,3 +105,61 @@
   color: var(--primary, #0b6252);
   font-weight: 600;
 }
+
+/* ── The bulk ladder ──────────────────────────────────────────────────────────────── */
+
+/* The shop's own offer, shown whole rather than only the band in force: somebody deciding how many
+   to buy needs to see what buying more would cost. */
+.bands {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.band,
+.bandOn {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+}
+
+.band:last-child,
+.bandOn:last-child { border-bottom: none; }
+
+.band { color: var(--text-muted, #6b7280); }
+
+/* The band this quantity has actually earned. */
+.bandOn {
+  background: var(--primary-subtle, #e6f2ef);
+  color: var(--primary, #0b6252);
+  font-weight: 700;
+}
+
+.saving {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--success, #166534);
+}
+
+/* Not a nag — a tappable offer that sets the quantity, because a discount somebody has to work out
+   for themselves is a discount the shop does not get credit for. */
+.upsell {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px dashed var(--primary, #0b6252);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--primary, #0b6252);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}

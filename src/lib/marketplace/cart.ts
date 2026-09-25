@@ -2,6 +2,8 @@
 
 import { useCallback } from 'react';
 import { useDemandState } from '@academix-admin/state-stack';
+import type { PublicTier } from '@/lib/stacks/storefront';
+import { unitPriceFor } from './pricing';
 
 /**
  * A BASKET THAT IS ALREADY SORTED BY WHO YOU ARE BUYING FROM.
@@ -26,11 +28,21 @@ const CART_KEY = 'basket';
 export interface CartLine {
   productId: string;
   name: string;
-  /** What one costs, remembered as it was SHOWN. See `priceChanged`. */
+  /** What one costs at the ordinary price, remembered as it was SHOWN. */
   price: string | null;
   unitLabel: string;
   imagePath: string | null;
   qty: number;
+  /**
+   * The shop's bulk bands for this product, carried with the line.
+   *
+   * Kept here rather than re-read when the basket opens, for two reasons. A basket must work on a
+   * bad connection — it is the one thing a shopper has already invested effort in — and the line's
+   * total has to change the moment the stepper crosses a band, not after a round trip. The server
+   * prices the order for real when it is sent, bands included, so a stale band here can only ever
+   * make the page's arithmetic differ from the shop's, which the basket already warns about.
+   */
+  tiers?: PublicTier[];
 }
 
 export interface CartSeller {
@@ -66,6 +78,7 @@ export function useCart() {
         store_name: string;
       },
       qty = 1,
+      tiers?: PublicTier[],
     ) => {
       setCart((prev) => {
         const next: Cart = (prev ?? []).map((s) => ({ ...s, lines: [...s.lines] }));
@@ -78,8 +91,10 @@ export function useCart() {
         const line = seller.lines.find((l) => l.productId === product.id);
         if (line) {
           line.qty += qty;
-          // The price is refreshed to what is being shown now — see `priceChanged` on the cart page.
+          // Refreshed to what is being shown now: this page has just read it, the basket may not
+          // have looked in days.
           line.price = product.price;
+          if (tiers) line.tiers = tiers;
         } else {
           seller.lines.push({
             productId: product.id,
@@ -88,6 +103,7 @@ export function useCart() {
             unitLabel: product.unit_label,
             imagePath: product.image_path,
             qty,
+            tiers,
           });
         }
         return next;
@@ -130,9 +146,27 @@ export function useCart() {
   return { sellers, count, add, setQty, removeSeller, clearSeller };
 }
 
-/** What one seller's part of the basket comes to. */
+/** What one line comes to, at the band its quantity has earned. */
+export function lineTotal(line: CartLine): number {
+  const unit = unitPriceFor(line.price, line.tiers, line.qty);
+  return unit === null ? 0 : unit * line.qty;
+}
+
+/** What one earns each at this quantity — the ordinary price, or the band if one applies. */
+export function lineUnitPrice(line: CartLine): number | null {
+  return unitPriceFor(line.price, line.tiers, line.qty);
+}
+
+/** Whether this line is cheaper per unit than it would be at one. */
+export function lineIsDiscounted(line: CartLine): boolean {
+  const one = unitPriceFor(line.price, line.tiers, 1);
+  const now = unitPriceFor(line.price, line.tiers, line.qty);
+  return one !== null && now !== null && now < one;
+}
+
+/** What one seller's part of the basket comes to, bulk bands included. */
 export function sellerTotal(seller: CartSeller): number {
-  return seller.lines.reduce((sum, l) => sum + (l.price ? Number(l.price) * l.qty : 0), 0);
+  return seller.lines.reduce((sum, l) => sum + lineTotal(l), 0);
 }
 
 /**

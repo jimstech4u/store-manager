@@ -85,7 +85,7 @@ export default function CartPage() {
   const nothingLeft = count === 0 && Object.keys(sent).length === 0;
 
   return (
-    <MarketShell>
+    <MarketShell back={{ to: '/', label: 'Back to shopping' }} title="Your basket">
       <main className={styles.wrap}>
         <h1 className={styles.title}>Your basket</h1>
 

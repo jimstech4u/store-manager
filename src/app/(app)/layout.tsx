@@ -86,14 +86,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
    * and the list is empty — which used to route a signed-in shop to the create-a-shop wizard, the
    * one screen it could not possibly want. An error means we do not know, so nothing is claimed.
    */
-  const needsStore = !loading && !storesLoading && !!session && stores.length === 0 && !error;
+  /*
+   * "YOU HAVE NOT MADE YOUR SHOP YET" — which is only true of somebody who came here to run one.
+   *
+   * A shopper has no store and never will; `/main` is their screen too, and it renders the
+   * customer's own home rather than the shop's tabs. So they are not missing anything and must not
+   * be sent anywhere: not to the create-a-shop wizard, and not out to the marketplace either,
+   * which was the earlier stopgap and left a shopper with no home of their own.
+   */
+  const needsStore =
+    !loading && !storesLoading && !!session && !isShopper && stores.length === 0 && !error;
   const needsOnboarding =
     !loading && !!store && !store.onboardedAt && !pathname.startsWith('/setup');
 
   useEffect(() => {
     if (needsAccount) router.replace('/login');
-    // Back to the marketplace for a shopper; the shop wizard for anybody else.
-    else if (needsStore) router.replace(isShopper ? '/' : '/setup');
+    else if (needsStore) router.replace('/setup');
     else if (needsOnboarding) router.replace('/setup/opening');
   }, [needsAccount, needsStore, needsOnboarding, isShopper, router]);
 

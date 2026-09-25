@@ -296,3 +296,61 @@
   font-size: 12px;
   color: var(--text-muted);
 }
+
+/* ── Your shops ───────────────────────────────────────────────────────────────────── */
+
+/* A row per shop, with the one being worked in marked rather than merely highlighted: on a screen
+   that changes which business every figure in the app belongs to, "which one am I in" must not be a
+   matter of noticing a colour. */
+.shopRow,
+.shopHere,
+.shopAdd {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  min-height: var(--touch-comfortable);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  margin-bottom: var(--space-2);
+}
+
+.shopRow:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-sunken);
+}
+
+.shopHere {
+  border-color: var(--primary);
+  background: var(--primary-subtle);
+  cursor: default;
+}
+
+.shopName {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.shopMeta {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.shopHere .shopMeta {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.shopAdd {
+  border-style: dashed;
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.shopRow:disabled {
+  opacity: 0.6;
+}

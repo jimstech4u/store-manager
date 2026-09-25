@@ -64,18 +64,44 @@
   font-weight: 600;
 }
 
+/*
+ * "3 crates × ₦3,600" on the left, the money on the right, in a COLUMN.
+ *
+ * This was a flex row with `space-between`, which lines two things up only while they both fit.
+ * The money is what a receipt is read for and it was set at `--text-xs` and muted along with the
+ * quantity beside it, so the figure a customer checks was the smallest thing on the line.
+ *
+ * A grid with a fixed second column puts every total on the same right edge whatever the
+ * description does, which is what makes a column of figures scannable at all.
+ */
 .lineDetail {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
   gap: var(--space-3);
   font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
+/*
+ * A narrow roll — roughly 32 characters — cannot hold both on one line, so the total moves under
+ * the quantity. It stays on the right edge: stacking is a lack of room, not a reason to abandon
+ * the column. This replaced an inline `display: block`, which left the money hanging on the left
+ * under the description with nothing aligning it to anything.
+ */
+.lineDetailNarrow {
+  grid-template-columns: 1fr;
+}
+
 .lineTotal {
   font-variant-numeric: tabular-nums;
+  /* The figure being checked, at the size of the line it belongs to rather than the footnote size
+     of the quantity beside it. */
+  font-size: var(--text-sm);
   font-weight: 700;
   color: var(--text);
+  text-align: right;
+  white-space: nowrap;
 }
 
 .totals {

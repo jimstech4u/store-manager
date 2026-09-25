@@ -18,6 +18,7 @@ import { SellStack } from './sell-stack/sell-stack';
 import { StockStack } from './stock-stack/stock-stack';
 import { MoneyStack } from './money-stack/money-stack';
 import { SettingsStack } from './settings-stack/settings-stack';
+import { CustomerHome } from './customer-home';
 
 /**
  * The app shell: one navigation stack per tab, coordinated by GroupNavigationStack.
@@ -50,10 +51,26 @@ const STACK_COMPONENTS: Record<string, React.ReactElement> = {
 export default function MainShell() {
   const { theme } = useTheme();
   const { can } = usePermission();
-  const { store, user } = useAuth();
+  const { store, user, session, stores } = useAuth();
 
-  // What another till records reaches this one as it happens — see `useLiveShop`.
-  useLiveShop(store?.id ?? null, user?.id ?? null);
+  /*
+   * `/main` IS EVERYONE'S HOME, and they are not all here for the same thing.
+   *
+   * A shopper gets their own screen: their orders, their basket, a way back to the shops. Below
+   * this line is the shop's app — five stacks in a tab group — and none of it means anything to
+   * somebody who came to buy a crate of drinks.
+   *
+   * Read from the session, which is already here, and only believed for somebody with no shop: a
+   * shop owner who also shops elsewhere is a shop owner when they open this. `user_metadata` is
+   * client-writable, so it decides which of two screens somebody sees and nothing else — every
+   * permission is still the database's answer from `auth.uid()`.
+   */
+  const isShopper =
+    stores.length === 0 && session?.user?.user_metadata?.signed_up_as === 'customer';
+
+  // What another till records reaches this one as it happens — see `useLiveShop`. Held for a
+  // shopper, who has no till and no shop for it to watch.
+  useLiveShop(isShopper ? null : store?.id ?? null, user?.id ?? null);
 
   const tabs = useMemo(() => TABS.filter((t) => !t.requires || can(t.requires)), [can]);
   const [active, setActive] = useState(() => defaultTabFor(tabs));
@@ -73,6 +90,10 @@ export default function MainShell() {
   );
 
   const isDark = theme === 'dark';
+
+  // Their screen, not the shop's. Returned before the group mounts: five stacks a shopper can
+  // reach nothing in is five stacks' worth of work for a screen they will never see.
+  if (isShopper) return <CustomerHome />;
 
   return (
     <div className={styles.shell}>

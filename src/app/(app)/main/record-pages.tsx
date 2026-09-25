@@ -25,6 +25,7 @@ import ReceiptPage from './sell-stack/receipt-page/receipt-page';
 import AmendPage from './sell-stack/amend-page/amend-page';
 import ClaimPage from './sell-stack/claim-page/claim-page';
 import OrdersPage from './sell-stack/orders-page/orders-page';
+import OrderPage from './sell-stack/order-page/order-page';
 import ShareWhatsAppPage from './sell-stack/share-whatsapp-page/share-whatsapp-page';
 import CountGatePage from './sell-stack/count-gate-page/count-gate-page';
 import TakePaymentPage from './sell-stack/take-payment-page/take-payment-page';
@@ -158,6 +159,9 @@ export const RECORD_PAGES: Record<string, ComponentType> = gateAll({
    * the Sell tab's own list, which would have shifted every record page above by one.
    */
   orders_page: OrdersPage,
+  // After `orders_page`, for the same reason `orders_page` is after everything else: a route is
+  // written into the URL as its POSITION in this map.
+  order_page: OrderPage,
 });
 
 /** Handed to each stack's `additionalNavLinks` — one array, so its identity never changes. */

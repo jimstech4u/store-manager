@@ -42,7 +42,14 @@ interface AuthContextValue {
   stores: StoreSummary[];
   /** The store being worked in. Null when the user has none yet. */
   store: StoreSummary | null;
-  selectStore: (storeId: string) => void;
+  /**
+   * Work in a different shop.
+   *
+   * Async because the previous shop's cached data is emptied BEFORE the change lands — see the
+   * implementation. Callers that do not care may ignore the promise; one that navigates afterwards
+   * should await it.
+   */
+  selectStore: (storeId: string) => Promise<void>;
   /** False once the first auth + store load has settled, either way. */
   loading: boolean;
   /**
@@ -346,25 +353,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStoreId((current) => chooseStore(stores, current));
   }, [stores]);
 
-  const selectStore = useCallback((id: string) => {
-    setStoreId((previous) => {
-      if (previous === id) return previous;
-      try {
-        localStorage.setItem(LAST_STORE_KEY, id);
-      } catch {
-        /* not fatal — the choice just will not survive a reload */
-      }
-      // Switching stores must not carry the previous store's data across. Doing it here rather
-      // than in whatever button triggered the switch means every path that changes store is
-      // covered, including a future one nobody has written yet.
-      if (previous !== null) void clearStoreScopes();
-      return id;
-    });
+  /*
+   * SWITCH SHOP: EMPTY THE OLD ONE'S DATA FIRST, THEN CHANGE.
+   *
+   * The clear used to run inside the state updater, unawaited, alongside the change — so the new
+   * shop's id was live while the old shop's cache was still being emptied. Every screen re-reads
+   * the moment the id changes, and `clearScope` is asynchronous: the two race, and when the clear
+   * lost it wiped data belonging to the shop just switched TO. Which shop's numbers were on screen
+   * depended on which promise settled first, which is the worst possible answer for a screen
+   * showing money.
+   *
+   * Doing it here rather than in whatever button triggered the switch means every path that
+   * changes shop is covered, including one nobody has written yet.
+   */
+  const selectStore = useCallback(async (id: string) => {
+    if (storeIdRef.current === id) return;
+    if (storeIdRef.current !== null) await clearStoreScopes();
+    try {
+      localStorage.setItem(LAST_STORE_KEY, id);
+    } catch {
+      /* not fatal — the choice just will not survive a reload */
+    }
+    setStoreId(id);
   }, []);
 
   useEffect(() => {
     if (storeId) hadStore.current = true;
   }, [storeId]);
+
+  // Read by `selectStore`, which must not depend on `storeId` — a callback that changed identity
+  // on every switch would re-register every consumer that lists it as a dependency.
+  const storeIdRef = useRef<string | null>(null);
+  storeIdRef.current = storeId;
 
   /*
    * HOW THIS SHOP SHOWS MONEY, applied as soon as the shop is known.

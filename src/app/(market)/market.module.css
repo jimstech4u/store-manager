@@ -602,3 +602,31 @@
   width: 6.5rem;
   height: var(--touch-min);
 }
+
+/* ── Back, in the header where every page keeps it ────────────────────────────────── */
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: var(--touch-min);
+  height: var(--touch-min);
+  margin-left: calc(var(--space-2) * -1);
+  border-radius: var(--radius-full);
+  color: var(--text);
+}
+
+.back:hover { background: var(--surface-sunken); }
+
+/* The page's own name. It truncates before the actions do: losing the name costs a glance, losing
+   the basket costs the sale. */
+.topTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--text);
+}

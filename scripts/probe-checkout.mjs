@@ -129,7 +129,9 @@ try {
   // ══ 5. The shop is not offered to somebody who came to buy ════════════════════════
   const top = (await p.locator('header').first().innerText()).replace(/\s+/g, ' ');
   check('the top bar does not offer to set up a shop', !/set up my shop/i.test(top), top.slice(0, 60));
-  check('it offers their own orders instead', /my orders/i.test(top), top.slice(0, 60));
+  // `/main` is everyone's home now and shows the shopper their own screen, so the top bar says
+  // "My account" rather than pointing at one page of it.
+  check('it offers their own account instead', /my account/i.test(top), top.slice(0, 60));
 
   // ══ 6. Who the shop should ask for ════════════════════════════════════════════════
   await p.waitForTimeout(2500);
@@ -159,11 +161,15 @@ try {
   check('the shopper can see their own order', placedCode ? mine.includes(placedCode) : false, mine.slice(0, 80));
   check('and it says it is waiting on the shop', /waiting on the shop/i.test(mine));
 
-  // ══ 9. /main has nothing for a shopper, and does not ask them to open a shop ══════
+  // ══ 9. /main is the shopper's own home, not the shop's app and not the wizard ═════
   await p.goto(`${BASE}/main`, { waitUntil: 'domcontentloaded' });
   await p.waitForTimeout(9000);
   const landed = new URL(p.url()).pathname;
-  check('a shopper at /main is sent to the marketplace, not the shop wizard', landed === '/', landed);
+  check('a shopper stays at /main rather than being sent to the shop wizard', landed === '/main', landed);
+  const home = (await p.locator('body').innerText()).replace(/\s+/g, ' ');
+  check('and it is their own screen', /your orders/i.test(home) && /browse shops/i.test(home), home.slice(0, 70));
+  check('with no invitation to open a shop', !/set up your shop|open another shop/i.test(home));
+  check('and their order on it', placedCode ? /waiting/i.test(home) : false, home.slice(0, 60));
 
   // ══ 10. The shop's side: it is waiting, and can be turned down ════════════════════
   const shop = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
@@ -189,17 +195,26 @@ try {
 
   /*
    * THIS ORDER, not whichever is first. The queue is a real shop's queue and may hold anything;
-   * declining the top card would turn down somebody else's order.
+   * opening the top card would answer somebody else's order.
    */
   const card = shop.locator('li').filter({ hasText: placedCode ?? ' ' }).first();
   check('the probe can find its own order in the queue', (await card.count()) > 0, placedCode ?? '');
+
+  // ══ 11. The shop reads the order before answering it ══════════════════════════════
+  await card.getByRole('button').first().dispatchEvent('click');
+  await shop.waitForTimeout(5000);
+  const detail = (await shop.locator('body').innerText()).replace(/\s+/g, ' ');
+  check('the card opens the order itself', detail.includes(placedCode ?? ' '), detail.slice(0, 70));
+  check('which lists what was asked for', /× ₦|x ₦/i.test(detail) || /\d+ .* × /.test(detail), detail.slice(0, 90));
+  check('and names the shopper', detail.includes(NAME), NAME);
+  check('and offers both answers', /accept and open at the till/i.test(detail) && /decline/i.test(detail));
 
   /*
    * `dispatchEvent`, not `click`. The confirm dialog opens over the button that opened it, and
    * Playwright's own retry then reports the click it just made as blocked by the thing that click
    * produced. Dispatching the event asks for the one behaviour being tested and nothing else.
    */
-  await card.getByRole('button', { name: /^decline$/i }).first().dispatchEvent('click');
+  await shop.getByRole('button', { name: /^decline$/i }).first().dispatchEvent('click');
   await shop.waitForTimeout(1800);
   check('declining asks first', /decline this order/i.test(await shop.locator('body').innerText()));
   await shop.getByRole('button', { name: /decline it/i }).first().dispatchEvent('click');

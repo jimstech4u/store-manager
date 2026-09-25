@@ -25,7 +25,7 @@ function slugify(name: string): string {
 
 export default function CreateStorePage() {
   const router = useRouter();
-  const { refreshStores } = useAuth();
+  const { refreshStores, selectStore, stores } = useAuth();
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const error = useProblem();
@@ -41,13 +41,27 @@ export default function CreateStorePage() {
       // create_store() writes the shop and the owner membership in one transaction. Doing it as
       // two client calls would risk a shop existing with no members — unreachable by anyone,
       // including the person who just made it.
-      const { error: err } = await getSupabase().rpc('create_store', {
+      const { data: newId, error: err } = await getSupabase().rpc('create_store', {
         p_name: trimmed,
         p_slug: slugify(trimmed),
       });
       if (err) throw err;
 
       await refreshStores();
+
+      /*
+       * OPEN THE SHOP THAT WAS JUST MADE.
+       *
+       * Refreshing the list is not the same as working in the new shop, and for somebody opening
+       * their SECOND shop the two came apart: the list gained a shop, the app stayed in the old
+       * one, and `/setup/opening` then asked for opening balances for the shop they already run.
+       * `chooseStore` is right to prefer a finished shop over a half-made one on sign-in — that is
+       * what it is for — but this is not sign-in. Here the new shop is the point.
+       *
+       * Awaited, because switching empties the previous shop's cached data first and the next
+       * screen reads straight away.
+       */
+      if (typeof newId === 'string') await selectStore(newId);
       router.replace('/setup/opening');
     } catch (err: unknown) {
       error.show(messageOf(err, 'Could not create your shop'));
@@ -60,10 +74,27 @@ export default function CreateStorePage() {
     <div className={styles.page}>
       <div className={styles.inner}>
         <p className={styles.step}>Step 1 of 2</p>
-        <h1 className={styles.heading}>Set up your shop</h1>
+        <h1 className={styles.heading}>
+          {stores.length > 0 ? 'Open another shop' : 'Set up your shop'}
+        </h1>
         <p className={styles.sub}>
-          This is the business whose stock and money you are keeping track of.
+          {stores.length > 0
+            ? 'A separate business, with its own stock, prices, customers and money. Nothing is shared with your other shops.'
+            : 'This is the business whose stock and money you are keeping track of.'}
         </p>
+
+        {/*
+          A WAY OUT, for somebody who came here on purpose and changed their mind.
+          
+          Only when they already have a shop: this screen is unskippable for somebody who has none,
+          because there is nothing behind it. For an owner opening a second shop it was a dead end —
+          no header, no back arrow, and the only button creates a business.
+        */}
+        {stores.length > 0 && (
+          <button type="button" className={styles.escape} onClick={() => router.replace('/main')}>
+            ← Back to {stores.find((s) => s.onboardedAt)?.name ?? 'my shop'}
+          </button>
+        )}
 
       {/*
         A FAILURE INTERRUPTS; it does not sit on the page.

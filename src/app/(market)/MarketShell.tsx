@@ -6,6 +6,8 @@ import type { ReactNode } from 'react';
 import styles from './market.module.css';
 import { Button } from '@/components/ui/Button';
 import { Logo } from '@/components/ui/Logo';
+import { ChevronLeftIcon } from '@/components/ui/Icon';
+import { useBackTo } from '@/lib/marketplace/use-back-to';
 import { useCart } from '@/lib/marketplace/cart';
 import { useAuth } from '@/providers/AuthProvider';
 
@@ -20,19 +22,52 @@ import { useAuth } from '@/providers/AuthProvider';
 export function MarketShell({
   children,
   search,
+  back,
+  title,
 }: {
   children: ReactNode;
   /** Rendered under the brand row — the marketplace search. */
   search?: ReactNode;
+  /**
+   * Where this page sits under, for the back button.
+   *
+   * A public page is arrived at from a search result, a shared link or a typed shop code, where
+   * the browser's history is one entry long and Back does nothing — or leaves the site. Given a
+   * fallback, the header draws a back button that goes back when there is somewhere to go back to
+   * and here otherwise. See `useBackTo`.
+   */
+  back?: { to: string; label: string };
+  /** Shown beside the back button, so a page arrived at cold says what it is. */
+  title?: string;
 }) {
   const router = useRouter();
   const { session, stores, loading } = useAuth();
   const { count } = useCart();
+  const goBack = useBackTo(back?.to ?? '/');
 
   return (
     <div className={styles.page}>
       <header className={styles.top}>
         <div className={styles.topRow}>
+          {/*
+            THE WAY BACK, where the page has one.
+            
+            The shop page used to draw its own "All shops" link in the body, and the product page a
+            link at the foot; the basket and a tracked order had nothing at all. A back control
+            belongs in the same place on every page, which is the header — the same place the app's
+            own screens put it.
+          */}
+          {back && (
+            <button
+              type="button"
+              className={styles.back}
+              onClick={goBack}
+              aria-label={back.label}
+            >
+              <ChevronLeftIcon size="1.2em" />
+            </button>
+          )}
+
           <button
             type="button"
             className={styles.brand}
@@ -41,6 +76,9 @@ export function MarketShell({
           >
             <Logo size={30} nameClassName={styles.brandName} />
           </button>
+
+          {/* The page's own name, once there is a back button taking the brand's usual room. */}
+          {title && <span className={styles.topTitle}>{title}</span>}
 
           <span className={styles.topSpacer} />
 
@@ -82,12 +120,16 @@ export function MarketShell({
                 an invitation to open one. With no store the useful thing is their own orders; the
                 way to open a shop is still on the landing page, where somebody looking for it is.
               */
+              /*
+                `/main` EITHER WAY — it is everyone's home now, and it shows the shop's app or the
+                shopper's own screen depending on who is asking. Only the word changes.
+              */
               <Button
                 size="small"
                 variant={stores.length ? 'primary' : 'secondary'}
-                onClick={() => router.push(stores.length ? '/main' : '/orders')}
+                onClick={() => router.push('/main')}
               >
-                {stores.length ? 'My shop' : 'My orders'}
+                {stores.length ? 'My shop' : 'My account'}
               </Button>
             ) : (
               <>

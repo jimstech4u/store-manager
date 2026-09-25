@@ -1,12 +1,21 @@
-/* A queue of requests: who, how much, and the two answers. */
+/* A queue of requests: who, how much, and a way in. The answering happens on the order's
+   own screen, where the lines are. */
 .list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
 
 .order {
+  display: block;
+  width: 100%;
+  text-align: left;
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 14px;
   background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
 }
+
+.order:hover { border-color: var(--border-strong); background: var(--surface-sunken); }
 
 .head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .who { font-weight: 700; font-size: 15px; color: var(--text); }
@@ -21,5 +30,13 @@
 
 .what { margin: 6px 0 12px; font-size: 14px; color: var(--text-muted); }
 
-/* Accept is the ordinary answer and sits first; declining is deliberate. */
-.actions { display: flex; flex-direction: column; gap: 8px; }
+/* Says what the tap does. A chevron alone leaves somebody guessing whether this opens the order or
+   accepts it — and one of those cannot be undone. */
+.go {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--primary);
+}

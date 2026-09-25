@@ -206,7 +206,7 @@ export function TrackClient({ initialToken }: { initialToken?: string } = {}) {
   }, [initial, initialToken, look, lookByToken]);
 
   return (
-    <MarketShell>
+    <MarketShell back={{ to: '/', label: 'Back to shopping' }} title="Follow an order">
       <div className={styles.wrap}>
         <h1 className={styles.title}>
           {state === 'found' ? 'Your order' : 'Follow your order'}

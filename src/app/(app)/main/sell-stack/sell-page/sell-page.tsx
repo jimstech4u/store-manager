@@ -5,14 +5,15 @@ import styles from './sell-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
-import { useIsActiveStack, useOverlayRoute } from '@academix-admin/navigation-stack';
-import { useIsTop, useNav, scrollIntoViewBelow } from '@academix-admin/navigation-stack';
+import { useWakeRefresh } from '@/hooks/useWakeRefresh';
+import { useOverlayRoute } from '@academix-admin/navigation-stack';
+import { useNav, scrollIntoViewBelow } from '@academix-admin/navigation-stack';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
 import { CameraIcon, CloseIcon, MinusIcon, PlusIcon, ReceiptIcon, CashIcon,
   ReturnIcon, BoxIcon } from '@/components/ui/Icon';
-import { usePendingOrderCount } from '@/lib/stacks/online-orders';
+import { onlineOrdersChanged, usePendingOrderCount } from '@/lib/stacks/online-orders';
 import { CustomerPicker } from '@/components/customers/CustomerPicker';
 import { CustomerTabs } from '@/components/sell/CustomerTabs';
 import { ShareOrder } from '@/components/sell/ShareOrder';
@@ -77,7 +78,8 @@ export default function SellPage() {
    * How many orders are waiting, for the badge. Its own small read rather than the list, because the
    * till asks on every visit and the list is opened rarely.
    */
-  const pendingOrders = usePendingOrderCount(store?.id ?? null).data ?? 0;
+  const orderCount = usePendingOrderCount(store?.id ?? null);
+  const pendingOrders = orderCount.data ?? 0;
   const {
     orders,
     activeOrder,
@@ -253,42 +255,39 @@ export default function SellPage() {
   useLiveRefresh(nav, reloadCounts);
 
   /*
-   * THE COUNT IS PUSHED, not offered — once per item per visit to the till.
+   * THE ORDERS BADGE, KEPT HONEST WITHOUT A TIMER.
    *
-   * When the sale is opened with uncounted items on it, and whenever an uncounted item is added, the
-   * count page opens by itself with that item already chosen. Each item is pushed for once: pressing
-   * "Not now" and coming back does not push the same thing again, but the note below stays and Take
-   * payment will not settle until it is counted.
+   * Three things move it, and between them they cover every way a new order can arrive:
    *
-   * Only while the till is the page on screen, in the tab that is showing — a push fired from a page
-   * underneath would land on top of whatever the seller is actually looking at.
+   *   · answering one invalidates `online_orders`, so this re-reads — that is this app's ordinary
+   *     mechanism and it needs nothing here;
+   *   · coming back to the till from another screen fires `onResume`, below;
+   *   · and the app itself being picked up again fires `useWakeRefresh` — the case neither of the
+   *     others can see, because while a backgrounded PWA is away nothing in it runs at all. A shop
+   *     that opened the till at nine and looked at eleven was reading nine o'clock's count.
+   *
+   * No polling. A timer would ask when nothing had happened and still not ask at the moment the
+   * screen lights up, which is the only moment anybody is looking.
    */
-  const tillIsTop = useIsTop();
+  useLiveRefresh(nav, orderCount.reload);
+  useWakeRefresh(() => onlineOrdersChanged());
+
   /*
-   * IS THE TILL THE TAB ON SCREEN?
+   * THE COUNT IS NO LONGER PUSHED. It is said on the line, on the note below, and on the button.
    *
-   * `nav.isActiveStack()` reads as that and is not: it says the stack syncs history, which is true
-   * of all four tabs at once. So on start-up — while the group was still settling which tab to show
-   * — the till pushed this offer onto whatever tab the shop had actually opened, and the history
-   * entry it created then ate the next Back press. `useIsActiveStack` (0.19.0) is the real question.
+   * It used to open by itself: adding an uncounted item interrupted whatever the seller was doing
+   * and put the count screen in front of them, once per item per visit. Three things already say
+   * the same thing without taking the screen away — each uncounted LINE says so and opens the count
+   * when tapped, the note above the keypad says so, and Take payment says "Count first" and is the
+   * only route to settling anyway.
+   *
+   * So the interruption bought nothing and cost the thing being typed. A seller with a customer in
+   * front of them is mid-sale; a screen that takes itself away is a screen they have to find their
+   * way back into.
+   *
+   * `useIsTop` and `useIsActiveStack` went with it. They were here to stop the push landing on
+   * another tab — a problem that only existed because of the push.
    */
-  const tillTabShowing = useIsActiveStack();
-  const offeredCount = useRef<{ order: string | null; ids: Set<string> }>({
-    order: null,
-    ids: new Set(),
-  });
-  useEffect(() => {
-    if (!activeOrder) return;
-    if (offeredCount.current.order !== activeOrder.clientUuid) {
-      offeredCount.current = { order: activeOrder.clientUuid, ids: new Set() };
-    }
-    if (!tillIsTop || !tillTabShowing) return;
-    const fresh = needCount.filter((id) => !offeredCount.current.ids.has(id));
-    if (fresh.length === 0) return;
-    fresh.forEach((id) => offeredCount.current.ids.add(id));
-    const newest = [...activeOrder.lines].reverse().find((l) => fresh.includes(l.productId));
-    void nav.push('count_gate_page', { focus: newest?.productId ?? fresh[0] });
-  }, [needCount, tillIsTop, tillTabShowing, activeOrder, nav]);
 
   const [askCloseTab, setAskCloseTab] = useState(false);
   /*

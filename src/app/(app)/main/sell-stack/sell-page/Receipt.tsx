@@ -316,7 +316,9 @@ export function Receipt({
                   {l.product_name}
                 </RecordLink>
               </p>
-              <div className={styles.lineDetail} style={narrow ? { display: 'block' } : undefined}>
+              <div
+                className={`${styles.lineDetail} ${narrow ? styles.lineDetailNarrow : ''}`}
+              >
                 <span>
                   {formatQty(l.entered_qty)}{' '}
                   {l.pack_name ?? pluralUnit(l.base_unit, Number(l.entered_qty))}

@@ -15,7 +15,7 @@ import { productHref } from '@/lib/marketplace/links';
 import { ProductActions } from '@/components/market/ProductActions';
 import { ProductCard } from '@/components/market/ProductCard';
 import { BottomSheet } from '@/components/ui/BottomSheet';
-import { ChevronLeftIcon, SearchIcon } from '@/components/ui/Icon';
+import { SearchIcon } from '@/components/ui/Icon';
 import { useInfiniteScroll } from '@/hooks/usePaginatedList';
 import {
   fetchPublicStore,
@@ -129,7 +129,7 @@ export default function StorefrontPage({ code }: { code: string }) {
 
   if (state === 'missing' || !store) {
     return (
-      <MarketShell>
+      <MarketShell back={{ to: '/', label: 'Back to all shops' }} title="Shop not found">
         <main className={styles.body}>
           <div className={styles.inner}>
             <InfoPanel tone="warning" title="No shop with that code">
@@ -147,6 +147,8 @@ export default function StorefrontPage({ code }: { code: string }) {
 
   return (
     <MarketShell
+      back={{ to: '/', label: 'Back to all shops' }}
+      title={store.name}
       search={
         <SearchLauncher
           label={`Search ${store.name}`}
@@ -157,15 +159,6 @@ export default function StorefrontPage({ code }: { code: string }) {
     >
       <section className={styles.hero}>
         <div className={styles.heroInner}>
-          {/* An explicit way back to the marketplace.
-
-              A shopper who arrived by typing a shop code has no history to go back TO, so the
-              browser's own back button is either greyed out or leaves the site entirely. A link
-              that always works is the difference between browsing and a dead end. */}
-          <button type="button" className={styles.backLink} onClick={() => router.push('/')}>
-            <ChevronLeftIcon size="1.1em" /> All shops
-          </button>
-
           <h1 className={styles.heroTitle}>{store.name}</h1>
           <p className={styles.heroText}>
             {store.description ?? 'Browse what this shop has, and what it costs.'}
@@ -314,10 +307,13 @@ export default function StorefrontPage({ code }: { code: string }) {
                 price: openProduct.price,
                 unit_label: openProduct.unit_label,
                 image_path: openProduct.image_path,
+                store_id: openProduct.store_id,
                 store_code: store.code,
                 store_name: store.name,
                 in_stock: openProduct.in_stock,
               }}
+              // The page has already read them for the ladder below; no second request.
+              tiers={tiers}
             />
           ) : undefined
         }

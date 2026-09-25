@@ -1,15 +1,12 @@
 'use client';
 
-import { useState } from 'react';
 import { useNav } from '@academix-admin/navigation-stack';
 import { useAuth } from '@/providers/AuthProvider';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
-import { Button } from '@/components/ui/Button';
-import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/components/ui/Dialog';
+import { ChevronRightIcon } from '@/components/ui/Icon';
 import { formatMoney } from '@/lib/format';
-import { useDraftOrders } from '@/lib/stacks/draft-orders';
-import { declineOrder, useOnlineOrders, type OnlineOrder } from '@/lib/stacks/online-orders';
+import { useOnlineOrders } from '@/lib/stacks/online-orders';
 import styles from './orders-page.module.css';
 
 /**
@@ -21,61 +18,14 @@ import styles from './orders-page.module.css';
  * by somebody the shop has never met is not a sale, and a ledger that counted it as one would lie
  * about what the shop is owed.
  *
- * ACCEPTING OPENS IT AT THE TILL. Not "creates a sale": the shop still confirms the quantities and
- * still takes the money, through the same screen it uses for somebody standing at the counter. An
- * accepted order is a claimed draft, and from that moment it is indistinguishable from one written
- * by hand — which is the point. There is one way to make a sale in this app.
+ * THIS SCREEN ONLY LISTS. It used to carry Accept and Decline on every card, under a line reading
+ * "4 items · ₦18,400" — which asked somebody to commit stock on the strength of a total. A card
+ * opens the order; the order is answered on its own screen, where the lines are.
  */
 export default function OrdersPage() {
   const nav = useNav();
   const { store } = useAuth();
   const orders = useOnlineOrders(store?.id ?? null);
-  const { claimByCode } = useDraftOrders(store?.id ?? null);
-
-  const [busy, setBusy] = useState<string | null>(null);
-  /*
-   * The order being asked about, and the whole of what says the question is up.
-   *
-   * `ConfirmDialog` opens itself on mount — mounted means asked — so this is what decides whether
-   * it is on the page at all. Rendering it unconditionally and holding a separate "is it open"
-   * flag put the dialog on screen the moment this page did, over an empty list, asking about
-   * nothing.
-   */
-  const [toDecline, setToDecline] = useState<OnlineOrder | null>(null);
-  const declineDialog = useConfirm();
-  const problem = useProblem();
-
-  const accept = async (order: OnlineOrder) => {
-    setBusy(order.id);
-    try {
-      /*
-       * Claim it, then go back to the till — where it is now the open order. The same call the
-       * counter makes when a colleague reads out a code, because this IS that: somebody handing the
-       * shop an order it has not started.
-       */
-      await claimByCode(order.code);
-      nav.popToRoot();
-    } catch (e) {
-      problem.show(e instanceof Error ? e.message : 'That order could not be opened.');
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  /*
-   * Takes the order rather than reading it back from state: by the time this runs the dialog has
-   * already closed and cleared it. Passing it in is what makes that ordering irrelevant.
-   */
-  const decline = async (order: OnlineOrder) => {
-    setBusy(order.id);
-    try {
-      await declineOrder(order.id);
-    } catch (e) {
-      problem.show(e instanceof Error ? e.message : 'That order could not be declined.');
-    } finally {
-      setBusy(null);
-    }
-  };
 
   const list = orders.data ?? [];
   const status: PageStatus = !orders.loaded
@@ -91,63 +41,46 @@ export default function OrdersPage() {
       : { state: 'ready' };
 
   return (
-    <PageScaffold title="Orders" subtitle="Asked for from the marketplace" onBack={() => void nav.pop()}>
+    <PageScaffold
+      title="Orders"
+      subtitle="Asked for from the marketplace"
+      onBack={() => void nav.pop()}
+    >
       <PageState status={status}>
         {() => (
           <ul className={styles.list}>
             {list.map((order) => (
-              <li key={order.id} className={styles.order}>
-                <div className={styles.head}>
-                  <span className={styles.who}>{order.customer_name ?? order.label ?? 'A shopper'}</span>
-                  <span className={styles.code}>{order.code}</span>
-                </div>
+              <li key={order.id}>
+                {/*
+                  The whole card is the target. A chevron with a small "View" beside it would be two
+                  things to aim at, one of them small, on a screen used one-handed.
+                */}
+                <button
+                  type="button"
+                  className={styles.order}
+                  onClick={() => void nav.push('order_page', { id: order.id })}
+                >
+                  <span className={styles.head}>
+                    <span className={styles.who}>
+                      {order.customer_name ?? order.label ?? 'A shopper'}
+                    </span>
+                    <span className={styles.code}>{order.code}</span>
+                  </span>
 
-                <p className={styles.what}>
-                  {order.lines} {order.lines === 1 ? 'item' : 'items'} · {formatMoney(order.total)}
-                </p>
+                  <span className={styles.what}>
+                    {order.lines} {order.lines === 1 ? 'item' : 'items'} ·{' '}
+                    {formatMoney(order.total)}
+                  </span>
 
-                <div className={styles.actions}>
-                  <Button
-                    size="large"
-                    fullWidth
-                    busy={busy === order.id}
-                    onClick={() => void accept(order)}
-                  >
-                    Accept and open at the till
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="large"
-                    fullWidth
-                    disabled={busy === order.id}
-                    onClick={() => setToDecline(order)}
-                  >
-                    Decline
-                  </Button>
-                </div>
+                  <span className={styles.go}>
+                    Look at this order <ChevronRightIcon size="1em" />
+                  </span>
+                </button>
               </li>
             ))}
           </ul>
         )}
       </PageState>
-
-      {/*
-        Asked before declining, because the shopper is told and it cannot be taken back. Accepting
-        needs no such question: the next screen is the till, where anything can still be changed.
-      */}
-      {toDecline && (
-        <ConfirmDialog
-          controller={declineDialog}
-          title="Decline this order?"
-          message="The shopper will be told it was not accepted. Nothing has been sold and no stock moves."
-          confirmText="Decline it"
-          cancelText="Keep it"
-          tone="danger"
-          onConfirm={() => void decline(toDecline)}
-          onDismiss={() => setToDecline(null)}
-        />
-      )}
-      <ProblemDialog problem={problem} title="Could not answer this order" />
     </PageScaffold>
   );
 }

@@ -144,6 +144,7 @@ export const ROUTE_NEEDS: Readonly<Record<string, Permission>> = {
    * next thing that happens is money and stock. So it asks for exactly what the till asks for.
    */
   orders_page: 'sales.record',
+  order_page: 'sales.record',
 };
 
 export function roleCan(role: Role | null | undefined, permission: Permission): boolean {

@@ -114,7 +114,7 @@ export default async function Page({ params }: Params) {
    * the FIRST page somebody sees, so it cannot be the one that looks like a different site.
    */
   return (
-    <MarketShell>
+    <MarketShell back={{ to: `/s/${code}`, label: `Back to ${product.store_name}` }} title={product.name}>
     <main className={styles.wrap}>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 

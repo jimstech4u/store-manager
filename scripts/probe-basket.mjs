@@ -235,10 +235,19 @@ try {
      * Either state is a pass. With nothing waiting the honest answer IS the empty state, and a
      * check that demanded rows would only pass against a seeded database.
      */
+    /*
+     * The queue LISTS; it no longer answers. Accept and Decline moved to the order's own screen,
+     * because deciding from "4 items · ₦18,400" is not deciding.
+     */
     check(
       'which lists orders, or says there are none',
-      /no orders waiting/i.test(text) || /accept and open at the till/i.test(text),
+      /no orders waiting/i.test(text) || /look at this order/i.test(text),
       /no orders waiting/i.test(text) ? 'none waiting' : 'orders listed',
+    );
+    check(
+      'and does not offer an answer without showing the order',
+      !/accept and open at the till/i.test(text),
+      'no Accept on the queue',
     );
 
     /*

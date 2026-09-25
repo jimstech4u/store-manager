@@ -1,0 +1,13 @@
+
+/* A way out for somebody who came here by choice — see the note in the page. Deliberately plain:
+   it must be findable and must not compete with the one action this screen is for. */
+.escape {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--touch-min);
+  margin-bottom: var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--primary);
+  background: none;
+}
