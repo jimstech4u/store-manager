@@ -120,3 +120,63 @@
   color: var(--text-muted);
   text-align: center;
 }
+
+/* ── Putting an answer back ───────────────────────────────────────────────────────── */
+
+/* A reason is required, so the field is given room rather than squeezed beside the button: this is
+   a correction somebody will read later. */
+.reopen {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+}
+
+/* ── History ──────────────────────────────────────────────────────────────────────── */
+
+.history {
+  margin-top: var(--space-6);
+}
+
+.historyTitle {
+  font-size: var(--text-base);
+  font-weight: 700;
+  margin-bottom: var(--space-3);
+}
+
+.events {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-left: 2px solid var(--border-strong);
+  padding-left: var(--space-4);
+}
+
+.event {
+  padding-bottom: var(--space-3);
+}
+
+.event:last-child { padding-bottom: 0; }
+
+.eventWhat {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.eventWhen {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+/* The reason somebody gave, in their words — which is the whole point of asking for one. */
+.eventWhy {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  font-style: italic;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}

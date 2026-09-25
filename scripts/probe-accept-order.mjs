@@ -197,6 +197,41 @@ try {
   const afterReload = (await shop.locator('body').innerText()).replace(/\s+/g, ' ');
   check('after a reload, somebody is being served', !/no customer being served/i.test(afterReload), afterReload.slice(0, 70));
 
+  /*
+   * THE ORDER IS NO LONGER WAITING. Reported as "I accepted it and the badge still says one, and I
+   * could accept it again" — because the queue read the SALE's status, which stays `open` while an
+   * accepted order is at the till.
+   */
+  const answered = await sql(
+    `select answer, status from draft_orders where code = '${code}'`,
+  );
+  check(
+    'the order is marked accepted',
+    Array.isArray(answered) && answered[0]?.answer === 'accepted',
+    JSON.stringify(Array.isArray(answered) ? answered[0] : answered),
+  );
+
+  /*
+   * THIS order is gone from the queue — not "the queue is empty". A real shop's queue may hold
+   * anything, and an assertion that the count is zero tests whoever ran a probe last rather than
+   * the behaviour. (It failed exactly that way first time, on a leftover order from another probe.)
+   */
+  const shopToken = await signInApi(env.SAMPLE_EMAIL, env.SAMPLE_PASSWORD);
+  const storeId = (await sql(`select store_id from draft_orders where code = '${code}'`))[0]?.store_id;
+  const queue = await rpcAs(shopToken, 'pending_online_orders', { p_store_id: storeId });
+  const stillThere = (Array.isArray(queue.body) ? queue.body : []).some((o) => o.code === code);
+  check('and it has left the queue the badge counts', !stillThere, stillThere ? 'still listed' : 'gone');
+
+  // Accepting again must be refused — by the server, not by hiding a button.
+  const twice = await rpcAs(await signInApi(env.SAMPLE_EMAIL, env.SAMPLE_PASSWORD), 'accept_online_order', {
+    p_draft_id: (await sql(`select id from draft_orders where code = '${code}'`))[0]?.id,
+  });
+  check(
+    'and it cannot be accepted a second time',
+    twice.status >= 400 && /already been answered/i.test(twice.body?.message ?? ''),
+    `${twice.status} ${twice.body?.message ?? ''}`.slice(0, 70),
+  );
+
   // The shop's own customer record was made from the order, which is what lets them be followed up.
   const linked = await sql(
     `select sc.display_name

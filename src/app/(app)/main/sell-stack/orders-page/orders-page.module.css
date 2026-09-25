@@ -52,3 +52,86 @@
   font-size: 14px;
   color: var(--text);
 }
+
+/* ── Tabs and period ──────────────────────────────────────────────────────────────── */
+
+/* What the shop said — the first thing anybody filters by, so it is the bigger control and it
+   scrolls rather than wrapping: four words in a row on a narrow phone would otherwise stack into
+   two lines and push the list down. */
+.tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 12px 0 8px;
+  padding-bottom: 2px;
+}
+
+.tabs::-webkit-scrollbar { display: none; }
+
+.tab,
+.tabOn {
+  flex: none;
+  min-height: var(--touch-min);
+  padding: 0 16px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tabOn {
+  border-color: var(--primary);
+  background: var(--primary-subtle);
+  color: var(--primary);
+}
+
+/* The period is a narrowing of whichever tab is showing, so it is quieter than the tabs. */
+.when {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.whenChip,
+.whenOn {
+  flex: none;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.whenOn {
+  border-color: var(--text-muted);
+  color: var(--text);
+}
+
+/* ── What the shop said, on the card ──────────────────────────────────────────────── */
+
+.accepted,
+.declined {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.accepted {
+  background: var(--success-subtle);
+  color: var(--success);
+}
+
+.declined {
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+}

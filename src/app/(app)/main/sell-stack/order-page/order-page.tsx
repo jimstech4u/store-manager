@@ -8,7 +8,15 @@ import { Button } from '@/components/ui/Button';
 import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/components/ui/Dialog';
 import { useStackBack } from '@/hooks/useStackBack';
 import { formatMoney, formatQty, messageOf } from '@/lib/format';
-import { acceptOnlineOrder, declineOrder, useOnlineOrder } from '@/lib/stacks/online-orders';
+import {
+  acceptOnlineOrder,
+  declineOrder,
+  reopenOnlineOrder,
+  useOnlineOrder,
+  useOrderHistory,
+} from '@/lib/stacks/online-orders';
+import { usePermission } from '@/hooks/usePermission';
+import { Field } from '@/components/ui/Field';
 import { useAuth } from '@/providers/AuthProvider';
 import { useDraftOrders } from '@/lib/stacks/draft-orders';
 import styles from './order-page.module.css';
@@ -39,12 +47,39 @@ export default function OrderPage() {
   const { store } = useAuth();
   const { claimByCode } = useDraftOrders(store?.id ?? null);
   const order = useOnlineOrder(id);
+  const history = useOrderHistory(id);
+  const { can } = usePermission();
   const [busy, setBusy] = useState(false);
   const [declining, setDeclining] = useState(false);
+  const [reopening, setReopening] = useState(false);
+  const [reason, setReason] = useState('');
   const declineDialog = useConfirm();
   const problem = useProblem();
 
   const data = order.data;
+
+  /*
+   * PUTTING AN ANSWER BACK is a correction, not an undo, so it asks for `sales.amend` — the same
+   * permission as changing a sale after the fact, and for the same reason. Answering an order is a
+   * seller's job; changing an answer already given is the owner's and the manager's.
+   */
+  const mayReopen = can('sales.amend');
+
+  const reopen = async () => {
+    if (!id || !reason.trim()) return;
+    setBusy(true);
+    try {
+      await reopenOnlineOrder(id, reason.trim());
+      setReopening(false);
+      setReason('');
+      order.reload();
+      history.reload();
+    } catch (e) {
+      problem.show(messageOf(e, 'That order could not be reopened.'));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const accept = async () => {
     if (!id || !data) return;
@@ -111,7 +146,12 @@ export default function OrderPage() {
         }
       : { state: 'ready' };
 
-  const answered = data && data.status !== 'open';
+  /*
+   * ANSWERED means the shop has said something, which is not the same as the sale being over. An
+   * accepted order sits at `status = 'open'` while it is at the till — reading that as "still
+   * waiting" is what let one be accepted twice.
+   */
+  const answered = Boolean(data?.answer);
 
   return (
     <PageScaffold
@@ -166,11 +206,68 @@ export default function OrderPage() {
               </div>
 
               {answered ? (
-                <p className={styles.done}>
-                  {data.status === 'settled'
-                    ? 'This order has been accepted.'
-                    : 'This order was turned down.'}
-                </p>
+                <>
+                  <p className={styles.done}>
+                    {data.answer === 'accepted'
+                      ? data.status === 'settled'
+                        ? 'Accepted, and sold at the till.'
+                        : 'Accepted. It is open at the till.'
+                      : 'Turned down.'}
+                  </p>
+
+                  {/*
+                    A way back, for an answer given by mistake — and only for somebody allowed to
+                    correct one. An order that has become a SALE is not reopened here: that is a
+                    void, with its own ledger entries and its own permission, and the server
+                    refuses it either way.
+                  */}
+                  {mayReopen && data.status !== 'settled' && !reopening && (
+                    <Button
+                      variant="secondary"
+                      size="large"
+                      fullWidth
+                      onClick={() => setReopening(true)}
+                    >
+                      Put it back in the queue
+                    </Button>
+                  )}
+
+                  {reopening && (
+                    <div className={styles.reopen}>
+                      <Field
+                        label="Why is this being reopened?"
+                        required
+                        value={reason}
+                        onChange={(e) => setReason(e.target.value)}
+                        placeholder="Declined by mistake"
+                        hint="Kept with the order, so anyone reviewing it later can see why."
+                      />
+                      <div className={styles.actions}>
+                        <Button
+                          size="large"
+                          fullWidth
+                          busy={busy}
+                          disabled={!reason.trim()}
+                          onClick={() => void reopen()}
+                        >
+                          Put it back in the queue
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="large"
+                          fullWidth
+                          disabled={busy}
+                          onClick={() => {
+                            setReopening(false);
+                            setReason('');
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
               ) : (
                 <div className={styles.actions}>
                   <Button size="large" fullWidth busy={busy} onClick={() => void accept()}>
@@ -191,6 +288,44 @@ export default function OrderPage() {
           )
         }
       </PageState>
+
+      {/*
+        WHAT HAS HAPPENED TO THIS ORDER, in order.
+        
+        Append-only on the server. It is here because an answer can be taken back: "accepted,
+        reopened, turned down" is a real sequence, and a shop that cannot see it cannot review it.
+      */}
+      {history.loaded && (history.data?.length ?? 0) > 0 && (
+        <section className={styles.history}>
+          <h2 className={styles.historyTitle}>History</h2>
+          <ul className={styles.events}>
+            {history.data?.map((e, i) => (
+              <li key={i} className={styles.event}>
+                <span className={styles.eventWhat}>
+                  {e.action === 'placed'
+                    ? 'Ordered'
+                    : e.action === 'accepted'
+                      ? 'Accepted'
+                      : e.action === 'declined'
+                        ? 'Turned down'
+                        : 'Put back in the queue'}
+                  {' by '}
+                  {e.actor_name}
+                </span>
+                <span className={styles.eventWhen}>
+                  {new Date(e.at).toLocaleString('en-NG', {
+                    day: 'numeric',
+                    month: 'short',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                  })}
+                </span>
+                {e.reason && <span className={styles.eventWhy}>“{e.reason}”</span>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/*
         Mounted only while it is asking — `ConfirmDialog` opens itself on mount, so one rendered
