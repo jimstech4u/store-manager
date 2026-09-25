@@ -100,8 +100,21 @@ export async function getProduct(id: string): Promise<ProductForSeo | null> {
   }
 }
 
-/** A storage path is stored, never a URL — the host can change, and every row would break at once. */
+/**
+ * A storage path is stored, never a URL — the host can change, and every row would break at once.
+ *
+ * `media/` IS THE BUCKET, and it was missing. This built
+ * `…/object/public/<store>/products/<id>-0.png`, which Supabase answers with a 400: the first
+ * segment after `public/` is the bucket name, so it was asking for a bucket named after the shop.
+ * Every product page rendered a broken image where the picture should be — and, worse and more
+ * quietly, every `og:image` and every JSON-LD `image` pointed at that 400, so a link shared to
+ * WhatsApp had no picture and Google was offered one that does not exist.
+ *
+ * It was invisible on screen because nothing else on the public side uses this: the grids and the
+ * sheet all go through `Thumb`/`mediaUrl`, which has always had the bucket. Two builders for one
+ * job, and only one of them right.
+ */
 export function imageUrl(path: string | null | undefined): string | null {
   if (!path || !url) return null;
-  return `${url}/storage/v1/object/public/${path.replace(/^\/+/, '')}`;
+  return `${url}/storage/v1/object/public/media/${path.replace(/^\/+/, '')}`;
 }

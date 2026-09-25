@@ -98,7 +98,7 @@ try {
   await p.waitForTimeout(2500);
   check('the basket page answers', /basket/i.test(await p.locator('h1').first().innerText()));
   check('and says it is empty', /nothing in it/i.test(await p.locator('main').innerText()));
-  const badgeWhenEmpty = await p.locator('header a[href="/cart"] span').count();
+  const badgeWhenEmpty = await p.locator('a[href="/cart"] span').count();
   check('no badge when there is nothing in it', badgeWhenEmpty === 0, `${badgeWhenEmpty} badge(s)`);
 
   // ══ 3. Add two products, through the buttons a shopper uses ═══════════════════════
@@ -127,7 +127,7 @@ try {
   check('a saved product is still saved after a reload', (await p.getByRole('button', { name: /remove from saved/i }).count()) > 0);
 
   // ══ 4. The badge ══════════════════════════════════════════════════════════════════
-  const badge = p.locator('header a[href="/cart"] span').first();
+  const badge = p.locator('a[href="/cart"] span').first();
   check('the top bar now carries a badge', (await badge.count()) > 0);
   if (await badge.count()) check('and it reads 2', (await badge.innerText()).trim() === '2', (await badge.innerText()).trim());
 

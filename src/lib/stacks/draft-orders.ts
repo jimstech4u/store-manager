@@ -685,13 +685,28 @@ export function useDraftOrders(storeId: string | null) {
   useEffect(() => {
     if (!storeId) return;
 
-    void demandOrders(async ({ set }) => {
+    void demandOrders(async ({ get, set }) => {
       const { data } = await getSupabase().rpc('my_open_drafts', { p_store_id: storeId });
       const rows = (data ?? []) as Record<string, unknown>[];
 
       if (rows.length > 0) {
+        /*
+         * WHAT THE TILL ALREADY HOLDS, so a restore does not renumber it.
+         *
+         * `clientUuid` is how everything on this screen refers to a tab — `activeId` is one, and so
+         * is every open editor. `makeDraft()` mints a fresh one, so rebuilding the list from the
+         * server used to give every order a NEW identity and leave `activeId` pointing at nothing:
+         * all the tabs present, none of them selected, and the till saying "No customer being
+         * served" over a row of customers. Accepting a marketplace order hit this every time,
+         * because claiming one and then restoring raced.
+         *
+         * Matched on the server's `id`, which is the same order however many times it is read.
+         */
+        const held = get() ?? [];
         const restored: DraftOrder[] = rows.map((row) => ({
           ...makeDraft(),
+          clientUuid:
+            held.find((o) => o.id === String(row.id))?.clientUuid ?? makeDraft().clientUuid,
           id: String(row.id),
           code: (row.code as string | null) ?? null,
           shareToken: (row.share_token as string | null) ?? null,
@@ -721,7 +736,19 @@ export function useDraftOrders(storeId: string | null) {
         }));
 
         set(restored, { override: true });
-        setActiveId(restored[0].clientUuid);
+
+        /*
+         * THE TAB THE SELLER IS ON STAYS THE TAB THEY ARE ON.
+         *
+         * This set the first order active unconditionally, so any restore — a reload, a resume, a
+         * second screen mounting this hook — moved a seller mid-sale to somebody else's tab. The
+         * first order is only the right answer when the one being served has gone.
+         */
+        setActiveId((previous) =>
+          previous && restored.some((o) => o.clientUuid === previous)
+            ? previous
+            : restored[0].clientUuid,
+        );
       }
 
       /*
@@ -777,12 +804,22 @@ export function useDraftOrders(storeId: string | null) {
     /**
      * Nothing to show yet, and not because the till is empty.
      *
-     * `persist` means the saved orders are already in `orders` on the first render — there is no
-     * hydration to wait for and no flag to consult. So the only moment worth covering is a device
-     * that has nothing saved AND has not yet heard from the shop. Showing "nobody is being served"
-     * then tells a seller their customers are gone; a moment later they all appear.
+     * `persist` means the saved orders are already in `orders` on the first render, so the obvious
+     * case is a device that has nothing saved and has not yet heard from the shop. Showing "nobody
+     * is being served" then tells a seller their customers are gone; a moment later they all
+     * appear.
+     *
+     * `activeId === null` COVERS THE OTHER HALF, and it is the one that was still flashing. The
+     * orders and the choice of which one is being served are two separate persisted values, and
+     * they do not arrive in the same frame — so the till could hold three customers and no active
+     * tab for a render, which draws exactly the same "No customer being served" as an empty till.
+     * Reported as "sometimes a flash of no customer".
+     *
+     * Both are gated on `!loaded`, which is raised at the end of the load whatever it found, so
+     * this cannot get stuck: a till that genuinely has orders and no open tab says so a moment
+     * later.
      */
-    settling: !loaded && orders.length === 0,
+    settling: !loaded && (orders.length === 0 || activeId === null),
     error,
   };
 }

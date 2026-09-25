@@ -557,8 +557,8 @@
 
 /* ── Basket ───────────────────────────────────────────────────────────────────────── */
 
-/* Icon-only at every width. The two account actions beside it are words and already fill a
-   phone's top bar; a third set of words would push one of them off. */
+/* Icon-only, in the top bar. On a phone it now shares that row with a back button and the page's
+   name rather than with two word-buttons, which is what it was being crowded out by. */
 .basket {
   position: relative;
   display: inline-flex;
@@ -574,6 +574,36 @@
 .basket:hover {
   background: var(--surface-sunken);
 }
+
+/*
+ * THE WAY BACK TO YOUR OWN SIDE — floating, bottom right, clear of the safe area.
+ *
+ * A shop owner or a shopper browsing the public side wants this from wherever they have scrolled
+ * to, not only from the top of the page. Shown only when somebody is signed in, so it is never an
+ * invitation — it is a door back to something that already exists.
+ */
+.shopFab {
+  position: fixed;
+  right: var(--space-4);
+  bottom: calc(var(--space-4) + var(--safe-bottom));
+  z-index: 30;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-full);
+  background: var(--primary);
+  color: var(--primary-text);
+  font-weight: 700;
+  /* Lifted off the page it sits on top of, rather than outlined — an outline at this size reads
+     as a hole in the page. */
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+}
+
+.shopFab:hover { filter: brightness(1.06); }
+.shopFab:active { transform: scale(0.97); }
 
 .basketCount {
   position: absolute;

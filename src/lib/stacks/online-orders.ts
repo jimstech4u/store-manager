@@ -32,6 +32,14 @@ export interface OnlineOrder {
   lines: number;
   total: string;
   created_at: string;
+  /**
+   * The first few items, as "6 × American Cola PET 60cl, 2 × 7Up PET 50cl".
+   *
+   * Enough to tell one order from another at a glance — two orders for ₦30,000 are otherwise
+   * identical rows — and deliberately not enough to answer one on. That happens on the order's own
+   * screen, with the quantities, the prices and the stock in front of you.
+   */
+  preview: string | null;
 }
 
 export function useOnlineOrders(storeId: string | null) {

@@ -24,6 +24,7 @@ export function MarketShell({
   search,
   back,
   title,
+  brand = false,
 }: {
   children: ReactNode;
   /** Rendered under the brand row — the marketplace search. */
@@ -39,6 +40,16 @@ export function MarketShell({
   back?: { to: string; label: string };
   /** Shown beside the back button, so a page arrived at cold says what it is. */
   title?: string;
+  /**
+   * THE LANDING PAGE, and only it, wears the branding.
+   *
+   * Every public page carried the wordmark and the two account buttons, which on a product page
+   * left the product's own name competing with ours for the same row — and put "Open a shop" in
+   * front of somebody halfway through buying one. The landing page is where a visitor is deciding
+   * what this site IS; everywhere else they already know, and the row is better spent on where
+   * they are and how to get back.
+   */
+  brand?: boolean;
 }) {
   const router = useRouter();
   const { session, stores, loading } = useAuth();
@@ -68,30 +79,35 @@ export function MarketShell({
             </button>
           )}
 
-          <button
-            type="button"
-            className={styles.brand}
-            onClick={() => router.push('/')}
-            aria-label="Store Manager home"
-          >
-            <Logo size={30} nameClassName={styles.brandName} />
-          </button>
+          {brand && (
+            <button
+              type="button"
+              className={styles.brand}
+              onClick={() => router.push('/')}
+              aria-label="Store Manager home"
+            >
+              <Logo size={30} nameClassName={styles.brandName} />
+            </button>
+          )}
 
-          {/* The page's own name, once there is a back button taking the brand's usual room. */}
+          {/* The page's own name, which now has the row to itself. */}
           {title && <span className={styles.topTitle}>{title}</span>}
 
           <span className={styles.topSpacer} />
 
           <div className={styles.topActions}>
             {/*
-              THE BASKET IS ALWAYS REACHABLE, and always before the account actions.
+              THE BASKET IS ALWAYS REACHABLE, on every public page.
 
               A shopper who has added something and then wandered two shops deep needs it from
-              wherever they are; hunting for it is how a basket is abandoned. It is a real <a
-              href> so it survives a crawler, a middle-click and a shared link — the same reason
-              every other route on the public side is.
+              wherever they are; hunting for it is how a basket is abandoned. A real <a href>, so
+              it survives a crawler, a middle-click and a shared link.
             */}
-            <Link className={styles.basket} href="/cart" aria-label={count > 0 ? `Basket, ${count} items` : 'Basket'}>
+            <Link
+              className={styles.basket}
+              href="/cart"
+              aria-label={count > 0 ? `Basket, ${count} items` : 'Basket'}
+            >
               <BasketIcon />
               {/* The number appears only when there is one. A badge reading 0 is noise that
                   trains people to ignore the badge. */}
@@ -109,28 +125,19 @@ export function MarketShell({
               A placeholder of the same width holds the space, so the bar does not jump when the
               answer lands either.
             */}
-            {loading ? (
+            {/*
+              SIGN IN AND OPEN A SHOP, on the landing page only.
+
+              They are an answer to "what is this site", which is the question the landing page
+              exists for. On a product page they sat beside the product's own name and invited
+              somebody halfway through buying a crate of drinks to start a business.
+
+              Nothing is claimed until the session is known: `session` is null while the provider
+              is still working it out, which is indistinguishable from signed out, so arriving here
+              from the till used to show "Sign in" for a moment. A placeholder holds the width.
+            */}
+            {!brand || session ? null : loading ? (
               <span className={styles.actionsPlaceholder} aria-hidden="true" />
-            ) : session ? (
-              /*
-                A SIGNED-IN PERSON HERE IS NOT NECESSARILY A SHOP.
-                
-                This used to offer "Set up my shop" to anyone signed in with no store, which is now
-                the shopper's normal state — they signed up to order from shops, and were met with
-                an invitation to open one. With no store the useful thing is their own orders; the
-                way to open a shop is still on the landing page, where somebody looking for it is.
-              */
-              /*
-                `/main` EITHER WAY — it is everyone's home now, and it shows the shop's app or the
-                shopper's own screen depending on who is asking. Only the word changes.
-              */
-              <Button
-                size="small"
-                variant={stores.length ? 'primary' : 'secondary'}
-                onClick={() => router.push('/main')}
-              >
-                {stores.length ? 'My shop' : 'My account'}
-              </Button>
             ) : (
               <>
                 {/* Wrapped rather than given a `hidden` class directly: Button sets its own
@@ -138,11 +145,7 @@ export function MarketShell({
                     stylesheet order — so hiding the button itself worked or not depending on
                     bundle order. Hiding a wrapper is unambiguous. */}
                 <span className={styles.hideNarrow}>
-                  <Button
-                    size="small"
-                    variant="secondary"
-                    onClick={() => router.push('/login')}
-                  >
+                  <Button size="small" variant="secondary" onClick={() => router.push('/login')}>
                     Sign in
                   </Button>
                 </span>
@@ -158,6 +161,25 @@ export function MarketShell({
       </header>
 
       {children}
+
+      {/*
+        THE WAY BACK TO YOUR OWN SIDE, floating, on every public page.
+
+        Only for somebody already signed in — for anybody else there is nothing to go back to, and
+        the landing page's own buttons are the right invitation. It floats rather than sitting in
+        the top row because the row belongs to where you are and how to leave it, and because a
+        shop owner browsing the marketplace wants this from wherever they have scrolled to, not
+        only from the top.
+      */}
+      {!loading && session && (
+        <button
+          type="button"
+          className={styles.shopFab}
+          onClick={() => router.push('/main')}
+        >
+          {stores.length ? 'My shop' : 'My account'}
+        </button>
+      )}
 
       <footer className={styles.foot}>
         Store Manager — stock, sales and accounts for distribution businesses.

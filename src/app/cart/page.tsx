@@ -4,7 +4,15 @@ import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { MarketShell } from '../(market)/MarketShell';
-import { useCart, sellerTotal, hasUnpriced, type CartSeller } from '@/lib/marketplace/cart';
+import {
+  useCart,
+  sellerTotal,
+  hasUnpriced,
+  lineTotal,
+  lineUnitPrice,
+  lineIsDiscounted,
+  type CartSeller,
+} from '@/lib/marketplace/cart';
 import { saveCustomerAccount, useCustomerAccount } from '@/lib/marketplace/account';
 import { placeOnlineOrder, type PlacedOrder } from '@/lib/marketplace/place-order';
 import { useAuth } from '@/providers/AuthProvider';
@@ -168,10 +176,27 @@ export default function CartPage() {
                           </button>
                         </span>
 
+                        {/*
+                          THE BAND'S PRICE, not the ordinary one times the quantity.
+                          
+                          This multiplied `line.price` by `qty` while the seller's total below it
+                          used `sellerTotal`, which applies the bulk bands — so six American Cola
+                          read ₦22,200 on the line and ₦21,600 underneath it. Two figures for one
+                          basket, and the bigger one is the one a shopper sees first.
+                        */}
                         <span className={styles.linePrice}>
-                          {line.price
-                            ? `₦${(Number(line.price) * line.qty).toLocaleString('en-NG')}`
-                            : 'Ask'}
+                          {line.price ? (
+                            <>
+                              ₦{lineTotal(line).toLocaleString('en-NG')}
+                              {lineIsDiscounted(line) && (
+                                <span className={styles.lineBand}>
+                                  bulk · ₦{(lineUnitPrice(line) ?? 0).toLocaleString('en-NG')} each
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            'Ask'
+                          )}
                         </span>
                       </li>
                     ))}

@@ -102,6 +102,7 @@ export default function MarketLanding() {
 
   return (
     <MarketShell
+      brand
       search={
         <SearchLauncher
           label="Search the marketplace"

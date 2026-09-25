@@ -67,6 +67,11 @@ export default function OrdersPage() {
                     <span className={styles.code}>{order.code}</span>
                   </span>
 
+                  {/* What is on it, so one order is distinguishable from another without opening
+                      both. Truncated by CSS rather than by cutting the text, so the count beside
+                      it stays the truth about how much more there is. */}
+                  {order.preview && <span className={styles.preview}>{order.preview}</span>}
+
                   <span className={styles.what}>
                     {order.lines} {order.lines === 1 ? 'item' : 'items'} ·{' '}
                     {formatMoney(order.total)}

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getProduct, getShopProducts, imageUrl, productHref, productIdFromSlug } from '@/lib/marketplace/server';
+import { Thumb } from '@/components/ui/Thumb';
 import { MarketShell } from '@/app/(market)/MarketShell';
 import { ProductActions } from '@/components/market/ProductActions';
 import styles from './product.module.css';
@@ -125,10 +126,15 @@ export default async function Page({ params }: Params) {
       </nav>
 
       <article className={styles.product}>
-        {image && (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img className={styles.image} src={image} alt={product.name} width={640} height={640} />
-        )}
+        {/*
+          `Thumb`, not a bare <img>, so a path whose file has gone degrades to the product's
+          initials on a colour of its own rather than to a broken-image glyph. A shop that has not
+          photographed everything should look unphotographed, not broken — and this page in
+          particular is the one a shared link opens.
+        */}
+        <div className={styles.image}>
+          <Thumb path={product.image_path} name={product.name} ratio="1 / 1" />
+        </div>
 
         <h1 className={styles.name}>{product.name}</h1>
         <p className={styles.shop}>

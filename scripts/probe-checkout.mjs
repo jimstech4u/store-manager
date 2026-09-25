@@ -82,7 +82,7 @@ try {
   await p.waitForTimeout(2500);
   await p.getByRole('button', { name: /add .* to basket/i }).first().click();
   await p.waitForTimeout(900);
-  check('a signed-out shopper can fill a basket', (await p.locator('header a[href="/cart"] span').count()) > 0);
+  check('a signed-out shopper can fill a basket', (await p.locator('a[href="/cart"] span').count()) > 0);
 
   // ══ 2. The ask arrives at the send button, and nowhere earlier ════════════════════
   await p.goto(`${BASE}/cart`, { waitUntil: 'domcontentloaded' });
@@ -152,7 +152,7 @@ try {
   placedCode = /order number is ([A-Z0-9]+)/i.exec(afterText)?.[1] ?? null;
   check('and it comes back with a code to quote', Boolean(placedCode), placedCode ?? afterText.slice(0, 60));
   check('the basket no longer holds what was sent', (await p.locator('main section[class*="seller"]').count()) === 0);
-  check('and the top bar badge is gone with it', (await p.locator('header a[href="/cart"] span').count()) === 0);
+  check('and the top bar badge is gone with it', (await p.locator('a[href="/cart"] span').count()) === 0);
 
   // ══ 8. It is theirs to see ════════════════════════════════════════════════════════
   await p.goto(`${BASE}/orders`, { waitUntil: 'domcontentloaded' });
@@ -197,14 +197,14 @@ try {
    * THIS ORDER, not whichever is first. The queue is a real shop's queue and may hold anything;
    * opening the top card would answer somebody else's order.
    */
-  const card = shop.locator('li').filter({ hasText: placedCode ?? ' ' }).first();
+  const card = shop.locator('li').filter({ hasText: placedCode ?? '\u0000' }).first();
   check('the probe can find its own order in the queue', (await card.count()) > 0, placedCode ?? '');
 
   // ══ 11. The shop reads the order before answering it ══════════════════════════════
   await card.getByRole('button').first().dispatchEvent('click');
   await shop.waitForTimeout(5000);
   const detail = (await shop.locator('body').innerText()).replace(/\s+/g, ' ');
-  check('the card opens the order itself', detail.includes(placedCode ?? ' '), detail.slice(0, 70));
+  check('the card opens the order itself', detail.includes(placedCode ?? '\u0000'), detail.slice(0, 70));
   check('which lists what was asked for', /× ₦|x ₦/i.test(detail) || /\d+ .* × /.test(detail), detail.slice(0, 90));
   check('and names the shopper', detail.includes(NAME), NAME);
   check('and offers both answers', /accept and open at the till/i.test(detail) && /decline/i.test(detail));

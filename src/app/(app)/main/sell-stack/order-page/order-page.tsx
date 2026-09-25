@@ -9,6 +9,8 @@ import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/componen
 import { useStackBack } from '@/hooks/useStackBack';
 import { formatMoney, formatQty, messageOf } from '@/lib/format';
 import { acceptOnlineOrder, declineOrder, useOnlineOrder } from '@/lib/stacks/online-orders';
+import { useAuth } from '@/providers/AuthProvider';
+import { useDraftOrders } from '@/lib/stacks/draft-orders';
 import styles from './order-page.module.css';
 
 /**
@@ -34,17 +36,42 @@ export default function OrderPage() {
   const location = useLocation();
   const id = (location?.params?.id as string | undefined) ?? null;
 
+  const { store } = useAuth();
+  const { claimByCode } = useDraftOrders(store?.id ?? null);
   const order = useOnlineOrder(id);
   const [busy, setBusy] = useState(false);
   const [declining, setDeclining] = useState(false);
   const declineDialog = useConfirm();
   const problem = useProblem();
 
+  const data = order.data;
+
   const accept = async () => {
-    if (!id) return;
+    if (!id || !data) return;
     setBusy(true);
     try {
+      /*
+       * TWO STEPS, AND BOTH ARE NECESSARY.
+       *
+       * `accept_online_order` attaches the shop's customer record for this shopper — that is the
+       * part only the server can do. It also claims the draft, which makes it the shop's, but the
+       * TILL does not learn anything from that: its open orders are a list it holds, and an order
+       * claimed behind its back is an order it has never heard of. Accepting used to do only this
+       * and land on a till saying "No customer being served", with the order sitting in the
+       * database perfectly claimed.
+       *
+       * `claimByCode` is the till's own way of taking on an order — the same call the counter makes
+       * when somebody reads a code aloud. It loads the lines, puts it in the list and makes it the
+       * customer being served. Claiming twice costs nothing: `claim_draft_order` sets
+       * `held_by = auth.uid()` on an open order, which it already is.
+       *
+       * IN THIS ORDER, because the customer must be on the row before the till reads it. The other
+       * way round the till would adopt the order and show no customer on it.
+       */
       await acceptOnlineOrder(id);
+      const claimed = await claimByCode(data.code);
+      if (!claimed) throw new Error('The order was accepted but could not be opened at the till.');
+
       /*
        * Back to the till, where the order now is. `popToRoot` rather than a push: this screen and
        * the queue behind it are both finished with, and leaving them in the stack would let Back
@@ -72,7 +99,6 @@ export default function OrderPage() {
     }
   };
 
-  const data = order.data;
   const status: PageStatus = !order.loaded
     ? order.error
       ? { state: 'error', what: 'this order', error: order.error, onRetry: order.reload }

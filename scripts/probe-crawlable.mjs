@@ -82,6 +82,31 @@ try {
     const productLinks = links(shop.html).filter((h) => /product|\/p\//i.test(h));
     check('and links a crawler can follow to a PRODUCT', productLinks.length > 0,
       productLinks.length ? productLinks.slice(0, 2).join(' ') : 'none — products are taps, not links');
+
+    // ══ 4. A product page, and the picture anything previewing it will ask for ══════
+    if (productLinks[0]) {
+      const item = await get(productLinks[0]);
+      check('the product page answers', item.status === 200, `${item.status}`);
+      check('it has its own title', Boolean(/<title[^>]*>([^<]+)<\/title>/i.exec(item.html)?.[1]),
+        /<title[^>]*>([^<]+)<\/title>/i.exec(item.html)?.[1] ?? '(none)');
+
+      /*
+       * THE og:image HAS TO FETCH, and nothing short of fetching it says so.
+       *
+       * It was built without the storage bucket — `…/object/public/<store>/…` rather than
+       * `…/object/public/media/<store>/…` — which Supabase answers with a 400. The tag was
+       * present and well-formed the whole time, so every check that looked at the MARKUP passed
+       * while every link shared to WhatsApp had no picture and Google was offered an image that
+       * does not exist. The only check worth having is the one that asks for it.
+       */
+      const og = /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i.exec(item.html)?.[1];
+      if (!og) {
+        note('this product has no picture', 'nothing to fetch — not a failure');
+      } else {
+        const res = await fetch(og);
+        check('and its preview image actually fetches', res.status === 200, `${res.status} ${og.slice(-40)}`);
+      }
+    }
   }
 } catch (e) {
   console.log('STOPPED:', String(e).split('\n')[0]);
