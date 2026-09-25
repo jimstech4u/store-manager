@@ -57,7 +57,12 @@ try {
   for (const [what, path] of [['the marketplace', '/'], ['a shop', '/s/7R8U2A']]) {
     await p.goto(`${BASE}${path}`, { waitUntil: 'networkidle' });
     await p.waitForTimeout(3500);
-    const top = (await p.locator('header, [class*="top"]').first().innerText()).replace(/\s+/g, ' ');
+    /*
+     * THE WHOLE PAGE, not the top bar. The way back to your own side floats at the bottom right
+     * now, and the branding and sign-in buttons belong to the landing page alone — so a check that
+     * reads only the header would see an empty row and call it a failure.
+     */
+    const top = (await p.locator('body').innerText()).replace(/\s+/g, ' ');
 
     check(`${what}: no invitation to sign in`, !/sign in|sign up/i.test(top), top.slice(0, 60));
     check(`${what}: one tap back to the shop`, /my shop|set up my shop/i.test(top), top.slice(0, 60));
@@ -68,7 +73,12 @@ try {
   if (href) {
     await p.goto(`${BASE}${href}`, { waitUntil: 'networkidle' });
     await p.waitForTimeout(3500);
-    const top = (await p.locator('header, [class*="top"]').first().innerText()).replace(/\s+/g, ' ');
+    /*
+     * THE WHOLE PAGE, not the top bar. The way back to your own side floats at the bottom right
+     * now, and the branding and sign-in buttons belong to the landing page alone — so a check that
+     * reads only the header would see an empty row and call it a failure.
+     */
+    const top = (await p.locator('body').innerText()).replace(/\s+/g, ' ');
     check('a product page: no invitation to sign in', !/sign in|sign up/i.test(top), top.slice(0, 60));
     check('a product page: one tap back to the shop', /my shop|set up my shop/i.test(top), top.slice(0, 60));
   } else {

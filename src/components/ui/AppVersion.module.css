@@ -1,0 +1,42 @@
+/* Which build is running, and the way to take the next one. See AppVersion.tsx. */
+
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.label {
+  font-weight: 600;
+}
+
+/* The build is a commit, so it is read out or copied rather than read for meaning — monospace and
+   allowed to break, because it must never push the label off a narrow phone. */
+.value {
+  font-family: var(--font-numeric);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.ready {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius);
+  background: var(--primary-subtle);
+  color: var(--primary);
+  font-weight: 600;
+  font-size: var(--text-sm);
+}
+
+.note {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}

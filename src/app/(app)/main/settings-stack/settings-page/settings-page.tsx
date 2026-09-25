@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { AppVersion } from '@/components/ui/AppVersion';
 import { useReload } from '@/lib/stacks/resource';
 import { ReceiptPreview } from '@/components/receipt/ReceiptPreview';
 import { LogoRejected, normaliseReceiptLogo } from '@/lib/image-pipeline';
@@ -1011,6 +1012,19 @@ export default function SettingsPage() {
         See the marketplace
         <span className={styles.marketNote}>How shoppers find you, and what your shop looks like to them</span>
       </a>
+
+      {/*
+        WHICH BUILD THIS IS, and a way to take the next one now.
+        
+        An installed app updates itself and the reload prompt offers it on the shop's own schedule,
+        which is right and entirely invisible — so when something is wrong there is no way to say
+        which version it is wrong in, and no way to answer "have you got the latest?" except by
+        waiting for the prompt.
+      */}
+      <div className={styles.group}>
+        <h2 className={styles.section}>This app</h2>
+        <AppVersion />
+      </div>
 
       <Button variant="secondary" size="large" fullWidth onClick={() => void signOut()}>
         Sign out

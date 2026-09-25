@@ -127,11 +127,15 @@ try {
   check('signing in comes back to the basket', new URL(p.url()).pathname === '/cart', new URL(p.url()).pathname);
 
   // ══ 5. The shop is not offered to somebody who came to buy ════════════════════════
-  const top = (await p.locator('header').first().innerText()).replace(/\s+/g, ' ');
-  check('the top bar does not offer to set up a shop', !/set up my shop/i.test(top), top.slice(0, 60));
-  // `/main` is everyone's home now and shows the shopper their own screen, so the top bar says
-  // "My account" rather than pointing at one page of it.
-  check('it offers their own account instead', /my account/i.test(top), top.slice(0, 60));
+  /*
+   * The whole page, not the header: the way into your own side is a floating button now, and only
+   * the landing page carries the branding and the sign-in buttons at the top.
+   */
+  const shown = (await p.locator('body').innerText()).replace(/\s+/g, ' ');
+  check('nothing offers to set up a shop', !/set up my shop|open a shop/i.test(shown), shown.slice(0, 60));
+  // `/main` is everyone's home now and shows the shopper their own screen, so it says "My account"
+  // rather than pointing at one page of it.
+  check('it offers their own account instead', /my account/i.test(shown), shown.slice(0, 60));
 
   // ══ 6. Who the shop should ask for ════════════════════════════════════════════════
   await p.waitForTimeout(2500);

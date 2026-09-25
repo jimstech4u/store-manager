@@ -641,18 +641,35 @@ export function useDraftOrders(storeId: string | null) {
           })),
         };
 
+        /*
+         * THE TAB THAT ENDS UP IN THE LIST IS THE TAB TO SELECT, and it is not always the one just
+         * built.
+         *
+         * When this order is already open on the device the existing tab is KEPT and refreshed —
+         * rightly, since two tabs for one order could settle it twice — which means it keeps its
+         * own `clientUuid` and the one on `claimed` is discarded. Selecting `claimed.clientUuid`
+         * regardless then pointed `activeId` at a tab that does not exist: every tab present, none
+         * selected, and the till saying "No customer being served" over the customer's own name.
+         *
+         * Accepting a marketplace order hit this every time. `accept_online_order` claims the
+         * draft, so any restore between that and this one brings the order into the list first —
+         * and then this took the branch that keeps the existing uuid.
+         */
+        let selected = claimed.clientUuid;
         setOrders((prev) => {
           // Already open on this device — refresh it rather than opening a second tab for the
           // same order, which would let two tabs settle the same thing.
           const existing = prev.findIndex((o) => o.id === claimed.id);
           if (existing >= 0) {
+            selected = prev[existing].clientUuid;
             const next = [...prev];
-            next[existing] = { ...claimed, clientUuid: prev[existing].clientUuid };
+            next[existing] = { ...claimed, clientUuid: selected };
             return next;
           }
+          selected = claimed.clientUuid;
           return [...prev, claimed];
         });
-        setActiveId(claimed.clientUuid);
+        setActiveId(selected);
         return claimed;
       } catch (e: unknown) {
         setError(messageOf(e, 'Could not find that order'));
