@@ -135,11 +135,26 @@ export function ServiceWorker() {
       if (!worker || !navigator.serviceWorker.controller) return;
 
       /*
-       * A version that was ready before the shop had done anything is not news. It installs itself
-       * on the next launch — see STARTUP_GRACE_MS. This is also why a browser tab that is merely
-       * refreshed says nothing, while one left open for a day still gets asked.
+       * A version that was ready before the shop had done anything is not news — not YET. Asked
+       * again once the grace period is up, rather than dropped.
+       *
+       * Dropping it was how the app stopped updating altogether. On every launch this runs inside
+       * the grace window, so a build that was already waiting was discarded; `lookAgain` then only
+       * asked the SERVER, which has nothing new to give because the new build is already
+       * downloaded and sitting in `waiting`. No `updatefound`, no prompt, for ever. The app went on
+       * running the old build with the new one on the device, and the only escape was to fully
+       * close every window — which an installed app on a phone essentially never does.
+       *
+       * Reproduced before it was fixed: swap in a new worker, resume, relaunch, resume again —
+       * `waiting: true` throughout and not one prompt.
        */
-      if (Date.now() - startedAt < STARTUP_GRACE_MS) return;
+      const early = STARTUP_GRACE_MS - (Date.now() - startedAt);
+      if (early > 0) {
+        setTimeout(() => {
+          if (!dropped) void ready(worker);
+        }, early + 250);
+        return;
+      }
 
       const v = await versionOf(worker);
       if (dropped) return;
@@ -192,7 +207,13 @@ export function ServiceWorker() {
      * are not in the middle of anything.
      */
     const lookAgain = () => {
-      if (document.visibilityState === 'visible') void registration?.update().catch(() => {});
+      if (document.visibilityState !== 'visible') return;
+      // Ask the server whether there is something newer…
+      void registration?.update().catch(() => {});
+      // …and re-offer anything ALREADY downloaded and waiting. `update()` finds nothing when the
+      // new build is already on the device, so without this the one case that matters most — a
+      // build waiting since a previous launch — had nothing left to announce it.
+      void ready(registration?.waiting ?? null);
     };
 
     if (document.readyState === 'complete') void register();
