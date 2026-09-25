@@ -5,10 +5,17 @@ import { useNav } from '@academix-admin/navigation-stack';
 import { useAuth } from '@/providers/AuthProvider';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
-import { SearchField, useDebounced } from '@/components/ui/SearchField';
+import { SearchLauncher } from '@/components/ui/SearchLauncher';
+import { SearchSheet } from '@/components/ui/SearchSheet';
+import { useSearchController } from '@academix-admin/search-viewer';
 import { ChevronRightIcon } from '@/components/ui/Icon';
 import { formatMoney } from '@/lib/format';
-import { useOnlineOrderList, type OrdersFilter } from '@/lib/stacks/online-orders';
+import {
+  fetchOnlineOrders,
+  useOnlineOrderList,
+  type OnlineOrderRow,
+  type OrdersFilter,
+} from '@/lib/stacks/online-orders';
 import styles from './orders-page.module.css';
 
 /**
@@ -55,13 +62,20 @@ export default function OrdersPage() {
    * where a shop actually wants to narrow.
    */
   const [when, setWhen] = useState<OrdersFilter['when']>('all');
-  const [typed, setTyped] = useState('');
-  const query = useDebounced(typed);
+  /*
+   * SEARCH IS A SURFACE, NOT A BOX ON THIS PAGE — the same one every other search in this app
+   * opens. A field here would filter the list underneath it with the keyboard over the results,
+   * which is the arrangement the rest of the app moved away from.
+   *
+   * The page's own list is narrowed by the TABS and the period. Searching finds one order and
+   * opens it, which is what somebody with a code or a name in their hand is actually doing.
+   */
+  const [searchId, searchOps, isSearchOpen] = useSearchController();
 
-  const orders = useOnlineOrderList(store?.id ?? null, { answer, when, query });
+  const orders = useOnlineOrderList(store?.id ?? null, { answer, when, query: '' });
 
   const list = orders.data ?? [];
-  const searching = query.trim() !== '' || when !== 'all';
+  const searching = when !== 'all';
   const status: PageStatus = !orders.loaded
     ? orders.error
       ? { state: 'error', what: 'orders', error: orders.error, onRetry: orders.reload }
@@ -70,7 +84,7 @@ export default function OrdersPage() {
       ? {
           state: 'empty',
           title: searching
-            ? 'Nothing matches that'
+            ? 'Nothing in that period'
             : answer === 'waiting'
               ? 'No orders waiting'
               : answer === 'accepted'
@@ -78,10 +92,9 @@ export default function OrdersPage() {
                 : answer === 'declined'
                   ? 'None turned down'
                   : 'No orders yet',
-          body:
-            searching
-              ? 'Try a different word, or widen the period.'
-              : 'When somebody orders from your shop on the marketplace, it waits here until you answer it.',
+          body: searching
+            ? 'Try a wider period, or search for the order.'
+            : 'When somebody orders from your shop on the marketplace, it waits here until you answer it.',
         }
       : { state: 'ready' };
 
@@ -91,11 +104,10 @@ export default function OrdersPage() {
       subtitle="Asked for from the marketplace"
       onBack={() => void nav.pop()}
     >
-      <SearchField
-        value={typed}
-        onChange={setTyped}
-        placeholder="Search a code, a shopper or a product"
+      <SearchLauncher
         label="Search marketplace orders"
+        placeholder="Search a code, a shopper or a product"
+        onOpen={searchOps.open}
       />
 
       {/* What the shop said, which is the first thing anybody is filtering by. */}
@@ -177,6 +189,63 @@ export default function OrdersPage() {
           </ul>
         )}
       </PageState>
+
+      {/*
+        RESULTS AS THE SAME CARD the page uses. An order is recognised by who sent it, its code and
+        what is on it — exactly what the card already says — so a different row shape here would be
+        a second answer to the same question.
+      */}
+      <SearchSheet<OnlineOrderRow>
+        id={searchId}
+        isOpen={isSearchOpen}
+        onClose={searchOps.close}
+        placeholder="Search a code, a shopper or a product"
+        /*
+         * The orders already on the page answer the first keystroke with no request at all. The
+         * server call behind it searches every order, not just the tab being shown — somebody
+         * looking for a code does not know or care whether it was accepted.
+         */
+        onInitialData={(text) => {
+          const t = text.trim().toLowerCase();
+          if (!t) return [];
+          return list.filter(
+            (o) =>
+              o.code.toLowerCase().includes(t) ||
+              (o.customer_name ?? '').toLowerCase().includes(t) ||
+              (o.preview ?? '').toLowerCase().includes(t),
+          );
+        }}
+        localDataDeps={[list]}
+        queryData={async (_cursor, text) => ({
+          data: store?.id ? await fetchOnlineOrders(store.id, { query: text }) : [],
+        })}
+        keyOf={(o) => o.id}
+        renderRow={(o) => (
+          <button
+            type="button"
+            className={styles.order}
+            onClick={() => {
+              searchOps.close();
+              void nav.push('order_page', { id: o.id });
+            }}
+          >
+            <span className={styles.head}>
+              <span className={styles.who}>{o.customer_name ?? 'A shopper'}</span>
+              <span className={styles.code}>{o.code}</span>
+            </span>
+            {o.answer && (
+              <span className={o.answer === 'accepted' ? styles.accepted : styles.declined}>
+                {o.answer === 'accepted' ? 'Accepted' : 'Turned down'}
+              </span>
+            )}
+            {o.preview && <span className={styles.preview}>{o.preview}</span>}
+            <span className={styles.what}>
+              {o.lines} {o.lines === 1 ? 'item' : 'items'} · {formatMoney(o.total)}
+            </span>
+          </button>
+        )}
+        emptyText="No order matches that."
+      />
     </PageScaffold>
   );
 }

@@ -201,6 +201,28 @@ export function useOnlineOrderList(storeId: string | null, filter: OrdersFilter)
   });
 }
 
+/**
+ * ONE PAGE OF ORDERS, WITHOUT A HOOK — for the search viewer, which owns its own results.
+ *
+ * `useOnlineOrderList` keeps a list for the screen: persisted, scoped, restored. A search surface
+ * wants none of that, so the request is lifted out here and both go through it rather than two
+ * copies of the same call drifting apart.
+ */
+export async function fetchOnlineOrders(
+  storeId: string,
+  opts: { answer?: OrderAnswer | 'all'; when?: OrdersFilter['when']; query?: string; limit?: number } = {},
+): Promise<OnlineOrderRow[]> {
+  const { data, error } = await getSupabase().rpc('online_orders', {
+    p_store_id: storeId,
+    p_answer: !opts.answer || opts.answer === 'all' ? null : opts.answer,
+    p_since: sinceFor(opts.when ?? 'all'),
+    p_query: opts.query?.trim() || null,
+    p_limit: opts.limit ?? 40,
+  });
+  if (error) throw error;
+  return (data ?? []) as OnlineOrderRow[];
+}
+
 export interface OrderEvent {
   action: 'placed' | 'accepted' | 'declined' | 'reopened';
   actor_name: string;
