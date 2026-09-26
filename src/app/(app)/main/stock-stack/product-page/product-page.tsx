@@ -1,12 +1,14 @@
 'use client';
 
 import { LEDGERS_SCOPE } from '@/lib/stacks/customer-ledgers';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { StockHistoryCard } from '@/components/stock/StockHistory';
 import { InfoPanel } from '@/components/ui/Explain';
+import { Button } from '@/components/ui/Button';
+import { Field } from '@/components/ui/Field';
 import { PhotoUpload } from '@/components/ui/PhotoUpload';
 import { ChevronRightIcon, EditIcon, TrashIcon } from '@/components/ui/Icon';
 import { getSupabase } from '@/lib/supabase/client';
@@ -14,6 +16,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useProduct, type Product } from '@/lib/stacks/catalog-stack';
+import { setItemLowStock, useLowStockRule } from '@/lib/stacks/low-stock';
 import { useListNotifier } from '@/hooks/useListChannel';
 import { stockInShapes, useSellingUnits } from '@/lib/stacks/selling-units';
 import { unitGaps, useProductUnits } from '@/lib/stacks/product-units';
@@ -66,6 +69,36 @@ export default function ProductPage() {
     reload: reloadUnits,
   } = useSellingUnits(store?.id ?? null);
   const { units: productUnits } = useProductUnits(productId);
+
+  /*
+   * WHEN TO BE TOLD THIS ONE IS RUNNING OUT.
+   *
+   * Here as well as on the form and on the Running low page, and deliberately: somebody who has just
+   * discovered this item ran out on Saturday is looking at THIS page — at what is on the shelf, what
+   * it cost and how it sells. Sending them to a settings screen to act on what they are reading is
+   * how a setting goes unused.
+   *
+   * The shop's general level comes along so the box can say what it is overriding. A level of 5 means
+   * nothing without "everything else is 20" beside it.
+   */
+  const rule = useLowStockRule(store?.id ?? null);
+  const [lowLevel, setLowLevel] = useState('');
+  const [lowSeeded, setLowSeeded] = useState<string | null>(null);
+  const [savingLow, setSavingLow] = useState(false);
+  const [lowNote, setLowNote] = useState<string | null>(null);
+
+  /*
+   * Seeded once per product, from the item's OWN level — never the resolved one.
+   *
+   * `ownLowStockLevel` is null when the item simply follows the shop, which is what the empty box
+   * means. Seeding from the resolved figure would put the shop's general level in a box labelled
+   * "different from the rest" and turn every item anybody opened into an exception on the next save.
+   */
+  useEffect(() => {
+    if (!product || lowSeeded === product.id) return;
+    setLowSeeded(product.id);
+    setLowLevel(product.ownLowStockLevel == null ? '' : String(product.ownLowStockLevel));
+  }, [product, lowSeeded]);
   /*
    * Read into its own area, so a failure says so.
    *
@@ -325,6 +358,81 @@ export default function ProductPage() {
         rate per container (0109), and which shapes come back is a tick on the shape, asked on the
         product form where the shapes are defined.
       */}
+      {/*
+        ─── RUNNING LOW, FOR THIS ITEM ───────────────────────────────────────────
+
+        Blank means it follows the shop's level. Zero does not: zero is a real level meaning "tell me
+        only when there are none at all", which is the right answer for something rare that gets
+        ordered in when a customer asks for it. The two are kept apart the whole way down to the
+        column, so an empty box can never be saved as a nought.
+      */}
+      <section className={styles.empties}>
+        <h2 className={styles.emptiesTitle}>Running low</h2>
+        <Field
+          label={`Warn me at this many ${pluralUnit(product.baseUnit, 2)}`}
+          numeric
+          value={lowLevel}
+          onChange={(e) => setLowLevel(e.target.value)}
+          placeholder={
+            rule.data?.level == null
+              ? 'No warnings set up yet'
+              : `Follows the shop: ${rule.data.level}`
+          }
+          hint={
+            rule.data?.level == null
+              ? 'Your shop has no general level, so nothing warns unless you set one here.'
+              : `Leave it blank to follow the shop's level of ${rule.data.level}.`
+          }
+        />
+        {(() => {
+          const typed = lowLevel.trim();
+          const wanted = typed === '' ? null : Number(typed);
+          const had = product.ownLowStockLevel == null ? null : Number(product.ownLowStockLevel);
+          const dirty = wanted !== had;
+          return (
+            <>
+              <Button
+                variant="secondary"
+                fullWidth
+                busy={savingLow}
+                busyLabel="Saving"
+                disabled={!dirty || (typed !== '' && !Number.isFinite(wanted))}
+                onClick={async () => {
+                  setSavingLow(true);
+                  setLowNote(null);
+                  try {
+                    await setItemLowStock(product.id, wanted);
+                    /*
+                     * Re-read, so the box is seeded from what the shop now holds rather than from
+                     * what this screen believes it sent. A form that trusts its own optimism is a
+                     * form that shows a saved value that was refused.
+                     */
+                    setLowSeeded(null);
+                    await load();
+                    setLowNote(
+                      wanted === null
+                        ? "Back under the shop's level."
+                        : `This item warns at ${wanted}.`,
+                    );
+                  } catch (e: unknown) {
+                    setLowNote(messageOf(e, 'Could not save that level'));
+                  } finally {
+                    setSavingLow(false);
+                  }
+                }}
+              >
+                {dirty ? 'Save this level' : 'Saved'}
+              </Button>
+              {lowNote && (
+                <p className={styles.emptiesNote} role="status">
+                  {lowNote}
+                </p>
+              )}
+            </>
+          );
+        })()}
+      </section>
+
       <section className={styles.empties}>
         <h2 className={styles.emptiesTitle}>Containers out</h2>
         <LoadArea area={outArea} what="what is out with customers">

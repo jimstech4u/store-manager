@@ -8,7 +8,7 @@ import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
 import { FloatingAction } from '@/components/ui/FloatingAction';
 import { ClipboardCheckIcon } from '@/components/ui/Icon';
-import { AlertIcon, BoxIcon,
+import { AlertIcon, BoxIcon, WarningIcon,
   PeopleIcon, ChevronRightIcon, PlusIcon } from '@/components/ui/Icon';
 import { useNav } from '@academix-admin/navigation-stack';
 import { useAuth } from '@/providers/AuthProvider';
@@ -146,6 +146,19 @@ export default function StockPage() {
           icon: <AlertIcon />,
           onClick: () => void nav.push('expiry_page'),
           ariaLabel: 'What is going off',
+        },
+        /*
+          WHEN TO BE TOLD SOMETHING IS RUNNING OUT.
+          
+          Reachable from Settings too, but this is where a shop looking at a list of quantities
+          actually is — the thought "I should be warned before that happens again" arrives while
+          reading this screen, not while reading preferences.
+        */
+        {
+          key: 'low-stock',
+          icon: <WarningIcon />,
+          onClick: () => void nav.push('low_stock_page'),
+          ariaLabel: 'When to be told stock is running low',
         },
         ...(can('stock.receive')
           ? [

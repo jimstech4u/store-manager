@@ -34,6 +34,8 @@ const navLink = tabRoutes({ stock_page: StockPage }, [
   'receipt_page',
   'amend_page',
   'customer_form_page',
+  // Appended, never inserted: the URL names a route by its position in this list.
+  'low_stock_page',
 ]);
 
 export const StockStack = () => (

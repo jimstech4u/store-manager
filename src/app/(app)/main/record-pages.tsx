@@ -4,6 +4,7 @@ import type { ComponentType } from 'react';
 import { gatePage } from '@/components/ui/PermissionGate';
 import ProductPage from './stock-stack/product-page/product-page';
 import ProductFormPage from './stock-stack/product-form-page/product-form-page';
+import LowStockPage from './stock-stack/low-stock-page/low-stock-page';
 import ReceivePage from './stock-stack/receive-page/receive-page';
 import StockHistoryPage from './stock-stack/stock-history-page/stock-history-page';
 import UnitsPage from './stock-stack/units-page/units-page';
@@ -162,6 +163,8 @@ export const RECORD_PAGES: Record<string, ComponentType> = gateAll({
   // After `orders_page`, for the same reason `orders_page` is after everything else: a route is
   // written into the URL as its POSITION in this map.
   order_page: OrderPage,
+  // And this one after those, for the same reason. The rule is only ever "append".
+  low_stock_page: LowStockPage,
 });
 
 /** Handed to each stack's `additionalNavLinks` — one array, so its identity never changes. */
