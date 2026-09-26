@@ -512,11 +512,34 @@ export function useDraftOrders(storeId: string | null) {
   const removeLine = useCallback(
     (clientUuid: string, lineKey: string) => {
       setOrders((prev) =>
-        prev.map((o) =>
-          o.clientUuid === clientUuid
-            ? { ...o, synced: false, lines: o.lines.filter((l) => l.key !== lineKey) }
-            : o,
-        ),
+        prev.map((o) => {
+          if (o.clientUuid !== clientUuid) return o;
+          const lines = o.lines.filter((l) => l.key !== lineKey);
+
+          /*
+           * TAKING THE LAST ITEM OFF TAKES THE MONEY WITH IT.
+           *
+           * Charges, deposits and the old single fee are all things added ON TOP of what is being
+           * sold — transport for this load, a deposit on these crates. With nothing being sold
+           * they are amounts attached to nothing, and the till went on totalling them: an order
+           * cleared back to empty still showed ₦2,000 of transport and a deposit, and settling it
+           * produced a receipt with money on it and no goods.
+           *
+           * Only when the LAST one goes. Removing one item from five changes nothing about the
+           * transport for the load, and clearing it then would be the app overruling the shop.
+           */
+          if (lines.length > 0) return { ...o, synced: false, lines };
+
+          return {
+            ...o,
+            synced: false,
+            lines,
+            charges: [],
+            deposits: [],
+            feeAmount: '',
+            feeLabel: '',
+          };
+        }),
       );
     },
     [setOrders],

@@ -156,22 +156,42 @@
   white-space: nowrap;
 }
 
-.quickRow {
-  display: flex;
-  gap: var(--space-2);
-  margin-bottom: var(--space-4);
-}
-
+/* Under "Add payment", not above it: the shortcut is the exception, and it now performs the whole
+   action rather than filling a box for somebody to confirm. Full width, because it is no longer
+   one of a row. */
 .quick {
-  flex: 1;
+  width: 100%;
   min-height: var(--touch-min);
-  padding: 0 var(--space-2);
-  border: 2px solid var(--border-strong);
+  margin-top: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 2px dashed var(--border-strong);
   border-radius: var(--radius);
   background: var(--surface);
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--text);
+}
+
+.quick:hover { background: var(--surface-sunken); }
+
+/* ── What the total is made of ────────────────────────────────────────────────────── */
+
+/* Between the title and the figure, so the figure still reads as the answer and the parts are
+   there for the customer who asks why. */
+.breakdown {
+  display: block;
+  margin: var(--space-2) 0;
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.breakdownRow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── Who this is for ──────────────────────────────────────────────────────────────── */

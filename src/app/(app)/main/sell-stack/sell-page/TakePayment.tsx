@@ -236,7 +236,30 @@ export function TakePayment({
    * misreading that makes a shop think its prices are higher than they are.
    */
   const held = depositTotal(order);
-  const itemsTotal = Math.max(0, total - chargesTotal(order) - held);
+  const charges = chargesTotal(order);
+  const itemsTotal = Math.max(0, total - charges - held);
+
+  /*
+   * ONE PLACE A PAYMENT IS ADDED, because there are two ways to ask for one: composing an amount
+   * and pressing Add, or taking the whole remainder in a tap. Two copies of this drifted once
+   * already — the shortcut filled the box and left the adding to the other path, which is why it
+   * took two taps and why it went on offering after the sale was paid.
+   */
+  const addPayment = (amount: string) => {
+    if (!(Number(amount) > 0)) return;
+    setRows((prev) => [
+      ...prev,
+      {
+        key: newKey(),
+        method: draftMethod,
+        amount,
+        reference: draftReference,
+        bankAccountId: draftMethod === 'transfer' ? (draftAccount ?? accounts[0]?.id ?? null) : null,
+      },
+    ]);
+    setDraftAmount('');
+    setDraftReference('');
+  };
 
   const remaining = Math.max(total - paid, 0);
 
@@ -573,9 +596,30 @@ export function TakePayment({
           charges, and lives in its own ledger.
         */}
         {held > 0 && (
-          <div className={styles.deposit}>
-            <span className={styles.depositLabel}>Deposit held</span>
-            <span>{formatMoney(held)}</span>
+          /*
+            REMOVABLE FROM HERE, where it is read.
+            
+            The deposit was listed with the goods and could only be taken off further down the page,
+            beside the box that composes it — so the one place a seller notices it is wrong is the
+            one place they cannot fix it. A charge has always had its cross here; this is the same
+            line doing the same job.
+            
+            It clears every deposit on the sale, because that is what this line totals. One of
+            several is still removed individually, below.
+          */
+          <div className={styles.charge}>
+            <button
+              type="button"
+              className={styles.chargeRemove}
+              onClick={() => onUpdateOrder({ deposits: [] })}
+              aria-label="Remove the deposit"
+            >
+              <CloseIcon />
+            </button>
+            <span className={styles.chargeBody}>
+              <span className={styles.chargeName}>Deposit held</span>
+            </span>
+            <span className={styles.chargeAmount}>{formatMoney(held)}</span>
           </div>
         )}
 
@@ -761,6 +805,36 @@ export function TakePayment({
 
       <div className={styles.due}>
         <span className={styles.dueLabel}>Total for this sale</span>
+
+        {/*
+          WHAT THE TOTAL IS MADE OF, above the figure rather than scattered up the page.
+
+          A distributor's bill is goods plus transport plus a deposit, and the one number at the
+          bottom is the one a customer queries. Having to scroll back through the items to work out
+          why it is ₦7,700 is how an argument at a counter starts. Only the parts that exist are
+          listed: a sale with no deposit and no charges says nothing extra.
+        */}
+        {(held > 0 || charges > 0) && (
+          <span className={styles.breakdown}>
+            <span className={styles.breakdownRow}>
+              <span>Items</span>
+              <span>{formatMoney(itemsTotal)}</span>
+            </span>
+            {charges > 0 && (
+              <span className={styles.breakdownRow}>
+                <span>Charges</span>
+                <span>{formatMoney(charges)}</span>
+              </span>
+            )}
+            {held > 0 && (
+              <span className={styles.breakdownRow}>
+                <span>Deposit</span>
+                <span>{formatMoney(held)}</span>
+              </span>
+            )}
+          </span>
+        )}
+
         <span className={styles.dueValue}>{formatMoney(total)}</span>
       </div>
 
@@ -888,40 +962,35 @@ export function TakePayment({
           waiting is a common source of mistyped payments — and after a first payment, "the rest"
           is almost always the second one.
         */}
-        <div className={styles.quickRow}>
-          <button
-            type="button"
-            className={styles.quick}
-            onClick={() => setDraftAmount(String(remaining > 0 ? remaining : total))}
-          >
-            {paid > 0 && remaining > 0
-              ? `The rest (${formatMoney(remaining)})`
-              : `Pay all (${formatMoney(total)})`}
-          </button>
-
-        </div>
-
         <Button
           fullWidth
           disabled={!(Number(draftAmount) > 0)}
-          onClick={() => {
-            setRows((prev) => [
-              ...prev,
-              {
-                key: newKey(),
-                method: draftMethod,
-                amount: draftAmount,
-                reference: draftReference,
-                bankAccountId:
-                  draftMethod === 'transfer' ? (draftAccount ?? accounts[0]?.id ?? null) : null,
-              },
-            ]);
-            setDraftAmount('');
-            setDraftReference('');
-          }}
+          onClick={() => addPayment(draftAmount)}
         >
           <PlusIcon /> Add payment
         </Button>
+
+        {/*
+          THE WHOLE REMAINING AMOUNT, IN ONE TAP — and gone once there is nothing left owing.
+
+          Three things were wrong with it. It sat ABOVE "Add payment", so the order read
+          "shortcut, then the real button", which is backwards: the shortcut is the exception. It
+          only FILLED the box, so "Pay all" still needed a second tap on a button that looked like
+          it was for something else. And it stayed on screen after the sale was paid in full,
+          offering to pay ₦7,700 again on a sale with nothing owing.
+
+          Now it adds the payment itself and disappears when `remaining` reaches zero. After
+          ₦5,000 of ₦7,700 it reads "The rest (₦2,700)"; after that it is gone.
+        */}
+        {remaining > 0 && (
+          <button
+            type="button"
+            className={styles.quick}
+            onClick={() => addPayment(String(remaining))}
+          >
+            {paid > 0 ? `The rest (${formatMoney(remaining)})` : `Pay all (${formatMoney(total)})`}
+          </button>
+        )}
       </section>
 
 
