@@ -18,7 +18,17 @@
 
 export interface ShareLine {
   name: string;
+  /** "2 Crate x N9,600" — the full working, for the picture and the PDF. */
   detail: string;
+  /**
+   * "2 Crate" — the same line WITHOUT the unit price.
+   *
+   * A printed receipt reads better without it: "1 Pack x N4,500 ... N4,500" says the same figure
+   * twice on a 32-character line, and on the lines where it differs the multiplication is
+   * arithmetic the customer is not checking. The picture keeps the working, because a phone screen
+   * has room for it. Optional, so anything that has not been taught to send it still prints.
+   */
+  qty?: string;
   amount: string;
 }
 

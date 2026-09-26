@@ -203,17 +203,6 @@
 
 /* Quantity, date, and a way to take the line out — on one row where there is room, stacked on a
    phone rather than squeezed into three unreadable columns. */
-.batchRow {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--space-2);
-  align-items: end;
-  padding: var(--space-3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  margin-bottom: var(--space-2);
-  background: var(--surface-sunken);
-}
 
 @media (min-width: 520px) {
   .batchRow { grid-template-columns: 1fr 1fr auto; }
@@ -257,4 +246,98 @@
   font-size: var(--text-base);
   font-weight: 700;
   margin: var(--space-5) 0 var(--space-1);
+}
+
+/*
+  DATED STOCK: one form above, the lines below.
+
+  It was a pair of boxes repeated down the page, one set per date. Composing above and listing
+  below is how every other repeated thing here works — a charge, a deposit, a payment — and it is
+  the only arrangement where an abandoned half-typed line cannot be saved as stock with no date.
+*/
+.batchCompose {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  margin-bottom: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken, var(--surface));
+}
+
+.batchShape {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.batchShapeLabel {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.batchSelect {
+  min-height: var(--touch-comfortable);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.batchList {
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/*
+  A line reads as a sentence: how many of what, and when it goes off. The cross is its own target
+  on the left, away from the figures, because it is the one control here that destroys something.
+*/
+.batchLine {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.batchRemove {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.batchRemove:hover {
+  color: var(--danger, var(--text));
+}
+
+.batchWhat {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.batchWhen {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }

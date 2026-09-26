@@ -463,3 +463,26 @@ export async function setProductLowStock(productId: string, level: number | null
   if (error) throw error;
   catalogChanged();
 }
+
+/**
+ * HAS THIS ITEM EVER HAD STOCK RECORDED AGAINST IT?
+ *
+ * Asked by the edit form, which now offers the opening count a shop may have skipped when the item
+ * was added. "Opening" stock is a movement like any other, so offering it on an item that already
+ * has movements would ADD to the shelf rather than describe it — a shop correcting an oversight
+ * would double their stock and not find out until a count.
+ *
+ * On hand being zero is NOT the same question and is the wrong test: an item that sold out has a
+ * history, and opening it again would invent stock that is not there. What matters is whether
+ * anything has ever been written, so that is what is asked.
+ *
+ * `head: true` with an exact count: the rows are not wanted, only whether there are any.
+ */
+export async function hasStockHistory(productId: string): Promise<boolean> {
+  const { count, error } = await getSupabase()
+    .from('stock_movements')
+    .select('id', { count: 'exact', head: true })
+    .eq('product_id', productId);
+  if (error) throw error;
+  return (count ?? 0) > 0;
+}

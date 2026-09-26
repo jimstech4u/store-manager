@@ -107,6 +107,17 @@ export function columnsAt(size: TextSize, layout: ReceiptLayout): number {
  * the printer's code page is not something this can rely on — so they are spelled in ASCII, which
  * every one of these printers has.
  */
+/**
+ * The whole-number part of a fraction, or nothing at all.
+ *
+ * "2.5" is two and a half; "0.5" is a half. A first version tested the captured digits for
+ * truthiness, and "0" is a non-empty string — so half a crate printed as "0 1/2", which reads
+ * like a quantity somebody got wrong. Reported off a real receipt.
+ */
+function lead(whole: string): string {
+  return whole && whole !== '0' ? `${whole} ` : '';
+}
+
 function printable(text: string): string {
   return (
     text
@@ -120,9 +131,9 @@ function printable(text: string): string {
        * front so a PRICE is never touched: "N9,600.50" is money and must stay money, while "0.5
        * Crate" and "2.5" are quantities. The leading whole number is kept — 2.5 becomes "2 1/2".
        */
-      .replace(/(^|[\s(])(\d*)\.25(?![\d])/g, (_m, pre, whole) => `${pre}${whole ? whole + ' ' : ''}1/4`)
-      .replace(/(^|[\s(])(\d*)\.5(?![\d])/g, (_m, pre, whole) => `${pre}${whole ? whole + ' ' : ''}1/2`)
-      .replace(/(^|[\s(])(\d*)\.75(?![\d])/g, (_m, pre, whole) => `${pre}${whole ? whole + ' ' : ''}3/4`)
+      .replace(/(^|[\s(])(\d*)\.25(?![\d])/g, (_m, pre, whole) => `${pre}${lead(whole)}1/4`)
+      .replace(/(^|[\s(])(\d*)\.5(?![\d])/g, (_m, pre, whole) => `${pre}${lead(whole)}1/2`)
+      .replace(/(^|[\s(])(\d*)\.75(?![\d])/g, (_m, pre, whole) => `${pre}${lead(whole)}3/4`)
       .replace(/[‘’]/g, "'")
       .replace(/[“”]/g, '"')
       .replace(/[×]/g, 'x')
@@ -189,33 +200,53 @@ export function receiptLines(input: ReceiptImageInput, layout: ReceiptLayout): P
   const put = (size: TextSize, text: string) => out.push({ size, text });
   const blank = () => put('ss', '');
   const rule = () => put('ss', '-'.repeat(at('ss')));
+  /*
+   * A DOUBLE RULE, where the receipt genuinely changes subject.
+   *
+   * Every break was the same dashed line, so the paper read as one long list with occasional
+   * interruptions — nothing told a reader where the shop ends and the sale begins, or where the
+   * money stops and the crates start. A shop asked for the heavier line at exactly the four places
+   * it turns over in the hand: under the letterhead, under who and when, under the money, and
+   * under what they are still holding.
+   *
+   * `=` rather than two rows of dashes: it is one line of paper instead of two, which on a roll is
+   * a real cost, and it reads as heavier at every size.
+   */
+  const ruleDouble = () => put('ss', '='.repeat(at('ss')));
 
   put(layout.shopName, centre(input.shopName, at(layout.shopName)));
   if (input.header) {
     for (const l of wrap(input.header, at(layout.header))) put(layout.header, centre(l, at(layout.header)));
   }
-  rule();
+  ruleDouble();
 
+  // Who and when — the date, the receipt's number, the customer.
   for (const m of input.meta) put(layout.meta, printable(m));
-  rule();
+  ruleDouble();
 
   for (const l of input.lines) {
     for (const part of wrap(l.name, at(layout.itemName))) put(layout.itemName, part);
-    put(layout.itemDetail, spread(`  ${l.detail}`, l.amount, at(layout.itemDetail)));
+    // `qty` where it is offered: "1 Pack", not "1 Pack x N4,500 ... N4,500", which says the same
+    // figure twice on a narrow line. `detail` is the fallback for anything not yet sending it.
+    put(layout.itemDetail, spread(`  ${l.qty ?? l.detail}`, l.amount, at(layout.itemDetail)));
   }
   rule();
 
   for (const t of input.totals) {
     if (t.value === '') {
-      // A heading inside the totals, like "Still with you". No figure to line up.
-      blank();
+      /*
+       * A heading inside the totals — "Still with you". The money is finished at this point, so
+       * the heavy line goes HERE rather than after the last figure: it is the break a reader is
+       * looking for when they check what they are holding.
+       */
+      ruleDouble();
       put(layout.strongTotals, printable(t.label));
       continue;
     }
     const size = t.strong ? layout.strongTotals : layout.totals;
     put(size, spread(t.label, t.value, at(size)));
   }
-  rule();
+  ruleDouble();
 
   if (input.note) {
     for (const l of wrap(input.note, at(layout.footer))) put(layout.footer, l);

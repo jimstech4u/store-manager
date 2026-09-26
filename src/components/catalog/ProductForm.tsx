@@ -27,12 +27,12 @@ import {
   type StoreUnit,
 } from '@/lib/stacks/product-units';
 import { getSupabase } from '@/lib/supabase/client';
-import { setProductLowStock, type Product } from '@/lib/stacks/catalog-stack';
+import { hasStockHistory, setProductLowStock, type Product } from '@/lib/stacks/catalog-stack';
 import styles from './ProductForm.module.css';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 import { useLoadArea } from '@/components/ui/LoadArea';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
-import { messageOf, pluralUnit } from '@/lib/format';
+import { formatQty, messageOf, pluralUnit } from '@/lib/format';
 import { baseQtyByShape, stockInShapes } from '@/lib/shape-quantities';
 
 /**
@@ -182,7 +182,54 @@ export function ProductForm({
    * Entirely optional. Plenty of stock has no date on it at all, and a form that insisted would be
    * asking most shops to invent one.
    */
-  const [batches, setBatches] = useState<{ key: string; qty: string; expiresOn: string }[]>([]);
+  /*
+   * DATED STOCK, LINE BY LINE — and each line says WHICH SHAPE.
+   *
+   * The first version asked "how many crates" and a date, over and over, because it assumed a
+   * shelf is all one shape. It is not: eight crates going off in September, three more in October,
+   * and two loose bottles in October as well. Three lines, two shapes, and the old form could only
+   * express the first two.
+   *
+   * So a line is a shape, a quantity and a date, added one at a time — and `storeUnitId` is what
+   * makes the arithmetic work, because the count they have to add up to is in BASE units and a
+   * crate is not a bottle.
+   */
+  const [batches, setBatches] = useState<
+    { key: string; storeUnitId: string; qty: string; expiresOn: string }[]
+  >([]);
+
+  /** The line being composed, above the list. Not a blank row IN the list: an abandoned half-typed
+   *  line would otherwise be saved as stock with no date, or a date with no stock. */
+  /*
+   * WHETHER THIS ITEM HAS EVER HAD STOCK — which decides whether the edit form may offer to open it.
+   *
+   * A shop adds an item in a hurry and skips the count, the dates and the empties, then comes back
+   * to fill them in. That has to work, and it has to work WITHOUT adding stock twice: opening stock
+   * is a movement, so offering it on an item that already has movements would add to the shelf
+   * rather than describe it.
+   *
+   * `null` while the answer is unknown, so the section stays hidden rather than flashing open and
+   * then away — and an item being CREATED has no id to ask about, which is its own answer.
+   */
+  const [hadStock, setHadStock] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!product?.id) {
+      setHadStock(false);
+      return;
+    }
+    let alive = true;
+    void hasStockHistory(product.id)
+      .then((has) => alive && setHadStock(has))
+      // Unknown stays unknown: guessing "no" here is the guess that doubles a shelf.
+      .catch(() => alive && setHadStock(true));
+    return () => {
+      alive = false;
+    };
+  }, [product?.id]);
+
+  const [batchUnit, setBatchUnit] = useState<string>('');
+  const [batchQty, setBatchQty] = useState('');
+  const [batchDate, setBatchDate] = useState('');
 
   /*
    * THIS ITEM'S OWN "RUNNING LOW" LEVEL, if it is an exception.
@@ -195,7 +242,6 @@ export function ProductForm({
     product?.ownLowStockLevel == null ? '' : String(product.ownLowStockLevel),
   );
 
-  const [openingCost, setOpeningCost] = useState('');
 
   /*
    * AND THE EMPTIES THE SHOP ITSELF IS HOLDING, per shape that comes back.
@@ -295,11 +341,18 @@ export function ProductForm({
    * says "forty crates" about — so they are converted to base units the same way the count is
    * before the two are compared.
    */
+  /*
+   * What the dated lines come to, IN BASE UNITS — each converted by its own shape.
+   *
+   * This used the cost shape for every line, which was only ever right when the whole shelf was
+   * one shape. Two bottles counted as two crates is the kind of wrong that balances on screen and
+   * is refused by the server.
+   */
   const batchBase = batches.reduce(
-    (sum, b) => sum + (Number(b.qty) || 0) * (costShape ? (baseOf[costShape.storeUnitId] ?? 1) : 1),
+    (sum, b) => sum + (Number(b.qty) || 0) * (baseOf[b.storeUnitId] ?? 1),
     0,
   );
-  const anyBatch = batches.some((b) => (b.qty ?? '').trim() !== '');
+  const anyBatch = batches.length > 0;
 
   const shelfBase = totalFrom(shelfByShape, countedShapes);
   const anyShelfSaid = countedShapes.some((u) => (shelfByShape[u.storeUnitId] ?? '').trim() !== '');
@@ -626,9 +679,18 @@ export function ProductForm({
            * the item would be wrong by a factor of twelve for as long as this stock lasted.
            */
           p_unit_cost:
-            openingCost.trim() === '' || !costShape
-              ? null
-              : Number(openingCost) / (baseOf[costShape.storeUnitId] || 1),
+            /*
+             * NO COST IS ASKED FOR HERE ANY MORE.
+             *
+             * The form asked "what one crate cost you" beside the opening count, and a shop
+             * setting up rarely knows — the answer was a guess that then became the margin on
+             * every sale until the first delivery corrected it. A guess written into a cost is
+             * worse than no cost: it looks like a figure somebody checked.
+             *
+             * Opening stock now lands with no cost and the first delivery sets it, which is where
+             * the shop has a real number on a real invoice.
+             */
+            null,
           p_note: 'Counted when the item was added',
           /*
            * The dated lots, in base units like the count, or nothing at all. The server refuses a
@@ -638,8 +700,9 @@ export function ProductForm({
             ? batches
                 .filter((b) => Number(b.qty) > 0)
                 .map((b) => ({
-                  qty:
-                    Number(b.qty) * (costShape ? (baseOf[costShape.storeUnitId] ?? 1) : 1),
+                  // In base units, each by ITS OWN shape: a crate of twelve and a loose bottle
+                  // land on the same shelf and have to be counted in the same thing.
+                  qty: Number(b.qty) * (baseOf[b.storeUnitId] ?? 1),
                   expires_on: b.expiresOn || null,
                 }))
             : null,
@@ -1075,7 +1138,19 @@ export function ProductForm({
         </p>
       )}
 
-      {!editing && hasAShape && (
+      {/*
+        THE OPENING FACTS — on a new item, and on one that never got them.
+
+        This was `!editing`, full stop, and the reasoning was sound: asking "how many are on the
+        shelf?" a week later invites a guess, and a guess written into stock is worse than no
+        figure because it looks like a count. But a shop that added an item in a hurry and skipped
+        it had no way back at all, and their shelf stayed at nought for ever.
+
+        So it is offered when the item has NEVER had stock recorded. Once it has, this section is
+        gone and the count screen is the way — which is the right tool anyway: it records a count
+        as a count, with the variance, rather than as an opening.
+      */}
+      {(!editing || hadStock === false) && hasAShape && (
         <>
           <h2 className={styles.section}>What you have now</h2>
           <p className={styles.sectionNote}>
@@ -1114,60 +1189,110 @@ export function ProductForm({
           </p>
 
           {/* ── When it goes off ──────────────────────────────────────────────── */}
-          {shelfBase > 0 && costShape && (
+          {shelfBase > 0 && countedShapes.length > 0 && (
             <>
               <h3 className={styles.subsection}>When does it go off?</h3>
               <p className={styles.sectionNote}>
-                Only if it has a date on it. Add a line for each date — a shelf two deliveries deep
-                has two, and one averaged date would hide the one that matters.
+                Only if it has a date on it. Say the shape, how many and the date, then add the
+                line — a shelf two deliveries deep has two, and they are not always the same shape.
               </p>
 
-              {batches.map((b, i) => (
-                <div className={styles.batchRow} key={b.key}>
-                  <Field
-                    label={"How many " + costShape.plural.toLowerCase()}
-                    numeric
-                    value={b.qty}
-                    onChange={(e) =>
-                      setBatches((prev) =>
-                        prev.map((x, j) => (j === i ? { ...x, qty: e.target.value } : x)),
-                      )
-                    }
-                    placeholder="0"
-                  />
-                  <Field
-                    label="Goes off"
-                    type="date"
-                    value={b.expiresOn}
-                    onChange={(e) =>
-                      setBatches((prev) =>
-                        prev.map((x, j) => (j === i ? { ...x, expiresOn: e.target.value } : x)),
-                      )
-                    }
-                  />
-                  <button
-                    type="button"
-                    className={styles.batchRemove}
-                    onClick={() => setBatches((prev) => prev.filter((_, j) => j !== i))}
-                    aria-label="Remove this date"
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
+              {/*
+                ONE FORM, AND A LIST — not a form per line.
 
-              <button
-                type="button"
-                className={styles.batchAdd}
-                onClick={() =>
-                  setBatches((prev) => [
-                    ...prev,
-                    { key: String(Date.now()) + '-' + String(prev.length), qty: '', expiresOn: '' },
-                  ])
-                }
-              >
-                + Add a date
-              </button>
+                It was a pair of boxes repeated down the page, one set per date, each asking "how
+                many crates" because it assumed the whole shelf was crates. A shop with eight
+                crates going off in September, three in October and two loose bottles in October
+                could not say the third thing at all. Composing above and listing below is also
+                how every other repeated thing in this app works: a charge, a deposit, a payment.
+              */}
+              <div className={styles.batchCompose}>
+                {countedShapes.length > 1 && (
+                  <label className={styles.batchShape}>
+                    <span className={styles.batchShapeLabel}>Shape</span>
+                    <select
+                      className={styles.batchSelect}
+                      value={batchUnit || countedShapes[0].storeUnitId}
+                      onChange={(e) => setBatchUnit(e.target.value)}
+                    >
+                      {countedShapes.map((u) => (
+                        <option key={u.storeUnitId} value={u.storeUnitId}>
+                          {u.plural}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+
+                <Field
+                  label="How many"
+                  numeric
+                  value={batchQty}
+                  onChange={(e) => setBatchQty(e.target.value)}
+                  placeholder="0"
+                />
+                <Field
+                  label="Goes off"
+                  type="date"
+                  value={batchDate}
+                  onChange={(e) => setBatchDate(e.target.value)}
+                />
+
+                <Button
+                  variant="secondary"
+                  fullWidth
+                  disabled={!(Number(batchQty) > 0) || batchDate === ''}
+                  onClick={() => {
+                    const unit = batchUnit || countedShapes[0].storeUnitId;
+                    setBatches((prev) => [
+                      ...prev,
+                      {
+                        key: `${Date.now().toString(36)}-${prev.length}`,
+                        storeUnitId: unit,
+                        qty: batchQty,
+                        expiresOn: batchDate,
+                      },
+                    ]);
+                    /*
+                     * The quantity and the date clear; the SHAPE does not. A shelf two deliveries
+                     * deep is usually two lines of the same shape, and re-picking it every time is
+                     * a tap for nothing.
+                     */
+                    setBatchQty('');
+                    setBatchDate('');
+                  }}
+                >
+                  <PlusIcon /> Add this date
+                </Button>
+              </div>
+
+              {batches.length > 0 && (
+                <ul className={styles.batchList}>
+                  {batches.map((b) => {
+                    const shape = countedShapes.find((u) => u.storeUnitId === b.storeUnitId);
+                    const many = Number(b.qty) || 0;
+                    return (
+                      <li key={b.key} className={styles.batchLine}>
+                        <button
+                          type="button"
+                          className={styles.batchRemove}
+                          onClick={() => setBatches((prev) => prev.filter((x) => x.key !== b.key))}
+                          aria-label="Remove this date"
+                        >
+                          <CloseIcon />
+                        </button>
+                        <span className={styles.batchWhat}>
+                          {formatQty(many)}{' '}
+                          {shape ? (many === 1 ? shape.name : shape.plural).toLowerCase() : ''}
+                        </span>
+                        <span className={styles.batchWhen}>
+                          {b.expiresOn ? new Date(b.expiresOn).toLocaleDateString() : ''}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
 
               {/*
                 SAID BEFORE SAVING, not after. The server refuses a set that does not add up, and
@@ -1208,24 +1333,7 @@ export function ProductForm({
             figure — an invented cost is worse than none, since it looks like a measurement. Left
             blank the stock opens with no cost and the first delivery sets it.
           */}
-          {costShape && anyShelfSaid && (
-            <Field
-              label={`What one ${costShape.name.toLowerCase()} cost you`}
-              numeric
-              prefix="₦"
-              optional
-              value={openingCost}
-              onChange={(e) => setOpeningCost(e.target.value)}
-              placeholder="0"
-              hint={
-                (baseOf[costShape.storeUnitId] ?? 1) > 1
-                  ? `One ${costShape.name.toLowerCase()} is ${baseOf[costShape.storeUnitId]}. Leave blank if you do not know.`
-                  : 'Leave it blank if you do not know what it cost.'
-              }
-            />
-          )}
-
-          {/*
+{/*
             AND THE EMPTIES IN THE SHOP'S OWN YARD, one box per shape that comes back.
 
             Not "already out with customers" — that is a fact about a CUSTOMER, entered against
@@ -1233,7 +1341,18 @@ export function ProductForm({
             all. This is the other half a shop can actually see on day one: the stack of empty
             crates and loose empty bottles it is holding before it has sold anything.
           */}
-          {returnableShapes.length > 0 && (
+          {/*
+            AND ONLY FOR AN ITEM WITH NO GROUP.
+
+            An item in a group is counted BY MAKER: a shop does not count Gulder crates and Star
+            crates, it counts NBL crates, because that is what goes back on the lorry and what the
+            yard screen totals. Asking per item as well would be asking the same crates twice, and
+            the two answers would disagree the moment anybody moved one.
+
+            So the box appears for the ungrouped items — the ones counted item by item, which is
+            exactly the split the yard already makes.
+          */}
+          {returnableShapes.length > 0 && groupIds.length === 0 && (
             <>
               <h2 className={styles.section}>Empties you are holding</h2>
               <p className={styles.sectionNote}>

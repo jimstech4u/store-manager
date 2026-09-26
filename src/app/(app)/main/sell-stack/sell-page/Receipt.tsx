@@ -22,7 +22,8 @@ import {
 import { receiptPdf, sharePdf } from '@/lib/pdf';
 import { useThisPrinter } from '@/lib/stacks/printer';
 import { openPrinterAppWith } from '@/lib/print-handoff';
-import { receiptAsEscPos } from '@/lib/escpos-text';
+import { asInstruction, receiptLines } from '@/lib/escpos-text';
+import { PrintPreview } from '@/components/settings/PrintPreview';
 import { appUrl } from '@/lib/app-url';
 
 interface SaleDetail {
@@ -240,6 +241,8 @@ export function Receipt({
   const width = settings?.width ?? 80;
 
 
+
+
   // Below roughly 58mm there is not enough width for a two-column row, so the layout stacks.
   const narrow = width < 58;
 
@@ -264,6 +267,10 @@ export function Receipt({
     detail: `${formatQty(l.entered_qty)} ${
     l.pack_name ?? pluralUnit(l.base_unit, Number(l.entered_qty))
     } x ${formatMoney(l.unit_price)}`,
+    // The same thing without the unit price, for the paper — see ShareLine.qty.
+    qty: `${formatQty(l.entered_qty)} ${
+    l.pack_name ?? pluralUnit(l.base_unit, Number(l.entered_qty))
+    }`,
     amount: formatMoney(l.line_total),
     })),
     totals: [
@@ -303,172 +310,40 @@ export function Receipt({
     transferDetails: sale.transfer_details,
     });
 
+  /*
+   * THE RECEIPT AS LINES — one description, read by the screen, the preview and the printer.
+   *
+   * Built here rather than inside the render so the screen and the Print button cannot end up
+   * looking at different arrays. `receiptPayload()` is the single source of the figures; this is
+   * the single source of how they are set out.
+   */
+  const printedLines = receiptLines(receiptPayload(), printer.layout);
+
 
   return (
     <>
+      {/*
+        THE RECEIPT, DRAWN FROM THE LINES THE PRINTER IS SENT.
+
+        This screen used to lay the receipt out in its own markup — a head, a meta block, a list of
+        lines, a totals table. It looked like a receipt and it was not the one that came out of the
+        printer: different wrapping, different rounding of where things sat, the unit price shown
+        here and not there. A shop comparing the screen with the paper found two documents, and
+        could not tell which was wrong.
+
+        So it renders `receiptLines`, the exact array `asInstruction` tags and sends. Monospaced,
+        at the same characters-per-line, because that is what a printer's built-in font is. There
+        is no second layout left to drift.
+
+        `data-print-root` stays: the browser's own print still reveals exactly this, so a shop on a
+        laptop prints the same document too.
+      */}
       <div
         className={styles.receipt}
-        // data-print-root is what the global print rules reveal; --receipt-width drives
-        // both the @page size and the printed width. See globals.css.
         data-print-root
         style={{ ['--receipt-width' as string]: `${width}mm` }}
       >
-        <div className={styles.head}>
-          <p className={styles.shop}>{shopName}</p>
-          {settings?.header && <p className={styles.headLine}>{settings.header}</p>}
-        </div>
-
-        <div className={styles.meta}>
-          <span>{formatDateTime(sale.occurred_at)}</span>
-          <span>
-            #{sale.id.slice(0, 8).toUpperCase()}
-            {Number(sale.revision ?? 1) > 1 ? ` · rev ${sale.revision}` : ''}
-          </span>
-        </div>
-
-        {/*
-          IT OWNS UP TO REPLACING SOMETHING.
-
-          Revision 1 prints nothing extra, so the common case is exactly as it was. From revision 2
-          the copy says what it replaces and when — because somebody may still be holding that one,
-          and a shop that corrected a bill in the customer's favour wants it visible while a shop
-          that corrected it the other way has to be able to point at the reason.
-
-          Two short lines, not a paragraph: this also prints on an 80mm roll.
-        */}
-        {corrected && (
-          <div className={styles.replaces}>
-            <p>Replaces the copy printed {formatDateTime(corrected.replaced_at)}.</p>
-            <p>
-              It said {formatMoney(corrected.was_total)}. {corrected.reason}
-            </p>
-          </div>
-        )}
-
-        {/*
-          THE RECORDS THIS RECEIPT BELONGS TO, one tap away: the customer's account, and each item.
-          Pushed onto whatever tab this receipt was opened in, so Back returns here.
-        */}
-        {customer && (
-          <div className={styles.meta}>
-            <RecordLink route="account_page" id={customer.id}>
-              {customer.name}
-            </RecordLink>
-            <span>{customer.phone}</span>
-          </div>
-        )}
-
-        <div className={styles.lines}>
-          {lines.map((l) => (
-            <div className={styles.line} key={l.id}>
-              <p className={styles.lineName}>
-                <RecordLink route="product_page" id={l.product_id}>
-                  {l.product_name}
-                </RecordLink>
-              </p>
-              <div
-                className={`${styles.lineDetail} ${narrow ? styles.lineDetailNarrow : ''}`}
-              >
-                <span>
-                  {formatQty(l.entered_qty)}{' '}
-                  {l.pack_name ?? pluralUnit(l.base_unit, Number(l.entered_qty))}
-                  {' × '}
-                  {formatMoney(l.unit_price)}
-                </span>
-                <span className={styles.lineTotal}>{formatMoney(l.line_total)}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className={styles.totals}>
-          {/* Each charge on its own line. Summing them under one heading is exactly what makes
-              a bill unanswerable when the customer asks about it a fortnight later. */}
-          {(charges ?? []).map((c, i) => (
-            <div className={styles.row} key={`${c.label}-${i}`}>
-              <span>{c.label}</span>
-              <span className={styles.value}>{formatMoney(c.amount)}</span>
-            </div>
-          ))}
-
-          {/* An order started on an older build still carries its fee here and nowhere else. */}
-          {(charges ?? []).length === 0 && Number(sale.fee_amount) > 0 && (
-            <div className={styles.row}>
-              <span>{sale.fee_label || 'Extra charge'}</span>
-              <span className={styles.value}>{formatMoney(sale.fee_amount)}</span>
-            </div>
-          )}
-
-          <div className={`${styles.row} ${styles.grand}`}>
-            <span>Total</span>
-            <span className={styles.value}>{formatMoney(sale.total)}</span>
-          </div>
-
-          {payments.map((p) => (
-            <div className={styles.row} key={p.id}>
-              <span>
-                Paid ({p.method}
-                {p.reference ? ` ${p.reference}` : ''})
-              </span>
-              <span className={styles.value}>{formatMoney(p.amount)}</span>
-            </div>
-          ))}
-
-          {owing > 0 && (
-            <div className={styles.row}>
-              <span>{owedAfter !== null ? 'Left on this sale' : 'Balance'}</span>
-              <span className={styles.value}>{formatMoney(owing)}</span>
-            </div>
-          )}
-
-          {/*
-            BEFORE AND AFTER, as at this sale. "Total owed" used to read the balance TODAY, so an old
-            receipt reprinted later disagreed with the copy the customer was holding.
-          */}
-          {owedBefore !== null && owedBefore > 0.005 && (
-            <div className={styles.row}>
-              <span>Owed before</span>
-              <span className={styles.value}>{formatMoney(owedBefore)}</span>
-            </div>
-          )}
-
-          {owedAfter !== null && owedAfter > 0.005 && (
-            <div className={`${styles.row} ${styles.grand}`}>
-              <span>Total owed</span>
-              <span className={styles.value}>{formatMoney(owedAfter)}</span>
-            </div>
-          )}
-        </div>
-
-        {/*
-          What the customer still has of ours, printed on the receipt itself.
-          The money half of an account has always been printed and the containers never were — and
-          the containers are the half that gets disputed, because nobody has anything in writing
-          about them.
-        */}
-        {stillWithYou.length > 0 && (
-          <div className={styles.totals}>
-            <div className={styles.row}>
-              <span className={styles.emptiesHead}>Still with you</span>
-            </div>
-            {stillWithYou.map((e) => (
-              <div className={styles.row} key={`${e.label}-${e.unit}-${e.isPart}`}>
-                <span>
-                  {e.label} {e.unit.toLowerCase()}
-                </span>
-                <span className={styles.value}>{e.said}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {sale.note && <p className={styles.foot}>{sale.note}</p>}
-
-        {/* The account snapshot taken when the sale was recorded — so reprinting an old receipt
-            shows the account it was issued with, even if the shop has since changed banks. */}
-        {sale.transfer_details && <div className={styles.transfer}>{sale.transfer_details}</div>}
-
-        {settings?.footer && <p className={styles.foot}>{settings.footer}</p>}
+        <PrintPreview lines={printedLines} layout={printer.layout} />
       </div>
 
       {shareNote && (
@@ -670,7 +545,7 @@ export function Receipt({
                * thousand, and most of the ways the image route could break simply do not exist.
                */
               const went = await openPrinterAppWith(
-                receiptAsEscPos(receiptPayload(), printer.layout),
+                asInstruction(printedLines),
               );
               if (went) return;
               setShareNote(

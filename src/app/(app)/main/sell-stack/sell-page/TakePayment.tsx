@@ -222,8 +222,12 @@ export function TakePayment({
    * all. It said the sale was saved, and the sales list showed it unpaid — money apparently taken
    * and no record of it.
    *
-   * The typed amount is what they meant. It is counted in the totals, listed with the rest, and
-   * sent when the sale settles; pressing "Add payment" is only needed to start a SECOND one.
+   * The typed amount is what they meant. It is counted in the totals and sent when the sale
+   * settles; pressing "Add payment" is only needed to start a SECOND one.
+   *
+   * IT IS NOT LISTED, though, and that was the other half of getting this right. Listing it put a
+   * ₦5 payment on screen while somebody was halfway through typing ₦5,000 — a line they had not
+   * added, in a list of lines they had. Counted, not listed.
    */
   const pending: PaymentRow | null = useMemo(
     () =>
@@ -537,8 +541,10 @@ export function TakePayment({
             one place they cannot fix it. A charge has always had its cross here; this is the same
             line doing the same job.
             
-            It clears every deposit on the sale, because that is what this line totals. One of
-            several is still removed individually, below.
+            It clears every deposit on the sale, because that is what this line totals — and it is
+            now the ONLY place a deposit is listed. There was a second list further down, repeating
+            each one beside the box that composes them, so a sale with a deposit showed it twice and
+            a seller could not tell whether that meant two deposits.
           */
           <div className={styles.charge}>
             <button
@@ -707,31 +713,6 @@ export function TakePayment({
           <PlusIcon /> Add deposit
         </Button>
 
-        {(order.deposits ?? []).length > 0 && (
-          <ul className={styles.depositList}>
-            {(order.deposits ?? []).map((d) => (
-              <li key={d.key} className={styles.charge}>
-                <button
-                  type="button"
-                  className={styles.chargeRemove}
-                  onClick={() =>
-                    onUpdateOrder({
-                      deposits: (order.deposits ?? []).filter((x) => x.key !== d.key),
-                    })
-                  }
-                  aria-label="Remove this deposit"
-                >
-                  <CloseIcon />
-                </button>
-                <span className={styles.chargeBody}>
-                  <span className={styles.chargeName}>Deposit</span>
-                  {d.note ? <span className={styles.chargeNote}>{d.note}</span> : null}
-                </span>
-                <span className={styles.chargeAmount}>{formatMoney(d.amount)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
       </section>
 
 
@@ -799,19 +780,25 @@ export function TakePayment({
         </div>
       )}
 
-      {allRows.length > 0 && (
+      {/*
+        THE PAYMENTS THAT WERE ADDED — and a typed figure is not one of them.
+
+        This listed `allRows`, which includes the amount still in the box. So a seller typing "5"
+        on the way to "5,000" watched a ₦5 payment appear in a list of payments they had not made,
+        and had to work out whether it counted. It does count, and that is deliberate — see
+        `pending` above, where NOT counting it once settled sales with no payment recorded at all —
+        but counting towards a total and being listed as a decision somebody made are different
+        things. The total below says what is covered; this list says what was entered.
+      */}
+      {rows.length > 0 && (
         <div className={styles.payList}>
           <span className={styles.payListLabel}>Paying with</span>
-          {allRows.map((row) => (
+          {rows.map((row) => (
             <div className={styles.payRow} key={row.key}>
               <button
                 type="button"
                 className={styles.payRemove}
-                onClick={() =>
-                  row.key === 'pending'
-                    ? setDraftAmount('')
-                    : setRows((prev) => prev.filter((r) => r.key !== row.key))
-                }
+                onClick={() => setRows((prev) => prev.filter((r) => r.key !== row.key))}
                 aria-label={`Remove this ${row.method} payment`}
               >
                 <CloseIcon />
