@@ -11,6 +11,13 @@ import { CustomerPicker } from '@/components/customers/CustomerPicker';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { draftTotal, useDraftOrders } from '@/lib/stacks/draft-orders';
+import { getSupabase } from '@/lib/supabase/client';
+import { messageOf } from '@/lib/format';
+import { applySaleLocally } from '@/lib/stacks/local-effects';
+import { accountsChanged } from '@/lib/stacks/customer-account';
+import { ledgersChanged } from '@/lib/stacks/customer-ledgers';
+import { stockMoved } from '@/lib/stacks/catalog-stack';
+import { useListNotifier } from '@/hooks/useListChannel';
 
 /**
  * Taking payment for the open order — a page.
@@ -66,6 +73,34 @@ export default function TakePaymentPage() {
     scope: 'sell',
   });
 
+  /*
+   * THE LISTS THIS SALE CHANGES, told rather than asked.
+   *
+   * These moved here with the writes they belong to. They were inside `TakePayment`, which also
+   * serves correcting a settled receipt now — and a correction does not put a NEW row on the sales
+   * list or add to a debtor's balance, it changes a row that is already there. Two behaviours
+   * sharing one notification block is how the correction path would have started announcing sales
+   * that did not happen.
+   */
+  const notifySales = useListNotifier<{
+    id: string;
+    occurred_at: string;
+    total: string;
+    paid: string;
+    outstanding: string;
+    customer_id: string | null;
+    customer_name: string | null;
+    note: string | null;
+    line_count: number;
+  }>('sales');
+  const notifyDebtors = useListNotifier<{ id: string; balance: string }>('debtors');
+  /*
+   * The People list carries a balance too, and it was never told. It used to be swept up by
+   * `accountsChanged()`, which re-read the whole list; now that only the derived figures re-read,
+   * the one row that moved is patched here.
+   */
+  const notifyCustomers = useListNotifier<{ id: string; balance: string }>('customers');
+
   if (!store) return null;
 
   /*
@@ -119,7 +154,119 @@ export default function TakePaymentPage() {
         storeId={store.id}
         total={draftTotal(activeOrder)}
         onNeedCustomer={() => setPicking(true)}
-        onSettled={(saleId) => {
+        /*
+         * SETTLING A DRAFT — this page's job, and not the payment screen's.
+         *
+         * `TakePayment` composes the money and hands over the facts; what is written with them
+         * depends on what is being paid for. Here it is a draft becoming a sale, which means a new
+         * row on the sales list and, when something goes on account, a debtor's balance moving.
+         * Correcting a settled receipt writes none of that and calls `amend_sale` instead.
+         */
+        commit={async ({
+          payments,
+          depositNow,
+          depositReason,
+          paidTotal,
+          towardsOldDebt,
+          previousBalance,
+          stockOut,
+          containersOut,
+        }) => {
+          if (!activeOrder.id) {
+            throw new Error('This order has not saved to the shop yet. Try again in a moment.');
+          }
+          const total = draftTotal(activeOrder);
+
+          /*
+           * THE SALE AND ITS DEPOSIT, IN ONE TRANSACTION (0152).
+           *
+           * These were two calls: settle, then take the deposit. A deposit call that failed left
+           * the sale settled and the customer's money recorded nowhere. `settle_draft_with_deposit`
+           * does both or neither, and a retry after a timeout returns the sale already recorded
+           * without taking the deposit twice. The draft's client id is still the idempotency key.
+           */
+          const { data, error: err } = await getSupabase().rpc('settle_draft_with_deposit', {
+            p_draft_id: activeOrder.id,
+            p_payments: payments,
+            p_client_uuid: activeOrder.clientUuid,
+            p_deposit: depositNow > 0 ? depositNow : null,
+            p_deposit_reason: depositReason,
+          });
+          if (err) throw err;
+          const saleId = data as string;
+
+          /*
+           * THIS DEVICE KNOWS WHAT IT JUST DID — so every screen showing a figure this sale moved
+           * says the new one now, on screen or not: the shelf, what the customer owes, the
+           * containers they took, the deposit taken. The invalidations below then re-read each from
+           * the server, which has the last word.
+           */
+          applySaleLocally({
+            storeId: store.id,
+            saleId,
+            customer: activeOrder.customerId
+              ? { id: activeOrder.customerId, name: activeOrder.customerName || 'Customer' }
+              : null,
+            // What went on account, less whatever paid down an older debt.
+            balanceDelta: Math.max(0, total - paidTotal) - towardsOldDebt,
+            deposit: depositNow > 0 ? { amount: depositNow, reason: depositReason } : null,
+            stockOut,
+            containersOut,
+          });
+
+          accountsChanged();
+          /*
+           * AND THE EMPTIES LIST. A sale in a shape that comes back writes a container row for the
+           * customer, and the Empties page lives in its own scope that `accountsChanged` never
+           * reaches — so a customer who had just taken three crates was missing from the list
+           * until the page was reloaded by hand.
+           */
+          ledgersChanged();
+          /*
+           * A SALE MOVES STOCK, and the stock screens were never told. `accountsChanged()` covers
+           * balances and empties; nothing covered the shelf, so a shop could sell all afternoon
+           * and read this morning's figures.
+           */
+          stockMoved();
+
+          /*
+           * Tell the sales list about THIS sale, rather than telling it to read everything again.
+           * Every figure here is one this page just committed, not a guess — which is the
+           * difference between patching a list and lying to it.
+           */
+          notifySales({
+            type: 'upsert',
+            row: {
+              id: saleId,
+              occurred_at: new Date().toISOString(),
+              total: String(total),
+              paid: String(paidTotal),
+              outstanding: String(Math.max(0, total - paidTotal)),
+              customer_id: activeOrder.customerId,
+              customer_name: activeOrder.customerName || null,
+              note: activeOrder.note || null,
+              line_count: activeOrder.lines.length,
+            },
+          });
+
+          /*
+           * And the debtor list, when this sale left money on account. That list no longer re-reads
+           * itself when you return to it, so the one screen that knows a balance moved has to say
+           * so.
+           */
+          const wentOnAccount = Math.max(0, total - paidTotal);
+          if (activeOrder.customerId && wentOnAccount > 0 && previousBalance !== null) {
+            /*
+             * `previousBalance` is what they owed BEFORE this sale — the figure the payment screen
+             * fetched and showed while the seller decided whether to extend more credit — so the
+             * new balance is that plus whatever went on account just now. Only patched when it was
+             * actually read: a list told a figure nobody saw is worse than a list not told.
+             */
+            const owedNow = String(previousBalance + wentOnAccount);
+            notifyDebtors({ type: 'patch', id: activeOrder.customerId, patch: { balance: owedNow } });
+            notifyCustomers({ type: 'patch', id: activeOrder.customerId, patch: { balance: owedNow } });
+          }
+
           if (settled.isProvided) {
             settled.getter()?.(saleId);
             return;
@@ -129,8 +276,7 @@ export default function TakePaymentPage() {
            *
            * `pushAndPopUntil` rather than `push`: the payment screen is finished the moment the
            * sale exists, and leaving it under the receipt means Back walks into a payment for a
-           * sale already made. Back from the receipt goes to the till, ready for the next
-           * customer, which is where a seller is going anyway.
+           * sale already made.
            */
           void nav.pushAndPopUntil('receipt_page', (entry) => entry.key === 'sell_page', {
             id: saleId,

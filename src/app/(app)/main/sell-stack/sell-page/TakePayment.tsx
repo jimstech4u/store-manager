@@ -18,7 +18,6 @@ import {
 import { useResource } from '@/lib/stacks/resource';
 import { applySaleLocally } from '@/lib/stacks/local-effects';
 import { stockMoved } from '@/lib/stacks/catalog-stack';
-import { useListNotifier } from '@/hooks/useListChannel';
 import { formatMoney, messageOf } from '@/lib/format';
 import { useSellingUnits } from '@/lib/stacks/selling-units';
 import { useUncountedToday } from '@/lib/stacks/count-gate';
@@ -69,7 +68,8 @@ export function TakePayment({
   storeId,
   total,
   onNeedCustomer,
-  onSettled,
+  commit,
+  settledLabel = 'Mark as paid',
   onUpdateOrder,
 }: {
   order: DraftOrder;
@@ -78,7 +78,54 @@ export function TakePayment({
   total: number;
   /** Asked for only when part of the money is going on account. */
   onNeedCustomer: () => void;
-  onSettled: (saleId: string) => void;
+  /**
+   * WHAT TO DO WITH THE MONEY ONCE IT IS COMPOSED.
+   *
+   * The till settles a draft and tells the sales list, the debtor list and the shelf what it just
+   * did. A correction calls `amend_sale` on a receipt that already exists and tells different
+   * screens. Neither of those is this component's business: it counts money and checks it adds up.
+   */
+  commit: (args: {
+    payments: {
+      amount: number;
+      method: Method;
+      reference: string | null;
+      bank_account_id: string | null;
+    }[];
+    /** Deposit being taken now, already checked against there being somebody to hold it for. */
+    depositNow: number;
+    depositReason: string | null;
+    paidTotal: number;
+    /** Of any overpayment, how much the seller said was for an older debt. */
+    towardsOldDebt: number;
+    /**
+     * What the customer owed BEFORE this, as this screen read it — null when it never arrived.
+     *
+     * Passed on rather than re-read: it is the figure the seller was looking at while deciding
+     * whether to extend more credit, and a caller fetching its own could patch a list with a
+     * balance nobody saw.
+     */
+    previousBalance: number | null;
+    /** In base units, per item — what this order takes off the shelf. */
+    stockOut: { productId: string; base: number }[];
+    /** Only the lines sold in a shape that comes back empty. */
+    containersOut: {
+      productId: string;
+      productName: string;
+      productUnitId: string;
+      unitName: string;
+      unitPlural: string;
+      baseQty: number;
+      qty: number;
+    }[];
+  }) => Promise<void>;
+  /**
+   * What the button says when the money covers the total.
+   *
+   * "Mark as paid" is right for a first sale and wrong for a correction, where the seller is
+   * confirming a changed figure on a receipt somebody is already holding.
+   */
+  settledLabel?: string;
   /**
    * Edits the draft this screen is settling.
    *
@@ -141,28 +188,6 @@ export function TakePayment({
 
   // Told about the one sale this screen creates. Unhandled when nobody is showing that list, which
   // is the correct outcome — it will read the truth the next time it loads.
-  const notifySales = useListNotifier<{
-    id: string;
-    occurred_at: string;
-    total: string;
-    paid: string;
-    outstanding: string;
-    customer_id: string | null;
-    customer_name: string | null;
-    note: string | null;
-    line_count: number;
-  }>('sales');
-
-  const notifyDebtors = useListNotifier<{ id: string; balance: string }>('debtors');
-
-  /*
-   * The People list carries a balance too, and it was never told.
-   *
-   * It used to be swept up by `accountsChanged()`, which re-read the whole list. Now that only the
-   * derived figures re-read, the one row that moved is patched here — otherwise somebody settles a
-   * sale, opens People, and reads yesterday's figure.
-   */
-  const notifyCustomers = useListNotifier<{ id: string; balance: string }>('customers');
 
   /*
    * WHAT THIS CUSTOMER ALREADY OWES, before today's sale.
@@ -356,164 +381,72 @@ export function TakePayment({
         );
       }
 
-      if (!order.id) {
-        throw new Error('This order has not saved to the shop yet. Try again in a moment.');
-      }
-
       const takenNow = (order.deposits ?? []).reduce((sum, d) => {
         const n = Number(d.amount);
         return sum + (Number.isFinite(n) ? n : 0);
       }, 0);
 
       /*
-       * THE SALE AND ITS DEPOSIT, IN ONE TRANSACTION (0152).
+       * AND WHAT HAPPENS TO IT IS THE CALLER'S BUSINESS.
        *
-       * These were two calls: settle, then take the deposit. A deposit call that failed left the sale
-       * settled and the customer's money recorded nowhere. `settle_draft_with_deposit` does both or
-       * neither, and a retry after a timeout returns the sale already recorded without taking the
-       * deposit twice. The draft's client id is still the idempotency key.
+       * Everything above is about composing money and is the same whether a sale is being settled
+       * for the first time or a settled one is being corrected. Everything below used to be about
+       * settling a DRAFT specifically — `settle_draft_with_deposit`, a row pushed onto the sales
+       * list, a debtor's balance patched — and none of it is true of a correction, which calls
+       * `amend_sale` and is looking at a receipt that already exists.
+       *
+       * The alternative was a `mode` flag threaded through ninety lines of writes and
+       * notifications. Two behaviours sharing one function body is how the correction path would
+       * have quietly acquired the till's assumptions.
        */
-      const { data, error: err } = await getSupabase().rpc('settle_draft_with_deposit', {
-        p_draft_id: order.id,
-        p_payments: payments,
-        p_client_uuid: order.clientUuid,
-        p_deposit: takenNow > 0 && order.customerId ? takenNow : null,
-        p_deposit_reason:
+      await commit({
+        payments,
+        depositNow: takenNow > 0 && order.customerId ? takenNow : 0,
+        depositReason:
           (order.deposits ?? [])
             .map((d) => d.note?.trim())
             .filter(Boolean)
             .join(', ') || null,
+        paidTotal: payments.reduce((sum, p) => sum + p.amount, 0),
+        /*
+         * WHAT LEFT THE SHELF, and WHICH CONTAINERS WENT WITH IT.
+         *
+         * Worked out here because the answer needs `byProduct`, the shapes lookup this screen
+         * already holds: whether a line puts a crate out is a fact about the SHAPE it was sold in,
+         * not about the line. A caller doing this for itself would need the same lookup, and two
+         * lookups are two answers to "does this come back".
+         */
+        stockOut: order.lines.map((l) => ({
+          productId: l.productId,
+          base:
+            (Number(l.qty) || 0) * (Number(l.saleUnitBaseQty) || Number(l.packQty) || 1),
+        })),
+        containersOut: order.lines.flatMap((l) => {
+          const shape = l.saleUnitId
+            ? (byProduct.get(l.productId) ?? []).find((u) => u.productUnitId === l.saleUnitId)
+            : undefined;
+          return shape?.isReturnable
+            ? [
+                {
+                  productId: l.productId,
+                  productName: l.productName,
+                  productUnitId: shape.productUnitId,
+                  unitName: shape.name,
+                  unitPlural: shape.plural,
+                  baseQty: shape.baseQty,
+                  qty: Number(l.qty) || 0,
+                },
+              ]
+            : [];
+        }),
+        /*
+         * How much of an overpayment is meant for an OLDER debt rather than being change. Worked
+         * out here because this screen is the one that read the balance and showed it; a caller
+         * recomputing it would be reading a figure the seller never saw.
+         */
+        towardsOldDebt: outstanding !== null ? towardsOldDebt : 0,
+        previousBalance: outstanding,
       });
-      if (err) throw err;
-
-      /*
-       * A settled sale moves a customer's balance, their empties and the debtor list — so say so
-       * before handing back.
-       *
-       * Without this the account screens kept whatever they had cached until the TTL expired.
-       * Measured: settle a sale, open the customer, and their balance was the figure from before
-       * it — ₦200,000 where it should have read ₦247,100. The write is the only thing that knows
-       * it happened; every screen guessing on a timer is the arrangement this replaced.
-       */
-      const paidTotal = payments.reduce((sum, p) => sum + p.amount, 0);
-
-      /*
-       * THIS DEVICE KNOWS WHAT IT JUST DID — so every screen showing a figure this sale moved says
-       * the new one now, on screen or not: the shelf, what the customer owes, the containers they
-       * took, the deposit taken. The invalidations below then re-read each from the server, which
-       * has the last word — the same figure, or a different one if another till moved it too.
-       */
-      if (storeId) {
-        applySaleLocally({
-          storeId,
-          saleId: data as string,
-          customer: order.customerId
-            ? { id: order.customerId, name: order.customerName || 'Customer' }
-            : null,
-          // What went on account, less whatever paid down an older debt. Only a balance that was
-          // actually read counts towards the second half.
-          balanceDelta: Math.max(0, total - paidTotal) - (outstanding !== null ? towardsOldDebt : 0),
-          deposit:
-            takenNow > 0
-              ? {
-                  amount: takenNow,
-                  reason:
-                    (order.deposits ?? [])
-                      .map((d) => d.note?.trim())
-                      .filter(Boolean)
-                      .join(', ') || null,
-                }
-              : null,
-          stockOut: order.lines.map((l) => ({
-            productId: l.productId,
-            base:
-              (Number(l.qty) || 0) *
-              (Number(l.saleUnitBaseQty) || Number(l.packQty) || 1),
-          })),
-          containersOut: order.lines.flatMap((l) => {
-            const shape = l.saleUnitId
-              ? (byProduct.get(l.productId) ?? []).find((u) => u.productUnitId === l.saleUnitId)
-              : undefined;
-            return shape?.isReturnable
-              ? [
-                  {
-                    productId: l.productId,
-                    productName: l.productName,
-                    productUnitId: shape.productUnitId,
-                    unitName: shape.name,
-                    unitPlural: shape.plural,
-                    baseQty: shape.baseQty,
-                    qty: Number(l.qty) || 0,
-                  },
-                ]
-              : [];
-          }),
-        });
-      }
-
-      accountsChanged();
-      /*
-       * AND THE EMPTIES LIST. A sale in a shape that comes back writes a container row for the
-       * customer, and the Empties page lives in its own scope that `accountsChanged` never reaches —
-       * so a customer who had just taken three crates was missing from the list until the page was
-       * reloaded by hand.
-       */
-      ledgersChanged();
-
-      /*
-       * A SALE MOVES STOCK, and the stock screens were never told.
-       *
-       * `accountsChanged()` covers balances and empties. Nothing covered the shelf: what is on
-       * hand, what it is worth, the dearest layer a price is warned against. So a shop could sell
-       * all afternoon and read this morning's figures.
-       */
-      stockMoved();
-
-      /*
-       * Tell the sales list about THIS sale, rather than telling it to read everything again.
-       *
-       * The row is built from what was just settled — the id the database returned, the customer
-       * on the order, the total that was paid. That is the whole row as the list shows it, so the
-       * list can put it at the top and be correct without a request.
-       *
-       * `accountsChanged()` above still stands and does a different job: balances and empties are
-       * derived figures spread across several screens, and no single row describes them.
-       */
-      const paidNow = payments.reduce((sum, p) => sum + p.amount, 0);
-      notifySales({
-        type: 'upsert',
-        row: {
-          id: data as string,
-          occurred_at: new Date().toISOString(),
-          total: String(total),
-          paid: String(paidNow),
-          // What is left on account. Every figure here is one this screen just committed, not a
-          // guess — which is the difference between patching a list and lying to it.
-          outstanding: String(Math.max(0, total - paidNow)),
-          customer_id: order.customerId,
-          customer_name: order.customerName || null,
-          note: order.note || null,
-          line_count: order.lines.length,
-        },
-      });
-
-      /*
-       * And the debtor list, when this sale left money on account.
-       *
-       * That list no longer re-reads itself when you return to it, so the one screen that knows a
-       * balance moved has to say so. `outstanding` above is what they owed BEFORE this sale — the
-       * figure this screen fetched and showed while deciding whether to extend more credit — so
-       * the new balance is that plus whatever went on account just now.
-       */
-      const wentOnAccount = Math.max(0, total - paidNow);
-      if (order.customerId && wentOnAccount > 0 && outstanding !== null) {
-        const owedNow = String(outstanding + wentOnAccount);
-        notifyDebtors({ type: 'patch', id: order.customerId, patch: { balance: owedNow } });
-        // The People list shows the same figure and is a different list.
-        notifyCustomers({ type: 'patch', id: order.customerId, patch: { balance: owedNow } });
-      }
-
-      onSettled(data as string);
     } catch (e: unknown) {
       error.show(messageOf(e, 'Could not record this payment'));
     } finally {
@@ -1152,7 +1085,7 @@ export function TakePayment({
           onClick={settle}
         >
           {paid >= total
-            ? 'Mark as paid'
+            ? settledLabel
             : paid > 0
               ? `Take ${formatMoney(paid)}, rest on account`
               : 'Put it all on account'}

@@ -20,7 +20,8 @@ import {
   shareLink,
 } from '@/lib/share';
 import { receiptPdf, sharePdf } from '@/lib/pdf';
-import { isIOS } from '@/lib/printing';
+import { useThisPrinter } from '@/lib/stacks/printer';
+import { openInPrinterApp, removePrinted, uploadForPrinting } from '@/lib/print-handoff';
 import { appUrl } from '@/lib/app-url';
 
 interface SaleDetail {
@@ -138,6 +139,27 @@ export function Receipt({
   const detail = res.data?.detail ?? null;
   const shopName = res.data?.shopName ?? '';
   const settings = res.data?.settings ?? null;
+
+  /*
+   * HOW THIS DEVICE PRINTS, from the shop's own setting (0175) rather than from anything this
+   * component works out for itself.
+   *
+   * An earlier version of this decided on the spot: if the browser had Web Bluetooth, print over
+   * Bluetooth. Which would have taken printing AWAY from a shop on a laptop with a real driver and a
+   * working print dialog, and handed them a device chooser instead. The shop says which; the hook
+   * re-acquires the connection silently where the browser allows it.
+   *
+   * CALLED HERE, above the early returns for loading and failure. It sat below them for one build and
+   * the receipt died with React error 310 — "rendered more hooks than during the previous render" —
+   * because the first pass returned early and the second did not. A hook cannot live after a return.
+   */
+  const printer = useThisPrinter(storeId, Number(settings?.width) || undefined);
+  const route: 'direct' | 'app' | 'browser' =
+    (printer.kind === 'usb' || printer.kind === 'bluetooth') && printer.ready
+      ? 'direct'
+      : printer.kind === 'ios_app'
+        ? 'app'
+        : 'browser';
   // Only a receipt never read is an error screen; a failed re-read keeps the receipt readable.
   const error = res.data ? null : res.error;
 
@@ -156,16 +178,23 @@ export function Receipt({
   const [sharingWhatsApp, setSharingWhatsApp] = useState(false);
   const [makingPdf, setMakingPdf] = useState(false);
   const [printing, setPrinting] = useState(false);
+  const [connecting, setConnecting] = useState(false);
 
   /*
-   * WHETHER PRINTING HERE HAS TO GO THROUGH ANOTHER APP. See src/lib/printing.ts.
+   * WHICH WAY THIS DEVICE CAN REACH A PRINTER. See src/lib/printing.ts for the whole reasoning.
    *
-   * Decided after mounting, not during the render, because it reads the user agent: the server
-   * has no opinion about which phone this is, and answering differently on the two passes would
-   * make React throw the markup away and rebuild it.
+   * Decided after mounting, not during the render, because it reads the user agent and the Bluetooth
+   * API: the server has no opinion about which phone this is, and answering differently on the two
+   * passes would make React throw the markup away and rebuild it.
+   *
+   * Three routes, in order of how little they ask of the shop:
+   *
+   *   · BLUETOOTH DIRECT, where the browser has Web Bluetooth — Android, and Chrome on a desktop.
+   *     One tap, nothing installed, straight to the paired roll.
+   *   · THE PRINTER APP, on iOS, through a URL scheme. One tap, and the receipt goes as a picture.
+   *   · THE SHARE SHEET, when neither works — always available, three taps.
    */
-  const [handOff, setHandOff] = useState(false);
-  useEffect(() => setHandOff(isIOS() && canShareFiles()), []);
+
 
   if (error) {
     return (
@@ -208,6 +237,8 @@ export function Receipt({
   const owedAfter = detail.account ? Number(detail.account.owed_after) || 0 : null;
   const owedBefore = owedAfter === null ? null : owedAfter - owing;
   const width = settings?.width ?? 80;
+
+
   // Below roughly 58mm there is not enough width for a two-column row, so the layout stacks.
   const narrow = width < 58;
 
@@ -583,41 +614,87 @@ export function Receipt({
         </Button>
 
         {/*
-          PRINT, WHICH IS NOT THE SAME ROUTE ON EVERY DEVICE.
+          PRINT — ONE TAP, AND THE ROUTE IS THE DEVICE'S PROBLEM, NOT THE SELLER'S.
 
           A shop told us it could not print at all: an 80mm roll paired over Bluetooth, printing
           fine from the printer's own app, and this button giving "No AirPrint printers found".
-          AirPrint only reaches printers on the network, and iOS gives a web page no way to open a
-          Bluetooth one itself — src/lib/printing.ts has the whole reasoning.
+          AirPrint only reaches printers on a network. And there is volume here — a receipt per
+          sale, all day — so three taps through a share sheet is not an answer either.
 
-          So on an iPhone the receipt is drawn at the roll's width and handed to the share sheet,
-          where the printer's own app is waiting. AirPrint is in that same sheet as "Print", so a
-          shop on a network printer loses nothing by going through it. Everywhere else the browser
-          prints directly and this is left alone.
+          So the button does whatever this device can actually do, and says which:
+
+            Android / desktop Chrome  →  straight to the paired printer over Bluetooth
+            iPhone, iPad              →  handed to the printer's own app by URL scheme
+            anything else             →  the browser's own print
+
+          Each falls back to the one below it rather than failing: a printer out of range, or the
+          printer app not installed, ends at the share sheet, which always works. See
+          src/lib/printing.ts, escpos.ts and print-handoff.ts.
         */}
         <Button
           variant="secondary"
           fullWidth
           busy={printing}
-          busyLabel="Preparing"
+          busyLabel="Printing"
           onClick={async () => {
-            if (!handOff) {
+            setShareNote(null);
+
+            if (route === 'browser') {
               window.print();
               return;
             }
+
             setPrinting(true);
-            setShareNote(null);
             try {
+              if (route === 'direct') {
+                const canvas = await renderReceiptCanvas(receiptPayload(), width);
+                if (!canvas) throw new Error('Could not draw the receipt');
+                await printer.print(canvas);
+                setShareNote('Sent to the printer.');
+                return;
+              }
+
+              // iOS: the receipt goes to a public path, and the printer app fetches it.
               const blob = await renderReceiptImage(receiptPayload(), width);
               if (!blob) throw new Error('Could not draw the receipt');
+
+              let url: string | null = null;
+              try {
+                url = await uploadForPrinting(storeId, blob);
+              } catch {
+                // Offline, or storage refused. The share sheet does not need a server.
+                url = null;
+              }
+
+              if (url) {
+                const went = await openInPrinterApp(url);
+                /*
+                 * Taken away as soon as the app has had it. It is a one-shot handover at a public
+                 * path, and a shop's receipts should not accumulate there.
+                 *
+                 * Delayed a little on a hit: the app fetches the image AFTER iOS switches to it, so
+                 * removing it immediately would race the download.
+                 */
+                if (went) {
+                  setTimeout(() => void removePrinted(url as string), 20000);
+                  return;
+                }
+                void removePrinted(url);
+                setShareNote(
+                  'No printer app answered. Pick your printer\u2019s own app in the share sheet.',
+                );
+              }
+
               const result = await shareImage(
                 blob,
                 `receipt-${sale.id.slice(0, 8)}.png`,
                 `Receipt from ${shopName}`,
               );
-              if (result === 'downloaded') setShareNote('Saved to your downloads — open it to print.');
+              if (result === 'downloaded') {
+                setShareNote('Saved to your downloads \u2014 open it to print.');
+              }
             } catch (e: unknown) {
-              setShareNote(messageOf(e, 'Could not prepare the receipt'));
+              setShareNote(messageOf(e, 'Could not print this receipt'));
             } finally {
               setPrinting(false);
             }
@@ -625,9 +702,31 @@ export function Receipt({
         >
           Print
         </Button>
-        {handOff && (
+        {route === 'direct' && (
           <p className={styles.shareNote}>
-            Pick your printer&apos;s own app. A Bluetooth printer does not show up under Print —
+            Printing straight to {printer.printerName}
+            {printer.kind === 'usb' ? ' over the cable' : ''}.
+          </p>
+        )}
+
+        {/*
+          A PRINTER THAT IS SET UP BUT NOT THERE, said as a fact rather than as an error.
+
+          A cable unplugged or a roll switched off is the ordinary morning state, not a fault. The
+          button below still prints — through the browser — so the sentence explains why it will look
+          different rather than blocking anything.
+        */}
+        {(printer.kind === 'usb' || printer.kind === 'bluetooth') && !printer.ready && (
+          <p className={styles.shareNote}>
+            {printer.reconnecting
+              ? `Looking for ${printer.printerName ?? 'your printer'}…`
+              : `${printer.printerName ?? 'Your printer'} is not answering. Printing the ordinary way instead — or set it up again in Settings.`}
+          </p>
+        )}
+
+        {route === 'app' && (
+          <p className={styles.shareNote}>
+            Goes to your printer’s own app. A Bluetooth printer never appears under Print —
             that list is network printers only.
           </p>
         )}

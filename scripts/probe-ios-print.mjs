@@ -28,6 +28,16 @@ const IPHONE =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 ' +
   '(KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
 
+/*
+ * The sentence the iOS route puts on screen, in ONE place.
+ *
+ * It was written out twice — once asserted present on an iPhone, once asserted absent on a desktop —
+ * and when the copy changed the first check failed loudly while the second went on passing against a
+ * phrase that no longer existed anywhere. A negative check against stale wording is a check that
+ * reports success for nothing.
+ */
+const IOS_ADVICE = /never appears under Print|printer.s own app/i;
+
 let failed = 0;
 const check = (what, ok, detail = '') => {
   console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${what}${detail ? ` — ${detail}` : ''}`);
@@ -116,8 +126,8 @@ try {
     const body = (await p.locator('body').innerText()).replace(/\s+/g, ' ');
     check(
       'the screen says a Bluetooth printer is not in the Print list',
-      /does not show up under Print/i.test(body),
-      body.slice(0, 120),
+      IOS_ADVICE.test(body),
+      body.slice(0, 160),
     );
 
     await print.click();
@@ -146,7 +156,8 @@ try {
     const body = (await p.locator('body').innerText()).replace(/\s+/g, ' ');
     check(
       'no iPhone advice on a machine it does not apply to',
-      !/does not show up under Print/i.test(body),
+      !IOS_ADVICE.test(body),
+      body.slice(0, 160),
     );
 
     await print.click();

@@ -24,6 +24,18 @@ import { usePermission } from '@/hooks/usePermission';
 import { useStackBack } from '@/hooks/useStackBack';
 import { ROLE_DESCRIPTION, ROLE_LABEL } from '@/lib/permissions';
 import { getSupabase } from '@/lib/supabase/client';
+import {
+  availableKinds,
+  deviceId,
+  forgetPrinter,
+  savePrinter,
+  usePrinters,
+  useThisPrinter,
+  type PrinterKind,
+} from '@/lib/stacks/printer';
+import { testTicket } from '@/lib/escpos';
+import { printBytes } from '@/lib/bluetooth-print';
+import { printBytesOverUsb } from '@/lib/usb-print';
 import { useTheme } from '@/context/ThemeContext';
 import { NOTICE_NAMES, showNotice, useHiddenNotices } from '@/lib/hidden-notices';
 import { messageOf } from '@/lib/format';
@@ -109,6 +121,8 @@ export default function SettingsPage() {
   const { can, canOpen, role } = usePermission();
   const { theme, storedTheme, setTheme } = useTheme();
   const hiddenNotices = useHiddenNotices();
+
+
   const accounts = useBankAccounts(store?.id ?? null);
 
 
@@ -147,6 +161,21 @@ export default function SettingsPage() {
   );
 
   const settings = snapshot.settings;
+
+  /*
+   * WHICH PRINTER THIS DEVICE USES, and every device the shop has set up.
+   *
+   * Per device and synced: the counter iPad reaches a Bluetooth roll, the back-office laptop has a
+   * USB printer and a driver, a seller's phone has neither. One setting on the shop would be wrong
+   * on two of those three — and a setting kept only in the browser means a replaced phone is set up
+   * from scratch and nobody can see what the counter was pointing at.
+   */
+  const printer = useThisPrinter(store?.id ?? null, Number(settings?.printer_width_mm) || undefined);
+  const printers = usePrinters(store?.id ?? null);
+  const [kinds, setKinds] = useState<PrinterKind[]>([]);
+  useEffect(() => setKinds(availableKinds()), []);
+  const [connecting, setConnecting] = useState<PrinterKind | null>(null);
+  const [printerNote, setPrinterNote] = useState<string | null>(null);
 
   /*
    * Which account prints — resolved the same way `settle_sale` resolves it, so the preview and the
@@ -943,6 +972,219 @@ export default function SettingsPage() {
       <p className={styles.sectionNote}>
         Currently showing {theme}. This is per device, not shared with your staff.
       </p>
+
+      {/*
+        ─── HOW THIS DEVICE PRINTS ────────────────────────────────────────────────
+
+        Under "This device" because that is what it is. The paper width above is the SHOP's, because
+        it describes the roll a shop buys; which cable or radio reaches the printer describes the
+        counter, and those are different facts with different right answers.
+
+        WHAT SYNCS AND WHAT CANNOT. The choice syncs — this device prints over USB to "XP-58". The
+        browser's handle on the device cannot: permission is granted to an origin for a device and
+        the handle is re-acquired, never stored. Both `usb.getDevices()` and, in newer Chrome,
+        `bluetooth.getDevices()` hand back already-permitted devices with no prompt, so after the
+        first pairing the reconnect is invisible. That is the whole difference between a printer that
+        works and one somebody sets up every morning.
+      */}
+      <h3 className={styles.subsection}>Printing from this device</h3>
+
+      {printer.choice ? (
+        <p className={styles.sectionNote}>
+          {printer.kind === 'usb' || printer.kind === 'bluetooth' ? (
+            <>
+              Set to print{printer.kind === 'usb' ? ' over the cable' : ' over Bluetooth'} to{' '}
+              <strong>{printer.choice.printerName ?? 'a printer'}</strong>.{' '}
+              {printer.reconnecting
+                ? 'Looking for it…'
+                : printer.ready
+                  ? 'Connected — one tap prints.'
+                  : 'Not answering right now. Receipts will print the ordinary way until it is back.'}
+            </>
+          ) : printer.kind === 'ios_app' ? (
+            <>
+              Receipts go to your printer&apos;s own app. iPhones and iPads cannot reach a Bluetooth
+              printer from a web page at all — this is the way round it.
+            </>
+          ) : (
+            <>Receipts use this device&apos;s own print dialog.</>
+          )}
+        </p>
+      ) : (
+        <p className={styles.sectionNote}>
+          Nothing set up yet, so receipts print whatever way this device normally would. Connect the
+          printer once and a receipt is one tap from then on.
+        </p>
+      )}
+
+      <div className={styles.themeRow} role="group" aria-label="How this device prints">
+        {kinds.includes('usb') && (
+          <button
+            type="button"
+            className={`${styles.preset} ${printer.kind === 'usb' ? styles.presetActive : ''}`}
+            aria-pressed={printer.kind === 'usb'}
+            disabled={connecting !== null}
+            onClick={async () => {
+              setConnecting('usb');
+              setPrinterNote(null);
+              try {
+                await printer.connect('usb');
+                setPrinterNote('Connected over USB. It will reconnect by itself from now on.');
+                await printers.reload();
+              } catch (e: unknown) {
+                /*
+                 * Closing the chooser is a decision, not a failure. Reporting it as an error trains
+                 * people to ignore the messages that matter.
+                 */
+                const m = messageOf(e, 'Could not connect that printer');
+                if (!/cancell?ed|no device selected|chooser/i.test(m)) setPrinterNote(m);
+              } finally {
+                setConnecting(null);
+              }
+            }}
+          >
+            {connecting === 'usb' ? 'Connecting…' : 'USB cable'}
+          </button>
+        )}
+
+        {kinds.includes('bluetooth') && (
+          <button
+            type="button"
+            className={`${styles.preset} ${printer.kind === 'bluetooth' ? styles.presetActive : ''}`}
+            aria-pressed={printer.kind === 'bluetooth'}
+            disabled={connecting !== null}
+            onClick={async () => {
+              setConnecting('bluetooth');
+              setPrinterNote(null);
+              try {
+                await printer.connect('bluetooth');
+                setPrinterNote('Connected over Bluetooth.');
+                await printers.reload();
+              } catch (e: unknown) {
+                const m = messageOf(e, 'Could not connect that printer');
+                if (!/cancell?ed|no device selected|chooser/i.test(m)) setPrinterNote(m);
+              } finally {
+                setConnecting(null);
+              }
+            }}
+          >
+            {connecting === 'bluetooth' ? 'Connecting…' : 'Bluetooth'}
+          </button>
+        )}
+
+        {kinds.includes('ios_app') && (
+          <button
+            type="button"
+            className={`${styles.preset} ${printer.kind === 'ios_app' ? styles.presetActive : ''}`}
+            aria-pressed={printer.kind === 'ios_app'}
+            onClick={async () => {
+              if (!store) return;
+              setPrinterNote(null);
+              try {
+                await savePrinter(store.id, {
+                  kind: 'ios_app',
+                  deviceLabel: printer.choice?.deviceLabel ?? null,
+                  printerName: null,
+                  widthMm: printer.widthMm,
+                  usbVendorId: null,
+                  usbProductId: null,
+                  btDeviceId: null,
+                });
+                await printers.reload();
+                await printer.reload();
+              } catch (e: unknown) {
+                setPrinterNote(messageOf(e, 'Could not save that'));
+              }
+            }}
+          >
+            Printer app
+          </button>
+        )}
+
+        <button
+          type="button"
+          className={`${styles.preset} ${printer.kind === 'browser' ? styles.presetActive : ''}`}
+          aria-pressed={printer.kind === 'browser'}
+          onClick={async () => {
+            if (!store) return;
+            setPrinterNote(null);
+            try {
+              await forgetPrinter(store.id);
+              await printers.reload();
+              await printer.reload();
+              setPrinterNote('This device will use its own print dialog.');
+            } catch (e: unknown) {
+              setPrinterNote(messageOf(e, 'Could not save that'));
+            }
+          }}
+        >
+          This device&apos;s dialog
+        </button>
+      </div>
+
+      {/*
+        PROVING IT, without needing a sale.
+
+        A printer that is "connected" and prints nothing is the commonest complaint, and the only way
+        to tell the difference before a customer is standing there is to print something.
+      */}
+      {printer.ready && (printer.kind === 'usb' || printer.kind === 'bluetooth') && (
+        <Button
+          variant="secondary"
+          fullWidth
+          onClick={async () => {
+            setPrinterNote(null);
+            try {
+              const bytes = testTicket(store?.name ?? 'This shop');
+              if (printer.kind === 'usb') await printBytesOverUsb(bytes);
+              else await printBytes(bytes);
+              setPrinterNote('Sent. If nothing came out, the roll or the paper is the next thing to check.');
+            } catch (e: unknown) {
+              setPrinterNote(messageOf(e, 'Could not reach the printer'));
+            }
+          }}
+        >
+          Print a test
+        </Button>
+      )}
+
+      {printerNote && (
+        <p className={styles.sectionNote} role="status">
+          {printerNote}
+        </p>
+      )}
+
+      {/*
+        AND WHAT EVERY OTHER DEVICE IS SET TO.
+
+        "Why does the counter print and my phone not" is answered by seeing both, rather than by
+        walking to each one. A shop replacing a phone also needs to see what the old one pointed at.
+      */}
+      {(printers.data ?? []).filter((d) => d.deviceId !== deviceId()).length > 0 && (
+        <>
+          <h3 className={styles.subsection}>Your other devices</h3>
+          <ul className={styles.noticeList}>
+            {(printers.data ?? [])
+              .filter((d) => d.deviceId !== deviceId())
+              .map((d) => (
+                <li key={d.deviceId} className={styles.noticeRow}>
+                  <span>
+                    {d.deviceLabel ?? 'A device'} —{' '}
+                    {d.kind === 'usb'
+                      ? `USB, ${d.printerName ?? 'a printer'}`
+                      : d.kind === 'bluetooth'
+                        ? `Bluetooth, ${d.printerName ?? 'a printer'}`
+                        : d.kind === 'ios_app'
+                          ? 'a printer app'
+                          : 'its own print dialog'}
+                    {' · '}
+                    {d.widthMm}mm
+                  </span>
+                </li>
+              ))}
+          </ul>
+        </>
+      )}
 
       {/*
         WHAT WAS PUT AWAY, AND THE WAY BACK.
