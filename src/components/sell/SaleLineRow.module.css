@@ -1,0 +1,262 @@
+/*
+  ONE LINE ON A RECEIPT BEING BUILT.
+
+  Moved out of sell-page.module.css with the component it belongs to, so the till and the correction
+  screen draw the same row rather than two rows that look alike until one of them is edited. The
+  comments came with the rules deliberately: a rule separated from the reason for it is a rule
+  somebody deletes next year.
+*/
+
+.line {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: var(--space-4);
+}
+
+.lineHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.lineName {
+  font-weight: 700;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.lineRemove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: var(--touch-min);
+  min-height: var(--touch-min);
+  margin: calc(var(--space-2) * -1);
+  border-radius: var(--radius);
+  color: var(--danger);
+}
+
+.lineRemove:hover {
+  background: var(--danger-subtle);
+}
+
+/*
+ * One column on a phone. Two columns here put a stepper — two 56px buttons plus a number field
+ * plus a unit label — into roughly 97px, which squeezed the number field's content box to zero
+ * and made the quantity invisible. Quantity and price both need room to be read at a glance and
+ * hit with a thumb; side by side they get neither.
+ */
+
+.lineGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+}
+
+/*
+ * The quick parts belong directly under the quantity they modify and above the price they change.
+ * They were below the whole grid, which put the price field between the control and the number it
+ * acts on — so a seller set a price and only then noticed the amount was still whole.
+ */
+
+.fractionBlock {
+  margin-top: calc(var(--space-2) * -1);
+}
+
+/* The line's own total, so a mistyped quantity is caught on the line that caused it rather
+   than as a wrong grand total further down. */
+
+.lineTotal {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+  font-size: var(--text-sm);
+}
+
+/* A button now — tapping it sets the whole amount, for a customer who haggles on the total
+   rather than on the unit price. Styled as the figure it has always been. */
+
+.lineTotalValue {
+  border: none;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+
+.belowCost {
+  color: var(--danger);
+}
+
+/* Quantity by tapping as well as typing. Typing a number on a phone keypad while holding
+   goods is where mis-entry happens; ± is a smaller, safer motion for the common ±1 change. */
+
+.stepper {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
+}
+
+.stepperButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: var(--touch-comfortable);
+  min-height: var(--touch-comfortable);
+  border: 2px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.stepperButton:hover:not(:disabled) {
+  background: var(--surface-sunken);
+}
+
+.stepperButton:disabled {
+  opacity: 0.45;
+}
+
+.stepperField {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The shapes a product is sold in — "Pack", "Half pack", "Piece". Tapping one is far quicker
+   and far safer than working out that half a pack means 6, which is arithmetic nobody should
+   be doing at a counter with a queue. */
+
+.unitRow {
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+
+  /* Out to the edges of its CARD, not the page — the chips belong to the line they sit in, and
+     bleeding them past the card would break that grouping. */
+  margin: 0 calc(var(--space-4) * -1) var(--space-3);
+  padding: 0 var(--space-4) var(--space-1);
+  scroll-padding-left: var(--space-4);
+}
+
+.unitRow::-webkit-scrollbar {
+  display: none;
+}
+
+.unit {
+  flex: none;
+  min-height: var(--touch-min);
+  padding: 0 var(--space-4);
+  border: 2px solid var(--border-strong);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.unitActive {
+  border-color: var(--primary);
+  background: var(--primary-subtle);
+  color: var(--primary);
+}
+
+/*
+ * Sits directly above the line total rather than at the top of the line.
+ *
+ * Changing the shape changes the price and therefore the total, so the control belongs beside the
+ * number it moves. At the top of the card it was separated from its own effect by the quantity
+ * and price fields, and sellers were setting a price and only then noticing they were still on
+ * "Pack".
+ */
+
+.unitBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.unitLabel {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* ── Quick fractions ──────────────────────────────────────────────────────────────── */
+
+.fractionBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.fractionLabel {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.fractionRow {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/*
+ * Square-ish and generous. These carry single glyphs (¼, ½), which are small targets by nature,
+ * and they sit next to the line total where a mis-tap changes the money.
+ */
+
+.fraction {
+  flex: 1;
+  min-height: var(--touch-comfortable);
+  border: 2px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.fraction:hover:not(:disabled) {
+  background: var(--surface-sunken);
+}
+
+.fractionActive {
+  border-color: var(--primary);
+  background: var(--primary-subtle);
+  color: var(--primary);
+}
+
+/* An uncounted item, marked on its own line — one tap counts exactly this one. */
+
+.countChip {
+  display: inline-flex;
+  align-items: center;
+  margin-left: var(--space-2);
+  padding: 2px var(--space-2);
+  min-height: 28px;
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-full);
+  background: var(--warning-subtle);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  vertical-align: middle;
+  cursor: pointer;
+}

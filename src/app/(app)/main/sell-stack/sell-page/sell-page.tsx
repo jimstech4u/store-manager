@@ -20,6 +20,7 @@ import { ShareOrder } from '@/components/sell/ShareOrder';
 import { ConfirmDialog, useConfirm } from '@/components/ui/Dialog';
 import { useAsyncAction } from '@/components/ui/AsyncAction';
 import { ProductPicker } from '@/components/catalog/ProductPicker';
+import { SaleLineRow } from '@/components/sell/SaleLineRow';
 import { findByBarcode } from '@/lib/stacks/mid-sale';
 import { useUncountedToday } from '@/lib/stacks/count-gate';
 import { useTillShapes } from '@/lib/stacks/till-shapes';
@@ -947,308 +948,31 @@ export default function SellPage() {
           {/* ── Lines ─────────────────────────────────────────────────────────── */}
           {activeOrder.lines.length > 0 && (
             <div className={styles.lines}>
-              {activeOrder.lines.map((line) => {
-                const under = belowCost(line);
-                return (
-                  <div className={styles.line} key={line.key}>
-                    <div className={styles.lineHead}>
-                      {/* Just the name. The base-unit total ("12 pieces in total") used to sit
-                          here and was read as a second quantity to check against the one being
-                          entered — two numbers for one line, with nothing saying which mattered. */}
-                      <p className={styles.lineName}>
-                        {line.productName}
-                        {/*
-                          NOT COUNTED TODAY, on the line itself. The note above says how many; this
-                          says which — and one tap counts exactly this item.
-                        */}
-                        {needCount.includes(line.productId) && (
-                          <button
-                            type="button"
-                            className={styles.countChip}
-                            onClick={() =>
-                              void nav.push('count_gate_page', { focus: line.productId })
-                            }
-                          >
-                            Not counted today · Count
-                          </button>
-                        )}
-                      </p>
-                      <button
-                        type="button"
-                        className={styles.lineRemove}
-                        onClick={() => removeLine(activeOrder.clientUuid, line.key)}
-                        aria-label={`Remove ${line.productName}`}
-                      >
-                        <CloseIcon />
-                      </button>
-                    </div>
-
-                    {(saleUnits[line.productId]?.length ?? 0) > 1 && (
-                      <div className={styles.unitBlock}>
-                        <span className={styles.unitLabel}>Selling as</span>
-                        <div className={styles.unitRow} role="group" aria-label="How it is being sold">
-                        {saleUnits[line.productId].map((u) => (
-                          <button
-                            key={u.id}
-                            type="button"
-                            className={`${styles.unit} ${
-                              line.saleUnitId === u.id ? styles.unitActive : ''
-                            }`}
-                            aria-pressed={line.saleUnitId === u.id}
-                            onClick={() => {
-                              updateLine(activeOrder.clientUuid, line.key, {
-                                saleUnitId: u.id,
-                                saleUnitName: u.name,
-                                saleUnitBaseQty: u.baseQty,
-                                // Switching shape switches price: each shape carries its own,
-                                // and keeping the previous one would quietly sell a half pack
-                                // at the full pack price.
-                                unitPrice: u.price ?? line.unitPrice,
-                              });
-                              // ...then let any bulk band for the NEW shape apply on top.
-                              void repriceLine(line, line.qty, u.id);
-                            }}
-                          >
-                            {u.name}
-                          </button>
-                        ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className={styles.lineGrid}>
-                      <div className={styles.stepper}>
-                        <button
-                          type="button"
-                          className={styles.stepperButton}
-                          onClick={() => step(line, -1)}
-                          disabled={Number(line.qty) <= 0}
-                          aria-label={`One less ${line.productName}`}
-                        >
-                          <MinusIcon />
-                        </button>
-                        <div className={styles.stepperField}>
-                          <Field
-                            label="Quantity"
-                            numeric
-                            value={line.qty}
-                            onChange={(e) => {
-                              // Typed freely while the keyboard is up: snapping mid-word would
-                              // fight somebody halfway through "4.5" by rewriting "4." to "4".
-                              updateLine(activeOrder.clientUuid, line.key, {
-                                qty: e.target.value,
-                              });
-                              void repriceLine(line, e.target.value, line.saleUnitId);
-                            }}
-                            onBlur={() => {
-                              /*
-                               * SNAPPED WHEN THEY LOOK AWAY, not while they type.
-                               *
-                               * A shop selling half crates gets 4.3 typed at it now and then —
-                               * they meant 4.5, and 4.3 is a line the database refuses at the
-                               * worst possible moment, after the money has been counted. Rounded
-                               * to the NEAREST step, because somebody who overshoots slightly
-                               * meant the figure they were reaching for.
-                               */
-                              const rules = unitRulesFor(line);
-                              const typed = Number(line.qty);
-                              if (!Number.isFinite(typed)) return;
-
-                              const snapped = snapQty(typed, rules);
-                              if (snapped === typed) return;
-
-                              updateLine(activeOrder.clientUuid, line.key, {
-                                qty: String(snapped),
-                              });
-                              void repriceLine(line, String(snapped), line.saleUnitId);
-                            }}
-                            suffix={line.saleUnitName ?? line.packName ?? line.baseUnit}
-                            error={
-                              Number(line.qty) > 0
-                                ? null
-                                : partsFor(unitRulesFor(line)).length > 0
-                                  ? // Starting at nothing is deliberate for a unit sold in parts:
-                                    // there is no safe default, and half a crate recorded as a
-                                    // whole one is a real loss.
-                                    'Say how many — tap a part below, or use +'
-                                  : 'Add a quantity, or remove this item'
-                            }
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          className={styles.stepperButton}
-                          onClick={() => step(line, 1)}
-                          aria-label={`One more ${line.productName}`}
-                        >
-                          <PlusIcon />
-                        </button>
-                      </div>
-
-                      {(() => {
-                        /*
-                         * Part-amounts on top of the whole number in the stepper.
-                         *
-                         * OFFERED ONLY WHEN THEY LAND ON WHOLE BASE UNITS. A quarter of a 12-piece
-                         * pack is 3 pieces and is real; a quarter of a single bottle is not, and
-                         * the database rejects it — so the guard belongs here too rather than
-                         * letting the seller build a line that cannot be settled.
-                         */
-                        /*
-                         * WHAT THIS SHOP SELLS, not what divides evenly.
-                         *
-                         * The old rule offered a fraction whenever it landed on whole base units,
-                         * so a shop selling half crates of Gulder was offered quarters and
-                         * three-quarters too — twelve divides by four — and each was a way to
-                         * record something it cannot deliver. The shop states its parts once on
-                         * the unit and the till obeys.
-                         */
-                        const rules = unitRulesFor(line);
-                        const options = partsFor(rules);
-                        if (options.length === 0) return null;
-
-                        const current = Number(line.qty);
-                        const safe = Number.isFinite(current) && current >= 0 ? current : 0;
-                        const whole = Math.floor(safe);
-                        // Rounded before comparing: 2.5 - 2 is not exactly 0.5 in binary floating
-                        // point, and an un-rounded compare leaves the button that IS selected
-                        // looking unselected.
-                        const part = Number((safe - whole).toFixed(4));
-
-                        return (
-                          <div className={styles.fractionBlock}>
-                            <span className={styles.fractionLabel}>
-                              Add a part{part > 0 ? ` — now ${formatQty(safe)}` : ''}
-                            </span>
-                            <div
-                              className={styles.fractionRow}
-                              role="group"
-                              aria-label="Add a part of one to the quantity"
-                            >
-                              {options.map((f) => {
-                                const on = part === f.value;
-                                return (
-                                  <button
-                                    key={f.label}
-                                    type="button"
-                                    className={`${styles.fraction} ${on ? styles.fractionActive : ''}`}
-                                    aria-pressed={on}
-                                    onClick={() => {
-                                      // Tapping the selected part removes it and leaves the whole
-                                      // number behind.
-                                      const next = String(on ? whole : whole + f.value);
-                                      updateLine(activeOrder.clientUuid, line.key, { qty: next });
-                                      void repriceLine(line, next, line.saleUnitId);
-                                    }}
-                                  >
-                                    {f.label}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })()}
-
-                      <Field
-                        label={line.saleUnitName ? `Price per ${line.saleUnitName.toLowerCase()}` : 'Price each'}
-                        numeric
-                        prefix="₦"
-                        value={line.unitPrice}
-                        onChange={(e) =>
-                          updateLine(activeOrder.clientUuid, line.key, {
-                            unitPrice: e.target.value,
-                            // From here on, this line keeps the seller's own figure.
-                            priceTouched: true,
-                            priceReason: null,
-                          })
-                        }
-                        error={under ? 'Below what this cost you' : null}
-                        /*
-                         * Say why this figure appeared. A price that changes on its own when the
-                         * quantity crosses a band looks like a glitch unless it explains itself —
-                         * and the seller needs to be able to tell the customer what they are
-                         * getting, which is half the point of offering a bulk price at all.
-                         */
-                        hint={
-                          line.priceTouched
-                            ? 'Your own price'
-                            : line.priceReason === 'bulk'
-                              ? 'Bulk price for this quantity'
-                              : line.priceReason === 'customer'
-                                ? "This customer's agreed price"
-                                : undefined
-                        }
-                      />
-                    </div>
-
-                    {/*
-                      THE FIGURE THE CUSTOMER ACTUALLY AGREED TO.
-
-                      Haggling in a Nigerian market happens on the total, not the unit price:
-                      "give me the four crates for thirty-five thousand". Until now the only box
-                      on the screen was price-per-crate, so a seller had to divide 35,000 by 4 at
-                      the counter with somebody waiting — and 8,750 is one of the kinder examples.
-                      A price typed here divides itself, and the line still warns if the result is
-                      below what the stock cost.
-                    */}
-                    <div className={styles.lineTotal}>
-                      {editingTotal === line.key ? (
-                        <Field
-                          label="Total for this line"
-                          numeric
-                          prefix="₦"
-                          autoFocus
-                          value={totalDraft}
-                          onChange={(e) => setTotalDraft(e.target.value)}
-                          onBlur={() => {
-                            const asked = Number(totalDraft);
-                            const qty = Number(line.qty);
-                            setEditingTotal(null);
-
-                            // Nothing usable typed, or no quantity to divide by: the line keeps
-                            // the price it had rather than being handed a zero or an infinity.
-                            if (
-                              !Number.isFinite(asked) ||
-                              asked < 0 ||
-                              !Number.isFinite(qty) ||
-                              qty <= 0
-                            ) {
-                              return;
-                            }
-
-                            updateLine(activeOrder.clientUuid, line.key, {
-                              // Kobo, because a total that will not divide evenly still has to
-                              // multiply back to something near what was agreed.
-                              unitPrice: String(Number((asked / qty).toFixed(2))),
-                              priceTouched: true,
-                              priceReason: null,
-                            });
-                          }}
-                          hint={`Split across ${formatQty(Number(line.qty) || 0)} ${
-                            line.saleUnitName?.toLowerCase() ?? line.baseUnit
-                          }`}
-                        />
-                      ) : (
-                        <>
-                          <span>Line total</span>
-                          <button
-                            type="button"
-                            className={`${styles.lineTotalValue} ${under ? styles.belowCost : ''}`}
-                            onClick={() => {
-                              setTotalDraft(String(lineTotal(line) || ''));
-                              setEditingTotal(line.key);
-                            }}
-                            aria-label={`Line total ${formatMoney(lineTotal(line))} — tap to set the whole amount`}
-                          >
-                            {formatMoney(lineTotal(line))}
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+              {activeOrder.lines.map((line) => (
+                /*
+                 * THE ROW IS SHARED WITH THE CORRECTION SCREEN — see SaleLineRow.
+                 *
+                 * It was ~300 lines inline here. Correcting a settled receipt now works like the
+                 * till, and the alternative was a second copy of the shape chips, the stepper, the
+                 * snapping, the fractions and the tap-the-total behaviour, which would have drifted
+                 * within a month. Nothing about the till moved into the row: it still does not know
+                 * whether there is a draft behind it or how a price is worked out.
+                 */
+                <SaleLineRow
+                  key={line.key}
+                  line={line}
+                  shapes={saleUnits[line.productId] ?? []}
+                  rules={unitRulesFor(line)}
+                  total={lineTotal(line)}
+                  belowCost={belowCost(line)}
+                  needsCount={needCount.includes(line.productId)}
+                  onPatch={(patch) => updateLine(activeOrder.clientUuid, line.key, patch)}
+                  onRemove={() => removeLine(activeOrder.clientUuid, line.key)}
+                  onStep={(direction) => step(line, direction)}
+                  onReprice={(qty, saleUnitId) => repriceLine(line, qty, saleUnitId)}
+                  onCountNow={() => void nav.push('count_gate_page', { focus: line.productId })}
+                />
+              ))}
             </div>
           )}
 
