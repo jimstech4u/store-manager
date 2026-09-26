@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import styles from './Receipt.module.css';
 import { useNav } from '@academix-admin/navigation-stack';
 import { Button } from '@/components/ui/Button';
@@ -12,8 +12,15 @@ import { ACCOUNT_DERIVED_SCOPE } from '@/lib/stacks/customer-account';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatDateTime, formatMoney, formatQty, pluralUnit, messageOf } from '@/lib/format';
 import { owedRowsFromReceipt, rollUpOwed } from '@/lib/empties-rollup';
-import { renderReceiptCanvas, renderReceiptImage, shareImage, shareLink } from '@/lib/share';
+import {
+  canShareFiles,
+  renderReceiptCanvas,
+  renderReceiptImage,
+  shareImage,
+  shareLink,
+} from '@/lib/share';
 import { receiptPdf, sharePdf } from '@/lib/pdf';
+import { isIOS } from '@/lib/printing';
 import { appUrl } from '@/lib/app-url';
 
 interface SaleDetail {
@@ -148,6 +155,17 @@ export function Receipt({
   const [revoking, setRevoking] = useState(false);
   const [sharingWhatsApp, setSharingWhatsApp] = useState(false);
   const [makingPdf, setMakingPdf] = useState(false);
+  const [printing, setPrinting] = useState(false);
+
+  /*
+   * WHETHER PRINTING HERE HAS TO GO THROUGH ANOTHER APP. See src/lib/printing.ts.
+   *
+   * Decided after mounting, not during the render, because it reads the user agent: the server
+   * has no opinion about which phone this is, and answering differently on the two passes would
+   * make React throw the markup away and rebuild it.
+   */
+  const [handOff, setHandOff] = useState(false);
+  useEffect(() => setHandOff(isIOS() && canShareFiles()), []);
 
   if (error) {
     return (
@@ -564,9 +582,55 @@ export function Receipt({
           Send as picture
         </Button>
 
-        <Button variant="secondary" fullWidth onClick={() => window.print()}>
+        {/*
+          PRINT, WHICH IS NOT THE SAME ROUTE ON EVERY DEVICE.
+
+          A shop told us it could not print at all: an 80mm roll paired over Bluetooth, printing
+          fine from the printer's own app, and this button giving "No AirPrint printers found".
+          AirPrint only reaches printers on the network, and iOS gives a web page no way to open a
+          Bluetooth one itself — src/lib/printing.ts has the whole reasoning.
+
+          So on an iPhone the receipt is drawn at the roll's width and handed to the share sheet,
+          where the printer's own app is waiting. AirPrint is in that same sheet as "Print", so a
+          shop on a network printer loses nothing by going through it. Everywhere else the browser
+          prints directly and this is left alone.
+        */}
+        <Button
+          variant="secondary"
+          fullWidth
+          busy={printing}
+          busyLabel="Preparing"
+          onClick={async () => {
+            if (!handOff) {
+              window.print();
+              return;
+            }
+            setPrinting(true);
+            setShareNote(null);
+            try {
+              const blob = await renderReceiptImage(receiptPayload(), width);
+              if (!blob) throw new Error('Could not draw the receipt');
+              const result = await shareImage(
+                blob,
+                `receipt-${sale.id.slice(0, 8)}.png`,
+                `Receipt from ${shopName}`,
+              );
+              if (result === 'downloaded') setShareNote('Saved to your downloads — open it to print.');
+            } catch (e: unknown) {
+              setShareNote(messageOf(e, 'Could not prepare the receipt'));
+            } finally {
+              setPrinting(false);
+            }
+          }}
+        >
           Print
         </Button>
+        {handOff && (
+          <p className={styles.shareNote}>
+            Pick your printer&apos;s own app. A Bluetooth printer does not show up under Print —
+            that list is network printers only.
+          </p>
+        )}
 
         {/*
           A real PDF, not the browser's print-to-PDF.
