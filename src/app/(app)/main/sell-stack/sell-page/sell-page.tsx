@@ -352,8 +352,25 @@ export default function SellPage() {
    * and left the shop's copy alone — so a seller signing in on another phone got a blank till and
    * the customers they were serving stayed invisible.
    */
+  /*
+   * ONCE PER SHOP, and the ref is the whole of why.
+   *
+   * `orders` is state-stack state, so the append is not visible on the very next render — while
+   * `startOrder`'s identity does change between renders. So this effect ran again with
+   * `orders.length` still 0 and started ANOTHER customer, and again, and again: a fresh load
+   * opened the till with five empty tabs nobody had asked for, reported as "I get up to 5
+   * customers without me pressing add and all have ₦0".
+   *
+   * It also means closing the last tab no longer springs a new one open. That is the better
+   * behaviour anyway: the empty state has a "Start a customer" button, and a till that refuses to
+   * be emptied is a till arguing with the person using it.
+   */
+  const autoStarted = useRef<string | null>(null);
   useEffect(() => {
-    if (store && hydrated && orders.length === 0) startOrder();
+    if (!store || !hydrated || orders.length > 0) return;
+    if (autoStarted.current === store.id) return;
+    autoStarted.current = store.id;
+    startOrder();
   }, [store, hydrated, orders.length, startOrder]);
 
   const total = activeOrder ? draftTotal(activeOrder) : 0;
