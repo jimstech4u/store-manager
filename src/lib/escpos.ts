@@ -18,12 +18,69 @@
  * that is the right trade for a document with the shop's name on it.
  */
 
-/** Printable dots across, by paper width. 80mm paper prints 72mm of it, 58mm prints 48mm. */
+/**
+ * Printable dots across, by PAPER width — which is not the same as the printing width.
+ *
+ * From the manual of the roll this was built against: "Dot pitch 576 dots/line, Printing width
+ * 72mm, Paper width 80mm, resolution 203 dpi". So 80mm paper prints 72mm of it, and 203dpi is 8
+ * dots per millimetre to within a rounding error (203 / 25.4 = 7.99). 58mm paper prints 48mm on the
+ * same head geometry.
+ */
 export function dotsFor(widthMm: number): number {
   if (widthMm >= 76) return 576;
   if (widthMm >= 56) return 384;
-  // 40mm and other narrow rolls, at the same 8 dots per mm.
-  return Math.max(8, Math.floor((widthMm - 6) * 8 / 8) * 8);
+  // Narrower rolls, at the same 8 dots per mm, rounded down to a whole byte.
+  return Math.max(8, Math.floor(Math.max(1, widthMm - 8)) * 8);
+}
+
+/**
+ * THE WIDTH TO LAY A RECEIPT OUT AT, in millimetres, for a given roll.
+ *
+ * THIS IS THE FIX FOR A BLURRY PRINT. The receipt was drawn at 8px per millimetre of PAPER — 640px
+ * for an 80mm roll — and then scaled down to the head's 576 dots on the way to the printer.
+ * Downscaling text by 0.9 does not make smaller text; it makes grey, half-covered pixels, and a
+ * printer that can only burn a dot or not burn it then has to guess at every one of them. The
+ * result reads as smudged and thin, which is exactly how the first real print came back.
+ *
+ * Drawn at 72mm instead, the layout lands on 576 pixels natively: one pixel, one dot, nothing
+ * resampled, and every stroke either full black or nothing.
+ */
+export function printableMm(paperMm: number): number {
+  return dotsFor(paperMm) / 8;
+}
+
+/**
+ * Pure black and white, with nothing in between.
+ *
+ * A thermal head burns a dot or it does not. Anti-aliased edges — the grey halo a browser puts
+ * around every glyph — are not something it can render, so whatever receives the image decides for
+ * itself: some threshold it, some dither it into stipple, and stippled text on 203dpi paper is the
+ * "did not come out well" everybody recognises. Deciding here means the picture that goes to the
+ * printer is the picture that comes out.
+ *
+ * The same threshold `rasterFromCanvas` uses, so the direct routes and the hand-off to a printer app
+ * produce identical paper.
+ */
+export function flatten(canvas: HTMLCanvasElement): HTMLCanvasElement {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas;
+  const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const { data } = image;
+  for (let i = 0; i < data.length; i += 4) {
+    // Transparent is PAPER. Read as dark it would burn every margin solid black, which wastes a
+    // roll and a battery and hides the receipt.
+    const luma =
+      data[i + 3] < 128
+        ? 255
+        : data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+    const v = luma < 160 ? 0 : 255;
+    data[i] = v;
+    data[i + 1] = v;
+    data[i + 2] = v;
+    data[i + 3] = 255;
+  }
+  ctx.putImageData(image, 0, 0);
+  return canvas;
 }
 
 const ESC = 0x1b;

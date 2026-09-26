@@ -21,12 +21,9 @@ import {
 } from '@/lib/share';
 import { receiptPdf, sharePdf } from '@/lib/pdf';
 import { useThisPrinter } from '@/lib/stacks/printer';
-import {
-  openInPrinterApp,
-  receiptForPrinterApp,
-  removePrinted,
-  uploadForPrinting,
-} from '@/lib/print-handoff';
+import { openPrinterAppWith } from '@/lib/print-handoff';
+import { receiptAsEscPos } from '@/lib/escpos-text';
+import { dotsFor } from '@/lib/escpos';
 import { appUrl } from '@/lib/app-url';
 
 interface SaleDetail {
@@ -660,42 +657,29 @@ export function Receipt({
               }
 
               /*
-               * iOS: the receipt goes to a public path and the printer app fetches it — FITTED to
-               * the print head first. The canvas is drawn at 8px/mm so it looks right on a phone,
-               * which is 640px for an 80mm roll against a head that has 576 dots.
+               * ── IOS: THE RECEIPT IN THE PRINTER'S OWN LETTERS ──────────────
+               *
+               * It went as an IMAGE first, uploaded to a public path for the app to fetch, because
+               * an image can draw ₦ and no code page on this class of printer can. The paper that
+               * came back settled it: a 203dpi head printing a browser-rendered bitmap gives thin,
+               * smudged text, while the printer's built-in font is sharp because its glyphs live in
+               * ROM at exactly the head's dot pitch. The shop compared the two and chose sharp.
+               *
+               * So it goes as ESC/POS text now. ₦ becomes N — see escpos-text.ts — and in exchange
+               * there is no upload, no public URL, no download, and nothing for an intermittent
+               * connection to half-finish. The receipt is a few hundred bytes instead of fifty
+               * thousand, and most of the ways the image route could break simply do not exist.
                */
-              const canvas = await renderReceiptCanvas(receiptPayload(), width);
-              if (!canvas) throw new Error('Could not draw the receipt');
-              const blob = await receiptForPrinterApp(canvas, printer.widthMm);
+              const went = await openPrinterAppWith(
+                receiptAsEscPos(receiptPayload(), dotsFor(printer.widthMm), printer.textSize),
+              );
+              if (went) return;
+              setShareNote(
+                'No printer app answered. Pick your printer’s own app in the share sheet.',
+              );
+
+              const blob = await renderReceiptImage(receiptPayload(), width);
               if (!blob) throw new Error('Could not draw the receipt');
-
-              let url: string | null = null;
-              try {
-                url = await uploadForPrinting(storeId, blob);
-              } catch {
-                // Offline, or storage refused. The share sheet does not need a server.
-                url = null;
-              }
-
-              if (url) {
-                const went = await openInPrinterApp(url);
-                /*
-                 * Taken away as soon as the app has had it. It is a one-shot handover at a public
-                 * path, and a shop's receipts should not accumulate there.
-                 *
-                 * Delayed a little on a hit: the app fetches the image AFTER iOS switches to it, so
-                 * removing it immediately would race the download.
-                 */
-                if (went) {
-                  setTimeout(() => void removePrinted(url as string), 20000);
-                  return;
-                }
-                void removePrinted(url);
-                setShareNote(
-                  'No printer app answered. Pick your printer\u2019s own app in the share sheet.',
-                );
-              }
-
               const result = await shareImage(
                 blob,
                 `receipt-${sale.id.slice(0, 8)}.png`,

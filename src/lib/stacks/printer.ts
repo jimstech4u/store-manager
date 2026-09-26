@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { getSupabase } from '@/lib/supabase/client';
 import { useResource } from '@/lib/stacks/resource';
 import { isIOS } from '@/lib/printing';
+import type { TextSize } from '@/lib/escpos-text';
 import { canShareFiles } from '@/lib/share';
 import {
   canPrintOverBluetooth,
@@ -52,6 +53,8 @@ export interface PrinterChoice {
   usbVendorId: number | null;
   usbProductId: number | null;
   btDeviceId: string | null;
+  /** Which of the printer's built-in letter sizes the body prints at. */
+  textSize: TextSize;
   updatedAt: string;
 }
 
@@ -86,6 +89,7 @@ interface Row {
   usb_vendor_id: number | null;
   usb_product_id: number | null;
   bt_device_id: string | null;
+  text_size: TextSize | null;
   updated_at: string;
 }
 
@@ -98,6 +102,8 @@ const toChoice = (r: Row): PrinterChoice => ({
   usbVendorId: r.usb_vendor_id,
   usbProductId: r.usb_product_id,
   btDeviceId: r.bt_device_id,
+  // The column has a default, so a row can only be null here if something else wrote it.
+  textSize: r.text_size ?? 'sshw',
   updatedAt: r.updated_at,
 });
 
@@ -135,6 +141,7 @@ export async function savePrinter(
     p_usb_vendor_id: choice.usbVendorId,
     p_usb_product_id: choice.usbProductId,
     p_bt_device_id: choice.btDeviceId,
+    p_text_size: choice.textSize,
   });
   if (error) throw error;
 }
@@ -206,6 +213,7 @@ export function useThisPrinter(storeId: string | null, shopWidthMm?: number) {
   }, [mine?.kind, mine?.usbVendorId, mine?.usbProductId, mine?.btDeviceId]);
 
   const kind: PrinterKind = mine?.kind ?? (isIOS() && canShareFiles() ? 'ios_app' : 'browser');
+  const textSize: TextSize = mine?.textSize ?? 'sshw';
   /*
    * THE ROLL: this device's own if it was given one, otherwise the SHOP's.
    *
@@ -249,6 +257,7 @@ export function useThisPrinter(storeId: string | null, shopWidthMm?: number) {
           usbVendorId: chosen.vendorId,
           usbProductId: chosen.productId,
           btDeviceId: null,
+          textSize: mine?.textSize ?? 'sshw',
         });
         setLive(chosen.name);
       } else {
@@ -261,6 +270,7 @@ export function useThisPrinter(storeId: string | null, shopWidthMm?: number) {
           usbVendorId: null,
           usbProductId: null,
           btDeviceId: chosen.id,
+          textSize: mine?.textSize ?? 'sshw',
         });
         setLive(chosen.name);
       }
@@ -273,6 +283,7 @@ export function useThisPrinter(storeId: string | null, shopWidthMm?: number) {
     choice: mine,
     kind,
     widthMm,
+    textSize,
     ready,
     reconnecting,
     printerName: live ?? mine?.printerName ?? null,

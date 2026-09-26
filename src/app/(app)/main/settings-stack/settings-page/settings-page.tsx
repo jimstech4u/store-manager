@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppVersion } from '@/components/ui/AppVersion';
 import { useReload } from '@/lib/stacks/resource';
@@ -36,6 +36,9 @@ import {
 import { testTicket } from '@/lib/escpos';
 import { printBytes } from '@/lib/bluetooth-print';
 import { printBytesOverUsb } from '@/lib/usb-print';
+import { PrintPreview } from '@/components/settings/PrintPreview';
+import { columnsAt, type TextSize } from '@/lib/escpos-text';
+import { dotsFor } from '@/lib/escpos';
 import {
   openPrinterAppWith,
   removePrinted,
@@ -178,6 +181,69 @@ export default function SettingsPage() {
   const [connecting, setConnecting] = useState<PrinterKind | null>(null);
   const [printerNote, setPrinterNote] = useState<string | null>(null);
   const [testingApp, setTestingApp] = useState(false);
+
+  /*
+   * A RECEIPT TO LOOK AT, in the shape a real one takes.
+   *
+   * Made up, and deliberately made up of the awkward cases rather than the easy ones: a product name
+   * long enough to wrap, a quantity that is not a whole number, an amount wide enough to crowd its
+   * label, containers still out, and bank details. A preview built from a tidy example tells a shop
+   * nothing about the receipt that will actually give them trouble.
+   */
+  const samplePrint = useMemo(
+    () => ({
+      shopName: store?.name ?? 'Your shop',
+      header: settings?.receipt_header ?? null,
+      footer: settings?.receipt_footer ?? null,
+      meta: [
+        new Date().toLocaleString(),
+        '#2D6AB81C',
+        'Gabriel',
+      ],
+      lines: [
+        { name: 'Gulder 60cl', detail: '0.5 Crate x \u20a69,600', amount: '\u20a64,800' },
+        {
+          name: 'American Cola PET 60cl',
+          detail: '20 Bottle x \u20a63,700',
+          amount: '\u20a674,000',
+        },
+      ],
+      totals: [
+        { label: 'Total', value: '\u20a678,800', strong: true },
+        { label: 'Left on this sale', value: '\u20a678,800' },
+        { label: 'Owed before', value: '\u20a694,200' },
+        { label: 'Total owed', value: '\u20a6173,000', strong: true },
+        { label: 'Still with you', value: '', strong: true },
+        { label: 'Nigerian Breweries (NBL) crates', value: '5' },
+        { label: 'Goldberg 60cl crate', value: '\u00bd' },
+      ],
+      note: null,
+      /*
+       * The bank block as the receipt builds it — the three fields on their own lines, and only
+       * when the shop has asked for them. A preview that always shows bank details would have a
+       * shop laying out paper for a block that never prints.
+       */
+      transferDetails:
+        settings?.show_transfer_details
+          ? [
+              settings.transfer_bank_name,
+              settings.transfer_account_no,
+              settings.transfer_account_name,
+            ]
+              .filter(Boolean)
+              .join(String.fromCharCode(10)) || null
+          : null,
+    }),
+    [
+      store?.name,
+      settings?.receipt_header,
+      settings?.receipt_footer,
+      settings?.show_transfer_details,
+      settings?.transfer_bank_name,
+      settings?.transfer_account_no,
+      settings?.transfer_account_name,
+    ],
+  );
 
   /*
    * Which account prints — resolved the same way `settle_sale` resolves it, so the preview and the
@@ -1093,6 +1159,7 @@ export default function SettingsPage() {
                   usbVendorId: null,
                   usbProductId: null,
                   btDeviceId: null,
+                  textSize: printer.textSize,
                 });
                 await printers.reload();
                 await printer.reload();
@@ -1214,6 +1281,118 @@ export default function SettingsPage() {
             3. Print an image from here
           </Button>
         </div>
+      )}
+
+      {/*
+        ─── HOW BIG THE LETTERS PRINT, AND WHAT THAT LOOKS LIKE ──────────────────
+
+        The receipt goes to the printer in its OWN built-in font, which is why it is sharp — the
+        glyphs live in the printer's ROM at exactly the dot pitch of the head, where an image has to
+        be resampled to get there. That font comes in sizes, and which one reads best is a judgement
+        about this shop: how far the customer stands, how good the light is, what a roll costs.
+
+        So it is a choice with a preview. The preview is built from the SAME instruction the printer
+        receives — un-tagged and laid out at the same characters-per-line — so a preview that is
+        wrong is a print that is wrong. Two layouts that resemble each other agree until the day they
+        do not.
+      */}
+      {(printer.kind === 'ios_app' || printer.kind === 'bluetooth' || printer.kind === 'usb') && (
+        <>
+          {/*
+            ─── THE PAPER FIRST, because everything below is measured against it ───
+
+            Found on a real shop: the roll setting said 48mm while the printer in the shop was an
+            80mm one — 576 dots, 72mm of printing, as its own manual states. Every layout decision
+            downstream is made against that number, so a receipt was being set out for two thirds of
+            the paper it was printed on.
+
+            It is also configurable further up this page, under the receipt, and it should be: that
+            is where a shop sets up its receipt. It is repeated HERE because this is the only place
+            the consequence is visible — the preview under it redraws, and the character count on
+            every size button changes with it.
+          */}
+          <h3 className={styles.subsection}>Your paper</h3>
+          <div className={styles.printerChoice} role="group" aria-label="Paper width">
+            {settings && ([80, 58, 48] as const).map((mm) => (
+              <button
+                key={mm}
+                type="button"
+                className={`${styles.printerOption} ${
+                  Number(settings.printer_width_mm) === mm ? styles.printerOptionActive : ''
+                }`}
+                aria-pressed={Number(settings.printer_width_mm) === mm}
+                disabled={!editable}
+                onClick={() => patch({ printer_width_mm: String(mm) })}
+              >
+                <span className={styles.printerOptionName}>{mm}mm roll</span>
+                <span className={styles.printerOptionWhat}>
+                  {dotsFor(mm)} dots across
+                  {mm === 80 ? ' · the common till roll' : ''}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <h3 className={styles.subsection}>How big it prints</h3>
+          <div className={styles.printerChoice} role="group" aria-label="Printed letter size">
+            {(
+              [
+                ['ss', 'Small', 'Most on a roll'],
+                ['ssw', 'Wide', 'Easy to read, same paper'],
+                ['sshw', 'Wide and tall', 'Clearest. Twice the paper'],
+                ['sl', 'Large', 'Between the two'],
+              ] as [TextSize, string, string][]
+            ).map(([size, name, what]) => (
+              <button
+                key={size}
+                type="button"
+                className={`${styles.printerOption} ${printer.textSize === size ? styles.printerOptionActive : ''}`}
+                aria-pressed={printer.textSize === size}
+                onClick={async () => {
+                  if (!store) return;
+                  setPrinterNote(null);
+                  try {
+                    await savePrinter(store.id, {
+                      kind: printer.kind,
+                      deviceLabel: printer.choice?.deviceLabel ?? null,
+                      printerName: printer.choice?.printerName ?? null,
+                      widthMm: printer.widthMm,
+                      usbVendorId: printer.choice?.usbVendorId ?? null,
+                      usbProductId: printer.choice?.usbProductId ?? null,
+                      btDeviceId: printer.choice?.btDeviceId ?? null,
+                      textSize: size,
+                    });
+                    await printers.reload();
+                    await printer.reload();
+                  } catch (e: unknown) {
+                    setPrinterNote(messageOf(e, 'Could not save that size'));
+                  }
+                }}
+              >
+                <span className={styles.printerOptionName}>{name}</span>
+                <span className={styles.printerOptionWhat}>
+                  {what} · {columnsAt(size, dotsFor(printer.widthMm))} characters a line
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <PrintPreview
+            payload={samplePrint}
+            paperMm={printer.widthMm}
+            bodySize={printer.textSize}
+          />
+          <p className={styles.diagnosticWhy}>
+            {/*
+              SAID HERE rather than discovered on paper. A shop that sees N where it expects ₦ will
+              assume something is broken unless it was told, and it is not broken — there is no code
+              page on this class of printer that carries the naira sign.
+            */}
+            This is what the roll will say. The naira sign prints as <strong>N</strong>: a thermal
+            printer&apos;s built-in letters do not include ₦, and printing a picture instead is what
+            made it come out faint.
+          </p>
+        </>
       )}
 
       {/*
