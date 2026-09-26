@@ -288,3 +288,11 @@
   color: var(--primary-text);
   font-weight: 600;
 }
+
+/* "Item by item" is empty whenever every returnable belongs to a maker, which is the normal case.
+   An empty sheet reads as a failure; this says what is going on and where to go instead. */
+.pickEmpty {
+  padding: var(--space-4);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}

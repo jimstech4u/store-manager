@@ -840,6 +840,22 @@ export default function CustomerFormPage() {
         <LoadArea area={offerArea} what="your items" compact>
           {() => null}
         </LoadArea>
+
+        {/*
+          EMPTY HERE IS AN ORDINARY ANSWER, and a common one.
+
+          "Item by item" lists only the returnables that belong to NO maker, so a shop that has put
+          every returnable into a maker's pool — which is most of them — sees nothing here, and
+          that is correct rather than broken. Said plainly, pointing at the tab that does have
+          their containers, instead of an empty sheet that reads as a failure.
+        */}
+        {offerArea.data && items.length === 0 && (
+          <p className={styles.pickEmpty}>
+            Every returnable you have belongs to a maker, so they are all counted under{' '}
+            <strong>By maker</strong>. Items appear here only when they are in no maker&rsquo;s pool.
+          </p>
+        )}
+
         <ul className={styles.pickList}>
           {items.map((it) => (
             <li key={it.productId}>
@@ -853,9 +869,10 @@ export default function CustomerFormPage() {
                 }}
               >
                 <span className={styles.pickName}>{it.productName}</span>
+                {/* No maker by definition now — every row here is outside every pool — so the
+                    meta says the only thing left worth saying. */}
                 <span className={styles.pickMeta}>
-                  {it.groupName ?? 'no maker set'} · {it.shapes}{' '}
-                  {it.shapes === 1 ? 'shape' : 'shapes'} come back
+                  {it.shapes} {it.shapes === 1 ? 'shape' : 'shapes'} come back
                 </span>
               </button>
             </li>
