@@ -354,3 +354,76 @@
 .shopRow:disabled {
   opacity: 0.6;
 }
+
+/*
+  HOW THIS DEVICE PRINTS — a real switch, not four squashed pills.
+
+  It first reused `.themeRow`, which is three short words at `flex: 1`. Four options with labels like
+  "This device's dialog" came out unreadable on a 390px phone, and a control you cannot read is a
+  control nobody can tell the state of. So: a two-column grid of cards, each with what it is and a
+  line saying what it means, and a selected state that is obvious without reading the labels.
+*/
+.printerChoice {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.printerOption {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: var(--touch-comfortable);
+  padding: var(--space-3);
+  border: 2px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+.printerOption:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.printerOptionActive {
+  border-color: var(--primary);
+  background: var(--primary-subtle);
+  color: var(--primary);
+}
+
+.printerOptionName {
+  font-weight: 650;
+  font-size: var(--text-sm);
+  color: inherit;
+}
+
+/*
+  The line under the name. Muted even when the card is selected — it is explaining the option, not
+  announcing it, and inheriting the selected colour made the whole card shout.
+*/
+.printerOptionWhat {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+/* A diagnostic block: three things to try, in the order that narrows the fault fastest. */
+.diagnostic {
+  margin: var(--space-3) 0 var(--space-4);
+  padding: var(--space-3);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.diagnosticWhy {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}

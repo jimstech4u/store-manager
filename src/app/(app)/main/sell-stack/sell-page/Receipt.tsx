@@ -21,7 +21,12 @@ import {
 } from '@/lib/share';
 import { receiptPdf, sharePdf } from '@/lib/pdf';
 import { useThisPrinter } from '@/lib/stacks/printer';
-import { openInPrinterApp, removePrinted, uploadForPrinting } from '@/lib/print-handoff';
+import {
+  openInPrinterApp,
+  receiptForPrinterApp,
+  removePrinted,
+  uploadForPrinting,
+} from '@/lib/print-handoff';
 import { appUrl } from '@/lib/app-url';
 
 interface SaleDetail {
@@ -654,8 +659,14 @@ export function Receipt({
                 return;
               }
 
-              // iOS: the receipt goes to a public path, and the printer app fetches it.
-              const blob = await renderReceiptImage(receiptPayload(), width);
+              /*
+               * iOS: the receipt goes to a public path and the printer app fetches it — FITTED to
+               * the print head first. The canvas is drawn at 8px/mm so it looks right on a phone,
+               * which is 640px for an 80mm roll against a head that has 576 dots.
+               */
+              const canvas = await renderReceiptCanvas(receiptPayload(), width);
+              if (!canvas) throw new Error('Could not draw the receipt');
+              const blob = await receiptForPrinterApp(canvas, printer.widthMm);
               if (!blob) throw new Error('Could not draw the receipt');
 
               let url: string | null = null;

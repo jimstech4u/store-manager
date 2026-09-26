@@ -36,6 +36,13 @@ import {
 import { testTicket } from '@/lib/escpos';
 import { printBytes } from '@/lib/bluetooth-print';
 import { printBytesOverUsb } from '@/lib/usb-print';
+import {
+  openPrinterAppWith,
+  removePrinted,
+  textTicket,
+  uploadForPrinting,
+  VENDOR_SAMPLE,
+} from '@/lib/print-handoff';
 import { useTheme } from '@/context/ThemeContext';
 import { NOTICE_NAMES, showNotice, useHiddenNotices } from '@/lib/hidden-notices';
 import { messageOf } from '@/lib/format';
@@ -170,6 +177,7 @@ export default function SettingsPage() {
   useEffect(() => setKinds(availableKinds()), []);
   const [connecting, setConnecting] = useState<PrinterKind | null>(null);
   const [printerNote, setPrinterNote] = useState<string | null>(null);
+  const [testingApp, setTestingApp] = useState(false);
 
   /*
    * Which account prints — resolved the same way `settle_sale` resolves it, so the preview and the
@@ -999,11 +1007,19 @@ export default function SettingsPage() {
         </p>
       )}
 
-      <div className={styles.themeRow} role="group" aria-label="How this device prints">
+      {/*
+        A REAL SWITCH, not four pills at `flex: 1`.
+
+        It reused the theme row first, which is three short words. Four options with labels like
+        "This device's dialog" came out squashed and unreadable on a 390px phone — reported from one.
+        A control whose state you cannot read is a control nobody trusts, so: a two-column grid, each
+        card saying what it is and what it means.
+      */}
+      <div className={styles.printerChoice} role="group" aria-label="How this device prints">
         {kinds.includes('usb') && (
           <button
             type="button"
-            className={`${styles.preset} ${printer.kind === 'usb' ? styles.presetActive : ''}`}
+            className={`${styles.printerOption} ${printer.kind === 'usb' ? styles.printerOptionActive : ''}`}
             aria-pressed={printer.kind === 'usb'}
             disabled={connecting !== null}
             onClick={async () => {
@@ -1025,14 +1041,17 @@ export default function SettingsPage() {
               }
             }}
           >
-            {connecting === 'usb' ? 'Connecting…' : 'USB cable'}
+            <span className={styles.printerOptionName}>
+              {connecting === 'usb' ? 'Connecting…' : 'USB cable'}
+            </span>
+            <span className={styles.printerOptionWhat}>Straight to the roll. Most reliable.</span>
           </button>
         )}
 
         {kinds.includes('bluetooth') && (
           <button
             type="button"
-            className={`${styles.preset} ${printer.kind === 'bluetooth' ? styles.presetActive : ''}`}
+            className={`${styles.printerOption} ${printer.kind === 'bluetooth' ? styles.printerOptionActive : ''}`}
             aria-pressed={printer.kind === 'bluetooth'}
             disabled={connecting !== null}
             onClick={async () => {
@@ -1050,14 +1069,17 @@ export default function SettingsPage() {
               }
             }}
           >
-            {connecting === 'bluetooth' ? 'Connecting…' : 'Bluetooth'}
+            <span className={styles.printerOptionName}>
+              {connecting === 'bluetooth' ? 'Connecting…' : 'Bluetooth'}
+            </span>
+            <span className={styles.printerOptionWhat}>Straight to a paired roll.</span>
           </button>
         )}
 
         {kinds.includes('ios_app') && (
           <button
             type="button"
-            className={`${styles.preset} ${printer.kind === 'ios_app' ? styles.presetActive : ''}`}
+            className={`${styles.printerOption} ${printer.kind === 'ios_app' ? styles.printerOptionActive : ''}`}
             aria-pressed={printer.kind === 'ios_app'}
             onClick={async () => {
               if (!store) return;
@@ -1079,13 +1101,16 @@ export default function SettingsPage() {
               }
             }}
           >
-            Printer app
+            <span className={styles.printerOptionName}>Printer app</span>
+            <span className={styles.printerOptionWhat}>
+              For iPhone and iPad, which cannot reach a printer themselves.
+            </span>
           </button>
         )}
 
         <button
           type="button"
-          className={`${styles.preset} ${printer.kind === 'browser' ? styles.presetActive : ''}`}
+          className={`${styles.printerOption} ${printer.kind === 'browser' ? styles.printerOptionActive : ''}`}
           aria-pressed={printer.kind === 'browser'}
           onClick={async () => {
             if (!store) return;
@@ -1100,9 +1125,96 @@ export default function SettingsPage() {
             }
           }}
         >
-          This device&apos;s dialog
+          <span className={styles.printerOptionName}>This device&apos;s dialog</span>
+          <span className={styles.printerOptionWhat}>
+            The normal print window. Right where there is a driver.
+          </span>
         </button>
       </div>
+
+      {/*
+        ─── WHEN THE PRINTER APP OPENS AND THEN REFUSES ──────────────────────────
+
+        This happened on the first real phone: Print opened Mobile Print Util, which said "there is
+        an issue with your device connection" — while printing a test page from inside that same app
+        worked. "It opened" and "it printed" are different facts and nothing on our side can see the
+        second one.
+
+        Guessing at that over messages costs a day. These try the parts SEPARATELY, so one tap each
+        says where it breaks:
+
+          · their own sample image — if this fails, the app or the printer is at fault, not us
+          · plain text             — no download for the app to do, so it isolates the fetch
+          · our image              — the real path, in the same shape a receipt takes
+
+        The order matters: whichever is the first to fail is the answer.
+      */}
+      {printer.kind === 'ios_app' && (
+        <div className={styles.diagnostic}>
+          <p className={styles.diagnosticWhy}>
+            If Print opens the app but nothing comes out, try these in order. The first one that
+            fails says where the problem is.
+          </p>
+          <Button
+            variant="secondary"
+            fullWidth
+            onClick={() => void openPrinterAppWith(VENDOR_SAMPLE)}
+          >
+            1. Print their sample image
+          </Button>
+          <Button
+            variant="secondary"
+            fullWidth
+            onClick={() => void openPrinterAppWith(textTicket(store?.name ?? 'This shop'))}
+          >
+            2. Print plain text (no download)
+          </Button>
+          <Button
+            variant="secondary"
+            fullWidth
+            busy={testingApp}
+            busyLabel="Preparing"
+            onClick={async () => {
+              if (!store) return;
+              setTestingApp(true);
+              setPrinterNote(null);
+              try {
+                const canvas = document.createElement('canvas');
+                canvas.width = 384;
+                canvas.height = 160;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) throw new Error('Could not draw a test');
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#000';
+                ctx.font = 'bold 28px sans-serif';
+                ctx.fillText('Printer test', 20, 60);
+                ctx.font = '20px sans-serif';
+                ctx.fillText(store.name.slice(0, 24), 20, 100);
+                ctx.fillText(new Date().toLocaleTimeString(), 20, 135);
+
+                const blob: Blob | null = await new Promise((r) => canvas.toBlob(r, 'image/png'));
+                if (!blob) throw new Error('Could not draw a test');
+                const url = await uploadForPrinting(store.id, blob);
+                const went = await openPrinterAppWith(`#imageurl#${url}#/imageurl#`);
+                // Given a long while: the app fetches AFTER iOS has switched to it, and removing
+                // the file early would race the download and look like the app's fault.
+                if (went) setTimeout(() => void removePrinted(url), 60000);
+                else {
+                  void removePrinted(url);
+                  setPrinterNote('The app did not open. Is it installed?');
+                }
+              } catch (e: unknown) {
+                setPrinterNote(messageOf(e, 'Could not prepare a test'));
+              } finally {
+                setTestingApp(false);
+              }
+            }}
+          >
+            3. Print an image from here
+          </Button>
+        </div>
+      )}
 
       {/*
         PROVING IT, without needing a sale.
