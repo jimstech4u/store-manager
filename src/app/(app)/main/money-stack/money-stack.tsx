@@ -22,6 +22,11 @@ const navLink = tabRoutes({ money_page: MoneyPage }, [
   'expense_page',
   'period_page',
   'account_action_page',
+  // Appended, never inserted: the URL names a route by its POSITION in this list, so a
+  // page put anywhere but the end sends every route after it somewhere else — including
+  // one a phone restored from a stack it persisted before the deploy.
+  'amend_payment_page',
+  'amend_reason_page',
 ]);
 
 export const MoneyStack = () => (

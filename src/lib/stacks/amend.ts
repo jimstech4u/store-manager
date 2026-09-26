@@ -73,6 +73,23 @@ export async function saleDocument(saleId: string): Promise<SaleDocument | null>
   return data ? toDocument(data as Record<string, unknown>) : null;
 }
 
+/**
+ * What a receipt has already been paid, summed from its allocations.
+ *
+ * `payments` has no `sale_id` — a payment is a sum of money that arrived, and which receipts it
+ * settles is a separate fact, because one payment can clear three receipts and one receipt can take
+ * four payments. So the answer is in `payment_allocations`, which is what every other reader of
+ * "what was this paid" uses.
+ */
+export async function salePaid(saleId: string): Promise<number> {
+  const { data, error } = await getSupabase()
+    .from('payment_allocations')
+    .select('amount')
+    .eq('sale_id', saleId);
+  if (error) throw error;
+  return ((data ?? []) as { amount: string }[]).reduce((sum, a) => sum + Number(a.amount), 0);
+}
+
 export interface Revision {
   revision: number;
   document: SaleDocument;
@@ -101,6 +118,13 @@ export interface AmendResult {
   paid: number;
   owing: number;
   customerId: string | null;
+  /**
+   * The correction took everything off, so the receipt was CANCELLED rather than restated (0174).
+   *
+   * Always present, so a caller reads one shape — and it has to be read: the seller is sent to a
+   * cancelled receipt, not to a new revision of a live one.
+   */
+  voided: boolean;
 }
 
 /**
@@ -124,6 +148,24 @@ export async function amendSale(args: {
     containersOut: number;
   }[];
   customerId?: string | null;
+  /**
+   * The named additions as the corrected receipt should read them.
+   *
+   * `undefined` means "leave them alone", which is what every caller that does not edit charges
+   * should send. An EMPTY ARRAY means "there are none", which is what a seller means by deleting
+   * the last one — the two are different instructions and the server keeps them apart.
+   */
+  charges?: { label: string; amount: number }[];
+  /** Money handed over DURING the correction. Added to what the receipt already took, never replacing it. */
+  payments?: {
+    amount: number;
+    method: string;
+    reference: string | null;
+    bankAccountId: string | null;
+  }[];
+  /** A deposit taken now, for containers this correction puts out. */
+  deposit?: number | null;
+  depositReason?: string | null;
 }): Promise<AmendResult> {
   const { data, error } = await getSupabase().rpc('amend_sale', {
     p_sale_id: args.saleId,
@@ -138,6 +180,22 @@ export async function amendSale(args: {
       containers_out: l.containersOut,
     })),
     p_customer_id: args.customerId ?? null,
+    /*
+     * `undefined` is sent as null, which the server reads as "unchanged". An empty array survives
+     * as an empty array, which it reads as "none" — the distinction the whole charge-editing
+     * behaviour rests on.
+     */
+    p_charges: args.charges ?? null,
+    p_payments: (args.payments ?? []).length
+      ? (args.payments ?? []).map((p) => ({
+          amount: p.amount,
+          method: p.method,
+          reference: p.reference,
+          bank_account_id: p.bankAccountId,
+        }))
+      : null,
+    p_deposit: args.deposit ?? null,
+    p_deposit_reason: args.depositReason ?? null,
   });
   if (error) throw error;
 
@@ -158,5 +216,6 @@ export async function amendSale(args: {
     paid: Number(r.paid) || 0,
     owing: Number(r.owing) || 0,
     customerId: (r.customer_id as string | null) ?? null,
+    voided: Boolean(r.voided),
   };
 }

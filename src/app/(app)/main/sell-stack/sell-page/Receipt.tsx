@@ -23,7 +23,6 @@ import { receiptPdf, sharePdf } from '@/lib/pdf';
 import { useThisPrinter } from '@/lib/stacks/printer';
 import { openPrinterAppWith } from '@/lib/print-handoff';
 import { receiptAsEscPos } from '@/lib/escpos-text';
-import { dotsFor } from '@/lib/escpos';
 import { appUrl } from '@/lib/app-url';
 
 interface SaleDetail {
@@ -671,7 +670,7 @@ export function Receipt({
                * thousand, and most of the ways the image route could break simply do not exist.
                */
               const went = await openPrinterAppWith(
-                receiptAsEscPos(receiptPayload(), dotsFor(printer.widthMm), printer.textSize),
+                receiptAsEscPos(receiptPayload(), printer.layout),
               );
               if (went) return;
               setShareNote(

@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { getSupabase } from '@/lib/supabase/client';
 import { useResource } from '@/lib/stacks/resource';
 import { isIOS } from '@/lib/printing';
-import type { TextSize } from '@/lib/escpos-text';
+import { defaultLayout, type ReceiptLayout, type TextSize } from '@/lib/escpos-text';
+import { dotsFor } from '@/lib/escpos';
 import { canShareFiles } from '@/lib/share';
 import {
   canPrintOverBluetooth,
@@ -53,8 +54,10 @@ export interface PrinterChoice {
   usbVendorId: number | null;
   usbProductId: number | null;
   btDeviceId: string | null;
-  /** Which of the printer's built-in letter sizes the body prints at. */
+  /** Which of the printer's built-in letter sizes the body prints at (0177, superseded by layout). */
   textSize: TextSize;
+  /** Every part's size, and the MEASURED characters-per-line. Null until the shop sets one. */
+  layout: ReceiptLayout | null;
   updatedAt: string;
 }
 
@@ -90,6 +93,7 @@ interface Row {
   usb_product_id: number | null;
   bt_device_id: string | null;
   text_size: TextSize | null;
+  layout: ReceiptLayout | null;
   updated_at: string;
 }
 
@@ -104,6 +108,7 @@ const toChoice = (r: Row): PrinterChoice => ({
   btDeviceId: r.bt_device_id,
   // The column has a default, so a row can only be null here if something else wrote it.
   textSize: r.text_size ?? 'sshw',
+  layout: r.layout ?? null,
   updatedAt: r.updated_at,
 });
 
@@ -142,6 +147,7 @@ export async function savePrinter(
     p_usb_product_id: choice.usbProductId,
     p_bt_device_id: choice.btDeviceId,
     p_text_size: choice.textSize,
+    p_layout: choice.layout,
   });
   if (error) throw error;
 }
@@ -214,6 +220,8 @@ export function useThisPrinter(storeId: string | null, shopWidthMm?: number) {
 
   const kind: PrinterKind = mine?.kind ?? (isIOS() && canShareFiles() ? 'ios_app' : 'browser');
   const textSize: TextSize = mine?.textSize ?? 'sshw';
+
+
   /*
    * THE ROLL: this device's own if it was given one, otherwise the SHOP's.
    *
@@ -223,6 +231,24 @@ export function useThisPrinter(storeId: string | null, shopWidthMm?: number) {
    * screen disagreeing. Per-device exists for the counter that genuinely has a different roll.
    */
   const widthMm = mine?.widthMm ?? shopWidthMm ?? 80;
+
+  /*
+   * THE LAYOUT, and what a device that has never seen the new screen gets.
+   *
+   * Null means nobody has set one, so the defaults apply — except for the body parts, which are
+   * seeded from `text_size`. That column shipped in 0177 and a shop may have chosen a size with it;
+   * ignoring it would silently revert their choice the moment this deployed, which is the kind of
+   * change nobody reports and everybody notices.
+   */
+  const layout: ReceiptLayout =
+    mine?.layout ?? {
+      ...defaultLayout(dotsFor(widthMm)),
+      ...(mine?.textSize
+        ? { itemName: mine.textSize, strongTotals: mine.textSize }
+        : {}),
+    };
+
+
 
   /*
    * A direct route is only READY when a handle is in hand. `ios_app` and `browser` are always ready:
@@ -258,6 +284,7 @@ export function useThisPrinter(storeId: string | null, shopWidthMm?: number) {
           usbProductId: chosen.productId,
           btDeviceId: null,
           textSize: mine?.textSize ?? 'sshw',
+          layout: mine?.layout ?? null,
         });
         setLive(chosen.name);
       } else {
@@ -271,6 +298,7 @@ export function useThisPrinter(storeId: string | null, shopWidthMm?: number) {
           usbProductId: null,
           btDeviceId: chosen.id,
           textSize: mine?.textSize ?? 'sshw',
+          layout: mine?.layout ?? null,
         });
         setLive(chosen.name);
       }
@@ -284,6 +312,7 @@ export function useThisPrinter(storeId: string | null, shopWidthMm?: number) {
     kind,
     widthMm,
     textSize,
+    layout,
     ready,
     reconnecting,
     printerName: live ?? mine?.printerName ?? null,

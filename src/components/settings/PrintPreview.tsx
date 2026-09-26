@@ -1,74 +1,50 @@
 'use client';
 
-import { useMemo } from 'react';
-import { columnsAt, receiptAsEscPos, type TextSize } from '@/lib/escpos-text';
-import { dotsFor } from '@/lib/escpos';
+import { columnsAt, type PrintedLine, type ReceiptLayout } from '@/lib/escpos-text';
 import styles from './PrintPreview.module.css';
 
 /**
  * WHAT THE ROLL WILL SAY, before a roll is spent finding out.
  *
- * A receipt printed in the printer's own letters is monospaced by definition — every glyph is the
- * same number of dots wide — so a faithful preview is not a rendering problem, it is an arithmetic
- * one: the same text, in a monospaced font, at the same number of characters per line.
+ * IT RENDERS THE PRINTER'S OWN LINES. Not a layout that resembles them — the exact array that
+ * `asInstruction` tags and sends. There is no second description to drift, which matters because
+ * the first version of this DID drift: it showed amounts lined up on the right while the paper
+ * wrapped them onto the next line, and a shop comparing the two found two different documents.
  *
- * THE PREVIEW IS BUILT FROM THE INSTRUCTION ITSELF, not from a second layout that resembles it.
- * `receiptAsEscPos` produces the exact string the printer receives; this un-tags it and shows the
- * lines. So a preview that is wrong is a print that is wrong, which is the only kind of preview
- * worth having — the alternative is two layouts that agree until the day they do not.
+ * The remaining assumption is the one thing a preview cannot know by itself — how many characters
+ * the printer fits on a line — and that is now measured off a ruler rather than calculated. The
+ * preview uses the measured number, so when it is right the two agree, and when it is wrong they
+ * are wrong together and the shop can see it and fix it.
  *
- * The sizes are the printer's, from the app's own reference: small is 9 dots wide, large is 12, and
- * the double-width variants take twice that. On a 576-dot head that is 64, 48 or 32 characters to a
- * line, and the preview scales each line the same way the head will.
+ * A receipt in the printer's built-in font is monospaced by definition: every glyph is the same
+ * number of dots wide. So a faithful preview is arithmetic, not rendering — the same text, in a
+ * monospaced face, at the same characters per line.
  */
 export function PrintPreview({
-  payload,
-  paperMm,
-  bodySize,
+  lines,
+  layout,
 }: {
-  /** The same receipt payload the sell screen builds. */
-  payload: Parameters<typeof receiptAsEscPos>[0];
-  paperMm: number;
-  bodySize: TextSize;
+  lines: PrintedLine[];
+  layout: ReceiptLayout;
 }) {
-  const dots = dotsFor(paperMm);
-
-  const lines = useMemo(() => {
-    const raw = receiptAsEscPos(payload, dots, bodySize);
-    /*
-     * Split back into (size, text) pairs. Every line this produces is `#size#text#lf#`, so the
-     * instruction is its own description and nothing here needs to know the layout rules.
-     */
-    return raw
-      .replace(/^#escps#/, '')
-      .split('#lf#')
-      .filter((chunk) => chunk.length > 0 && chunk !== '#cutt#')
-      .map((chunk) => {
-        const at = chunk.indexOf('#', 1);
-        const size = (chunk.slice(1, at) || 'ss') as TextSize;
-        return { size, text: chunk.slice(at + 1) };
-      });
-  }, [payload, dots, bodySize]);
-
   return (
     <div className={styles.paper} aria-label="How this will print">
-      {/*
-        A fixed character width, scaled per line by how wide that size's glyphs are. `ch` is the
-        width of a "0" in the current font, which in a monospaced face is every character — so a
-        line of 32 double-width characters and a line of 64 small ones come out the same width on
-        screen, exactly as they will on paper.
-      */}
       {lines.map((l, i) => {
-        const cols = columnsAt(l.size, dots);
+        const cols = columnsAt(l.size, layout);
         const tall = l.size.endsWith('h') || l.size.endsWith('hw');
         return (
           <pre
             key={i}
             className={styles.line}
             style={{
-              // Every size fills the same paper width; only the character count differs.
+              /*
+               * Every size fills the SAME paper width; only the character count differs. `ch` would
+               * do this too, but sizing by the count keeps the arithmetic identical to the
+               * printer's: one line of 32 wide characters and one of 64 small ones are the same
+               * width on the roll, and they are the same width here.
+               */
               fontSize: `calc(var(--print-line) / ${cols})`,
-              lineHeight: tall ? 1.6 : 1.15,
+              lineHeight: tall ? 1.7 : 1.15,
               fontWeight: l.size.startsWith('sl') ? 600 : 500,
             }}
           >

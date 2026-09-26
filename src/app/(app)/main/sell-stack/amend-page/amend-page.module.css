@@ -1,67 +1,63 @@
-.lines { display: grid; gap: var(--space-3); margin: var(--space-3) 0 var(--space-4); }
+/*
+  CORRECTING A RECEIPT — the till's own shape, for a sale that already happened.
 
-.line {
-  display: grid;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
+  Most of what this page draws is `SaleLineRow`, which brings its own stylesheet. What is left is
+  the few things a correction has that a fresh sale does not: whose receipt it is, what it said
+  before, and the two ways to put something back on it.
+*/
+
+.who {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
 }
 
-.lineHead {
+.lines {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-2);
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
 }
 
-/* The name is the flexible half, so it needs a zero floor or it pushes the control off a phone. */
-.lineName { min-width: 0; font-weight: 600; }
-.lineWas { font-size: var(--text-sm); color: var(--text-muted); white-space: nowrap; }
-
-.boxes { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
-@media (max-width: 380px) { .boxes { grid-template-columns: 1fr; } }
-
-.drop {
-  align-self: start;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--danger, #b3261e);
-  font: inherit;
-  font-size: var(--text-sm);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  cursor: pointer;
-}
-
-.totals {
+/* Side by side: both are ways of putting an item on, and one is not more important than the other. */
+.add {
   display: grid;
-  gap: var(--space-1);
-  padding: var(--space-3);
-  margin: var(--space-4) 0;
-  border-radius: var(--radius);
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+
+@media (max-width: 380px) {
+  .add {
+    /* Two buttons with icons and words do not fit side by side on the narrowest phones. */
+    grid-template-columns: 1fr;
+  }
+}
+
+/*
+  WHAT IT SAID, AND WHAT IT SHOULD SAY, one above the other.
+
+  The whole question a correction answers is the difference between those two figures, and putting
+  them anywhere but adjacent makes somebody hold one in their head.
+*/
+.totals {
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-6);
   border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   background: var(--surface);
-  font-variant-numeric: tabular-nums;
 }
 
-.totalRow { display: flex; justify-content: space-between; gap: var(--space-3); }
-.totalRow strong { font-size: var(--text-lg); }
-
-.section { margin: var(--space-6) 0 var(--space-2); font-size: var(--text-lg); font-weight: 700; }
-
-.history { display: grid; margin: 0; padding: 0; list-style: none; }
-
-.was {
-  padding: var(--space-3) 0;
-  border-bottom: 1px solid var(--border);
+.totalRow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
   font-size: var(--text-sm);
+  color: var(--text-muted);
 }
-.was:last-child { border-bottom: none; }
-.wasHead { font-weight: 600; }
-.wasDetail { color: var(--text-muted); }
 
-/* The action ENDS the page rather than being pinned to its foot — see CLAUDE.md. */
-.actions { margin: var(--space-5) 0 var(--space-4); }
+.totalRow strong {
+  font-size: var(--text-base);
+  color: var(--text);
+}

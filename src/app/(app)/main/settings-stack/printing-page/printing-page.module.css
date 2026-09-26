@@ -1,0 +1,177 @@
+/*
+  PRINTING — the printer, the paper, and how a receipt is set out.
+
+  One page, because these three were spread across the Settings screen with two previews and two
+  width controls that could disagree. The sliders and the preview have to sit on the same screen:
+  the whole point is watching the paper change as you move them.
+*/
+
+.section {
+  margin: var(--space-6) 0 var(--space-2);
+  font-size: var(--text-lg);
+  font-weight: 650;
+  color: var(--text);
+}
+
+.note {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* Two columns of cards: a real switch, not four pills squashed onto one line. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: var(--touch-comfortable);
+  padding: var(--space-3);
+  border: 2px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+.option:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.optionOn {
+  border-color: var(--primary);
+  background: var(--primary-subtle);
+  color: var(--primary);
+}
+
+.optionName {
+  font-weight: 650;
+  font-size: var(--text-sm);
+  color: inherit;
+}
+
+/* Muted even when selected: it explains the option rather than announcing it. */
+.optionWhat {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+/* ── The two measured numbers ───────────────────────────────────────────────── */
+
+.measures {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: var(--space-3) 0 var(--space-5);
+}
+
+.measure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.measureName {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.measureWhat {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.measureRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/*
+  The number beside its own slider, not under the whole group. Somebody dragging one of these is
+  reading the figure, and a value that lives somewhere else makes them look away from their thumb.
+*/
+.measureValue {
+  min-width: 2.5rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  color: var(--text);
+}
+
+/* ── A size per part ────────────────────────────────────────────────────────── */
+
+.parts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: var(--space-3) 0 var(--space-4);
+}
+
+.part {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.partHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.partName {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* What it is set to AND what that costs in columns — the number that decides whether a name fits. */
+.partSize {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.partWhat {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.slider {
+  width: 100%;
+  /* A comfortable target: these are dragged with a thumb, on a counter, in a hurry. */
+  height: var(--touch-comfortable);
+  accent-color: var(--primary);
+}
+
+/* ── Other devices ──────────────────────────────────────────────────────────── */
+
+.devices {
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.device {
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}

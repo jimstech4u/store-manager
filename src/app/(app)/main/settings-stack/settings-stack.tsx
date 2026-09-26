@@ -34,6 +34,8 @@ const navLink = tabRoutes({ settings_page: SettingsPage }, [
   'words_page',
   'bank_form_page',
   'staff_invite_page',
+  // Appended, never inserted: the URL names a route by its position in this list.
+  'printing_page',
 ]);
 
 export const SettingsStack = () => (

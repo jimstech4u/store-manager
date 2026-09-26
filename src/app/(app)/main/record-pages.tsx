@@ -5,6 +5,9 @@ import { gatePage } from '@/components/ui/PermissionGate';
 import ProductPage from './stock-stack/product-page/product-page';
 import ProductFormPage from './stock-stack/product-form-page/product-form-page';
 import LowStockPage from './stock-stack/low-stock-page/low-stock-page';
+import AmendPaymentPage from './sell-stack/amend-payment-page/amend-payment-page';
+import AmendReasonPage from './sell-stack/amend-reason-page/amend-reason-page';
+import PrintingPage from './settings-stack/printing-page/printing-page';
 import ReceivePage from './stock-stack/receive-page/receive-page';
 import StockHistoryPage from './stock-stack/stock-history-page/stock-history-page';
 import UnitsPage from './stock-stack/units-page/units-page';
@@ -165,6 +168,12 @@ export const RECORD_PAGES: Record<string, ComponentType> = gateAll({
   order_page: OrderPage,
   // And this one after those, for the same reason. The rule is only ever "append".
   low_stock_page: LowStockPage,
+  // The two halves of a correction after the money and the reason. Appended, like everything else:
+  // a route is written into the URL as its POSITION in this map.
+  amend_payment_page: AmendPaymentPage,
+  amend_reason_page: AmendReasonPage,
+  // Appended. A route is written into the URL as its POSITION in this map.
+  printing_page: PrintingPage,
 });
 
 /** Handed to each stack's `additionalNavLinks` — one array, so its identity never changes. */

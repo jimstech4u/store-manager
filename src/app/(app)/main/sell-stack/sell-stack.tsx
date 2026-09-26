@@ -30,6 +30,11 @@ const navLink = tabRoutes({ sell_page: SellPage }, [
   'group_form_page',
   'sales_page',
   'customer_form_page',
+  // Appended, never inserted: the URL names a route by its POSITION in this list, so a
+  // page put anywhere but the end sends every route after it somewhere else — including
+  // one a phone restored from a stack it persisted before the deploy.
+  'amend_payment_page',
+  'amend_reason_page',
 ]);
 
 export const SellStack = () => (
