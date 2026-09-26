@@ -367,6 +367,19 @@ export default function StockPage() {
               const lead = leadUnit(sellingUnits);
               const onHand = lead ? lead.onHand : Number(p.onHand);
               const out = onHand <= 0;
+              /*
+               * RUNNING LOW, judged in BASE units against this item's own level.
+               *
+               * `onHand` above is in whatever shape the card shows — crates, usually — and the
+               * level is stored in base units like every other quantity here. Comparing the two
+               * directly would call a shelf of forty bottles "low" against a level of five crates.
+               *
+               * Out of stock wins: an item with none left is not "running low", it is gone, and
+               * two badges saying overlapping things is two things to read.
+               */
+              const level = p.lowStockLevel === null ? null : Number(p.lowStockLevel);
+              const low =
+                !out && level !== null && Number.isFinite(level) && Number(p.onHand) <= level;
               return (
                 <li key={p.id}>
                   {/* A button, not a div with onClick: this has to be reachable by keyboard and
@@ -412,12 +425,16 @@ export default function StockPage() {
                   */}
                   <div className={styles.itemQty}>
                     {sellingUnits.length > 0 ? (
-                      <span className={`${styles.qtyShapes} ${out ? styles.qtyLow : ''}`}>
+                      <span
+                        className={`${styles.qtyShapes} ${out ? styles.qtyLow : ''} ${low ? styles.qtyRunning : ''}`}
+                      >
                         {stockInShapes(sellingUnits)}
                       </span>
                     ) : (
                       <>
-                        <span className={`${styles.qtyValue} ${out ? styles.qtyLow : ''}`}>
+                        <span
+                          className={`${styles.qtyValue} ${out ? styles.qtyLow : ''} ${low ? styles.qtyRunning : ''}`}
+                        >
                           {formatQty(onHand)}
                         </span>
                         <span className={styles.qtyUnit}>
@@ -425,6 +442,13 @@ export default function StockPage() {
                         </span>
                       </>
                     )}
+
+                    {/*
+                      SAID IN WORDS, not only in colour. A colour alone is invisible to a good
+                      number of people and unreadable in sunlight on a phone at a counter, which is
+                      where this is read.
+                    */}
+                    {low && <span className={styles.runningLow}>running low</span>}
                   </div>
                   <ChevronRightIcon className={styles.itemChevron} />
                   </button>

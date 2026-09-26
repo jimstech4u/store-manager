@@ -55,6 +55,12 @@ interface Settings {
   receipt_logo_width_pct: number;
   /** How long after "Not now" a waiting app update asks again, in minutes (0158). */
   update_reminder_minutes: number;
+  /**
+   * The shop-wide "running low" level, in base units. Null is OFF, and is not the same as 0 —
+   * zero means "tell me only when there are none", which a shop selling something rare wants.
+   * An item may carry its own level, which wins wherever it is set.
+   */
+  low_stock_threshold: number | null;
 }
 
 /** What the shop can choose from. Minutes, so a fifth is a number rather than a migration. */
@@ -234,6 +240,8 @@ export default function SettingsPage() {
             ...row,
             receipt_logo_width_pct: row.receipt_logo_width_pct ?? 60,
             update_reminder_minutes: row.update_reminder_minutes ?? 30,
+            // No default: null is a real answer here and means nobody has asked to be told.
+            low_stock_threshold: row.low_stock_threshold ?? null,
           },
           shop: shopRow.error
             ? snapshotRef.current.shop
@@ -294,6 +302,7 @@ export default function SettingsPage() {
           receipt_logo_path: settings.receipt_logo_path,
           receipt_logo_width_pct: settings.receipt_logo_width_pct,
           update_reminder_minutes: settings.update_reminder_minutes,
+          low_stock_threshold: settings.low_stock_threshold,
         })
         .eq('store_id', store.id);
       if (err) throw err;
@@ -410,6 +419,34 @@ export default function SettingsPage() {
               in, and comes with the next launch anyway.
             </p>
           </div>
+
+          {/*
+            RUNNING LOW — the shop's general rule. The exceptions live on the items themselves.
+
+            One figure across a whole shop is always wrong somewhere: too low and it never fires
+            for the fast-moving lines, too high and the slow ones shout constantly. So this is the
+            general answer, and any item can be given its own, which wins wherever it is set.
+
+            BLANK IS OFF, and that is not the same as 0. Zero means "tell me only when there are
+            none at all", which a shop selling something rare genuinely wants, so the two are kept
+            apart the whole way down to the column.
+          */}
+          <h2 className={styles.section}>Running low</h2>
+          <Field
+            label="Tell me when an item gets down to"
+            numeric
+            disabled={!editable}
+            value={
+              settings.low_stock_threshold === null ? '' : String(settings.low_stock_threshold)
+            }
+            onChange={(e) =>
+              patch({
+                low_stock_threshold: e.target.value.trim() === '' ? null : Number(e.target.value),
+              })
+            }
+            placeholder="Leave blank for no warning"
+            hint="Counted in the smallest unit an item is kept in. An item can be given its own level instead, and that one wins."
+          />
         </>
       )}
 

@@ -36,6 +36,19 @@ export interface Product {
   packName: string | null;
   packQty: string | null;
   listPrice: string | null;
+  /**
+   * What "running low" means for THIS item, in base units — its own level if it has one, the
+   * shop's otherwise, and null when nobody has asked to be told. This is the figure a card is
+   * judged against.
+   */
+  lowStockLevel: string | null;
+  /**
+   * And the level this item was actually GIVEN, which only `get_product` returns — null when it
+   * simply follows the shop. The edit form needs this one rather than the resolved figure above:
+   * shown the shop's general level in a box that means "this one is different", saving would pin
+   * every item somebody edited to whatever the general rule happened to be that day.
+   */
+  ownLowStockLevel?: string | null;
 }
 
 interface ProductRow {
@@ -52,6 +65,8 @@ interface ProductRow {
   pack_id: string | null;
   pack_name: string | null;
   pack_qty: string | null;
+  low_stock_level?: string | null;
+  own_low_stock_level?: string | null;
   list_price: string | null;
 }
 
@@ -70,6 +85,10 @@ function toProduct(r: ProductRow): Product {
     packId: r.pack_id,
     packName: r.pack_name,
     packQty: r.pack_qty,
+    lowStockLevel: (r.low_stock_level ?? null) as string | null,
+    // Left UNDEFINED, not null, by the readers that do not return it: undefined means "this row
+    // cannot say", and a form filled from such a row must not conclude the item has no exception.
+    ownLowStockLevel: r.own_low_stock_level,
     listPrice: r.list_price,
   };
 }
@@ -427,4 +446,20 @@ export async function fetchReturnablesDue(
     depositPerUnit: r.deposit_per_unit,
     depositTotal: r.deposit_total,
   }));
+}
+
+/**
+ * WHAT "RUNNING LOW" MEANS FOR ONE ITEM, overriding the shop's own rule.
+ *
+ * `null` puts it back under the shop's rule, which is a different thing from 0 — zero is a real
+ * level meaning "tell me only when there are none at all", which a shop selling something rare
+ * genuinely wants. The two are kept apart the whole way down to the column.
+ */
+export async function setProductLowStock(productId: string, level: number | null) {
+  const { error } = await getSupabase().rpc('set_product_low_stock', {
+    p_product_id: productId,
+    p_level: level,
+  });
+  if (error) throw error;
+  catalogChanged();
 }

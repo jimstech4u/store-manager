@@ -198,3 +198,63 @@
   font-size: var(--text-sm);
   color: var(--text-muted);
 }
+
+/* ── Dated batches ────────────────────────────────────────────────────────────────── */
+
+/* Quantity, date, and a way to take the line out — on one row where there is room, stacked on a
+   phone rather than squeezed into three unreadable columns. */
+.batchRow {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-2);
+  align-items: end;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: var(--space-2);
+  background: var(--surface-sunken);
+}
+
+@media (min-width: 520px) {
+  .batchRow { grid-template-columns: 1fr 1fr auto; }
+}
+
+.batchRemove {
+  min-height: var(--touch-min);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius);
+  color: var(--danger);
+  font-weight: 600;
+  background: none;
+}
+
+.batchAdd {
+  width: 100%;
+  min-height: var(--touch-min);
+  margin-bottom: var(--space-3);
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* Said while there is still something to do about it. The server refuses a set that does not add
+   up, and hearing that at the save button — having typed a whole item — is hearing it too late. */
+.batchWarn {
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  background: var(--warning-subtle);
+  color: var(--warning);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  margin-bottom: var(--space-3);
+}
+
+/* A heading inside a section — quieter than `.section`, because it belongs to the thing above it
+   rather than starting a new subject. */
+.subsection {
+  font-size: var(--text-base);
+  font-weight: 700;
+  margin: var(--space-5) 0 var(--space-1);
+}

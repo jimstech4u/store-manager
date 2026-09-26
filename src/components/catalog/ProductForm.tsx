@@ -27,12 +27,12 @@ import {
   type StoreUnit,
 } from '@/lib/stacks/product-units';
 import { getSupabase } from '@/lib/supabase/client';
-import type { Product } from '@/lib/stacks/catalog-stack';
+import { setProductLowStock, type Product } from '@/lib/stacks/catalog-stack';
 import styles from './ProductForm.module.css';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 import { useLoadArea } from '@/components/ui/LoadArea';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
-import { messageOf } from '@/lib/format';
+import { messageOf, pluralUnit } from '@/lib/format';
 import { baseQtyByShape, stockInShapes } from '@/lib/shape-quantities';
 
 /**
@@ -171,6 +171,30 @@ export function ProductForm({
    * One figure, not one per shape. A crate cost and a bottle cost are the same fact said twice and
    * can contradict each other; a shop knows what it pays for a crate.
    */
+  /*
+   * WHEN IT GOES OFF — and a shelf is routinely more than one answer.
+   *
+   * The same product is often two or three deliveries deep with different dates on it: forty
+   * crates going off in March and twelve in June. That is two facts, and averaging them into one
+   * loses the only one worth acting on. So the dates are LINES, and the quantities on them have to
+   * add up to what was counted above — the two are descriptions of one shelf.
+   *
+   * Entirely optional. Plenty of stock has no date on it at all, and a form that insisted would be
+   * asking most shops to invent one.
+   */
+  const [batches, setBatches] = useState<{ key: string; qty: string; expiresOn: string }[]>([]);
+
+  /*
+   * THIS ITEM'S OWN "RUNNING LOW" LEVEL, if it is an exception.
+   *
+   * Blank means "use the shop's rule", which is the right default for almost everything. A shop
+   * sets this on the few lines it cannot afford to run out of — and on the slow ones it does not
+   * want shouting at it.
+   */
+  const [lowStock, setLowStock] = useState(
+    product?.ownLowStockLevel == null ? '' : String(product.ownLowStockLevel),
+  );
+
   const [openingCost, setOpeningCost] = useState('');
 
   /*
@@ -265,6 +289,17 @@ export function ProductForm({
   const costShape =
     units.find((u) => u.isBought) ??
     [...countedShapes].sort((a, b) => (baseOf[b.storeUnitId] ?? 1) - (baseOf[a.storeUnitId] ?? 1))[0];
+
+  /*
+   * The dated lines are in the SHAPE THE COST IS IN — the biggest counted shape, the one a shop
+   * says "forty crates" about — so they are converted to base units the same way the count is
+   * before the two are compared.
+   */
+  const batchBase = batches.reduce(
+    (sum, b) => sum + (Number(b.qty) || 0) * (costShape ? (baseOf[costShape.storeUnitId] ?? 1) : 1),
+    0,
+  );
+  const anyBatch = batches.some((b) => (b.qty ?? '').trim() !== '');
 
   const shelfBase = totalFrom(shelfByShape, countedShapes);
   const anyShelfSaid = countedShapes.some((u) => (shelfByShape[u.storeUnitId] ?? '').trim() !== '');
@@ -547,6 +582,23 @@ export function ProductForm({
       await saveDiscounts(id, discounts);
 
       /*
+       * Only when it has actually changed. Writing it every save would touch the column on every
+       * edit of a name, and `null` and `0` mean different things here — sending one for the other
+       * would silently switch an item between "use the shop's rule" and "tell me only at none".
+       */
+      const wantedLow = lowStock.trim() === '' ? null : Number(lowStock);
+      const hadLow =
+        product?.ownLowStockLevel == null ? null : Number(product.ownLowStockLevel);
+      /*
+       * Only when it has actually changed, and only when this form was in a position to know what
+       * it was. `ownLowStockLevel` is undefined on a row that came from a reader which does not
+       * return it — a search result handed straight to the form, say — and writing on the strength
+       * of that would clear a level the form never showed.
+       */
+      const knew = !product || product.ownLowStockLevel !== undefined;
+      if (knew && wantedLow !== hadLow) await setProductLowStock(id, wantedLow);
+
+      /*
        * The opening facts, AFTER the units — a count is in base units and the units define them.
        *
        * Ordered rather than parallel, and deliberately: if the returnable link fails, the shop
@@ -578,6 +630,19 @@ export function ProductForm({
               ? null
               : Number(openingCost) / (baseOf[costShape.storeUnitId] || 1),
           p_note: 'Counted when the item was added',
+          /*
+           * The dated lots, in base units like the count, or nothing at all. The server refuses a
+           * set that does not add up to the count rather than quietly preferring one of them.
+           */
+          p_batches: anyBatch
+            ? batches
+                .filter((b) => Number(b.qty) > 0)
+                .map((b) => ({
+                  qty:
+                    Number(b.qty) * (costShape ? (baseOf[costShape.storeUnitId] ?? 1) : 1),
+                  expires_on: b.expiresOn || null,
+                }))
+            : null,
         });
         if (error) throw error;
       }
@@ -687,8 +752,22 @@ export function ProductForm({
           packName: null,
           packQty: null,
           listPrice: null,
+          // A new item is judged by the shop's own rule until somebody gives it one of its own.
+          lowStockLevel: null,
+          ownLowStockLevel: null,
         }),
         id,
+        /*
+         * The level as of this save, over whatever the spread above brought in.
+         *
+         * `lowStockLevel` is the RESOLVED figure and the shop's general level is not known here,
+         * so when the exception is being removed the old resolved value is kept until the re-read
+         * says otherwise — a moment of the previous answer, rather than a card that says no level
+         * at all on a shop that has one.
+         */
+        ownLowStockLevel: wantedLow === null ? null : String(wantedLow),
+        lowStockLevel:
+          wantedLow === null ? (product?.lowStockLevel ?? null) : String(wantedLow),
         name: trimmed,
         sku: sku.trim() || null,
         barcode: barcode.trim() || null,
@@ -1034,6 +1113,75 @@ export function ProductForm({
               : 'Leave them blank if you would rather count later.'}
           </p>
 
+          {/* ── When it goes off ──────────────────────────────────────────────── */}
+          {shelfBase > 0 && costShape && (
+            <>
+              <h3 className={styles.subsection}>When does it go off?</h3>
+              <p className={styles.sectionNote}>
+                Only if it has a date on it. Add a line for each date — a shelf two deliveries deep
+                has two, and one averaged date would hide the one that matters.
+              </p>
+
+              {batches.map((b, i) => (
+                <div className={styles.batchRow} key={b.key}>
+                  <Field
+                    label={"How many " + costShape.plural.toLowerCase()}
+                    numeric
+                    value={b.qty}
+                    onChange={(e) =>
+                      setBatches((prev) =>
+                        prev.map((x, j) => (j === i ? { ...x, qty: e.target.value } : x)),
+                      )
+                    }
+                    placeholder="0"
+                  />
+                  <Field
+                    label="Goes off"
+                    type="date"
+                    value={b.expiresOn}
+                    onChange={(e) =>
+                      setBatches((prev) =>
+                        prev.map((x, j) => (j === i ? { ...x, expiresOn: e.target.value } : x)),
+                      )
+                    }
+                  />
+                  <button
+                    type="button"
+                    className={styles.batchRemove}
+                    onClick={() => setBatches((prev) => prev.filter((_, j) => j !== i))}
+                    aria-label="Remove this date"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+
+              <button
+                type="button"
+                className={styles.batchAdd}
+                onClick={() =>
+                  setBatches((prev) => [
+                    ...prev,
+                    { key: String(Date.now()) + '-' + String(prev.length), qty: '', expiresOn: '' },
+                  ])
+                }
+              >
+                + Add a date
+              </button>
+
+              {/*
+                SAID BEFORE SAVING, not after. The server refuses a set that does not add up, and
+                being told at the save button — having typed a whole item — is being told too late.
+              */}
+              {anyBatch && batchBase !== shelfBase && (
+                <p className={styles.batchWarn}>
+                  The dates cover {String(batchBase)} but you counted {String(shelfBase)}. They
+                  describe the same shelf, so they have to agree.
+                </p>
+              )}
+            </>
+          )}
+
           {/*
             The arithmetic said back, because nobody should have to trust a multiplication they
             cannot see. The count screen says the same thing for the same reason.
@@ -1119,6 +1267,32 @@ export function ProductForm({
           )}
         </>
       )}
+
+      {/*
+        WHEN TO BE TOLD THIS ONE IS RUNNING OUT.
+
+        The shop sets a general level in Settings and it covers everything; this is the exception,
+        and it wins wherever it is set. A shop learns which lines those are from selling them — it
+        is the item that ran out on a Saturday that earns its own level — so this cannot live in the
+        add-an-item half of the form, which is where it first went and where an existing item could
+        never reach it.
+
+        BLANK IS NOT ZERO. Blank puts the item back under the shop's rule; 0 is a real level meaning
+        "tell me only when there are none at all", which is right for something rare that is ordered
+        in when somebody asks.
+      */}
+      <h2 className={styles.section}>Tell me when it runs low</h2>
+      <p className={styles.sectionNote}>
+        Only if this one is different from the rest. Otherwise it follows the shop&apos;s general
+        level, set in Settings.
+      </p>
+      <Field
+        label={`Warn me at this many ${pluralUnit(impliedBaseUnit(), 2)}`}
+        numeric
+        value={lowStock}
+        onChange={(e) => setLowStock(e.target.value)}
+        placeholder="Use the shop's level"
+      />
 
       <h2 className={styles.section}>Cheaper for buying more</h2>
       <p className={styles.sectionNote}>

@@ -159,3 +159,21 @@
   font-weight: 600;
   cursor: pointer;
 }
+
+/* ── Running low ──────────────────────────────────────────────────────────────────── */
+
+/* Amber, not the red that means "none left": they are different situations and a shop acts on
+   them differently — one is a reorder, the other is a customer being turned away. */
+.qtyRunning {
+  color: var(--warning);
+}
+
+/* In words as well as colour. A colour alone is invisible to a good number of people and washes
+   out in sunlight on a phone at a counter, which is exactly where this is read. */
+.runningLow {
+  display: block;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--warning);
+  white-space: nowrap;
+}
