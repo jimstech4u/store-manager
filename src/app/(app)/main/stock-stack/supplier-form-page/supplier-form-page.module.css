@@ -32,3 +32,185 @@
   flex: 1 1 8rem;
   min-width: 0;
 }
+
+/* =====================================================================================
+   Containers between the shop and a supplier.
+
+   This was two grids of a numbered box per returnable shape — thirty zeroes to record the one
+   number a shop knows. It is now the same pick-and-add-a-line the customer form uses, and it can
+   speak at maker grain ("25 NBL crates"), which is how a yard is actually settled.
+   ===================================================================================== */
+
+/* ── Whose, and at what grain ─────────────────────────────────────────────────────── */
+
+.sideTabs,
+.grainTabs {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.side,
+.sideOn,
+.grain,
+.grainOn {
+  flex: 1;
+  min-height: var(--touch-min);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius);
+  border: 2px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+/* The side is the louder of the two: getting it wrong puts a supplier's crates on the shop's
+   side of the ledger, which is a real mistake. The grain is only how it is counted. */
+.sideOn {
+  border-color: var(--primary);
+  background: var(--primary-subtle);
+  color: var(--primary);
+}
+
+.grainTabs {
+  margin-bottom: var(--space-2);
+}
+
+.grain,
+.grainOn {
+  min-height: 38px;
+  border-width: 1px;
+  font-size: var(--text-xs);
+}
+
+.grainOn {
+  border-color: var(--text-muted);
+  color: var(--text);
+}
+
+/* ── Composing a line ─────────────────────────────────────────────────────────────── */
+
+.composer {
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  margin-bottom: var(--space-4);
+}
+
+/* Looks like the field it stands in for, because that is what it is: a value to be chosen rather
+   than typed. */
+.pick {
+  display: block;
+  width: 100%;
+  min-height: var(--touch-min);
+  padding: 0 var(--space-3);
+  margin-bottom: var(--space-3);
+  text-align: left;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.unitSelect {
+  width: 100%;
+  min-height: var(--touch-min);
+  padding: 0 var(--space-3);
+  margin-bottom: var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+/* ── The lines added so far ───────────────────────────────────────────────────────── */
+
+.lineList {
+  list-style: none;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.line:last-child { border-bottom: none; }
+
+.lineRemove {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--touch-min);
+  height: var(--touch-min);
+  margin-left: calc(var(--space-2) * -1);
+  border-radius: var(--radius-full);
+  color: var(--danger);
+  background: none;
+}
+
+.lineBody {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.lineLabel {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* Which side, on every line: a list that mixes the two and does not say so is a list nobody can
+   check. */
+.lineSide {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* ── The pickers ──────────────────────────────────────────────────────────────────── */
+
+.pickList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pickRow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  min-height: var(--touch-comfortable);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+}
+
+.pickRow:hover { background: var(--surface-sunken); }
+
+.pickName { font-weight: 600; overflow-wrap: anywhere; }
+
+.pickMeta { font-size: var(--text-sm); color: var(--text-muted); }
+
+/* An empty picker is an ordinary answer here — see the text it carries — and an empty sheet reads
+   as a failure, so it is given room rather than left blank. */
+.pickEmpty {
+  padding: var(--space-4);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}

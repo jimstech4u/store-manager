@@ -148,6 +148,37 @@ export async function supplierEmptiesSent(supplierId: string): Promise<SupplierE
  * Partial throughout, and every movement its own row, for the reason every ledger here is a ledger:
  * a shop hands back what fits on the lorry and the rest waits for the next one.
  */
+/**
+ * CONTAINERS AT MAKER GRAIN — "25 NBL crates", the way a yard is actually settled.
+ *
+ * A supplier delivers Gulder, Goldberg and 33 Export and takes back a count of NBL crates; nobody
+ * records which beer was in which. The mirror of `recordGroupEmpties` on the customer side, and it
+ * writes to the same table as `recordSupplierEmpties` — one row, carrying a maker and a word
+ * instead of a product and a shape.
+ */
+export async function recordSupplierGroupEmpties(args: {
+  storeId: string;
+  supplierId: string;
+  categoryId: string;
+  storeUnitId: string;
+  qty: number;
+  side?: 'they_hold' | 'we_hold';
+  direction?: 'out' | 'returned' | 'damaged';
+  note?: string;
+}) {
+  const { error } = await getSupabase().rpc('record_supplier_empties_for_group', {
+    p_store_id: args.storeId,
+    p_supplier_id: args.supplierId,
+    p_category_id: args.categoryId,
+    p_store_unit_id: args.storeUnitId,
+    p_qty: args.qty,
+    p_side: args.side ?? 'we_hold',
+    p_direction: args.direction ?? 'out',
+    p_note: args.note?.trim() || null,
+  });
+  if (error) throw error;
+}
+
 export async function recordSupplierEmpties(args: {
   storeId: string;
   supplierId?: string | null;
