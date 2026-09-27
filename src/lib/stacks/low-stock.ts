@@ -123,11 +123,23 @@ export async function setShopLowStock(storeId: string, level: number | null): Pr
   levelsChanged();
 }
 
-/** One item's own level. Null puts it back under the shop's rule — which is not the same as 0. */
-export async function setItemLowStock(productId: string, level: number | null): Promise<void> {
+/**
+ * One item's own level. Null puts it back under the shop's rule — which is not the same as 0.
+ *
+ * `unitId` is the shape the shop TYPED it in, kept so the form can read it back in those words
+ * (0184). The level itself is still in base units, because that is what the shelf is counted in
+ * and what every warning compares against. Clearing the level clears the shape with it: "follows
+ * the shop" is not said in crates.
+ */
+export async function setItemLowStock(
+  productId: string,
+  level: number | null,
+  unitId: string | null = null,
+): Promise<void> {
   const { error } = await getSupabase().rpc('set_product_low_stock', {
     p_product_id: productId,
     p_level: level,
+    p_unit_id: unitId,
   });
   if (error) throw error;
   levelsChanged();
