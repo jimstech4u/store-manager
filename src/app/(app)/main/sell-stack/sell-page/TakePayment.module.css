@@ -542,3 +542,17 @@
   font-weight: 600;
   cursor: pointer;
 }
+
+/*
+  WHICH ACCOUNT A TRANSFER LANDED IN — the label and the picker on one line.
+
+  `.accountLabel` and `.accountSelect` were styled and the row holding them was not, so on a narrow
+  phone the word "Into" sat above a full-width select instead of beside it, and the payment box
+  grew a line for nothing.
+*/
+.accountRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}

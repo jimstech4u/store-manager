@@ -90,6 +90,28 @@ export async function salePaid(saleId: string): Promise<number> {
   return ((data ?? []) as { amount: string }[]).reduce((sum, a) => sum + Number(a.amount), 0);
 }
 
+/**
+ * THE NAMED CHARGES ON A RECEIPT — transport, loading, whatever the shop added.
+ *
+ * `sale_document` carries `fee_amount` and `fee_label` but not the itemised list, so a correction
+ * seeded from it had no charges at all. Two things then went wrong at once: the corrected total
+ * left them out, so the screen disagreed with the receipt it was correcting, and saving sent an
+ * EMPTY list — which `amend_sale` reads as "there are none" and deletes the lot. A shop correcting
+ * a quantity would have silently dropped its own transport charge.
+ */
+export async function saleCharges(saleId: string): Promise<{ label: string; amount: number }[]> {
+  const { data, error } = await getSupabase()
+    .from('sale_charges')
+    .select('label, amount, sort_order')
+    .eq('sale_id', saleId)
+    .order('sort_order');
+  if (error) throw error;
+  return ((data ?? []) as { label: string; amount: string }[]).map((c) => ({
+    label: c.label,
+    amount: Number(c.amount) || 0,
+  }));
+}
+
 export interface Revision {
   revision: number;
   document: SaleDocument;

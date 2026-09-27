@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect } from 'react';
 import { useDemandState } from '@academix-admin/state-stack';
-import { saleDocument, salePaid, type SaleDocument } from '@/lib/stacks/amend';
+import { saleCharges, saleDocument, salePaid, type SaleDocument } from '@/lib/stacks/amend';
 import type { DraftLine, DraftOrder } from '@/lib/stacks/draft-orders';
 
 /**
@@ -64,7 +64,7 @@ const empty = (saleId: string): AmendDraft => ({
 });
 
 /** The receipt's lines, in the shape the till's own row component edits. */
-function toOrder(doc: SaleDocument): DraftOrder {
+function toOrder(doc: SaleDocument, charges: { label: string; amount: number }[]): DraftOrder {
   return {
     id: doc.saleId,
     clientUuid: doc.saleId,
@@ -98,14 +98,19 @@ function toOrder(doc: SaleDocument): DraftOrder {
     feeAmount: '0',
     feeLabel: '',
     /*
-     * The named charges are seeded EMPTY and the receipt's own are read from `was`.
+     * THE RECEIPT'S OWN CHARGES, read separately because `sale_document` does not carry them.
      *
-     * `sale_document` does not carry them line by line, and sending a guess as the list would
-     * replace the shop's itemised transport and loading with one lumped figure the moment anybody
-     * corrected a quantity. A screen that wants to edit them fills this from the receipt first;
-     * until it does, the correction leaves them alone by sending null.
+     * Seeded empty at first, and that was wrong twice over: the corrected total left the shop's
+     * transport out, so the screen disagreed with the receipt it was correcting — and saving sent
+     * an empty list, which `amend_sale` reads as "there are none" and deletes. Correcting a
+     * quantity silently dropped the transport.
      */
-    charges: [],
+    charges: charges.map((c, i) => ({
+      key: `charge-${i}`,
+      label: c.label,
+      amount: String(c.amount),
+      note: undefined,
+    })),
     deposits: [],
     note: doc.note ?? '',
     synced: true,
@@ -131,9 +136,15 @@ export function useAmendDraft(saleId: string | null) {
   useEffect(() => {
     if (!saleId || state.order) return;
     void demand(async ({ set }) => {
-      const [doc, paid] = await Promise.all([saleDocument(saleId), salePaid(saleId)]);
+      const [doc, paid, charges] = await Promise.all([
+        saleDocument(saleId),
+        salePaid(saleId),
+        saleCharges(saleId),
+      ]);
       if (!doc) return;
-      set({ ...empty(saleId), was: doc, order: toOrder(doc), alreadyPaid: paid }, { override: true });
+      set({ ...empty(saleId), was: doc, order: toOrder(doc, charges), alreadyPaid: paid }, {
+        override: true,
+      });
     });
   }, [saleId, state.order, demand]);
 
@@ -209,10 +220,17 @@ export function useAmendDraft(saleId: string | null) {
   const reset = useCallback(() => {
     if (!saleId) return;
     void demand(async ({ set }) => {
-      const [doc, paid] = await Promise.all([saleDocument(saleId), salePaid(saleId)]);
-      set(doc ? { ...empty(saleId), was: doc, order: toOrder(doc), alreadyPaid: paid } : empty(saleId), {
-        override: true,
-      });
+      const [doc, paid, charges] = await Promise.all([
+        saleDocument(saleId),
+        salePaid(saleId),
+        saleCharges(saleId),
+      ]);
+      set(
+        doc
+          ? { ...empty(saleId), was: doc, order: toOrder(doc, charges), alreadyPaid: paid }
+          : empty(saleId),
+        { override: true },
+      );
     });
   }, [saleId, demand]);
 

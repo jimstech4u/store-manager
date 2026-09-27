@@ -109,6 +109,16 @@ export default function AmendPaymentPage() {
                 order={order}
                 storeId={store.id}
                 total={stillOwed}
+                /*
+                 * WHAT WAS ALREADY TYPED HERE, restored.
+                 *
+                 * A seller adds ₦5,000, goes back to the items for one more crate, and comes back.
+                 * This screen is pushed and popped, so without these the payment was simply gone —
+                 * reported exactly that way, and the next screen then committed a correction with
+                 * no money on it.
+                 */
+                entered={draft.taking}
+                onEnteredChange={(next) => patch({ taking: next })}
                 onUpdateOrder={(next) => patchOrder(next)}
                 onNeedCustomer={() => {
                   /*
@@ -125,6 +135,11 @@ export default function AmendPaymentPage() {
                  * before the correction lands would sit against a document that never existed.
                  */
                 commit={async ({ payments, depositNow, depositReason }) => {
+                  /*
+                   * The rows are already on the correction, kept by `onEnteredChange` as they were
+                   * entered. What is set here is the amount still sitting in the box — counted
+                   * towards the total but never "added" — plus the deposit, which this screen owns.
+                   */
                   patch({
                     taking: payments.map((p) => ({
                       amount: p.amount,

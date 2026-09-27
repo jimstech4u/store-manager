@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import styles from './TakePayment.module.css';
 import { Button } from '@/components/ui/Button';
 import { useBankAccounts } from '@/lib/stacks/bank-accounts';
@@ -68,6 +68,8 @@ export function TakePayment({
   storeId,
   total,
   onNeedCustomer,
+  entered,
+  onEnteredChange,
   commit,
   settledLabel = 'Mark as paid',
   onUpdateOrder,
@@ -120,6 +122,18 @@ export function TakePayment({
     }[];
   }) => Promise<void>;
   /**
+   * Payments ALREADY ENTERED for this sale, to restore when the screen is opened again.
+   *
+   * Not payments already taken by the shop — those are the server's business. These are the ones
+   * somebody typed here and has not committed yet, and they have to survive going back for one
+   * more item.
+   */
+  entered?: { amount: number; method: string; reference: string | null; bankAccountId: string | null }[];
+  /** Told whenever they change, so the flow that owns them can hold them. */
+  onEnteredChange?: (
+    next: { amount: number; method: string; reference: string | null; bankAccountId: string | null }[],
+  ) => void;
+  /**
    * What the button says when the money covers the total.
    *
    * "Mark as paid" is right for a first sale and wrong for a correction, where the seller is
@@ -143,8 +157,43 @@ export function TakePayment({
    *
    * A blank first row meant "paying nothing by cash" was always on the list, and the summary had
    * to pretend it was not there.
+   *
+   * SEEDED FROM THE CALLER when there is something to restore. This screen is pushed and popped —
+   * a seller adds a payment, goes back for one more item, and comes back — and a component that
+   * starts empty every time loses what they entered. Reported on the correction flow, where going
+   * back to the items and returning forgot the payment entirely; the same would happen at the till
+   * the moment anything popped this page.
    */
-  const [rows, setRows] = useState<PaymentRow[]>([]);
+  const [rows, setRows] = useState<PaymentRow[]>(() =>
+    (entered ?? []).map((p, i) => ({
+      key: `kept-${i}`,
+      method: p.method as Method,
+      amount: String(p.amount),
+      reference: p.reference ?? '',
+      bankAccountId: p.bankAccountId ?? null,
+    })),
+  );
+
+  /*
+   * And handed back as they change, so whatever owns this flow can keep them.
+   *
+   * In an effect rather than at each call site: there are four places that add or remove a row,
+   * and one of them forgetting to report is exactly the bug this is fixing.
+   */
+  const reportRef = useRef(onEnteredChange);
+  reportRef.current = onEnteredChange;
+  useEffect(() => {
+    reportRef.current?.(
+      rows
+        .filter((r) => Number(r.amount) > 0)
+        .map((r) => ({
+          amount: Number(r.amount),
+          method: r.method,
+          reference: r.reference || null,
+          bankAccountId: r.bankAccountId ?? null,
+        })),
+    );
+  }, [rows]);
 
   // The payment being composed.
   const [draftMethod, setDraftMethod] = useState<Method>('cash');
