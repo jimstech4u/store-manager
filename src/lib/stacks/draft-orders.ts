@@ -368,6 +368,21 @@ export function useDraftOrders(storeId: string | null) {
               amount: Number(c.amount),
               note: c.note?.trim() || null,
             })),
+          /*
+           * THE DEPOSITS, which used to go nowhere at all (0182).
+           *
+           * They live as a list on the order — a deposit is a round sum two people agree against
+           * the containers going out, not a quantity at a rate — and no column followed them there
+           * when they moved off the lines. So the till held them in the browser and the shop never
+           * heard: a refresh lost them, a dead phone lost them, and the seller had taken cash the
+           * books had no record of.
+           *
+           * Same null-versus-empty contract as the charges: an empty array clears them, so removing
+           * the last deposit has to reach the server, and `null` would mean "not mentioned".
+           */
+          p_deposits: (order.deposits ?? [])
+            .filter((d) => Number(d.amount) > 0)
+            .map((d) => ({ amount: Number(d.amount), note: d.note?.trim() || null })),
           p_note: order.note || null,
           p_client_uuid: order.clientUuid,
           p_lines: order.lines
@@ -456,10 +471,33 @@ export function useDraftOrders(storeId: string | null) {
     [setOrders],
   );
 
+  /*
+   * CLOSING A TAB CLOSES IT IN THE SHOP TOO.
+   *
+   * This only ever emptied local state. The order stayed `open` on the server, `my_open_drafts`
+   * quite correctly sent it back on the next load, and the seller who had just cleared the counter
+   * reopened the app to find every tab they had discarded waiting for them — seventy-two of them,
+   * reported exactly that way. The confirm dialog's promise that "the order code goes back for
+   * someone else to use" was never kept either: the code stayed spoken for.
+   *
+   * `mergeInto` closes the tab it merged FROM, so the same gap was worse there than annoying: the
+   * source order stayed open holding the very lines that had just been copied onto another tab, and
+   * a reload brought the goods back a second time.
+   *
+   * A SETTLED ORDER IS LEFT ALONE. `settle_draft_order` has already closed it, and
+   * `cancel_draft_order` refuses one that has been paid for — rightly, since money and stock have
+   * moved and the way back is voiding the sale.
+   */
   const closeOrder = useCallback(
     (clientUuid: string) => {
+      let closed: DraftOrder | null = null;
+      let closedAt = -1;
+
       setOrders((prev) => {
         const at = prev.findIndex((o) => o.clientUuid === clientUuid);
+        if (at < 0) return prev;
+        closed = prev[at];
+        closedAt = at;
         const next = prev.filter((o) => o.clientUuid !== clientUuid);
 
         /*
@@ -477,6 +515,31 @@ export function useDraftOrders(storeId: string | null) {
 
         return next;
       });
+
+      const order = closed as DraftOrder | null;
+      if (!order?.id || order.settled) return;
+
+      /*
+       * Told after the tab has gone, not before.
+       *
+       * The counter cannot wait on a round trip to clear a tab — the next customer is already
+       * standing there. So the screen updates first and the shop is told behind it, and if the shop
+       * REFUSES the tab comes back where it was. That is not a nicety: the record is still open, so
+       * the next load would bring it back anyway, and showing it now is the truthful version of
+       * what just happened rather than a tab that silently returns tomorrow.
+       */
+      void (async () => {
+        const { error: err } = await getSupabase().rpc('cancel_draft_order', {
+          p_draft_id: order.id,
+        });
+        if (!err) return;
+        setOrders((prev) =>
+          prev.some((o) => o.clientUuid === order.clientUuid)
+            ? prev
+            : [...prev.slice(0, closedAt), order, ...prev.slice(closedAt)],
+        );
+        setError(messageOf(err, 'Could not close that order'));
+      })();
     },
     [setOrders, setActiveId],
   );
@@ -606,6 +669,13 @@ export function useDraftOrders(storeId: string | null) {
           .eq('draft_order_id', draftId)
           .order('position');
 
+        // The order's own deposits, which have had somewhere to live since 0182.
+        const { data: depositRows } = await supabase
+          .from('draft_order_deposits')
+          .select('amount, note')
+          .eq('draft_order_id', draftId)
+          .order('sort_order');
+
         type LineRow = {
           id: string;
           product_id: string;
@@ -631,8 +701,19 @@ export function useDraftOrders(storeId: string | null) {
           feeAmount: '',
           feeLabel: '',
           charges: [],
-          // A claimed order's deposits come back on its lines, which `depositTotal` still reads.
-          deposits: [],
+          /*
+           * Deposits come from the order's own rows (0182), read alongside the lines above.
+           *
+           * This said they "come back on its lines, which `depositTotal` still reads" — true when
+           * a figure was spread across the lines as `deposit_charged`, and not true since that
+           * arithmetic was removed. Between the two, a claimed order arrived with no deposits on it
+           * at all, and the till asked the customer for money they had already handed over.
+           */
+          deposits: ((depositRows ?? []) as { amount: string; note: string | null }[]).map((d) => ({
+            key: newId(),
+            amount: String(d.amount),
+            note: d.note ?? '',
+          })),
           note: '',
           synced: true,
           lines: ((lineRows ?? []) as unknown as LineRow[]).map((l) => ({
@@ -729,7 +810,7 @@ export function useDraftOrders(storeId: string | null) {
       const { data } = await getSupabase().rpc('my_open_drafts', { p_store_id: storeId });
       const rows = (data ?? []) as Record<string, unknown>[];
 
-      if (rows.length > 0) {
+      {
         /*
          * WHAT THE TILL ALREADY HOLDS, so a restore does not renumber it.
          *
@@ -762,20 +843,83 @@ export function useDraftOrders(storeId: string | null) {
             amount: String(c.amount ?? ''),
             note: (c.note as string | null) ?? '',
           })),
+          // And the deposits, which the shop can answer for since 0182.
+          deposits: ((row.deposits ?? []) as Record<string, unknown>[]).map((d) => ({
+            key: newId(),
+            amount: String(d.amount ?? ''),
+            note: (d.note as string | null) ?? '',
+          })),
           // Already the shop's own copy, so nothing to push back.
           synced: true,
+          /*
+           * THE WHOLE LINE, not five fields of it.
+           *
+           * This rebuilt each line from product, name, qty, price and pack — and an order being
+           * served has more facts on it than that. Everything else fell back to `makeDraftLine`'s
+           * defaults, which is not a restore, it is a plausible-looking replacement:
+           *
+           *  - THE SHAPE went to null, so a crate of twelve came back as a piece AT THE CRATE'S
+           *    unit price. The bill fell by a factor of twelve and so did the stock taken off the
+           *    shelf. `claimByCode` carries a warning about exactly this — "nothing on screen looked
+           *    wrong, which is what made it costly" — and this path had the same hole and no note.
+           *  - `containersOut` went to empty, so the empties walking out of the shop stopped being
+           *    owed by anybody.
+           *  - `depositCharged` went to empty, so money already collected left the record.
+           *
+           * All of it was in the database the whole time. `my_open_drafts` simply never selected it.
+           */
           lines: ((row.lines ?? []) as Record<string, unknown>[]).map((l) =>
             makeDraftLine({
               productId: String(l.product_id),
               productName: String(l.product_name ?? 'Item'),
+              baseUnit: String(l.base_unit ?? 'piece'),
               qty: String(l.qty ?? ''),
               unitPrice: String(l.unit_price ?? ''),
               packId: (l.pack_id as string | null) ?? null,
+              packName: (l.pack_name as string | null) ?? null,
+              packQty: l.pack_qty != null ? String(l.pack_qty) : null,
+              saleUnitId: (l.sale_unit_id as string | null) ?? null,
+              saleUnitName: (l.sale_unit_name as string | null) ?? null,
+              saleUnitBaseQty: l.sale_unit_base_qty != null ? String(l.sale_unit_base_qty) : null,
+              containersOut: l.containers_out != null ? String(l.containers_out) : '',
+              depositCharged: l.deposit_charged != null ? String(l.deposit_charged) : '',
+              /*
+               * `priceTouched` IS DELIBERATELY LEFT AT ITS DEFAULT, and it is worth saying why.
+               *
+               * The flag is client-only and never stored, so a restored line cannot say whether its
+               * price was suggested by the ladder or typed by a seller doing somebody a favour. The
+               * tempting move is to assume "typed" and protect it — but the same flag also blocks
+               * repricing when the SHAPE changes, and a crate sold on at the piece price is a far
+               * worse wrong number than a haggle being re-suggested. So a restored line reprices
+               * like any other, and a favour re-granted is the price of that.
+               */
             }),
           ),
         }));
 
-        set(restored, { override: true });
+        /*
+         * AN ORDER THE SHOP DID NOT LIST IS NOT OPEN ANY MORE, and the tab goes.
+         *
+         * This whole block used to be skipped when the shop sent nothing back — `if (rows.length >
+         * 0)` — which reads as caution and is actually a one-way door: the till could take orders
+         * ON from the shop and never take any OFF. A seller who cleared the counter on their phone
+         * left the shop's copy closed and the TABLET still showing every one of them, permanently,
+         * because the only thing that ever wrote the list was a non-empty answer. The same reason
+         * the shop is asked at all — another device may have moved on — applies to the emptying.
+         *
+         * TWO KINDS ARE KEPT ANYWAY, and neither is the shop disagreeing:
+         *
+         *  - one with no server id, which has not been saved yet. Its push may be in the air right
+         *    now, and this answer was composed before it landed.
+         *  - one marked settled, which is mid-receipt. It is closed in the shop, correctly, and
+         *    pulling it out from under the receipt being printed would be the app tidying up over
+         *    the seller's shoulder.
+         */
+        const mine = new Set(restored.map((o) => o.id));
+        const keep = held.filter((o) => (!o.id || o.settled) && !mine.has(o.id));
+        const next = [...restored, ...keep];
+
+        set(next, { override: true });
 
         /*
          * THE TAB THE SELLER IS ON STAYS THE TAB THEY ARE ON.
@@ -785,9 +929,9 @@ export function useDraftOrders(storeId: string | null) {
          * first order is only the right answer when the one being served has gone.
          */
         setActiveId((previous) =>
-          previous && restored.some((o) => o.clientUuid === previous)
+          previous && next.some((o) => o.clientUuid === previous)
             ? previous
-            : restored[0].clientUuid,
+            : (next[0]?.clientUuid ?? null),
         );
       }
 
