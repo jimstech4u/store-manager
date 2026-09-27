@@ -111,7 +111,18 @@ export interface OnlineOrderDetail {
  * strength of a total: what matters is which products, how many, and whether the shop has them.
  */
 export function useOnlineOrder(draftId: string | null) {
-  return useResource<OnlineOrderDetail | null>({
+  /*
+   * WRAPPED, because "that order is gone" is a real answer.
+   *
+   * `useResource` reads a bare null as "there has never been an answer", so `loaded` stays false
+   * for ever — and an order already claimed, answered on another till, or reached by a stale link
+   * returns no rows. The screen would sit on "Loading…" instead of saying the order is no longer
+   * there, which is the one thing the seller needs to know.
+   *
+   * Null meaning "never asked" is deliberate and right; it is what stops a screen showing a
+   * made-up zero. An answer that IS null therefore has to be carried inside something.
+   */
+  return useResource<{ order: OnlineOrderDetail | null }>({
     key: `online-order:${draftId ?? 'none'}`,
     scope: ONLINE_ORDERS_SCOPE,
     enabled: Boolean(draftId),
@@ -119,7 +130,7 @@ export function useOnlineOrder(draftId: string | null) {
     read: async () => {
       const { data, error } = await getSupabase().rpc('online_order_detail', { p_draft_id: draftId });
       if (error) throw error;
-      return ((data ?? []) as OnlineOrderDetail[])[0] ?? null;
+      return { order: ((data ?? []) as OnlineOrderDetail[])[0] ?? null };
     },
   });
 }

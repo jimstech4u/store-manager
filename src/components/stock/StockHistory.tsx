@@ -99,8 +99,21 @@ function when(iso: string) {
  * first answer. Now it re-reads when stock moves (here or on another till), keeps its rows through a
  * failure, and says when it does not know yet.
  */
+/**
+ * The newest movement on an item — WRAPPED, because "there isn't one" is a real answer.
+ *
+ * This returned `Movement | null`, and `useResource` treats a bare null as "there has never been
+ * an answer": `loaded` stays false for ever. So an item with NO stock history — a brand-new item,
+ * or one added and never counted — sat on "Loading…" permanently, while the page behind it opened
+ * and correctly showed nothing. Reported exactly that way: stuck loading on the card, empty on the
+ * page.
+ *
+ * `null` meaning "never asked" is deliberate and right; it is what stops a screen showing a made-up
+ * zero. An answer that IS null therefore has to be carried inside something. The same trap caught
+ * `useCustomerAccount` and the low-stock rule, and the same wrapping fixes it.
+ */
 function useLastMovement(productId: string) {
-  return useResource<Movement | null>({
+  return useResource<{ last: Movement | null }>({
     key: `product-last-movement:${productId}`,
     scope: DERIVED_SCOPE,
     enabled: Boolean(productId),
@@ -110,7 +123,7 @@ function useLastMovement(productId: string) {
         p_limit: 1,
       });
       if (error) throw error;
-      return ((data ?? []) as Movement[])[0] ?? null;
+      return { last: ((data ?? []) as Movement[])[0] ?? null };
     },
   });
 }
@@ -307,7 +320,7 @@ export function StockHistoryCard({
 }) {
   // Only the newest row — the page itself reads the rest, a page at a time.
   const res = useLastMovement(productId);
-  const last = res.data;
+  const last = res.data?.last ?? null;
 
   return (
     <button type="button" className={styles.card} onClick={onOpen}>

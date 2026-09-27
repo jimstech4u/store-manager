@@ -56,7 +56,8 @@ export default function OrderPage() {
   const declineDialog = useConfirm();
   const problem = useProblem();
 
-  const data = order.data;
+  // `order.data` is the envelope; the order itself may legitimately be null — see useOnlineOrder.
+  const data = order.data?.order ?? null;
 
   /*
    * PUTTING AN ANSWER BACK is a correction, not an undo, so it asks for `sales.amend` — the same
