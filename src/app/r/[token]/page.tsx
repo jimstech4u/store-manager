@@ -362,7 +362,21 @@ export default function SharedReceiptPage({
         )}
 
         {sale.note && <p className={styles.foot}>{sale.note}</p>}
-        {sale.transfer_details && <div className={styles.transfer}>{sale.transfer_details}</div>}
+        {/*
+          THE BANK DETAILS, ONLY WHERE SOMEBODY ACTUALLY TRANSFERRED.
+
+          This copy matters most: it is the one the CUSTOMER opens, from a link, possibly days
+          later. An account number on a receipt that was paid in cash reads as a request for
+          money, and the shop finds out when it arrives twice.
+
+          The shop's own choice about whether its account may appear at all is already baked into
+          `transfer_details`, which the server snapshots at settle time — so an old receipt keeps
+          the account it was printed with even after the shop changes banks. This is the second
+          condition: did this sale involve a transfer.
+        */}
+        {sale.transfer_details && payments.some((p) => p.method === 'transfer') && (
+          <div className={styles.transfer}>{sale.transfer_details}</div>
+        )}
         {shop.footer && <p className={styles.foot}>{shop.footer}</p>}
       </div>
 

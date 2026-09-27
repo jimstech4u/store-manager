@@ -209,3 +209,59 @@
 .replaces p {
   margin: 0;
 }
+
+/*
+  A CANCELLED RECEIPT SAYS SO BEFORE ANYTHING ELSE.
+
+  It looks almost identical to a live one, and somebody about to hand it to a customer needs to
+  know at a glance. Bordered in the warning colour rather than filled: the receipt underneath is
+  still the document, and a solid block over it would read as an error on the page rather than a
+  fact about the sale.
+*/
+.cancelled {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+  border: 2px solid var(--danger, #b3261e);
+  border-radius: var(--radius-md);
+  background: var(--danger-subtle, rgba(179, 38, 30, 0.06));
+}
+
+.cancelledHead {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+
+/*
+  A CORRECTED RECEIPT, FLAGGED BEFORE THE RECEIPT ITSELF.
+
+  Deliberately NOT the red of a cancelled one. A correction is an ordinary, legitimate act — the
+  shop found a mistake and fixed it — and dressing it in the same alarm colour as a cancellation
+  would make every amended sale look like something had gone wrong.
+*/
+.corrected {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+  border: 1px solid var(--border-strong);
+  border-left: 4px solid var(--primary);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.correctedHead {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+
+.correctedWas {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}

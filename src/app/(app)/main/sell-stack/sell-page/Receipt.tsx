@@ -1,20 +1,18 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import styles from './Receipt.module.css';
 import { useNav } from '@academix-admin/navigation-stack';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { WhatsAppIcon } from '@/components/ui/Icon';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
-import { RecordLink } from '@/components/ui/RecordLink';
 import { useResource } from '@/lib/stacks/resource';
 import { ACCOUNT_DERIVED_SCOPE } from '@/lib/stacks/customer-account';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatDateTime, formatMoney, formatQty, pluralUnit, messageOf } from '@/lib/format';
 import { owedRowsFromReceipt, rollUpOwed } from '@/lib/empties-rollup';
 import {
-  canShareFiles,
   renderReceiptCanvas,
   renderReceiptImage,
   shareImage,
@@ -53,6 +51,14 @@ interface SaleDetail {
   customer: { id: string; name: string; phone: string; balance: string } | null;
   /** Named additions to the bill — transport, loading — each answerable on its own. */
   charges: { label: string; amount: string }[];
+  /**
+   * Money held against the containers going out, summed over the lines.
+   *
+   * `sale_detail` did not return this — or the charges — until 0183, while the customer's own web
+   * copy of the same sale returned both. So a receipt could total N5,000 over N4,500 of goods and
+   * print nothing to account for the difference.
+   */
+  deposit_total?: string | number | null;
   /** What the customer still holds of the shop's, per pool, after this sale. */
   /** What this receipt sent out, one row per product shape (0140). Rolled up for printing. */
   empties: unknown;
@@ -186,7 +192,6 @@ export function Receipt({
   const [sharingWhatsApp, setSharingWhatsApp] = useState(false);
   const [makingPdf, setMakingPdf] = useState(false);
   const [printing, setPrinting] = useState(false);
-  const [connecting, setConnecting] = useState(false);
 
   /*
    * REOPENING A CANCELLATION — offered here because this is the screen somebody is looking at when
@@ -249,6 +254,17 @@ export function Receipt({
   const paid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
   const owing = Number(sale.total) - paid;
   /*
+   * WHAT THE GOODS CAME TO, AND WHAT WAS ADDED TO THEM.
+   *
+   * `extras` is the gap between the two, and it is what decides whether the breakdown is worth
+   * printing: a plain sale shows one total, a sale carrying transport or a crate deposit shows the
+   * steps. Derived from the total rather than by adding the parts up, so a receipt cannot print an
+   * arithmetic that fails to reach its own bottom line.
+   */
+  const itemsTotal = lines.reduce((sum, l) => sum + Number(l.line_total), 0);
+  const deposit = Number(detail.deposit_total ?? 0) || 0;
+  const extras = Number(sale.total) - itemsTotal;
+  /*
    * THE ACCOUNT, AS AT THIS SALE: what they owed before it, what it left, and where that puts them.
    *
    * «16,500 (old) + 1,000 (new) = 17,500». Read as at the sale rather than today, so a receipt
@@ -260,9 +276,6 @@ export function Receipt({
 
 
 
-
-  // Below roughly 58mm there is not enough width for a two-column row, so the layout stacks.
-  const narrow = width < 58;
 
   /**
    * What gets drawn, for the picture and the PDF alike.
@@ -279,6 +292,20 @@ export function Receipt({
     formatDateTime(sale.occurred_at),
     `#${sale.id.slice(0, 8).toUpperCase()}`,
     ...(customer ? [customer.name] : []),
+    /*
+     * A CORRECTED RECEIPT SAYS SO, ON THE PAPER.
+     *
+     * `sale_detail` has returned `corrected` — when it was replaced, why, and what the total used
+     * to be — for as long as corrections have existed, and this screen destructured it and
+     * rendered none of it. So the shop could correct a sale and hand over a receipt that looked
+     * exactly like a first printing, while the customer still held the original showing a
+     * different total and no way to tell which one was current.
+     *
+     * The old total is the useful half. "Corrected" alone invites the question this answers.
+     */
+    ...(corrected
+      ? [`Corrected — was ${formatMoney(corrected.was_total)}`]
+      : []),
     ],
     lines: lines.map((l) => ({
     name: l.product_name,
@@ -292,6 +319,17 @@ export function Receipt({
     amount: formatMoney(l.line_total),
     })),
     totals: [
+      /*
+       * THE GOODS ON THEIR OWN, when something else was added to them.
+       *
+       * Only then: with no charge and no deposit this is the same figure as the total, and a
+       * receipt that says N4,500 twice invites the question of why. With them, it is the first
+       * step of an arithmetic the customer can follow to the end — which is the whole job of the
+       * block below, and what "a full payment breakdown" was asking for.
+       */
+      ...(extras > 0.005
+        ? [{ label: 'Items', value: formatMoney(itemsTotal) }]
+        : []),
       // Every named charge on its own line, exactly as the printed page shows them. This used to
       // read `sale.fee_amount`, so a receipt shared as a picture or a PDF showed one lumped
       // "extra charge" while the paper itemised transport and loading separately — two documents
@@ -300,11 +338,31 @@ export function Receipt({
       ...((charges ?? []).length === 0 && Number(sale.fee_amount) > 0
         ? [{ label: sale.fee_label || 'Extra charge', value: formatMoney(sale.fee_amount) }]
         : []),
+      /*
+       * WHAT WAS HELD AGAINST THE CRATES, said as a deposit and not as part of the goods.
+       *
+       * It is the customer's money, not the shop's takings, and it comes back when the containers
+       * do. Printing the total with it folded in and no line for it is how a shop ends up arguing
+       * about a figure neither side has in writing.
+       */
+      ...(deposit > 0.005
+        ? [{ label: 'Deposit on containers', value: formatMoney(deposit) }]
+        : []),
       { label: 'Total', value: formatMoney(sale.total), strong: true },
+      /*
+       * EVERY PAYMENT, with its reference where there is one.
+       *
+       * A transfer without its reference is unmatchable against a bank statement — which is the
+       * one thing a customer holding the receipt and a shop holding the statement both need.
+       */
       ...payments.map((p) => ({
-        label: `Paid (${p.method})`,
+        label: `Paid (${p.method})${p.reference ? ` ${p.reference}` : ''}`,
         value: formatMoney(p.amount),
       })),
+      // What it adds up to, once there is more than one of them to add up.
+      ...(payments.length > 1
+        ? [{ label: 'Paid in all', value: formatMoney(paid) }]
+        : []),
       ...(owing > 0 ? [{ label: 'Left on this sale', value: formatMoney(owing) }] : []),
       ...(owedBefore !== null && owedBefore > 0.005
         ? [{ label: 'Owed before', value: formatMoney(owedBefore) }]
@@ -325,7 +383,21 @@ export function Receipt({
       })),
     ],
     note: sale.note,
-    transferDetails: sale.transfer_details,
+    /*
+     * THE BANK DETAILS, ONLY WHERE SOMEBODY ACTUALLY TRANSFERRED.
+     *
+     * Two conditions, and both matter. The shop decides in Settings whether its account may appear
+     * on receipts at all — that decision is already baked into `sale.transfer_details`, which the
+     * server snapshots at settle time. The second is this one: an account number on a receipt paid
+     * in cash is an invitation to pay again. A customer holding it has no way to tell it is not a
+     * request, and the shop finds out when the money arrives twice.
+     *
+     * Snapshotted per sale rather than read live, so an old receipt keeps the account it was
+     * printed with even after the shop changes banks.
+     */
+    transferDetails: payments.some((p) => p.method === 'transfer')
+      ? sale.transfer_details
+      : null,
     });
 
   /*
@@ -418,6 +490,27 @@ export function Receipt({
         somebody who was not there asks weeks later, and a reopen with no reason is
         indistinguishable from quietly undoing a decision you were overruled on.
       */}
+      {/*
+        AND ON SCREEN, WITH THE REASON.
+
+        The reason is free text a person typed and can run to a sentence, which is why it is not on
+        the roll — a receipt is 32 characters across at this size. Here there is room for it, and
+        this is where somebody goes when they are trying to work out what happened to a sale.
+      */}
+      {corrected && sale.status !== 'voided' && (
+        <div className={styles.corrected} data-print-no-print>
+          <p className={styles.correctedHead}>
+            <strong>This receipt was corrected</strong>
+            {` on ${formatDateTime(corrected.replaced_at)}`}
+            {corrected.reason ? ` — ${corrected.reason}` : ''}
+          </p>
+          <p className={styles.correctedWas}>
+            It was {formatMoney(corrected.was_total)} before
+            {sale.revision ? `, and this is version ${sale.revision}` : ''}.
+          </p>
+        </div>
+      )}
+
       {sale.status === 'voided' && (
         <div className={styles.cancelled} data-print-no-print>
           <p className={styles.cancelledHead}>
