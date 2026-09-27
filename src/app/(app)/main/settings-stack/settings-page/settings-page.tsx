@@ -193,7 +193,6 @@ export default function SettingsPage() {
   snapshotRef.current = snapshot;
 
   const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState(false);
 
   const canConfirm = can('records.confirm');
 
@@ -282,41 +281,6 @@ export default function SettingsPage() {
   const patch = (next: Partial<Settings>) =>
     setSettings((prev) => (prev ? { ...prev, ...next } : prev));
 
-  const save = async () => {
-    if (!store || !settings) return;
-    setBusy(true);
-    setError(null);
-    setSaved(false);
-    try {
-      const { error: err } = await getSupabase()
-        .from('store_settings')
-        .update({
-          printer_width_mm: Number(settings.printer_width_mm) || 80,
-          receipt_header: settings.receipt_header,
-          receipt_footer: settings.receipt_footer,
-          // The three text columns are no longer written — the receipt reads the accounts list.
-          receipt_bank_account_id: settings.receipt_bank_account_id,
-          show_transfer_details: settings.show_transfer_details,
-          receipt_logo_path: settings.receipt_logo_path,
-          receipt_logo_width_pct: settings.receipt_logo_width_pct,
-          update_reminder_minutes: settings.update_reminder_minutes,
-        })
-        .eq('store_id', store.id);
-      if (err) throw err;
-      setSaved(true);
-    } catch (e: unknown) {
-      /*
-        A FAILURE INTERRUPTS. This set the same `error` the LOAD failure uses, so a save that failed
-        appeared under the heading "Could not load your settings" — near the top of a long page,
-        already scrolled past by anyone who pressed Save at the bottom. Nothing changes, so Save
-        gets pressed again.
-      */
-      showSaveProblem(messageOf(e, 'Could not save your settings'));
-    } finally {
-      setBusy(false);
-    }
-  };
-
   if (!store) return null;
   // One header; the body waits for the shop's settings.
   // A first read that failed used to fall through to "ready" and draw the form with nothing in it.
@@ -334,24 +298,13 @@ export default function SettingsPage() {
       title="Settings"
       subtitle={store.name}
       /*
-       * Saving is a header action now.
-       *
-       * It was a bar pinned to the foot of a long scrolling form, which meant it sat on top of
-       * whatever field was being edited at the bottom of the screen. In the header it is in the
-       * same place whatever the form is doing, and it can show its own busy state.
-       */
-      actions={
-        editable
-          ? [
-              {
-                key: 'save',
-                icon: busy ? <RefreshIcon /> : <CheckIcon />,
-                onClick: save,
-                ariaLabel: busy ? 'Saving your settings' : 'Save settings',
-              },
-            ]
-          : undefined
-      }
+        NO SAVE ACTION IN THE HEADER, because this screen no longer edits anything.
+
+        It was a checkmark that governed the whole page: a select at the top, a paper width, a
+        logo, a bank account. Every one of those is on its own page now and saves as it is
+        changed. A Save on a list of links would be a control that does nothing, which is a
+        control somebody presses to find out what it does.
+      */
     >
       <PageState status={status}>
         {() =>
@@ -367,11 +320,6 @@ export default function SettingsPage() {
           <Button variant="secondary" size="small" onClick={reload}>
             Try again
           </Button>
-        </InfoPanel>
-      )}
-      {saved && (
-        <InfoPanel tone="success" title="Saved">
-          Everyone in this shop will see these settings, on any device.
         </InfoPanel>
       )}
 
@@ -393,41 +341,36 @@ export default function SettingsPage() {
       */}
       {settings && (
         <>
-          <h2 className={styles.section}>Remind me about updates</h2>
-          <div className={styles.field}>
-            <label className={styles.label} htmlFor="update-reminder">
-              After &ldquo;Not now&rdquo;, ask again
-            </label>
-            <select
-              id="update-reminder"
-              className={styles.select}
-              value={String(settings.update_reminder_minutes)}
-              disabled={!editable}
-              onChange={(e) => patch({ update_reminder_minutes: Number(e.target.value) })}
-            >
-              {REMIND_AFTER.map((r) => (
-                <option key={r.minutes} value={r.minutes}>
-                  {r.label}
-                </option>
-              ))}
-            </select>
-            <p className={styles.sectionNote}>
-              An update is never taken while you are in the middle of something — it waits to be let
-              in, and comes with the next launch anyway.
-            </p>
-          </div>
-
           {/*
-            RUNNING LOW LIVES ON ITS OWN PAGE NOW, and this is the signpost to it.
+            ─── A SETTINGS SCREEN IS A LIST OF THINGS TO GO AND DO ──────────────
 
-            It was a single box here, and that was only half the setting: the other half is the list
-            of items that are different, and there was nowhere to see those at all. A shop that had
-            set five exceptions over three months could not find out which five.
+            It had grown into a form: a select here, a paper width there, a logo upload, a bank
+            chooser, two previews — and one Save in the header governing all of it. Three problems
+            with that, and a shop hit each one. A change made at the top is not saved until
+            somebody finds a checkmark they were not looking for. Two screens editing overlapping
+            parts of the same row overwrite each other. And a page that long is a page where
+            nobody finds what they came for.
 
-            The signpost stays because a shop looking for "tell me when I am running out" looks in
-            Settings first, whatever page it ended up on. Removing the field and leaving nothing
-            would have made a working feature look deleted.
+            So each setting lives on its own page, saves as it is changed, and this screen points
+            at them.
           */}
+          <h2 className={styles.section}>Your receipt</h2>
+          <Button variant="secondary" fullWidth onClick={() => void nav.push('printing_page')}>
+            The receipt, your printer and your paper
+          </Button>
+          <p className={styles.sectionNote}>
+            What it says, how big it prints, which printer this device uses — and a preview of
+            what the roll will say.
+          </p>
+
+          <h2 className={styles.section}>Updates</h2>
+          <Button variant="secondary" fullWidth onClick={() => void nav.push('updates_page')}>
+            How often to ask again
+          </Button>
+          <p className={styles.sectionNote}>
+            After &ldquo;Not now&rdquo;, how long before a waiting update offers itself again.
+          </p>
+
           <h2 className={styles.section}>Running low</h2>
           <Button
             variant="secondary"
@@ -602,277 +545,15 @@ export default function SettingsPage() {
         </InfoPanel>
       )}
 
-      {settings && (
-        <>
-          <h2 className={styles.section}>Receipt printer</h2>
+      {/*
+        GUARDED ON THE SHOP, not on its settings.
 
-          <div className={styles.presets}>
-            {PRESET_WIDTHS.map((w) => (
-              <button
-                key={w}
-                type="button"
-                className={`${styles.preset} ${
-                  Number(settings.printer_width_mm) === w ? styles.presetActive : ''
-                }`}
-                onClick={() => editable && patch({ printer_width_mm: String(w) })}
-                disabled={!editable}
-                aria-pressed={Number(settings.printer_width_mm) === w}
-              >
-                {w}mm
-              </button>
-            ))}
-          </div>
-
-          <Field
-            label="Paper width"
-            numeric
-            suffix="mm"
-            value={settings.printer_width_mm}
-            onChange={(e) => patch({ printer_width_mm: e.target.value })}
-            disabled={!editable}
-            hint="Any width between 30 and 250. Use the buttons above for the common sizes."
-            help={
-              <Explain label="Which one do I have?">
-                It is usually printed on the roll or its packaging. If you are not sure, 80mm is
-                the most common and 58mm is the small handheld kind. Narrow rolls print each item
-                stacked rather than in columns, because there is not enough width for both.
-              </Explain>
-            }
-          />
-
-          <Field
-            label="Line above the receipt"
-            optional
-            value={settings.receipt_header ?? ''}
-            onChange={(e) => patch({ receipt_header: e.target.value })}
-            disabled={!editable}
-            placeholder="Shop address or phone number"
-          />
-
-          {/*
-            The logo, prepared for the paper it is going on.
-            A receipt printer is one bit per dot and 40mm or 80mm wide, so a colour logo has to be
-            trimmed, scaled and reduced to pure black and white before it means anything. Doing
-            that here, and showing the result, means the shop approves what will actually print
-            rather than what looks good on a phone.
-          */}
-          <div className={styles.logoBlock}>
-            <p className={styles.label}>Logo on the receipt</p>
-
-            <input
-              ref={logoInput}
-              type="file"
-              accept="image/*"
-              className={styles.hiddenInput}
-              tabIndex={-1}
-              aria-hidden="true"
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                e.target.value = '';
-                if (!file || !store) return;
-                setLogoBusy(true);
-                setLogoError(null);
-                try {
-                  // Dots across the paper at the usual 203dpi: 8 dots per millimetre, less a
-                  // little margin. Preparing at the real dot count means no resampling later.
-                  const dots = Math.round(Number(settings.printer_width_mm) * 8 * 0.9);
-                  const { blob } = await normaliseReceiptLogo(file, { widthPx: dots });
-
-                  const path = `${store.id}/store/receipt-logo-${Date.now().toString(36)}.png`;
-                  const up = await getSupabase()
-                    .storage.from('media')
-                    .upload(path, blob, { contentType: 'image/png', upsert: true });
-                  if (up.error) throw new Error(up.error.message);
-
-                  patch({ receipt_logo_path: path });
-                } catch (err) {
-                  // A rejection carries an explanation of what is wrong with the picture and what
-                  // would work instead; anything else is a genuine failure.
-                  setLogoError(
-                    err instanceof LogoRejected
-                      ? err.message
-                      : messageOf(err, 'That logo could not be used.'),
-                  );
-                } finally {
-                  setLogoBusy(false);
-                }
-              }}
-            />
-
-            <div className={styles.logoActions}>
-              <Button
-                variant="secondary"
-                busy={logoBusy}
-                disabled={!editable}
-                onClick={() => logoInput.current?.click()}
-              >
-                {settings.receipt_logo_path ? 'Change logo' : 'Add a logo'}
-              </Button>
-              {settings.receipt_logo_path && (
-                <Button
-                  variant="ghost"
-                  disabled={!editable}
-                  onClick={() => patch({ receipt_logo_path: null })}
-                >
-                  Remove it
-                </Button>
-              )}
-            </div>
-
-            <p className={styles.sectionNote}>
-              A wide picture works best — roughly three times as wide as it is tall, and at least
-              {' '}{Math.round(Number(settings.printer_width_mm) * 8 * 0.45)} pixels across. It is
-              printed in plain black and white, so a simple mark reads better than a photograph.
-            </p>
-
-            {logoError && (
-              <InfoPanel tone="warning" title="That picture will not print well">
-                {logoError}
-              </InfoPanel>
-            )}
-
-            {settings.receipt_logo_path && (
-              <Field
-                label="How wide on the paper"
-                numeric
-                suffix="%"
-                value={String(settings.receipt_logo_width_pct)}
-                onChange={(e) =>
-                  patch({ receipt_logo_width_pct: Number(e.target.value) || 60 })
-                }
-                disabled={!editable}
-                hint="A share of the paper width, so it stays right if you change printers."
-              />
-            )}
-          </div>
-
-          <Field
-            label="Line at the bottom"
-            optional
-            value={settings.receipt_footer ?? ''}
-            onChange={(e) => patch({ receipt_footer: e.target.value })}
-            disabled={!editable}
-            placeholder="Thank you for your patronage"
-          />
-
-          {/* Everything above, as it will print. Shown before the bank details so a mistake in
-              the header or the logo is caught here rather than by a customer. */}
-          <ReceiptPreview
-            widthMm={Number(settings.printer_width_mm) || 80}
-            header={settings.receipt_header}
-            footer={settings.receipt_footer}
-            logoPath={settings.receipt_logo_path}
-            logoWidthPct={settings.receipt_logo_width_pct}
-            shopName={store?.name ?? 'Your shop'}
-            /*
-              THE ACCOUNT THAT WILL ACTUALLY PRINT.
-
-              This read the three text columns 0083 retired, so the preview would have shown a blank
-              where the receipt shows an account — and the preview is exactly where somebody checks
-              instead of printing one to find out. Same resolution the receipt uses: the chosen
-              account, or failing that the one marked default.
-            */
-            transfer={
-              settings.show_transfer_details && receiptAccount
-                ? [
-                    receiptAccount.bank_name,
-                    receiptAccount.account_number,
-                    receiptAccount.account_name,
-                  ]
-                    .filter(Boolean)
-                    .join('\n')
-                : null
-            }
-          />
-
-          <h2 className={styles.section}>Bank details on receipts</h2>
-          <p className={styles.sectionNote}>
-            Printed on receipts so a customer paying later knows where to send the money.
-          </p>
-
-          <label className={styles.toggle}>
-            <input
-              type="checkbox"
-              checked={settings.show_transfer_details}
-              onChange={(e) => patch({ show_transfer_details: e.target.checked })}
-              disabled={!editable}
-            />
-            <span>Show my bank details on receipts</span>
-          </label>
-
-          {settings.show_transfer_details && (
-            <>
-              {/*
-                CHOSEN FROM THE SHOP'S ACCOUNTS, not typed again.
-
-                This was three text boxes — bank, number, name — typed once and checked against
-                nothing. The shop already keeps its accounts under Money, and the payment screen
-                already picks from them when somebody pays by transfer; having a second copy here
-                meant a shop that closed an account had receipts still asking customers to pay into
-                it, with no reason to think anything was wrong because the boxes still had text.
-              */}
-              {accounts.length === 0 ? (
-                <InfoPanel tone="warning" title="No accounts yet">
-                  <p>
-                    Receipts can only show an account you have added. Add one and it will be
-                    offered here.
-                  </p>
-                  {canOpen('bank_form_page') && (
-                    <Button onClick={() => void nav.push('bank_form_page')}>
-                      <PlusIcon /> Add a bank account
-                    </Button>
-                  )}
-                </InfoPanel>
-              ) : (
-                <>
-                  <ul className={styles.accountList}>
-                    {accounts.map((a) => {
-                      const chosen =
-                        settings.receipt_bank_account_id === a.id ||
-                        (!settings.receipt_bank_account_id && a.is_default);
-                      return (
-                        <li key={a.id}>
-                          <button
-                            type="button"
-                            className={`${styles.accountRow} ${chosen ? styles.accountChosen : ''}`}
-                            disabled={!editable}
-                            onClick={() => patch({ receipt_bank_account_id: a.id })}
-                            aria-pressed={chosen}
-                          >
-                            <span>
-                              <span className={styles.accountBank}>{a.bank_name}</span>
-                              <span className={styles.accountNo}>
-                                {a.account_number} · {a.account_name}
-                              </span>
-                            </span>
-                            {chosen && <CheckIcon />}
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                  {canOpen('bank_form_page') && (
-                    <button
-                      type="button"
-                      className={styles.accountAdd}
-                      onClick={() => void nav.push('bank_form_page')}
-                    >
-                      <PlusIcon /> Add another account
-                    </button>
-                  )}
-                </>
-              )}
-
-              <InfoPanel tone="info" title="Old receipts keep their old details">
-                Changing these does not alter receipts already issued — each one keeps the account
-                it was printed with.
-              </InfoPanel>
-            </>
-          )}
-        </>
-      )}
-
-      {editable && shop && (
+        This sat inside a `{settings && ...}` that happened to narrow `shop` as well, and the block
+        above it moved to its own page — taking the narrowing with it. What this section actually
+        reads is the SHOP: its code, whether it is listed, its description. Guarding on the thing
+        it uses is also the honest version: the storefront does not wait on a receipt setting.
+      */}
+      {shop && (
         <>
           <h2 className={styles.section}>Public storefront</h2>
           <p className={styles.sectionNote}>

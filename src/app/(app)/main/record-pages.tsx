@@ -9,6 +9,7 @@ import AmendPaymentPage from './sell-stack/amend-payment-page/amend-payment-page
 import AmendReasonPage from './sell-stack/amend-reason-page/amend-reason-page';
 import PrintingPage from './settings-stack/printing-page/printing-page';
 import ReceiptHistoryPage from './sell-stack/receipt-history-page/receipt-history-page';
+import UpdatesPage from './settings-stack/updates-page/updates-page';
 import ReceivePage from './stock-stack/receive-page/receive-page';
 import StockHistoryPage from './stock-stack/stock-history-page/stock-history-page';
 import UnitsPage from './stock-stack/units-page/units-page';
@@ -176,6 +177,7 @@ export const RECORD_PAGES: Record<string, ComponentType> = gateAll({
   // Appended. A route is written into the URL as its POSITION in this map.
   printing_page: PrintingPage,
   receipt_history_page: ReceiptHistoryPage,
+  updates_page: UpdatesPage,
 });
 
 /** Handed to each stack's `additionalNavLinks` — one array, so its identity never changes. */

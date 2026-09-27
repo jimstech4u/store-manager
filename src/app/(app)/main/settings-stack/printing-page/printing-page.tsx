@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { Button } from '@/components/ui/Button';
 import { Explain, InfoPanel } from '@/components/ui/Explain';
 import { PrintPreview } from '@/components/settings/PrintPreview';
+import { useNav } from '@academix-admin/navigation-stack';
+import { CheckIcon, PlusIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { useReceiptPaper } from '@/lib/stacks/receipt-paper';
@@ -32,6 +34,11 @@ import { printBytes } from '@/lib/bluetooth-print';
 import { printBytesOverUsb } from '@/lib/usb-print';
 import { openPrinterAppWith, textTicket, VENDOR_SAMPLE } from '@/lib/print-handoff';
 import { messageOf } from '@/lib/format';
+import { Field } from '@/components/ui/Field';
+import { getSupabase } from '@/lib/supabase/client';
+import { LogoRejected, normaliseReceiptLogo } from '@/lib/image-pipeline';
+import { useBankAccounts } from '@/lib/stacks/bank-accounts';
+import { usePermission } from '@/hooks/usePermission';
 import styles from './printing-page.module.css';
 
 /**
@@ -56,6 +63,9 @@ import styles from './printing-page.module.css';
  * document.
  */
 
+/** The rolls a shop is likely to have. Anything between 30 and 250 can still be typed. */
+const PRESET_WIDTHS = [40, 58, 80, 100];
+
 /** The sizes offered, smallest first — a real progression rather than eight confusing tags. */
 const SIZES: { size: TextSize; name: string }[] = [
   { size: 'ss', name: 'Small' },
@@ -78,8 +88,10 @@ const PARTS: { key: keyof ReceiptLayout; name: string; what: string }[] = [
 ];
 
 export default function PrintingPage() {
+  const nav = useNav();
   const goBack = useStackBack();
   const { store } = useAuth();
+  const shop = store;
   const settings = useReceiptPaper(store?.id ?? null);
 
   const paperMm = Number(settings.data?.printer_width_mm) || 80;
@@ -91,6 +103,30 @@ export default function PrintingPage() {
   const [connecting, setConnecting] = useState<PrinterKind | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  /*
+   * The logo and the shop's bank accounts, here with the controls that use them.
+   *
+   * Setting up a receipt is ONE job and it was split across two screens: the paper and the printer
+   * here, the words and the logo on Settings, with a preview on each that could disagree.
+   */
+  const logoInput = useRef<HTMLInputElement | null>(null);
+  const [logoBusy, setLogoBusy] = useState(false);
+  const [logoError, setLogoError] = useState<string | null>(null);
+  const accounts = useBankAccounts(store?.id ?? null);
+  const { can, canOpen } = usePermission();
+  const editable = can('store.settings');
+
+  /*
+   * WHICH ACCOUNT ACTUALLY PRINTS: the one chosen, or the shop's default if nothing was chosen.
+   *
+   * Read from the accounts list rather than from the three text columns 0083 retired — a preview
+   * built on those showed a blank block on every shop that had moved on.
+   */
+  const receiptAccount =
+    accounts.find((a) => a.id === settings.data?.receipt_bank_account_id) ??
+    accounts.find((a) => a.is_default) ??
+    null;
 
 
 
@@ -232,27 +268,6 @@ export default function PrintingPage() {
       <PageState status={status}>
         {() => (
           <>
-            {/* ── The paper ────────────────────────────────────────────────── */}
-            <h2 className={styles.section}>Your paper</h2>
-            <p className={styles.note}>
-              Everything below is measured against this. A receipt set out for the wrong roll uses
-              part of the paper, or runs off it.
-            </p>
-            <div className={styles.grid} role="group" aria-label="Paper width">
-              {[80, 58, 48].map((mm) => (
-                <button
-                  key={mm}
-                  type="button"
-                  className={`${styles.option} ${paperMm === mm ? styles.optionOn : ''}`}
-                  aria-pressed={paperMm === mm}
-                  onClick={() => void settings.patch({ printer_width_mm: String(mm) })}
-                >
-                  <span className={styles.optionName}>{mm}mm roll</span>
-                  <span className={styles.optionWhat}>{dotsFor(mm)} dots across</span>
-                </button>
-              ))}
-            </div>
-
             {/* ── How this device reaches the printer ──────────────────────── */}
             <h2 className={styles.section}>How this device prints</h2>
             <div className={styles.grid} role="group" aria-label="How this device prints">
@@ -401,6 +416,262 @@ export default function PrintingPage() {
                 </Button>
               </>
             )}
+
+          {settings.data && (
+            <>
+          <h2 className={styles.section}>What the receipt says</h2>
+
+          <div className={styles.presets}>
+            {PRESET_WIDTHS.map((w: number) => (
+              <button
+                key={w}
+                type="button"
+                className={`${styles.preset} ${
+                  Number(settings.data!.printer_width_mm) === w ? styles.presetActive : ''
+                }`}
+                onClick={() => editable && void settings.patch({ printer_width_mm: String(w) })}
+                disabled={!editable}
+                aria-pressed={Number(settings.data!.printer_width_mm) === w}
+              >
+                {w}mm
+              </button>
+            ))}
+          </div>
+
+          <Field
+            label="Paper width"
+            numeric
+            suffix="mm"
+            value={settings.data!.printer_width_mm}
+            onChange={(e) => void settings.patch({ printer_width_mm: e.target.value })}
+            disabled={!editable}
+            hint="Any width between 30 and 250. Use the buttons above for the common sizes."
+            help={
+              <Explain label="Which one do I have?">
+                It is usually printed on the roll or its packaging. If you are not sure, 80mm is
+                the most common and 58mm is the small handheld kind. Narrow rolls print each item
+                stacked rather than in columns, because there is not enough width for both.
+              </Explain>
+            }
+          />
+
+          <Field
+            label="Line above the receipt"
+            optional
+            value={settings.data!.receipt_header ?? ''}
+            onChange={(e) => void settings.patch({ receipt_header: e.target.value })}
+            disabled={!editable}
+            placeholder="Shop address or phone number"
+          />
+
+          {/*
+            The logo, prepared for the paper it is going on.
+            A receipt printer is one bit per dot and 40mm or 80mm wide, so a colour logo has to be
+            trimmed, scaled and reduced to pure black and white before it means anything. Doing
+            that here, and showing the result, means the shop approves what will actually print
+            rather than what looks good on a phone.
+          */}
+          <div className={styles.logoBlock}>
+            <p className={styles.label}>Logo on the receipt</p>
+
+            <input
+              ref={logoInput}
+              type="file"
+              accept="image/*"
+              className={styles.hiddenInput}
+              tabIndex={-1}
+              aria-hidden="true"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (!file || !store) return;
+                setLogoBusy(true);
+                setLogoError(null);
+                try {
+                  // Dots across the paper at the usual 203dpi: 8 dots per millimetre, less a
+                  // little margin. Preparing at the real dot count means no resampling later.
+                  const dots = Math.round(Number(settings.data!.printer_width_mm) * 8 * 0.9);
+                  const { blob } = await normaliseReceiptLogo(file, { widthPx: dots });
+
+                  const path = `${store.id}/store/receipt-logo-${Date.now().toString(36)}.png`;
+                  const up = await getSupabase()
+                    .storage.from('media')
+                    .upload(path, blob, { contentType: 'image/png', upsert: true });
+                  if (up.error) throw new Error(up.error.message);
+
+                  void settings.patch({ receipt_logo_path: path });
+                } catch (err: unknown) {
+                  // A rejection carries an explanation of what is wrong with the picture and what
+                  // would work instead; anything else is a genuine failure.
+                  setLogoError(
+                    err instanceof LogoRejected
+                      ? err.message
+                      : messageOf(err, 'That logo could not be used.'),
+                  );
+                } finally {
+                  setLogoBusy(false);
+                }
+              }}
+            />
+
+            <div className={styles.logoActions}>
+              <Button
+                variant="secondary"
+                busy={logoBusy}
+                disabled={!editable}
+                onClick={() => logoInput.current?.click()}
+              >
+                {settings.data!.receipt_logo_path ? 'Change logo' : 'Add a logo'}
+              </Button>
+              {settings.data!.receipt_logo_path && (
+                <Button
+                  variant="ghost"
+                  disabled={!editable}
+                  onClick={() => void settings.patch({ receipt_logo_path: null })}
+                >
+                  Remove it
+                </Button>
+              )}
+            </div>
+
+            <p className={styles.sectionNote}>
+              A wide picture works best — roughly three times as wide as it is tall, and at least
+              {' '}{Math.round(Number(settings.data!.printer_width_mm) * 8 * 0.45)} pixels across. It is
+              printed in plain black and white, so a simple mark reads better than a photograph.
+            </p>
+
+            {logoError && (
+              <InfoPanel tone="warning" title="That picture will not print well">
+                {logoError}
+              </InfoPanel>
+            )}
+
+            {settings.data!.receipt_logo_path && (
+              <Field
+                label="How wide on the paper"
+                numeric
+                suffix="%"
+                value={String(settings.data!.receipt_logo_width_pct)}
+                onChange={(e) =>
+                  void settings.patch({ receipt_logo_width_pct: Number(e.target.value) || 60 })
+                }
+                disabled={!editable}
+                hint="A share of the paper width, so it stays right if you change printers."
+              />
+            )}
+          </div>
+
+          <Field
+            label="Line at the bottom"
+            optional
+            value={settings.data!.receipt_footer ?? ''}
+            onChange={(e) => void settings.patch({ receipt_footer: e.target.value })}
+            disabled={!editable}
+            placeholder="Thank you for your patronage"
+          />
+
+          {/* Everything above, as it will print. Shown before the bank details so a mistake in
+              the header or the logo is caught here rather than by a customer. */}
+          {/*
+            THE OLD BITMAP PREVIEW IS GONE.
+
+            It drew its own picture of a receipt, beside the one further down this page that
+            renders the lines the printer is actually sent. Two previews that can disagree is
+            exactly what a shop reported — and the one that can disagree is the one that is not
+            built from the instruction.
+          */}
+
+          <h2 className={styles.section}>Bank details on receipts</h2>
+          <p className={styles.sectionNote}>
+            Printed on receipts so a customer paying later knows where to send the money.
+          </p>
+
+          <label className={styles.toggle}>
+            <input
+              type="checkbox"
+              checked={settings.data!.show_transfer_details}
+              onChange={(e) => void settings.patch({ show_transfer_details: e.target.checked })}
+              disabled={!editable}
+            />
+            <span>Show my bank details on receipts</span>
+          </label>
+
+          {settings.data!.show_transfer_details && (
+            <>
+              {/*
+                CHOSEN FROM THE SHOP'S ACCOUNTS, not typed again.
+
+                This was three text boxes — bank, number, name — typed once and checked against
+                nothing. The shop already keeps its accounts under Money, and the payment screen
+                already picks from them when somebody pays by transfer; having a second copy here
+                meant a shop that closed an account had receipts still asking customers to pay into
+                it, with no reason to think anything was wrong because the boxes still had text.
+              */}
+              {accounts.length === 0 ? (
+                <InfoPanel tone="warning" title="No accounts yet">
+                  <p>
+                    Receipts can only show an account you have added. Add one and it will be
+                    offered here.
+                  </p>
+                  {canOpen('bank_form_page') && (
+                    <Button onClick={() => void nav.push('bank_form_page')}>
+                      <PlusIcon /> Add a bank account
+                    </Button>
+                  )}
+                </InfoPanel>
+              ) : (
+                <>
+                  <ul className={styles.accountList}>
+                    {accounts.map((a) => {
+                      const chosen =
+                        settings.data!.receipt_bank_account_id === a.id ||
+                        (!settings.data!.receipt_bank_account_id && a.is_default);
+                      return (
+                        <li key={a.id}>
+                          <button
+                            type="button"
+                            className={`${styles.accountRow} ${chosen ? styles.accountChosen : ''}`}
+                            disabled={!editable}
+                            onClick={() => void settings.patch({ receipt_bank_account_id: a.id })}
+                            aria-pressed={chosen}
+                          >
+                            <span>
+                              <span className={styles.accountBank}>{a.bank_name}</span>
+                              <span className={styles.accountNo}>
+                                {a.account_number} · {a.account_name}
+                              </span>
+                            </span>
+                            {chosen && <CheckIcon />}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {canOpen('bank_form_page') && (
+                    <button
+                      type="button"
+                      className={styles.accountAdd}
+                      onClick={() => void nav.push('bank_form_page')}
+                    >
+                      <PlusIcon /> Add another account
+                    </button>
+                  )}
+                </>
+              )}
+
+              <InfoPanel tone="info" title="Old receipts keep their old details">
+                Changing these does not alter receipts already issued — each one keeps the account
+                it was printed with.
+              </InfoPanel>
+            </>
+          )}
+        </>
+      )}
+
+      {editable && shop && (
+        <>
+            </>
+          )}
 
             {/* ── And what it will actually say ─────────────────────────────── */}
             <h2 className={styles.section}>What the roll will say</h2>

@@ -27,6 +27,9 @@ export interface ReceiptPaper {
   transfer_bank_name: string | null;
   transfer_account_no: string | null;
   transfer_account_name: string | null;
+  receipt_bank_account_id: string | null;
+  receipt_logo_path: string | null;
+  receipt_logo_width_pct: number;
 }
 
 export function useReceiptPaper(storeId: string | null) {
@@ -36,7 +39,8 @@ export function useReceiptPaper(storeId: string | null) {
       .from('store_settings')
       .select(
         'printer_width_mm, receipt_header, receipt_footer, show_transfer_details, ' +
-          'transfer_bank_name, transfer_account_no, transfer_account_name',
+          'transfer_bank_name, transfer_account_no, transfer_account_name, ' +
+          'receipt_bank_account_id, receipt_logo_path, receipt_logo_width_pct',
       )
       .eq('store_id', storeId)
       .single();
