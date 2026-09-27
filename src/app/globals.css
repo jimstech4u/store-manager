@@ -402,6 +402,117 @@ svg[data-icon] {
 }
 
 /* =====================================================================================
+   AND THE SAME PRICE LIST ON THE SCREEN.
+
+   Every rule for the poster used to sit inside `@media print`, so the thing on screen had NO
+   layout at all: the item and its price were two spans running into each other, the maker headings
+   were bare `h2`s, and the masthead was three unstyled paragraphs. Reported as "the price list
+   should be well formatted", and it was not badly formatted so much as not formatted — the report
+   was only ever designed on paper, and the screen got whatever the browser does with a div.
+
+   It also matters that these agree. This is the one report a shop prints to HANG UP, and the seller
+   checks it here before spending a sheet of A4 on it; a preview that looks nothing like the print
+   cannot be checked at all.
+
+   Deliberately NOT the `.table` the other reports use. A price list is two columns of name-and-
+   price with a rule between, which is the shape it has on the wall, and forcing it into the same
+   table as "money taken by day" would make the preview lie about the poster.
+   ===================================================================================== */
+@media screen {
+  [data-print-root='poster'] {
+    /* Two columns where there is room for them, one on a phone — the same balance the print
+       version gets from `columns: 2`, expressed in a way that does not fight a scrolling card. */
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: var(--space-5);
+    align-items: start;
+  }
+
+  [data-print-root='poster'] .posterHead {
+    /* Across the whole sheet, above the columns, as on paper. */
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding-bottom: var(--space-3);
+    border-bottom: 2px solid var(--border);
+  }
+
+  [data-print-root='poster'] .posterTitles {
+    min-width: 0;
+  }
+
+  /* The code sits beside the name, not under the prices, so it is found without reading down. */
+  [data-print-root='poster'] .posterScan {
+    flex: none;
+    text-align: center;
+  }
+
+  [data-print-root='poster'] .posterScanNote {
+    margin: var(--space-1) 0 0;
+    font-size: var(--text-sm);
+    line-height: 1.3;
+    color: var(--text-muted);
+  }
+
+  [data-print-root='poster'] .posterShop {
+    margin: 0;
+    font-size: var(--text-xl);
+    font-weight: 800;
+  }
+
+  [data-print-root='poster'] .posterWhen {
+    margin: var(--space-1) 0 0;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+
+  [data-print-root='poster'] h2 {
+    margin: 0 0 var(--space-2);
+    padding-bottom: var(--space-1);
+    font-size: var(--text-lg);
+    border-bottom: 1px solid var(--border);
+  }
+
+  [data-print-root='poster'] .posterRow {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding: var(--space-2) 0;
+  }
+
+  /* A rule between prices, not under the last one: the group heading already closes the block. */
+  [data-print-root='poster'] .posterRow + .posterRow {
+    border-top: 1px solid var(--border);
+  }
+
+  [data-print-root='poster'] .posterItem {
+    display: flex;
+    flex-direction: column;
+    /* The name may be long; it wraps rather than shoving the price out of the column. */
+    min-width: 0;
+  }
+
+  [data-print-root='poster'] .posterName {
+    font-weight: 600;
+  }
+
+  [data-print-root='poster'] .posterShape {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+
+  [data-print-root='poster'] .posterPrice {
+    font-weight: 700;
+    /* So the naira figures line up down the column and can be compared at a glance. */
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+}
+
+/* =====================================================================================
    THE THIRD PAGE SHAPE: a price list for the wall.
 
    Not a scaled A4. A poster is read across a shop rather than at arm's length, so the type is
@@ -410,8 +521,13 @@ svg[data-icon] {
    sheet still knows what they are looking at.
 
    IT CARRIES ITS OWN DATE, large enough to see. A price list on a wall with no date is how a
-   customer argues a six-month-old price, and the QR beside it is what makes a printed poster safe
-   to hang at all — it is a convenience over a source of truth, never a substitute for one.
+   customer argues a six-month-old price.
+
+   THERE IS NO QR ON IT. This said there was — "the QR beside it is what makes a printed poster safe
+   to hang at all" — and nothing has ever rendered one: a paragraph describing a feature that does
+   not exist, which is how a sheet gets hung up in the belief that a customer can check today's
+   price against it. Worth building, and it needs a public price page to point at first; until that
+   exists the date is the only thing telling anybody how old the sheet on the wall is.
    ===================================================================================== */
 @media print {
   [data-print-root='poster'] {
@@ -446,6 +562,22 @@ svg[data-icon] {
     padding: 1.5mm 0;
   }
 
+  [data-print-root='poster'] .posterItem {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  /* Read from across the shop: the name carries, the shape is there for whoever walks up to it. */
+  [data-print-root='poster'] .posterName {
+    font-weight: 600;
+  }
+
+  [data-print-root='poster'] .posterShape {
+    font-size: 16pt;
+    opacity: 0.75;
+  }
+
   [data-print-root='poster'] .posterPrice {
     font-weight: 700;
     font-variant-numeric: tabular-nums;
@@ -455,9 +587,38 @@ svg[data-icon] {
   /* The masthead spans the sheet, above the columns. */
   [data-print-root='poster'] .posterHead {
     column-span: all;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10mm;
     margin: 0 0 8mm;
     padding-bottom: 4mm;
     border-bottom: 3pt solid currentColor;
+  }
+
+  [data-print-root='poster'] .posterTitles {
+    min-width: 0;
+  }
+
+  /*
+    THE CODE, AND IT HAS TO SURVIVE THE PRINT.
+
+    `print-color-adjust` because a black-on-white QR is exactly what browsers "helpfully" drop or
+    lighten when printing backgrounds, and a faint QR does not scan. Kept whole on one page too:
+    half a code split across a page break is a white square on a wall.
+  */
+  [data-print-root='poster'] .posterScan {
+    flex: none;
+    text-align: center;
+    break-inside: avoid;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  [data-print-root='poster'] .posterScanNote {
+    margin: 2mm 0 0;
+    font-size: 13pt;
+    line-height: 1.25;
   }
 
   [data-print-root='poster'] .posterShop { font-size: 40pt; font-weight: 800; margin: 0; }

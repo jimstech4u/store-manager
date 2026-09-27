@@ -106,6 +106,16 @@
   color: var(--text-muted);
 }
 
+/*
+  THE TWO WAYS TO TAKE A REPORT AWAY: print it, or save it.
+
+  It set a margin above itself and nothing between its children, so "Print the poster" and "Save
+  as CSV" sat edge to edge and read as one control with a seam. They are two different decisions —
+  one makes paper, the other makes a file — and nothing about the layout said so.
+*/
 .printRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
   margin-top: var(--space-4);
 }

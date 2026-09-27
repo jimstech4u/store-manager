@@ -181,6 +181,30 @@ export interface PriceRow {
  * permission that also shows them what the shop paid — so the server gates this on `sales.record`
  * rather than on `reports.view`, and returns no cost column at all.
  */
+/**
+ * Whether a printed price list can carry a QR, and where it would point.
+ *
+ * A poster on a wall goes out of date the moment a price moves, and the customer reading it has no
+ * way to tell how old it is beyond the date printed on it. A code they can scan turns the sheet
+ * into a pointer at the live list rather than a claim about prices.
+ *
+ * ONLY WHEN THE SHOP IS LISTED. `/s/CODE` is the public storefront, and it 404s for a shop that
+ * has not switched it on — so a QR printed regardless would put a dead link on the wall, which is
+ * worse than no link because somebody scans it in front of the person who printed it.
+ */
+export async function storefront(
+  storeId: string,
+): Promise<{ code: string | null; isPublic: boolean }> {
+  const { data, error } = await getSupabase()
+    .from('stores')
+    .select('code, is_public')
+    .eq('id', storeId)
+    .maybeSingle();
+  if (error) throw error;
+  const row = data as { code: string | null; is_public: boolean | null } | null;
+  return { code: row?.code ?? null, isPublic: Boolean(row?.is_public) };
+}
+
 export async function priceList(storeId: string): Promise<PriceRow[]> {
   const rows = await rpc<Record<string, unknown>>('price_list', { p_store_id: storeId });
   return rows.map((r) => ({

@@ -18,6 +18,7 @@ import {
   debtorsAged,
   downloadCsv,
   priceList,
+  storefront,
   salesByDay,
   salesByProduct,
   salesSummary,
@@ -34,6 +35,8 @@ import {
 } from '@/lib/stacks/report-readers';
 import { stockReport, type StockReport } from '@/lib/stacks/reports';
 import { formatDateTime, formatMoney, formatQty } from '@/lib/format';
+import { QrCode } from '@/components/ui/QrCode';
+import { appUrl } from '@/lib/app-url';
 import styles from './reports-page.module.css';
 
 /**
@@ -93,6 +96,8 @@ interface Loaded {
   stock: StockReport | null;
   staff: StaffRow[];
   prices: PriceRow[];
+  /** Where a scanned poster should land, when the shop is listed at all. */
+  storefront: { code: string | null; isPublic: boolean };
 }
 
 export default function ReportsPage() {
@@ -133,7 +138,11 @@ export default function ReportsPage() {
       case 'staff':
         return { ...base, staff: await staffActivity(w) };
       case 'prices':
-        return { ...base, prices: await priceList(store!.id) };
+        return {
+          ...base,
+          prices: await priceList(store!.id),
+          storefront: await storefront(store!.id),
+        };
     }
   }, [store, period, which]);
 
@@ -355,6 +364,7 @@ export default function ReportsPage() {
                 rows={data.prices}
                 shopName={store.name}
                 printedAt={printedAt}
+                storefront={data.storefront}
               />
             ) : (
               <div className={styles.sheet} data-print-root="page">
@@ -404,6 +414,7 @@ const empty: Loaded = {
   stock: null,
   staff: [],
   prices: [],
+  storefront: { code: null, isPublic: false },
 };
 
 /* ── The reports themselves ─────────────────────────────────────────────────────── */
@@ -658,11 +669,25 @@ function PricePoster({
   rows,
   shopName,
   printedAt,
+  storefront,
 }: {
   rows: PriceRow[];
   shopName: string;
   printedAt: string;
+  storefront: { code: string | null; isPublic: boolean };
 }) {
+  /*
+   * WHAT A CUSTOMER SCANS OFF THE WALL.
+   *
+   * The date says how old the sheet is; this says what is true now. A price list hung up in
+   * February is argued over in August, and the shop's answer has until now been "that one is old"
+   * with nothing to point at.
+   *
+   * Null unless the storefront is actually switched on and has a code — `/s/CODE` 404s otherwise,
+   * and a dead QR on a wall is worse than a bare sheet.
+   */
+  const shopUrl =
+    storefront.isPublic && storefront.code ? appUrl(`/s/${storefront.code}`) : null;
   const groups = useMemo(() => {
     const out = new Map<string, PriceRow[]>();
     for (const r of rows) {
@@ -679,8 +704,21 @@ function PricePoster({
   return (
     <div className={styles.sheet} data-print-root="poster">
       <div className="posterHead">
-        <p className="posterShop">{shopName}</p>
-        <p className="posterWhen">Prices as at {printedAt}</p>
+        <div className="posterTitles">
+          <p className="posterShop">{shopName}</p>
+          <p className="posterWhen">Prices as at {printedAt}</p>
+        </div>
+
+        {shopUrl && (
+          <div className="posterScan">
+            <QrCode value={shopUrl} size={96} title={`Scan for ${shopName}'s current prices`} />
+            <p className="posterScanNote">
+              Scan for today&rsquo;s prices
+              <br />
+              {storefront.code}
+            </p>
+          </div>
+        )}
       </div>
 
       {groups.map(([group, items]) => (
@@ -688,9 +726,20 @@ function PricePoster({
           <h2>{group}</h2>
           {items.map((r) => (
             <div className="posterRow" key={`${r.productId}-${r.unitName}`}>
-              <span>
-                {r.productName}
-                {r.baseQty > 1 ? ` · ${r.unitName.toLowerCase()} of ${r.baseQty}` : ` · ${r.unitName.toLowerCase()}`}
+              {/*
+                WHAT IT IS AND WHAT SHAPE IT COMES IN ARE TWO FACTS, so they are two spans.
+                They were one — "Coke · crate of 12" as a single run of text at one weight — and on
+                a sheet meant to be read across a shop that is the wrong emphasis twice over: the
+                name is what somebody is looking for and it competed with the shape, while a long
+                name and its shape together pushed the price off to the far edge of the column.
+              */}
+              <span className="posterItem">
+                <span className="posterName">{r.productName}</span>
+                <span className="posterShape">
+                  {r.baseQty > 1
+                    ? `${r.unitName.toLowerCase()} of ${r.baseQty}`
+                    : r.unitName.toLowerCase()}
+                </span>
               </span>
               <span className="posterPrice">{formatMoney(r.price)}</span>
             </div>
