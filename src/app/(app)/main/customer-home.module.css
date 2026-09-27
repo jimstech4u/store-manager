@@ -131,3 +131,13 @@
   font-weight: 600;
   color: var(--primary);
 }
+
+/*
+  A BLOCK ON THE SHOPPER'S HOME SCREEN.
+
+  Referenced and never defined, so "Your orders" and what follows it ran straight into the next
+  block with no separation.
+*/
+.section {
+  margin-bottom: var(--space-6);
+}

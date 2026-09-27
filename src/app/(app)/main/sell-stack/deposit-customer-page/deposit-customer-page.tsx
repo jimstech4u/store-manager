@@ -63,6 +63,15 @@ export default function DepositCustomerPage() {
     <PageScaffold
       onBack={goBack}
       title="Deposit"
+      /*
+       * WHAT A DEPOSIT IS, said under the title.
+       *
+       * Every other page in this tab carries a line explaining itself and this one carried only
+       * the word "Deposit" — which is the one word that does NOT explain it. Money held against
+       * containers is not a payment and not a charge, and somebody arriving here from a customer's
+       * account has no way to tell which it is.
+       */
+      subtitle="Money you are holding against their containers"
       // UP TO THE RECORD THIS BELONGS TO: the customer, with their statement and empties.
       actions={
         customerId

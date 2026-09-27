@@ -105,3 +105,8 @@
     flex: none;
   }
 }
+
+/* Space between stacked cards. Referenced and never defined, so they touched. */
+.cardGap {
+  margin-bottom: var(--space-3);
+}

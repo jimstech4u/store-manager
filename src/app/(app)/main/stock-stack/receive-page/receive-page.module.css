@@ -317,3 +317,25 @@
   text-align: left;
   cursor: pointer;
 }
+
+/*
+  A FIELD'S OWN LABEL, and the heading over the charges.
+
+  Both were referenced and neither was defined, so they rendered at body weight and read as
+  paragraphs rather than as labels for the controls under them.
+*/
+.label {
+  display: block;
+  margin-bottom: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.chargesLabel {
+  display: block;
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text);
+}

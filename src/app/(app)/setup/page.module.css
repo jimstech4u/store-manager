@@ -11,3 +11,25 @@
   color: var(--primary);
   background: none;
 }
+
+/*
+  THE WAY BACK, for somebody who already has a shop.
+
+  Setup is deliberately bare — no header, no back arrow — so a shop that reached it by accident
+  needs one plain way out. It was referenced and never defined, so the escape rendered as an
+  unstyled button with no colour and no room around it, which on a page with one green action
+  reads as something broken rather than as a way back.
+*/
+.escape {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--touch-comfortable);
+  margin-bottom: var(--space-4);
+  padding: 0 var(--space-2);
+  border: 0;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}

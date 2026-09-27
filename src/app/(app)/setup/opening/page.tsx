@@ -238,16 +238,27 @@ export default function OpeningBalancesPage() {
               />
 
               <div className={styles.grid}>
+                {/*
+                  THE SHOP'S OWN WORD, USED AS SOON AS IT HAS ONE.
+
+                  These labels said "pack" and "piece" — vocabulary this software chose, on the one
+                  screen where a shop is being asked what IT calls things. A distributor typing
+                  "Crate" into the box above was then asked how many "pieces" are in a "pack",
+                  which is two words they do not use for a thing they had just named.
+
+                  "Crate" stays as the PLACEHOLDER, because an example is help and a label is an
+                  instruction.
+                */}
                 <Field
-                  label="Pack name"
+                  label="What you buy it in"
                   optional
                   value={row.packName}
                   onChange={(e) => patchStock(row.key, { packName: e.target.value })}
                   placeholder="Crate"
-                  hint="How you buy it."
+                  hint="Your own word for it."
                 />
                 <Field
-                  label="Pieces in a pack"
+                  label={`How many in one ${row.packName.trim() || 'of them'}`}
                   optional
                   numeric
                   value={row.packQty}
@@ -260,14 +271,18 @@ export default function OpeningBalancesPage() {
                 <Field
                   label="How many now"
                   numeric
-                  suffix="pieces"
+                  suffix="singles"
                   value={row.qty}
                   onChange={(e) => patchStock(row.key, { qty: e.target.value })}
                   placeholder="0"
-                  hint="In single pieces, not packs."
+                  hint={
+                    row.packName.trim()
+                      ? `One at a time, not ${row.packName.trim().toLowerCase()}s.`
+                      : 'One at a time, not by the pack.'
+                  }
                 />
                 <Field
-                  label="Cost of one piece"
+                  label="Cost of one"
                   numeric
                   prefix="₦"
                   value={row.unitCost}

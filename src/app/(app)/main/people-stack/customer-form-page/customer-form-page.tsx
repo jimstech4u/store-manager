@@ -489,7 +489,9 @@ export default function CustomerFormPage() {
         required
         value={name}
         onChange={(e) => setName(e.target.value)}
-        placeholder="Irekanmi"
+        // A neutral example. This software is not one shop's, and a placeholder
+        // naming a real customer of a real business reads as somebody else's data.
+        placeholder="John Some"
         autoFocus
       />
 
