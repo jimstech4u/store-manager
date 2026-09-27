@@ -427,3 +427,16 @@
   font-size: var(--text-sm);
   color: var(--text-muted);
 }
+
+/*
+  A GROUP OF RELATED ROWS, held together.
+
+  Used by the shop switcher and never defined, so those rows ran into whatever followed them with
+  no separation at all.
+*/
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}

@@ -100,3 +100,30 @@
   font-variant-numeric: tabular-nums;
   opacity: 0.75;
 }
+
+/*
+  THE STOREFRONT SWITCH, which came here with the storefront block.
+
+  Carried over WITH its markup rather than left behind, because leaving a stylesheet behind is the
+  exact bug that made the receipt's bank details look "poorly designed" — the classes were fine,
+  they simply had no rules on the page they had moved to.
+*/
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--touch-comfortable);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.toggle input {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  accent-color: var(--primary);
+}

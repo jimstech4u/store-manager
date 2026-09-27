@@ -1,24 +1,19 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { AppVersion } from '@/components/ui/AppVersion';
 import { useReload } from '@/lib/stacks/resource';
-import { ReceiptPreview } from '@/components/receipt/ReceiptPreview';
-import { LogoRejected, normaliseReceiptLogo } from '@/lib/image-pipeline';
 import { InstallApp } from '@/components/ui/InstallApp';
 import { useInstallApp } from '@/hooks/useInstallApp';
 import styles from './settings-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { Button } from '@/components/ui/Button';
-import { Field } from '@/components/ui/Field';
-import { Explain, InfoPanel } from '@/components/ui/Explain';
+import { InfoPanel } from '@/components/ui/Explain';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
-import { CheckIcon, PlusIcon, RefreshIcon } from '@/components/ui/Icon';
 import { useNav } from '@academix-admin/navigation-stack';
 import { useDemandState } from '@academix-admin/state-stack';
-import { SETTINGS_SCOPE, useBankAccounts } from '@/lib/stacks/bank-accounts';
+import { SETTINGS_SCOPE } from '@/lib/stacks/bank-accounts';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -26,16 +21,6 @@ import { ROLE_DESCRIPTION, ROLE_LABEL } from '@/lib/permissions';
 import { getSupabase } from '@/lib/supabase/client';
 import { useTheme } from '@/context/ThemeContext';
 import { NOTICE_NAMES, showNotice, useHiddenNotices } from '@/lib/hidden-notices';
-import { messageOf } from '@/lib/format';
-
-/** Common thermal roll widths, offered as shortcuts beside a free field — like a print dialog. */
-const PRESET_WIDTHS = [40, 58, 80, 100];
-
-interface StoreRow {
-  is_public: boolean;
-  public_description: string | null;
-  code: string | null;
-}
 
 interface Settings {
   printer_width_mm: string;
@@ -56,14 +41,6 @@ interface Settings {
   /** How long after "Not now" a waiting app update asks again, in minutes (0158). */
   update_reminder_minutes: number;
 }
-
-/** What the shop can choose from. Minutes, so a fifth is a number rather than a migration. */
-const REMIND_AFTER: { minutes: number; label: string }[] = [
-  { minutes: 30, label: 'Every 30 minutes' },
-  { minutes: 60, label: 'Every hour' },
-  { minutes: 240, label: 'Every 4 hours' },
-  { minutes: 720, label: 'Twice a day' },
-];
 
 /**
  * Store settings — role-gated, and stored in the database rather than on the device.
@@ -105,34 +82,24 @@ export default function SettingsPage() {
   const hiddenNotices = useHiddenNotices();
 
 
-  const accounts = useBankAccounts(store?.id ?? null);
-
-
-  // The logo picker's hidden input, and the state around preparing one.
-  const logoInput = useRef<HTMLInputElement | null>(null);
-  const [logoBusy, setLogoBusy] = useState(false);
-  const [logoError, setLogoError] = useState<string | null>(null);
-
   /*
    * All three of this page's reads in one state-stack entry.
    *
    * This is the settings tab's ROOT, and every row on it pushes: bank accounts, staff, the review
-   * queue, the storefront. Each of the three used to be its own `useState` filled by its own
-   * effect, which meant every trip back rebuilt the whole screen from nothing — the printer width
-   * reverted to its placeholder, the "waiting for you" count blanked, and the public-shop toggle
-   * flicked off and back on. A settings screen whose switches move by themselves is one nobody
-   * trusts to have saved anything.
+   * queue, the shop itself. Each part used to be its own `useState` filled by its own effect,
+   * which meant every trip back rebuilt the whole screen from nothing — the printer width
+   * reverted to its placeholder and the "waiting for you" count blanked. A settings screen
+   * whose switches move by themselves is one nobody trusts to have saved anything.
    *
-   * One entry rather than three because they are read together and shown together; three keys
-   * would just be three chances to draw a half-built page.
+   * One entry rather than several because they are read together and shown together; separate
+   * keys would just be more chances to draw a half-built page.
    */
-  const [snapshot, demand, setSnapshot] = useDemandState<{
+  const [snapshot, demand] = useDemandState<{
     settings: Settings | null;
-    shop: StoreRow | null;
     pending: number;
     error: string | null;
   }>(
-    { settings: null, shop: null, pending: 0, error: null },
+    { settings: null, pending: 0, error: null },
     {
       key: `settings:${store?.id ?? 'none'}`,
       scope: SETTINGS_SCOPE,
@@ -148,39 +115,10 @@ export default function SettingsPage() {
 
 
 
-  /*
-   * Which account prints — resolved the same way `settle_sale` resolves it, so the preview and the
-   * receipt cannot disagree: the chosen one, or the shop's default when nothing has been chosen.
-   *
-   * BELOW `settings`, not beside `accounts`. Above it, this is a temporal dead zone that only fires
-   * once the list is non-empty, because the reference sits inside a `.find` callback — so the page
-   * worked until the shop added its first account and then white-screened.
-   */
-  const receiptAccount =
-    accounts.find((a) => a.id === settings?.receipt_bank_account_id) ??
-    accounts.find((a) => a.is_default) ??
-    null;
-  const shop = snapshot.shop;
   const pending = snapshot.pending;
   const error = snapshot.error;
 
-  const setSettings = (next: Settings | null | ((prev: Settings | null) => Settings | null)) => {
-    setSnapshot((prev) => ({
-      ...prev,
-      settings: typeof next === 'function' ? next(prev.settings) : next,
-    }));
-  };
-  const setShop = (next: StoreRow | null) => {
-    setSnapshot((prev) => ({ ...prev, shop: next }));
-  };
   const saveProblem = useProblem();
-  // Bound to a local const: `useProblem` returns a fresh object every render, so the hook itself is
-  // never a safe dependency — `show` is.
-  const showSaveProblem = saveProblem.show;
-
-  const setError = (next: string | null) => {
-    setSnapshot((prev) => ({ ...prev, error: next }));
-  };
 
   /*
    * The latest snapshot, readable from the loader without becoming a dependency of it.
@@ -192,27 +130,19 @@ export default function SettingsPage() {
   const snapshotRef = useRef(snapshot);
   snapshotRef.current = snapshot;
 
-  const [busy, setBusy] = useState(false);
-
   const canConfirm = can('records.confirm');
 
   const load = useCallback(() => {
     if (!store) return;
     demand(async ({ set }) => {
       const supabase = getSupabase();
-      const [own, review, shopRow] = await Promise.all([
+      const [own, review] = await Promise.all([
         supabase.rpc('ensure_store_settings', { p_store_id: store.id }),
         // A count on the button, not just a label. "Waiting for you" with no number gives no
         // reason to tap it; "3 waiting" does. Skipped entirely for a member who cannot approve.
         canConfirm
           ? supabase.rpc('pending_review', { p_store_id: store.id })
           : Promise.resolve({ data: null }),
-        // The public storefront row lives on `stores`, not `store_settings`.
-        supabase
-          .from('stores')
-          .select('is_public, public_description, code')
-          .eq('id', store.id)
-          .maybeSingle(),
       ]);
 
       if (own.error) {
@@ -226,8 +156,7 @@ export default function SettingsPage() {
       const q = review.data as
         | { products: unknown[]; customers: unknown[]; stock_entries: unknown[] }
         | null;
-      // A failed count is not "nothing waiting", and a failed storefront read is not "not listed":
-      // each keeps what it last knew.
+      // A failed count is not "nothing waiting": it keeps what it last knew.
       const reviewFailed = 'error' in review && Boolean(review.error);
 
       set(
@@ -240,9 +169,6 @@ export default function SettingsPage() {
             receipt_logo_width_pct: row.receipt_logo_width_pct ?? 60,
             update_reminder_minutes: row.update_reminder_minutes ?? 30,
           },
-          shop: shopRow.error
-            ? snapshotRef.current.shop
-            : ((shopRow.data as StoreRow | null) ?? null),
           pending: reviewFailed
             ? snapshotRef.current.pending
             : q
@@ -259,27 +185,6 @@ export default function SettingsPage() {
 
   // Try again READS: `demand` skips a key it has already served.
   const reload = useReload(SETTINGS_SCOPE, `settings:${store?.id ?? 'none'}`, load);
-
-  const saveShop = async (next: Partial<StoreRow>) => {
-    if (!store || !shop) return;
-    const merged = { ...shop, ...next };
-    setShop(merged);
-
-    // Turning the storefront on needs a code for people to find it by.
-    if (merged.is_public && !merged.code) {
-      const { data } = await getSupabase().rpc('ensure_store_code', { p_store_id: store.id });
-      if (data) merged.code = data as string;
-      setShop({ ...merged });
-    }
-
-    await getSupabase()
-      .from('stores')
-      .update({ is_public: merged.is_public, public_description: merged.public_description })
-      .eq('id', store.id);
-  };
-
-  const patch = (next: Partial<Settings>) =>
-    setSettings((prev) => (prev ? { ...prev, ...next } : prev));
 
   if (!store) return null;
   // One header; the body waits for the shop's settings.
@@ -323,22 +228,6 @@ export default function SettingsPage() {
         </InfoPanel>
       )}
 
-      {/*
-        ON THE PHONE ITSELF — for everybody, not just the owner.
-
-        A seller reaching the till through a browser tab is the one thing that makes this feel like
-        a website. `InstallApp` draws nothing once it is installed, so this section disappears the
-        moment it has done its job.
-      */}
-      <InstallSection />
-
-      {/*
-        HOW OFTEN A WAITING UPDATE ASKS AGAIN.
-
-        A new version announces itself and waits, because taking over mid-sale swaps the code under
-        somebody serving a customer. "Not now" therefore has to be a real answer — and an answer
-        never asked again is how a shop ends up running a version from March.
-      */}
       {settings && (
         <>
           {/*
@@ -361,14 +250,6 @@ export default function SettingsPage() {
           <p className={styles.sectionNote}>
             What it says, how big it prints, which printer this device uses — and a preview of
             what the roll will say.
-          </p>
-
-          <h2 className={styles.section}>Updates</h2>
-          <Button variant="secondary" fullWidth onClick={() => void nav.push('updates_page')}>
-            How often to ask again
-          </Button>
-          <p className={styles.sectionNote}>
-            After &ldquo;Not now&rdquo;, how long before a waiting update offers itself again.
           </p>
 
           <h2 className={styles.section}>Running low</h2>
@@ -421,6 +302,18 @@ export default function SettingsPage() {
             ever, and a shop created by a mistyped name could never be closed, so it sat in the
             switcher and, having no `onboarded_at`, answered sign-in with a setup wizard.
           */}
+          {/*
+            AND THESE ARE NOT MONEY.
+
+            "This shop" and "Words you measure in" sat under the Money heading with the bank
+            accounts, because that is where they were added rather than where they belong — so a
+            shop looking for its own name or its unit words was reading a list headed Money and
+            giving up. Their own heading, which is all this is.
+          */}
+          {(canOpen('shop_page') || canOpen('words_page')) && (
+            <h2 className={styles.section}>Your shop</h2>
+          )}
+
           {canOpen('shop_page') && (
             <button
               type="button"
@@ -546,53 +439,14 @@ export default function SettingsPage() {
       )}
 
       {/*
-        GUARDED ON THE SHOP, not on its settings.
+        THE PUBLIC STOREFRONT MOVED TO THE SHOP'S OWN PAGE.
 
-        This sat inside a `{settings && ...}` that happened to narrow `shop` as well, and the block
-        above it moved to its own page — taking the narrowing with it. What this section actually
-        reads is the SHOP: its code, whether it is listed, its description. Guarding on the thing
-        it uses is also the honest version: the storefront does not wait on a receipt setting.
+        It was a toggle, a text box and a code panel sitting loose here, which is this screen's own
+        rule broken — Settings lists what a shop can go and do, and is not where it does it. It
+        also read oddly: "Where it is", on the shop page, explains itself as "only used if your
+        storefront is switched on", so the switch and the reason for filling in an address were two
+        screens apart. They are together now.
       */}
-      {shop && (
-        <>
-          <h2 className={styles.section}>Public storefront</h2>
-          <p className={styles.sectionNote}>
-            Off by default. Your prices and what you sell are your own business — turn this on
-            only if you want shoppers to find you.
-          </p>
-
-          <label className={styles.toggle}>
-            <input
-              type="checkbox"
-              checked={shop.is_public}
-              onChange={(e) => void saveShop({ is_public: e.target.checked })}
-            />
-            <span>List my shop publicly</span>
-          </label>
-
-          {shop.is_public && (
-            <>
-              <Field
-                label="A line about your shop"
-                optional
-                value={shop.public_description ?? ''}
-                onChange={(e) => setShop({ ...shop, public_description: e.target.value })}
-                onBlur={() => void saveShop({})}
-                placeholder="Drinks and provisions, wholesale and retail"
-              />
-              <InfoPanel tone="info" title={`Your shop code is ${shop.code ?? '…'}`}>
-                Give this to customers. They can open{' '}
-                <strong>/s/{shop.code ?? 'CODE'}</strong> to see what you sell.
-                <Explain label="What do shoppers see?">
-                  Your shop name, what you sell, your selling prices, any bulk prices, and whether
-                  something is in stock. They never see what you paid for anything, how much you
-                  hold, your customers, or who owes you.
-                </Explain>
-              </InfoPanel>
-            </>
-          )}
-        </>
-      )}
 
       <h2 className={styles.section}>This device</h2>
 
@@ -614,24 +468,14 @@ export default function SettingsPage() {
       </p>
 
       {/*
-        PRINTING IS ITS OWN PAGE NOW.
+        THERE IS ONE PRINTING CARD, AND IT IS "YOUR RECEIPT" AT THE TOP.
 
-        This screen had grown a paper width, a size picker, a preview, a connection switch and a
-        diagnostic — beside a "Receipt printer" section that ALREADY had a paper width and a
-        preview. Two of each, able to disagree. And the connection switch could not be switched
-        back, because each option saved a different shape of setting.
-
-        A card, because that is what a settings screen is for: a list of things a shop can go and
-        do, not the place to do them.
+        A second one lived here, under "This device", pointing at the very same `printing_page`.
+        Two cards, same destination, one screen — reported as "double printing cards in settings
+        page at the top and bottom". The argument for this one was that the printer is a property
+        of the device; true, and the page it opens covers the shop's receipt AND this device's
+        printer together, so the shop still had to be told which of the two identical doors to use.
       */}
-      <h3 className={styles.subsection}>Printing</h3>
-      <Button variant="secondary" fullWidth onClick={() => void nav.push('printing_page')}>
-        Your printer, and how a receipt is set out
-      </Button>
-      <p className={styles.sectionNote}>
-        Which printer this device uses, and the size of every part of the receipt — with a preview
-        of what the roll will say.
-      </p>
 
       {/*
         WHAT WAS PUT AWAY, AND THE WAY BACK.
@@ -740,18 +584,34 @@ export default function SettingsPage() {
       </a>
 
       {/*
-        WHICH BUILD THIS IS, and a way to take the next one now.
-        
-        An installed app updates itself and the reload prompt offers it on the shop's own schedule,
-        which is right and entirely invisible — so when something is wrong there is no way to say
-        which version it is wrong in, and no way to answer "have you got the latest?" except by
-        waiting for the prompt.
-      */}
-      <div className={styles.group}>
-        <h2 className={styles.section}>This app</h2>
-        <AppVersion />
-      </div>
+        THE APP'S OWN BUSINESS, AT THE END OF THE SHOP'S.
 
+        These two were at the TOP: the very first things a shop was offered on opening Settings
+        were how to install the app and how often to be nagged about a new version, above its
+        money, its people and its stock. Reported as settings that belong at the bottom sitting in
+        the middle of the page. Nothing about either changed except where they are.
+
+        `InstallSection` still draws nothing once the app is installed, so on an installed phone
+        this is the Updates card alone.
+      */}
+      <h2 className={styles.section}>Updates</h2>
+      <Button variant="secondary" fullWidth onClick={() => void nav.push('updates_page')}>
+        How often to ask again
+      </Button>
+      <p className={styles.sectionNote}>
+        After &ldquo;Not now&rdquo;, how long before a waiting update offers itself again.
+      </p>
+
+      <InstallSection />
+
+      {/*
+        THE VERSION LIVES ON THE UPDATES PAGE, not here as well.
+
+        Both said "This app" and both showed the build and a Check-for-an-update button, so the
+        screen answered the same question twice — and the two could drift the moment one of them
+        gained a detail the other did not. The Updates card is the way to it, beside the
+        setting for how often an update asks.
+      */}
       <Button variant="secondary" size="large" fullWidth onClick={() => void signOut()}>
         Sign out
       </Button>

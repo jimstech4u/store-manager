@@ -6,7 +6,7 @@ import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { useLoadArea } from '@/components/ui/LoadArea';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
-import { InfoPanel } from '@/components/ui/Explain';
+import { Explain, InfoPanel } from '@/components/ui/Explain';
 import { AsyncAction, useAsyncAction } from '@/components/ui/AsyncAction';
 import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/components/ui/Dialog';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -44,6 +44,19 @@ export default function ShopPage() {
   const [lng, setLng] = useState('');
   const [zone, setZone] = useState('');
   const [decimals, setDecimals] = useState('0');
+  /*
+   * THE STOREFRONT, WHICH LIVES HERE NOW AND NOT IN SETTINGS.
+   *
+   * It was a toggle and a text box sitting loose on the Settings screen — against that screen's
+   * own rule, which is that it lists things to go and do rather than being the place to do them.
+   * And it belonged here on the facts: "Where it is" on this page already explains itself as
+   * "only used if your storefront is switched on", so the switch and the reason for the address
+   * were two screens apart.
+   */
+  const [isPublic, setIsPublic] = useState(false);
+  const [publicDesc, setPublicDesc] = useState('');
+  const [shopCode, setShopCode] = useState<string | null>(null);
+
   const [closing, setClosing] = useState(false);
   const [sales, setSales] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -65,7 +78,10 @@ export default function ShopPage() {
       const [{ data, error }, { data: choices, error: choicesError }] = await Promise.all([
         supabase
           .from('stores')
-          .select('name, address, latitude, longitude, timezone, money_decimals')
+          .select(
+            'name, address, latitude, longitude, timezone, money_decimals,' +
+              ' is_public, public_description, code',
+          )
           .eq('id', shopId as string)
           .maybeSingle(),
         // The shortlist the server offers, with each one's offset RIGHT NOW — "Africa/Lagos
@@ -82,6 +98,9 @@ export default function ShopPage() {
           longitude: number | null;
           timezone: string | null;
           money_decimals: number | null;
+          is_public: boolean | null;
+          public_description: string | null;
+          code: string | null;
         } | null,
         zones: (choices ?? []) as { name: string; offset_now: string }[],
       };
@@ -102,7 +121,39 @@ export default function ShopPage() {
     setLng(row?.longitude == null ? '' : String(row.longitude));
     setZone(row?.timezone ?? 'Africa/Lagos');
     setDecimals(String(row?.money_decimals ?? 0));
+    setIsPublic(row?.is_public ?? false);
+    setPublicDesc(row?.public_description ?? '');
+    setShopCode(row?.code ?? null);
   }, [shopArea.data]);
+
+  /*
+   * Saved as it is changed, like the rest of this page.
+   *
+   * Turning it on MINTS A CODE FIRST when there is none: the storefront is found by `/s/CODE`, and
+   * listing a shop nobody can be sent to is a switch that appears to work and does nothing.
+   */
+  const saveStorefront = async (next: { is_public?: boolean; public_description?: string }) => {
+    if (!store) return;
+    const wantPublic = next.is_public ?? isPublic;
+    const wantDesc = next.public_description ?? publicDesc;
+    setIsPublic(wantPublic);
+    setPublicDesc(wantDesc);
+
+    let code = shopCode;
+    if (wantPublic && !code) {
+      const { data } = await getSupabase().rpc('ensure_store_code', { p_store_id: store.id });
+      if (data) {
+        code = data as string;
+        setShopCode(code);
+      }
+    }
+
+    const { error } = await getSupabase()
+      .from('stores')
+      .update({ is_public: wantPublic, public_description: wantDesc || null })
+      .eq('id', store.id);
+    if (error) showProblem(messageOf(error, 'Could not save your storefront'));
+  };
 
   const closeDialog = useConfirm();
 
@@ -175,7 +226,8 @@ export default function ShopPage() {
         label="Shop name"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        placeholder="ASHABI GLOBAL RESOURCES"
+        // Neutral: this is every shop's setup screen, not one shop's.
+        placeholder="Your business name"
       />
 
       <div className={styles.actions}>
@@ -352,6 +404,43 @@ export default function ShopPage() {
           </Button>
         </AsyncAction>
       </div>
+
+      <h2 className={styles.section}>Shoppers finding you</h2>
+      <p className={styles.note}>
+        Off by default. Your prices and what you sell are your own business — turn this on only if
+        you want shoppers to find you.
+      </p>
+
+      <label className={styles.toggle}>
+        <input
+          type="checkbox"
+          checked={isPublic}
+          onChange={(e) => void saveStorefront({ is_public: e.target.checked })}
+        />
+        <span>List my shop publicly</span>
+      </label>
+
+      {isPublic && (
+        <>
+          <Field
+            label="A line about your shop"
+            optional
+            value={publicDesc}
+            onChange={(e) => setPublicDesc(e.target.value)}
+            onBlur={() => void saveStorefront({})}
+            placeholder="Drinks and provisions, wholesale and retail"
+          />
+          <InfoPanel tone="info" title={`Your shop code is ${shopCode ?? '…'}`}>
+            Give this to customers. They can open <strong>/s/{shopCode ?? 'CODE'}</strong> to see
+            what you sell.
+            <Explain label="What do shoppers see?">
+              Your shop name, what you sell, your selling prices, any bulk prices, and whether
+              something is in stock. They never see what you paid for anything, how much you hold,
+              your customers, or who owes you.
+            </Explain>
+          </InfoPanel>
+        </>
+      )}
 
       <h2 className={styles.section}>Closing this shop</h2>
       {elsewhere.length === 0 ? (
