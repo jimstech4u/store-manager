@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { columnsAt, type PrintedLine, type ReceiptLayout } from '@/lib/escpos-text';
+import { useEffect, useRef, useState } from 'react';
+import { columnsAt, type PrintedLine, type PrintedSpan, type ReceiptLayout } from '@/lib/escpos-text';
 import styles from './PrintPreview.module.css';
 
 /**
@@ -27,10 +27,33 @@ const MONO = "ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono', Menlo, Co
  * so the preview sat short of the right-hand edge and a shop reading it expected a gap on the
  * paper that would not be there.
  *
- * So the ratio is MEASURED from the font actually in use, once, and every line is sized against
- * it. Then a line of 32 wide characters and one of 64 small ones are the same width on screen,
- * exactly as they are on the roll.
+ * ── AND WHY EVERY SPAN IS SIZED SEPARATELY ───────────────────────────────────────
+ *
+ * This used to size a whole LINE at one font size, picked from whichever span had the fewest
+ * columns, and concatenate the text. Two things were wrong with that, and both showed on a phone:
+ *
+ *  - IT OVERFLOWED. A line of ten double-width characters and forty small ones was drawn as fifty
+ *    double-width characters — half again as wide as the paper — so the preview scrolled sideways
+ *    and the shop could not see the right-hand edge at all, which is the one part of a receipt
+ *    where the amounts live. Reported as "preview did not account to show within the screen width
+ *    of the physical device".
+ *  - AND IT UNDID THE ONE THING THE SPANS ARE FOR. Spans exist so a fraction can print smaller
+ *    than the number it qualifies — "3" large, "1/2" small. Rendering the line at one size drew
+ *    them the same, so the preview disagreed with the paper about the very detail the spans were
+ *    added for.
+ *
+ * Each span is now drawn at its own size, so a line's width on screen is the sum of its parts,
+ * exactly as the print head lays it down.
  */
+
+/** What the printer does to a glyph at this size, as multiples of the base cell. */
+function stretch(size: PrintedSpan['size']): { wide: number; tall: number } {
+  return {
+    wide: size.endsWith('w') ? 2 : 1,
+    tall: size.endsWith('h') || size.endsWith('hw') ? 2 : 1,
+  };
+}
+
 export function PrintPreview({
   lines,
   layout,
@@ -59,38 +82,82 @@ export function PrintPreview({
     if (measured > 0.3 && measured < 1) setRatio(measured);
   }, []);
 
+  /*
+   * THE WIDTH OF THE PAPER IS THE WIDTH THIS HAS ON THE SCREEN, measured.
+   *
+   * It was a fixed `30rem`, dropping to `21rem` under a 420px media query — a guess at how much
+   * room the component would be given, made by a stylesheet that cannot see where it was put. On a
+   * phone the guess was too wide, every line overflowed, and the card grew a horizontal scrollbar
+   * that hid the right-hand column. A media query cannot fix that: the same component sits in a
+   * full-width settings page and in a narrow receipt card, at the same viewport.
+   *
+   * So it is observed. The preview is then exactly as wide as the space it was handed, whatever
+   * that turns out to be, and nothing inside it ever needs to scroll.
+   */
+  const paperRef = useRef<HTMLDivElement | null>(null);
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const el = paperRef.current;
+    if (!el) return;
+    const read = () => setWidth(el.clientWidth);
+    read();
+    const ro = new ResizeObserver(read);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   return (
     <div className={styles.paper} aria-label="How this will print">
-      {lines.map((line, i) => {
-        /*
-         * A line is sized by its WIDEST span, because every span on it shares one font size on
-         * screen — the printer changes size mid-line and a browser text run cannot. Taking the
-         * widest keeps the line from overflowing the paper; the narrower spans then read slightly
-         * larger than they will print, which is the harmless direction to be wrong in.
-         */
-        const widest = line.spans.reduce(
-          (fewest, s) => Math.min(fewest, columnsAt(s.size, layout)),
-          Number.POSITIVE_INFINITY,
-        );
-        const cols = Number.isFinite(widest) ? widest : columnsAt('ss', layout);
-        const tall = line.spans.some((s) => s.size.endsWith('h') || s.size.endsWith('hw'));
-        const heavy = line.spans.some((s) => s.size.startsWith('sl'));
-        const text = line.spans.map((s) => s.text).join('');
+      {/* The measured box: full width inside the paper's padding, so the lines match the roll. */}
+      <div ref={paperRef} className={styles.roll}>
+        {width > 0 &&
+          lines.map((line, i) => {
+            const spans = line.spans.length > 0 ? line.spans : [{ size: 'ss' as const, text: ' ' }];
 
-        return (
-          <pre
-            key={i}
-            className={styles.line}
-            style={{
-              fontSize: `calc(var(--print-line) / ${cols} / ${ratio})`,
-              lineHeight: tall ? 1.7 : 1.15,
-              fontWeight: heavy ? 600 : 500,
-            }}
-          >
-            {text === '' ? ' ' : text}
-          </pre>
-        );
-      })}
+            /*
+             * One cell is the paper divided by how many of that size fit across it — the printer's
+             * own arithmetic. The font size that draws a cell that wide is that over the measured
+             * glyph ratio.
+             */
+            const sized = spans.map((s) => {
+              const cell = width / columnsAt(s.size, layout);
+              const { wide, tall } = stretch(s.size);
+              return {
+                span: s,
+                font: cell / ratio,
+                /*
+                 * Font size sets width AND height together, and the printer does not: `ssh` is
+                 * twice as tall at the same width, `ssw` twice as wide at the same height. The
+                 * font size above is chosen to get the WIDTH right, so the height is corrected
+                 * here — from the bottom, because a double-height character grows up off the
+                 * baseline rather than straddling it.
+                 */
+                scaleY: tall / wide,
+                height: (cell / ratio) * (tall / wide),
+              };
+            });
+
+            const rowHeight = sized.reduce((tallest, s) => Math.max(tallest, s.height), 0);
+
+            return (
+              <div key={i} className={styles.line} style={{ height: `${rowHeight * 1.2}px` }}>
+                {sized.map((s, j) => (
+                  <span
+                    key={j}
+                    className={styles.run}
+                    style={{
+                      fontSize: `${s.font}px`,
+                      transform: s.scaleY === 1 ? undefined : `scaleY(${s.scaleY})`,
+                      fontWeight: s.span.size.startsWith('sl') ? 600 : 500,
+                    }}
+                  >
+                    {s.span.text}
+                  </span>
+                ))}
+              </div>
+            );
+          })}
+      </div>
     </div>
   );
 }

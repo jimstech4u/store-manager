@@ -5,15 +5,6 @@
   preview tells a shop nothing about what will come out of a white roll.
 */
 .paper {
-  /*
-   * The width every line is measured against. Each line sets its own font size as this divided by
-   * how many characters that size fits, which is how 32 double-width characters and 64 small ones
-   * end up exactly as wide as each other — the same thing the print head does.
-   */
-  --print-line: 30rem;
-
-  max-width: 100%;
-  overflow-x: auto;
   padding: var(--space-4) var(--space-3);
   margin-bottom: var(--space-3);
   background: #ffffff;
@@ -22,33 +13,51 @@
   border-radius: var(--radius);
   /* A hint of the roll: the torn top and bottom of a receipt somebody is holding. */
   box-shadow: inset 0 6px 6px -6px rgba(0, 0, 0, 0.35), inset 0 -6px 6px -6px rgba(0, 0, 0, 0.35);
-}
-
-.line {
-  margin: 0;
   /*
-   * Monospaced, because the printer is. The whole point of the preview is that the amounts line up
-   * in the same column they will line up in on paper, and a proportional font would make that a
-   * coincidence.
-   */
-  font-family: ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono', Menlo, Consolas, monospace;
-  /* The lines are already padded to width by the layout; the browser must not touch them. */
-  white-space: pre;
-  color: inherit;
-}
+    NOTHING SCROLLS SIDEWAYS ANY MORE.
 
-@media (max-width: 420px) {
-  .paper {
-    /* Narrower phones get a narrower roll rather than a horizontal scrollbar under every line. */
-    --print-line: 21rem;
-  }
+    This was `overflow-x: auto` over a fixed `--print-line` width, which is the combination that
+    put the right-hand edge of the receipt — where every amount sits — off the side of a phone.
+    The roll inside is now measured rather than guessed, so a line cannot be wider than the box;
+    `hidden` is here to make that a visible bug if it ever stops being true, rather than a
+    scrollbar that quietly hides half the money.
+  */
+  overflow-x: hidden;
 }
 
 /*
-  The paper is positioned so nothing inside it needs to escape the flow. The character width is
-  measured on a canvas rather than by rendering a hidden ruler here — a hidden ruler put a hundred
-  zeros into the receipt's own text.
+  The box whose width IS the width of the paper. Measured by the component, which then sizes every
+  character against it — that is how 32 double-width characters and 64 small ones come out exactly
+  as wide as each other, the same thing the print head does.
 */
-.paper {
-  position: relative;
+.roll {
+  width: 100%;
+}
+
+.line {
+  display: flex;
+  /*
+    Bottom-aligned, because the print head sets characters on a baseline and a double-height one
+    grows upward from it. Centring them would float the small text in the middle of the tall text
+    and put the fraction somewhere it never prints.
+  */
+  align-items: flex-end;
+  overflow: hidden;
+}
+
+.run {
+  /*
+    Monospaced, because the printer is. The whole point of the preview is that the amounts line up
+    in the same column they will line up in on paper, and a proportional font would make that a
+    coincidence.
+  */
+  font-family: ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono', Menlo, Consolas, monospace;
+  /* The lines are already padded to width by the layout; the browser must not touch them. */
+  white-space: pre;
+  /* `line-height: 1` so the row's height is the component's arithmetic and not the font's idea. */
+  line-height: 1;
+  /* Needed for the height correction to apply at all: transforms do nothing to an inline box. */
+  display: inline-block;
+  transform-origin: bottom left;
+  color: inherit;
 }
