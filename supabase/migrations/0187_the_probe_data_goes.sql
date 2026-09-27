@@ -29,10 +29,31 @@ do $purge$
 declare
   v_removed jsonb := '{}'::jsonb;
   v_n       bigint;
+  v_tbl     text;
 begin
   -- ─── Off, for the length of this block ───────────────────────────────────────────
-  alter table public.stock_movements  disable trigger no_mutation;
-  alter table public.customer_empties disable trigger no_mutation;
+  /*
+   * EVERY APPEND-ONLY LEDGER EXCEPT THE AUDIT LOG.
+   *
+   * Seventeen tables carry `tg_append_only`, and naming two of them by hand was not enough: the
+   * cascade from `sales` reaches `sale_revisions`, which refused, and there are a dozen more the
+   * purge touches through a store id. Read from the catalogue rather than listed, so a table that
+   * gains the guard later cannot silently break this.
+   *
+   * `audit_log` is EXCLUDED by name and stays locked. This purge does not delete from it and must
+   * not be able to: a cleanup that can erase its own record is indistinguishable from one somebody
+   * did quietly.
+   */
+  for v_tbl in
+    select c.relname
+      from pg_trigger t
+      join pg_class c on c.oid = t.tgrelid
+      join pg_proc p on p.oid = t.tgfoid
+     where not t.tgisinternal and p.proname = 'tg_append_only'
+       and c.relname <> 'audit_log'
+  loop
+    execute format('alter table public.%I disable trigger no_mutation', v_tbl);
+  end loop;
 
   /*
    * THE AUDIT TRIGGERS STAY ON, and the audit log is not touched.
@@ -148,6 +169,46 @@ begin
   delete from public.supplier_empties where product_id in (select id from doomed_product)
       or store_id in (select id from doomed_store);
 
+  /*
+   * THE SHAPES OF A DOOMED PRODUCT, and the four things that RESTRICT on them.
+   *
+   * `products` cascades to `product_units`, but four tables hold those units down —
+   * `customer_empties`, `empties_counts`, `supplier_empties` and `product_units` itself, which
+   * references its own rows through `defined_against_id` for a shape defined in terms of another.
+   * Deleting the product without clearing these fails on a foreign key, which is how this file
+   * learned about each of them in turn.
+   */
+  create temporary table doomed_unit (id uuid primary key) on commit drop;
+  insert into doomed_unit (id)
+  select pu.id from public.product_units pu
+   where pu.product_id in (select id from doomed_product);
+
+  delete from public.empties_counts
+   where product_unit_id in (select id from doomed_unit)
+      or store_id in (select id from doomed_store);
+  delete from public.customer_empties  where product_unit_id in (select id from doomed_unit);
+  delete from public.supplier_empties  where product_unit_id in (select id from doomed_unit);
+
+  /*
+   * A SHAPE MEASURED AGAINST ANOTHER SHAPE GOES FIRST — leaf outwards.
+   *
+   * Nulling `defined_against_id` is refused by `product_unit_definition_whole`, which quite
+   * reasonably will not let a shape keep the rest of a definition it no longer has. So the
+   * doomed units are removed innermost first, a pass at a time, until none are left. It
+   * terminates because each pass removes at least one row or stops.
+   *
+   * Checked before writing this: NO surviving product has a shape defined against a doomed one,
+   * so nothing real depends on a row this removes.
+   */
+  loop
+    delete from public.product_units pu
+     where pu.id in (select id from doomed_unit)
+       and not exists (select 1 from public.product_units c
+                        where c.defined_against_id = pu.id);
+    get diagnostics v_n = row_count;
+    exit when v_n = 0;
+  end loop;
+
   -- ─── And the rows themselves ─────────────────────────────────────────────────────
   delete from public.store_customers where id in (select id from doomed_customer);
   get diagnostics v_n = row_count; v_removed := v_removed || jsonb_build_object('store_customers', v_n);
@@ -156,6 +217,20 @@ begin
   get diagnostics v_n = row_count; v_removed := v_removed || jsonb_build_object('products', v_n);
 
   -- Anything left that is keyed only by a store that no longer exists.
+  -- The remaining ledgers, which are keyed by store and would otherwise hold the shop row down.
+  delete from public.expenses            where store_id in (select id from doomed_store);
+  delete from public.staff_charges       where store_id in (select id from doomed_store);
+  delete from public.supplier_payments   where store_id in (select id from doomed_store);
+  delete from public.empties_counts      where store_id in (select id from doomed_store);
+  delete from public.variance_resolutions where stock_period_id in (
+    select sp.id from public.stock_periods sp where sp.store_id in (select id from doomed_store));
+  delete from public.movement_reviews    where movement_id in (
+    select m.id from public.stock_movements m where m.store_id in (select id from doomed_store));
+  delete from public.stock_count_edits   where product_id in (select id from doomed_product);
+  delete from public.stock_layers        where product_id in (select id from doomed_product);
+  delete from public.stock_periods       where product_id in (select id from doomed_product)
+      or store_id in (select id from doomed_store);
+
   delete from public.store_units       where store_id in (select id from doomed_store);
   delete from public.empties_categories where store_id in (select id from doomed_store);
   delete from public.stores            where id in (select id from doomed_store);
@@ -164,7 +239,15 @@ begin
   raise notice 'purged %', v_removed;
 
   -- ─── Back on ─────────────────────────────────────────────────────────────────────
-  alter table public.stock_movements  enable trigger no_mutation;
-  alter table public.customer_empties enable trigger no_mutation;
+  for v_tbl in
+    select c.relname
+      from pg_trigger t
+      join pg_class c on c.oid = t.tgrelid
+      join pg_proc p on p.oid = t.tgfoid
+     where not t.tgisinternal and p.proname = 'tg_append_only'
+       and c.relname <> 'audit_log'
+  loop
+    execute format('alter table public.%I enable trigger no_mutation', v_tbl);
+  end loop;
 end
 $purge$;
