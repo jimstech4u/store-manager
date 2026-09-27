@@ -440,6 +440,25 @@ export function TakePayment({
       }, 0);
 
       /*
+       * A DEPOSIT NEEDS SOMEBODY TO BE HOLDING IT FOR, exactly like credit does above and like
+       * the crates do.
+       *
+       * This used to send `takenNow > 0 && order.customerId ? takenNow : 0` — so a deposit typed
+       * against a walk-in was silently replaced with zero. The server has always refused this
+       * ("A deposit needs a customer to hold it for"), and the client made sure it never got the
+       * chance: the sale went through, the money was never recorded against anybody, and nothing
+       * on the screen said so. A N400 deposit disappeared exactly that way.
+       *
+       * A deposit is a ledger entry on a customer — it comes back to them, or the shop keeps it
+       * and says why — so there is no such thing as one held for nobody.
+       */
+      if (!order.customerId && takenNow > 0) {
+        throw new Error(
+          'Add a customer before taking a deposit, so there is somebody to give it back to.',
+        );
+      }
+
+      /*
        * AND WHAT HAPPENS TO IT IS THE CALLER'S BUSINESS.
        *
        * Everything above is about composing money and is the same whether a sale is being settled
@@ -454,7 +473,9 @@ export function TakePayment({
        */
       await commit({
         payments,
-        depositNow: takenNow > 0 && order.customerId ? takenNow : 0,
+        // Sent as it stands. The guard above is what makes this safe; zeroing it here is what
+        // made a deposit vanish.
+        depositNow: takenNow,
         depositReason:
           (order.deposits ?? [])
             .map((d) => d.note?.trim())
