@@ -196,7 +196,14 @@ export async function renderReceiptCanvas(
       ctx.fillText(part, pad, y);
       y += lineH;
     }
-    row(line.detail, line.amount);
+    /*
+     * The bare quantity where the line offers one — "3 Pack", not "3 Pack x N2,400 ... N7,200".
+     *
+     * The paper stopped repeating the unit price and the shared picture did not, so a customer
+     * sent a receipt on WhatsApp got a different document from the one in their hand. Two
+     * renderings of one sale that disagree is the trap this codebase already fell into once.
+     */
+    row(line.qty ?? line.detail, line.amount);
   }
   rule();
 

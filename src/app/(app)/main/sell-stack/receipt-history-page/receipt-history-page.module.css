@@ -1,0 +1,77 @@
+/*
+  EVERY VERSION THIS RECEIPT HAS HAD.
+
+  A list of what it said, and the one being looked at rendered as paper underneath. Tapping a
+  version changes the paper rather than opening a new screen: the whole reason somebody is here is
+  to compare two of them, and a page per version would make that a walk.
+*/
+
+.section {
+  margin: var(--space-6) 0 var(--space-2);
+  font-size: var(--text-lg);
+  font-weight: 650;
+  color: var(--text);
+}
+
+.note {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.version {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: var(--space-3);
+  margin-bottom: var(--space-2);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* The one whose paper is showing below. Bordered rather than filled: the paper is the content. */
+.versionOpen {
+  border-color: var(--primary);
+  background: var(--primary-subtle);
+}
+
+.versionHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.versionName {
+  font-weight: 650;
+  color: var(--text);
+}
+
+.versionTotal {
+  font-weight: 650;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+  The reason, in the shop's own words, at full size.
+
+  It is the only thing on the row that says WHY, and it is what somebody opened this page to read —
+  muting it to a caption would bury the answer under the arithmetic.
+*/
+.versionWhy {
+  font-size: var(--text-sm);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.versionWhen {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}

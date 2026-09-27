@@ -43,3 +43,12 @@
     --print-line: 21rem;
   }
 }
+
+/*
+  The paper is positioned so nothing inside it needs to escape the flow. The character width is
+  measured on a canvas rather than by rendering a hidden ruler here — a hidden ruler put a hundred
+  zeros into the receipt's own text.
+*/
+.paper {
+  position: relative;
+}

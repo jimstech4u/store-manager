@@ -41,6 +41,7 @@ const navLink = tabRoutes({ stock_page: StockPage }, [
   // one a phone restored from a stack it persisted before the deploy.
   'amend_payment_page',
   'amend_reason_page',
+  'receipt_history_page',
 ]);
 
 export const StockStack = () => (

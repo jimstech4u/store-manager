@@ -84,6 +84,21 @@ export default function ReceiptPage() {
               >
                 Something on this is wrong
               </Button>
+              {/*
+                AND WHAT IT HAS SAID BEFORE.
+                
+                Offered beside the correction rather than hidden, because the two questions arrive
+                together: somebody looking at a receipt that disagrees with the copy in a
+                customer's hand wants to see the old one before deciding whether to change this
+                one. `sale_revisions` has kept every version since 0131 and nothing read it back.
+              */}
+              <Button
+                variant="secondary"
+                fullWidth
+                onClick={() => void nav.push('receipt_history_page', { id: saleId })}
+              >
+                What this receipt has said
+              </Button>
             </div>
           )
         }

@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import styles from './Receipt.module.css';
 import { useNav } from '@academix-admin/navigation-stack';
 import { Button } from '@/components/ui/Button';
+import { Field } from '@/components/ui/Field';
 import { WhatsAppIcon } from '@/components/ui/Icon';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { RecordLink } from '@/components/ui/RecordLink';
@@ -22,6 +23,8 @@ import {
 import { receiptPdf, sharePdf } from '@/lib/pdf';
 import { useThisPrinter } from '@/lib/stacks/printer';
 import { openPrinterAppWith } from '@/lib/print-handoff';
+import { reopenSale } from '@/lib/stacks/amend';
+import { usePermission } from '@/hooks/usePermission';
 import { asInstruction, receiptLines } from '@/lib/escpos-text';
 import { PrintPreview } from '@/components/settings/PrintPreview';
 import { appUrl } from '@/lib/app-url';
@@ -37,6 +40,9 @@ interface SaleDetail {
     transfer_details: string | null;
     /** 1 until somebody corrects it. Every correction bumps it. */
     revision: number | null;
+    /** 'posted' or 'voided'. `sale_detail` returns the whole row, so it was always here. */
+    status?: string | null;
+    cancelled_reason?: string | null;
   };
   /*
    * WHAT THIS REPLACES, when it replaces something.
@@ -181,6 +187,18 @@ export function Receipt({
   const [makingPdf, setMakingPdf] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [connecting, setConnecting] = useState(false);
+
+  /*
+   * REOPENING A CANCELLATION — offered here because this is the screen somebody is looking at when
+   * they realise. The permission is the same one that cancels and corrects: undoing a cancellation
+   * is the same kind of act, and gating it more tightly would mean the person who made the mistake
+   * cannot fix it.
+   */
+  const { can } = usePermission();
+  const canAmend = can('sales.amend');
+  const [reopening, setReopening] = useState(false);
+  const [reopenWhy, setReopenWhy] = useState('');
+  const [askReopen, setAskReopen] = useState(false);
 
   /*
    * WHICH WAY THIS DEVICE CAN REACH A PRINTER. See src/lib/printing.ts for the whole reasoning.
@@ -388,6 +406,65 @@ export function Receipt({
         >
           {revoking ? 'Taking it back…' : 'Sent to the wrong person? Take the link back'}
         </button>
+      )}
+
+      {/*
+        ─── CANCELLED, AND THE WAY BACK ──────────────────────────────────────────
+
+        Said at the top of the actions rather than buried: a cancelled receipt looks almost
+        identical to a live one, and somebody about to hand it to a customer needs to know.
+
+        The reason is asked before anything happens, not after. "Why is this back" is a question
+        somebody who was not there asks weeks later, and a reopen with no reason is
+        indistinguishable from quietly undoing a decision you were overruled on.
+      */}
+      {sale.status === 'voided' && (
+        <div className={styles.cancelled} data-print-no-print>
+          <p className={styles.cancelledHead}>
+            <strong>This receipt was cancelled</strong>
+            {sale.cancelled_reason ? ` — ${sale.cancelled_reason}` : ''}
+          </p>
+          {canAmend && !askReopen && (
+            <Button variant="secondary" fullWidth onClick={() => setAskReopen(true)}>
+              Open it again
+            </Button>
+          )}
+          {canAmend && askReopen && (
+            <>
+              <Field
+                label="Why is it being reopened?"
+                value={reopenWhy}
+                onChange={(e) => setReopenWhy(e.target.value)}
+                placeholder="Cancelled by mistake, the lorry did go"
+                hint="The stock goes back out, the containers are owed again, and the bill returns to their account."
+              />
+              <Button
+                fullWidth
+                busy={reopening}
+                busyLabel="Opening"
+                disabled={reopenWhy.trim() === ''}
+                onClick={async () => {
+                  setReopening(true);
+                  setShareNote(null);
+                  try {
+                    await reopenSale(sale.id, reopenWhy.trim());
+                    setAskReopen(false);
+                    setReopenWhy('');
+                    // Re-read rather than patch: a reopen moves four ledgers and the screen should
+                    // show what the shop now holds, not what this device believes it sent.
+                    await res.reload();
+                  } catch (e: unknown) {
+                    setShareNote(messageOf(e, 'Could not reopen this receipt'));
+                  } finally {
+                    setReopening(false);
+                  }
+                }}
+              >
+                Open this receipt again
+              </Button>
+            </>
+          )}
+        </div>
       )}
 
       <div className={styles.actions} data-print-no-print>

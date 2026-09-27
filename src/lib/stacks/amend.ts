@@ -219,3 +219,37 @@ export async function amendSale(args: {
     voided: Boolean(r.voided),
   };
 }
+
+/**
+ * UNDO A CANCELLATION (0179).
+ *
+ * The exact inverse of voiding: the stock goes back out, the containers are owed again, the
+ * deposit claim is restored and the receipt is posted again — every step an append, so the void
+ * stays in the ledger with the reopen after it. Requires `sales.amend` and a reason, and the
+ * cancelled document is kept in the revision history.
+ *
+ * Why it exists: cancelling by mistake is ordinary, and the only way back was to key the whole
+ * sale again — a second document with a different number while the customer holds the first.
+ */
+export async function reopenSale(saleId: string, reason: string): Promise<AmendResult> {
+  const { data, error } = await getSupabase().rpc('reopen_sale', {
+    p_sale_id: saleId,
+    p_reason: reason,
+  });
+  if (error) throw error;
+
+  // It moves the shelf, the customer's balance and their containers, exactly as a correction does.
+  accountsChanged();
+  stockMoved();
+
+  const r = (Array.isArray(data) ? data[0] : data) as Record<string, unknown>;
+  return {
+    saleId: String(r.sale_id),
+    revision: Number(r.revision) || 1,
+    total: Number(r.total) || 0,
+    paid: Number(r.paid) || 0,
+    owing: Number(r.owing) || 0,
+    customerId: null,
+    voided: false,
+  };
+}
