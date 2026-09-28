@@ -78,6 +78,15 @@ interface SaleDetail {
     base_unit: string;
     entered_qty: string;
     pack_name: string | null;
+    /**
+     * THE SHAPE IT WAS SOLD IN — "Crate", "Pack", "Can".
+     *
+     * `pack_name` is the retired one-pack-per-product model and is null for everything this shop
+     * sells, so the line fell through to `base_unit`, a fallback word off a global list, and
+     * printed "1 pieces" over a line that was one crate (0201).
+     */
+    unit_name: string | null;
+    unit_plural: string | null;
     base_qty: string;
     unit_price: string;
     line_total: string;
@@ -291,6 +300,20 @@ export function Receipt({
    * object, and the moment a charge or a line of the header changed, one of them would have
    * silently kept the old shape.
    */
+  /**
+   * What to call one of these on the paper.
+   *
+   * THE SHAPE FIRST, because that is what the seller chose and what the customer was handed.
+   * `pack_name` is kept behind it for receipts written under the older pack model, and
+   * `base_unit` last — it is a fallback word off a global list and saying "pieces" over a crate
+   * is how a receipt stops matching the goods.
+   */
+  const unitWord = (l: SaleDetail['lines'][number]) => {
+    const many = Number(l.entered_qty) !== 1;
+    const shape = many ? (l.unit_plural ?? l.unit_name) : l.unit_name;
+    return shape ?? l.pack_name ?? pluralUnit(l.base_unit, Number(l.entered_qty));
+  };
+
   const receiptPayload = () => ({
     shopName,
     header: settings?.header,
@@ -317,11 +340,11 @@ export function Receipt({
     lines: lines.map((l) => ({
     name: l.product_name,
     detail: `${formatQtySpoken(l.entered_qty)} ${
-    l.pack_name ?? pluralUnit(l.base_unit, Number(l.entered_qty))
+    unitWord(l)
     } x ${formatMoney(l.unit_price)}`,
     // The same thing without the unit price, for the paper — see ShareLine.qty.
     qty: `${formatQtySpoken(l.entered_qty)} ${
-    l.pack_name ?? pluralUnit(l.base_unit, Number(l.entered_qty))
+    unitWord(l)
     }`,
     amount: formatMoney(l.line_total),
     })),

@@ -529,8 +529,19 @@ export function UnitsEditor({
                   onClick={() =>
                     patch(u.storeUnitId, {
                       [key]: !on,
-                      // Ticking any step means this is counted, not weighed.
-                      ...(on ? {} : { wholeDigit: key === 'wholeDigit' ? true : u.wholeDigit }),
+                      /*
+                       * TICKING ANY STEP MEANS THIS IS COUNTED, NOT WEIGHED — and now it does.
+                       *
+                       * This line used to keep `u.wholeDigit` as it was, so ticking "Halves too" on
+                       * a shape set to "Any amount" left BOTH lit. `partsFor` returns nothing for a
+                       * weighed thing, so the form showed halves and the till offered none: the
+                       * seller had to type 0.5, and the same box would have taken 0.43 crates.
+                       * Every shape in the first shop to use this was in that state (0204).
+                       *
+                       * Naming a step is not an opinion alongside "any amount"; it is the statement
+                       * that this thing comes in ones. So saying it makes it so.
+                       */
+                      ...(on ? {} : { wholeDigit: true }),
                     } as Partial<ProductUnit>)
                   }
                 >

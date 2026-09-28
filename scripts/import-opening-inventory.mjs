@@ -436,7 +436,16 @@ for (const p of PLAN) {
           ? (existingUnits.get(`${productId}:${unitIds.get(s.unit)}`)?.sell_price ?? null)
           : null,
         is_returnable: s.isReturnable,
-        whole_digit: false,
+        /*
+         * COUNTED, because a crate comes in ones and halves of one — it is not weighed.
+         *
+         * This said `false`, which is "any amount at all", and it went out over all 104 products.
+         * `partsFor` returns no part-buttons for a weighed thing, so every shape showed "Halves
+         * too" in the product form and offered no half at the till, while accepting 0.43 crates
+         * from anyone who typed it. 0204 corrects the rows and makes the server refuse the
+         * combination; this is where it was written.
+         */
+        whole_digit: true,
         allow_quarter: false,
         // Halves everywhere: the sheet has 5.5 crates and 133.5 can trays, and the shop confirmed
         // both are real.
