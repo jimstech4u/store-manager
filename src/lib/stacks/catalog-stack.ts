@@ -49,14 +49,6 @@ export interface Product {
    * every item somebody edited to whatever the general rule happened to be that day.
    */
   ownLowStockLevel?: string | null;
-  /**
-   * WHICH SHAPE that level was typed in — a label, not a unit of storage.
-   *
-   * `ownLowStockLevel` is in base units and every reader compares against the shelf in base units.
-   * This is only so the form can say the level back in the words the shop used: without it, "10
-   * crates" was stored as 120 and read back in whichever shape sorted first (0184).
-   */
-  ownLowStockUnitId?: string | null;
 }
 
 interface ProductRow {
@@ -75,7 +67,6 @@ interface ProductRow {
   pack_qty: string | null;
   low_stock_level?: string | null;
   own_low_stock_level?: string | null;
-  own_low_stock_unit_id?: string | null;
   list_price: string | null;
 }
 
@@ -98,7 +89,6 @@ function toProduct(r: ProductRow): Product {
     // Left UNDEFINED, not null, by the readers that do not return it: undefined means "this row
     // cannot say", and a form filled from such a row must not conclude the item has no exception.
     ownLowStockLevel: r.own_low_stock_level,
-    ownLowStockUnitId: r.own_low_stock_unit_id,
     listPrice: r.list_price,
   };
 }

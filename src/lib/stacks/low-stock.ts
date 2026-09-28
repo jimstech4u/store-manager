@@ -113,6 +113,70 @@ function levelsChanged() {
   invalidate('catalog_flow');
 }
 
+/**
+ * ONE LEVEL PER SHAPE, counted in that shape (0191).
+ *
+ * A shape with no row here follows the shop's general level — which also means "this many of that
+ * shape", so ten is ten crates for the crate and ten bottles for the bottle. An item is low the
+ * moment any one of its shapes is at or below its level.
+ */
+export interface ShapeLowLevel {
+  productUnitId: string;
+  /** The shop's own word for the shape, plural: "Crates". */
+  plural: string;
+  /** In that shape. 25 against a crate is twenty-five crates. */
+  level: number;
+}
+
+export async function shapeLowLevels(productId: string): Promise<ShapeLowLevel[]> {
+  const { data, error } = await getSupabase()
+    .from('product_low_stock_levels')
+    .select('product_unit_id, level, product_units(base_qty, store_units(name))')
+    .eq('product_id', productId);
+  if (error) throw error;
+  return ((data ?? []) as unknown as {
+    product_unit_id: string;
+    level: string;
+    product_units: { base_qty: string; store_units: { name: string } | null } | null;
+  }[])
+    .map((r) => ({
+      productUnitId: r.product_unit_id,
+      plural: r.product_units?.store_units?.name ?? '',
+      level: Number(r.level) || 0,
+    }))
+    .sort((a, b) => a.plural.localeCompare(b.plural));
+}
+
+/** Give one shape its own level. */
+export async function setShapeLowStock(
+  productId: string,
+  unitId: string,
+  level: number,
+): Promise<void> {
+  const { error } = await getSupabase().rpc('set_shape_low_stock', {
+    p_product_id: productId,
+    p_unit_id: unitId,
+    p_level: level,
+  });
+  if (error) throw error;
+  levelsChanged();
+}
+
+/**
+ * Put a shape back under the shop's general level.
+ *
+ * Which is NOT the same as setting it to zero: zero is a real level meaning "tell me only when
+ * there are none at all", and the two have to stay apart the whole way down.
+ */
+export async function clearShapeLowStock(productId: string, unitId: string): Promise<void> {
+  const { error } = await getSupabase().rpc('clear_shape_low_stock', {
+    p_product_id: productId,
+    p_unit_id: unitId,
+  });
+  if (error) throw error;
+  levelsChanged();
+}
+
 /** The shop's general level. Null turns the warnings off entirely. */
 export async function setShopLowStock(storeId: string, level: number | null): Promise<void> {
   const { error } = await getSupabase().rpc('set_low_stock_threshold', {

@@ -314,6 +314,23 @@ export function TakePayment({
    * misreading that makes a shop think its prices are higher than they are.
    */
   const held = depositTotal(order);
+
+  /*
+   * THE THREE THINGS THAT NEED A CUSTOMER, and why they are one rule.
+   *
+   * Money owed, containers lent, and money held each open a LEDGER against a person. A walk-in
+   * has no ledger, so any of the three against nobody is a record with no owner — the crates
+   * vanish, the debt has nowhere to sit, the deposit is owed back to no one.
+   *
+   * Paying in full does not excuse the other two. A customer can settle every naira and still
+   * walk out with five crates and N400 of the shop's money against them; that is still an
+   * account, and it still needs a name. Only a sale with none of the three — nothing owed,
+   * nothing returnable, nothing held — is a true walk-in.
+   */
+  const depositTaken = (order.deposits ?? []).reduce((sum, d) => {
+    const n = Number(d.amount);
+    return sum + (Number.isFinite(n) ? n : 0);
+  }, 0);
   const charges = chargesTotal(order);
   const itemsTotal = Math.max(0, total - charges - held);
 
@@ -453,6 +470,8 @@ export function TakePayment({
        * and says why — so there is no such thing as one held for nobody.
        */
       if (!order.customerId && takenNow > 0) {
+        // The button is already disabled for this; the throw is the backstop for any path that
+        // reaches `settle` another way.
         throw new Error(
           'Add a customer before taking a deposit, so there is somebody to give it back to.',
         );
@@ -1112,7 +1131,23 @@ export function TakePayment({
         </InfoPanel>
       )}
 
-      {!order.customerId && (remaining > 0 || comingBack.length > 0) && (
+      {/*
+        A DEPOSIT IS MONEY HELD FOR SOMEBODY, so there has to be a somebody.
+
+        It comes back to them when the containers do, or the shop keeps it and says why — and
+        neither sentence can be written about a walk-in. Said here as a condition to fix rather
+        than left to the server, which refused it correctly and was never reached: the till used
+        to replace the figure with zero and settle without it.
+      */}
+      {!order.customerId && depositTaken > 0 && (
+        <InfoPanel tone="warning" title="Who is this deposit being held for?">
+          {formatMoney(depositTaken)} is being held against the containers, so it needs somebody
+          to give it back to.
+        </InfoPanel>
+      )}
+
+      {!order.customerId &&
+        (remaining > 0 || comingBack.length > 0 || depositTaken > 0) && (
         <Button variant="secondary" size="large" fullWidth onClick={onNeedCustomer}>
           Choose a customer
         </Button>
@@ -1137,7 +1172,8 @@ export function TakePayment({
             // Paid more than the sale while what they owed is still unknown: the extra might be for
             // the old debt rather than change, and nobody can say which until the balance arrives.
             (balanceUnknown && paid > total) ||
-            (!order.customerId && (paid < total || comingBack.length > 0))
+            (!order.customerId &&
+              (paid < total || comingBack.length > 0 || depositTaken > 0))
           }
           onClick={settle}
         >

@@ -263,3 +263,70 @@ li + li .emptiesRow { border-top: 1px solid var(--border); }
   color: var(--text);
   font: inherit;
 }
+
+/*
+  RUNNING LOW, AS A LIST OF SHAPES.
+
+  Shaped like the charges list at the till on purpose: a row is one decision, the × undoes that
+  one decision, and a composer underneath adds the next. A shop that has learned the pattern in
+  one place should not have to learn it again here.
+*/
+.lowIntro {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.lowLine {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.lowLineText {
+  min-width: 0;
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+
+/*
+  The × is the control, so it gets a real touch target rather than being a small glyph somebody
+  has to aim at beside a counter.
+*/
+.lowRemove {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--touch-min, 44px);
+  height: var(--touch-min, 44px);
+  margin: calc(var(--space-2) * -1) 0;
+  padding: 0;
+  font-size: var(--text-lg);
+  line-height: 1;
+  color: var(--danger, #b3261e);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.lowAdd {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  margin-top: var(--space-3);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+}
+
+.lowNote {
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}

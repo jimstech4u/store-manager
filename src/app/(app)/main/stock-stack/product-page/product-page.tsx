@@ -1,7 +1,7 @@
 'use client';
 
 import { LEDGERS_SCOPE } from '@/lib/stacks/customer-ledgers';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
@@ -16,7 +16,15 @@ import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useProduct, type Product } from '@/lib/stacks/catalog-stack';
-import { setItemLowStock, useLowStockRule } from '@/lib/stacks/low-stock';
+import {
+  clearShapeLowStock,
+  setShapeLowStock,
+  shapeLowLevels,
+  useLowStockRule,
+  type ShapeLowLevel,
+} from '@/lib/stacks/low-stock';
+import { useResource } from '@/lib/stacks/resource';
+import { CATALOG_SCOPE } from '@/lib/stacks/customer-account';
 import { useListNotifier } from '@/hooks/useListChannel';
 import { stockInShapes, useSellingUnits } from '@/lib/stacks/selling-units';
 import { unitGaps, useProductUnits } from '@/lib/stacks/product-units';
@@ -82,24 +90,20 @@ export default function ProductPage() {
    * nothing without "everything else is 20" beside it.
    */
   const rule = useLowStockRule(store?.id ?? null);
-  const [lowLevel, setLowLevel] = useState('');
 
-  /*
-   * WHICH SHAPE THE LEVEL IS BEING SAID IN.
-   *
-   * The box asked for "this many pieces" — `product.baseUnit`, a fallback word from a global list
-   * that is very often not what the shop calls anything. A distributor who counts crates was being
-   * asked for a number of pieces, so either they typed crates and got a level twelve times too
-   * small, or they did the arithmetic in their head every time.
-   *
-   * STORED IN BASE UNITS STILL, because that is what the shelf is counted in and what every reader
-   * compares against. Only the saying and the showing change: the shop picks a shape, types a
-   * number in it, and it is converted once on the way in.
-   */
-  const [lowShape, setLowShape] = useState<string | null>(null);
-  const [lowSeeded, setLowSeeded] = useState<string | null>(null);
   const [savingLow, setSavingLow] = useState(false);
   const [lowNote, setLowNote] = useState<string | null>(null);
+
+  /*
+   * The shapes that already have a level of their own, and the composer's two boxes.
+   *
+   * `removingLevel` holds the line being confirmed rather than a boolean, so the dialog can name
+   * what it is about to undo — "put bottles back on the shop's level" rather than "are you sure".
+   */
+  const [addShape, setAddShape] = useState<string | null>(null);
+  const [addLevel, setAddLevel] = useState('');
+  const [removingLevel, setRemovingLevel] = useState<ShapeLowLevel | null>(null);
+  const removeLevelDialog = useConfirm();
 
   /*
    * Read into its own area, so a failure says so.
@@ -127,42 +131,19 @@ export default function ProductPage() {
    * save all need the same answer. Three copies of "how many pieces is a crate" is three chances
    * to disagree, and the way that shows up is a level twelve times too small.
    */
-  const lowUnit = shapes.find((u) => u.productUnitId === lowShape) ?? shapes[0] ?? null;
-  const lowPer = lowUnit ? Number(lowUnit.baseQty) || 1 : 1;
 
-  /*
-   * BELOW `shapes`, because it reads them — and reads them in its dependency list, which
-   * is evaluated immediately rather than when the effect runs. Above, that is a temporal dead
-   * zone and the page throws on its first render.
-   *
-   * Seeded once per product, from the item's OWN level — never the resolved one.
-   *
-   * `ownLowStockLevel` is null when the item simply follows the shop, which is what the empty box
-   * means. Seeding from the resolved figure would put the shop's general level in a box labelled
-   * "different from the rest" and turn every item anybody opened into an exception on the next save.
-   */
-  useEffect(() => {
-    if (!product || lowSeeded === product.id) return;
-    setLowSeeded(product.id);
+  /** This item's own per-shape levels (0191), and the shapes still free to be given one. */
+  const lowLevels = useResource<ShapeLowLevel[]>({
+    key: `product-low-levels:${productId ?? 'none'}`,
+    scope: CATALOG_SCOPE,
+    deps: [productId ?? ''],
+    read: () => shapeLowLevels(productId as string),
+    enabled: Boolean(productId),
+  });
+  const taken = new Set((lowLevels.data ?? []).map((l) => l.productUnitId));
+  const freeShapes = shapes.filter((u) => !taken.has(u.productUnitId));
+  const shopSaidGeneral = rule.data?.level == null ? null : formatQty(rule.data.level);
 
-    /*
-     * IN THE SHAPE IT WAS SAVED IN (0184).
-     *
-     * This divided by `shapes[0]` — whichever shape happened to sort first — because nothing
-     * recorded which one the shop had used. A level typed as "10 crates" is stored as 120 pieces,
-     * and reading 120 back against bottles gave "120" or against a half-crate gave "20": a number
-     * the shop had never typed, in a word it had not chosen. The column now remembers, and the
-     * first shape is only the fallback for an item nobody has set one on.
-     */
-    const savedShape =
-      shapes.find((u) => u.productUnitId === product.ownLowStockUnitId) ?? shapes[0] ?? null;
-    setLowShape(savedShape?.productUnitId ?? null);
-    setLowLevel(
-      product.ownLowStockLevel == null
-        ? ''
-        : String(Number(product.ownLowStockLevel) / (Number(savedShape?.baseQty) || 1)),
-    );
-  }, [product, lowSeeded, shapes]);
 
   const removeDialog = useConfirm();
   const [removing, setRemoving] = useState(false);
@@ -412,163 +393,131 @@ export default function ProductPage() {
         ordered in when a customer asks for it. The two are kept apart the whole way down to the
         column, so an empty box can never be saved as a nought.
       */}
+      {/*
+        ── A LEVEL FOR EACH SHAPE, as a list ──────────────────────────────────────────
+
+        The shop sets one general level and it means that many of WHATEVER SHAPE you are looking
+        at: ten crates, and ten bottles. This is where an item disagrees — crates at 25 because
+        they move, bottles left on the shop's ten, or bottles at 5 because a handful is plenty.
+
+        A LIST rather than one box, because there is no single right answer for an item sold two
+        ways, and the old single box had to pick one shape and convert the other — which is how a
+        general level of 10 came to be displayed as "0.8333 packs".
+
+        The selector only offers shapes that have no line yet, so once every shape is spoken for
+        there is nothing left to add and the composer goes.
+      */}
       <section className={styles.empties}>
         <h2 className={styles.emptiesTitle}>Running low</h2>
-        {(() => {
-          /*
-           * The shapes this item is actually counted in, biggest first — the shop's own words, not
-           * a global fallback. `shapes` is already sorted that way for the price table above.
-           */
-          const chosen = lowUnit;
-          const per = lowPer;
-          const shopLevel = rule.data?.level ?? null;
-          /*
-           * THE SHOP'S LEVEL IS SHOWN AS THE SHOP SET IT, not divided into this product's shape.
-           *
-           * It used to be `shopLevel / per`, so a general level of 10 displayed against a pack of
-           * twelve as "Follows the shop: 0.8333" — a number nobody typed, in a shape the shop was
-           * not thinking in when they set it. Reported exactly that way.
-           *
-           * The conversion was wrong in principle as well as ugly. One general level applies to
-           * everything the shop sells, so it cannot be expressed in any single product's shape;
-           * it is a count of base units and that is the only honest way to say it. The box below
-           * still takes its number in the chosen shape, because that figure IS about this item.
-           */
-          const shopSaid = shopLevel == null ? null : formatQty(shopLevel);
-          /*
-           * SAID IN THE SHOP'S SMALLEST SHAPE FOR THIS ITEM, not in `base_unit`.
-           *
-           * `base_unit` is a fallback word off a global list, and for a product sold in crates and
-           * bottles it says "piece" — so the box read "Warn me at this many crates" directly above
-           * "Follows the shop: 10 pieces", naming a unit this product does not have. Reported as a
-           * crate-and-pieces mismatch.
-           *
-           * The level IS in base units, and the smallest configured shape is what one base unit
-           * is: `shapes` is sorted biggest first, so the last of them is the shop's own word for
-           * the thing being counted. `base_unit` stays as the fallback for an item with no shapes
-           * configured at all.
-           */
-          const smallest = shapes.length > 0 ? shapes[shapes.length - 1] : null;
-          const shopWord = smallest
-            ? smallest.plural.toLowerCase()
-            : pluralUnit(product.baseUnit, Number(shopLevel) || 2);
 
-          return (
-            <>
-              {shapes.length > 1 && (
-                <label className={styles.lowShape}>
-                  <span className={styles.lowShapeLabel}>Count it in</span>
-                  <select
-                    className={styles.lowShapeSelect}
-                    value={chosen?.productUnitId ?? ''}
-                    onChange={(e) => {
-                      /*
-                       * THE FIGURE FOLLOWS THE SHAPE. Typing 5 against crates and then switching
-                       * to bottles must not leave "5" meaning five bottles — the shop changed how
-                       * they are saying the level, not the level.
-                       */
-                      const next = shapes.find((u) => u.productUnitId === e.target.value);
-                      const nextPer = next ? Number(next.baseQty) || 1 : 1;
-                      const asBase = Number(lowLevel) * per;
-                      if (lowLevel.trim() !== '' && Number.isFinite(asBase)) {
-                        setLowLevel(String(asBase / nextPer));
-                      }
-                      setLowShape(e.target.value);
-                    }}
-                  >
-                    {shapes.map((u) => (
-                      <option key={u.productUnitId} value={u.productUnitId}>
-                        {u.plural}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
+        <p className={styles.lowIntro}>
+          {shopSaidGeneral == null
+            ? 'Your shop has no general level, so nothing warns unless you set one here.'
+            : `Your shop warns at ${shopSaidGeneral} of any shape. Set a different level below for
+               a shape that should be treated differently.`}
+        </p>
 
-              <Field
-                label={`Warn me at this many ${
-                  chosen ? chosen.plural.toLowerCase() : pluralUnit(product.baseUnit, 2)
-                }`}
-                numeric
-                value={lowLevel}
-                onChange={(e) => setLowLevel(e.target.value)}
-                placeholder={
-                  shopSaid == null
-                    ? 'No warnings set up yet'
-                    : `Follows the shop: ${shopSaid} ${shopWord}`
-                }
-                hint={
-                  shopSaid == null
-                    ? 'Your shop has no general level, so nothing warns unless you set one here.'
-                    : `Leave it blank to follow the shop's general level of ${shopSaid} ${shopWord}.`
-                }
-              />
-            </>
-          );
-        })()}
-        {(() => {
-          const typed = lowLevel.trim();
-          /*
-           * Converted on the way in. The shop says "5 crates"; the column, the stock card and
-           * `low_stock_items` all speak base units, and one place doing the multiplication is what
-           * keeps them agreeing.
-           */
-          const wanted = typed === '' ? null : Number(typed) * lowPer;
-          const had = product.ownLowStockLevel == null ? null : Number(product.ownLowStockLevel);
-          const dirty = wanted !== had;
-          return (
-            <>
-              <Button
-                variant="secondary"
-                fullWidth
-                busy={savingLow}
-                busyLabel="Saving"
-                disabled={!dirty || (typed !== '' && !Number.isFinite(wanted))}
-                onClick={async () => {
-                  setSavingLow(true);
-                  setLowNote(null);
-                  try {
-                    /*
-                     * The shape goes with the figure. Without it the level is a bare number in
-                     * base units and the form has to guess how to say it back — which is the whole
-                     * bug 0184 closes.
-                     */
-                    await setItemLowStock(product.id, wanted, wanted === null ? null : lowShape);
-                    /*
-                     * Re-read, so the box is seeded from what the shop now holds rather than from
-                     * what this screen believes it sent. A form that trusts its own optimism is a
-                     * form that shows a saved value that was refused.
-                     */
-                    setLowSeeded(null);
-                    await load();
-                    /*
-                     * Said back in the shop's own words. "This item warns at 120" is true and
-                     * unreadable to somebody who typed 10 crates.
-                     */
-                    setLowNote(
-                      wanted === null
-                        ? "Back under the shop's level."
-                        : `This item warns at ${typed} ${
-                            lowUnit ? lowUnit.plural.toLowerCase() : pluralUnit(product.baseUnit, 2)
-                          }.`,
-                    );
-                  } catch (e: unknown) {
-                    setLowNote(messageOf(e, 'Could not save that level'));
-                  } finally {
-                    setSavingLow(false);
-                  }
-                }}
+        {lowLevels.data === null && !lowLevels.error && (
+          <p className={styles.lowIntro}>Reading this item&rsquo;s levels…</p>
+        )}
+
+        {(lowLevels.data ?? []).map((l) => (
+          <div className={styles.lowLine} key={l.productUnitId}>
+            <button
+              type="button"
+              className={styles.lowRemove}
+              aria-label={`Put ${l.plural.toLowerCase()} back on the shop's level`}
+              onClick={() => setRemovingLevel(l)}
+            >
+              ×
+            </button>
+            <span className={styles.lowLineText}>
+              <strong>{l.plural}</strong> at {formatQty(l.level)}
+            </span>
+          </div>
+        ))}
+
+        {freeShapes.length > 0 && (
+          <div className={styles.lowAdd}>
+            <label className={styles.lowShape}>
+              <span className={styles.lowShapeLabel}>Shape</span>
+              <select
+                className={styles.lowShapeSelect}
+                value={addShape ?? freeShapes[0].productUnitId}
+                onChange={(e) => setAddShape(e.target.value)}
               >
-                {dirty ? 'Save this level' : 'Saved'}
-              </Button>
-              {lowNote && (
-                <p className={styles.emptiesNote} role="status">
-                  {lowNote}
-                </p>
-              )}
-            </>
-          );
-        })()}
+                {freeShapes.map((u) => (
+                  <option key={u.productUnitId} value={u.productUnitId}>
+                    {u.plural}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <Field
+              label="Warn me at"
+              numeric
+              value={addLevel}
+              onChange={(e) => setAddLevel(e.target.value)}
+              placeholder="e.g. 25"
+            />
+
+            <Button
+              variant="secondary"
+              fullWidth
+              busy={savingLow}
+              busyLabel="Adding"
+              disabled={addLevel.trim() === '' || !Number.isFinite(Number(addLevel))}
+              onClick={async () => {
+                const unitId = addShape ?? freeShapes[0].productUnitId;
+                setSavingLow(true);
+                setLowNote(null);
+                try {
+                  await setShapeLowStock(product.id, unitId, Number(addLevel));
+                  setAddLevel('');
+                  setAddShape(null);
+                  await lowLevels.reload();
+                } catch (e: unknown) {
+                  setLowNote(messageOf(e, 'Could not add that level'));
+                } finally {
+                  setSavingLow(false);
+                }
+              }}
+            >
+              Add this level
+            </Button>
+          </div>
+        )}
+
+        {lowNote && <p className={styles.lowNote}>{lowNote}</p>}
+
+        {/*
+          Confirmed, because removing a line is not the same as setting it to nought — it puts the
+          shape back under the shop's general level, and somebody who meant "never warn me" would
+          otherwise get the opposite of what they asked for.
+        */}
+        {removingLevel && (
+          <ConfirmDialog
+            controller={removeLevelDialog}
+            title={`Put ${removingLevel.plural.toLowerCase()} back on the shop's level?`}
+            message={`This item warns at ${formatQty(removingLevel.level)} ${removingLevel.plural.toLowerCase()}. Removing that means it follows the shop${
+              shopSaidGeneral == null ? '' : `, which warns at ${shopSaidGeneral}`
+            }.`}
+            confirmText="Remove it"
+            tone="danger"
+            onDismiss={() => setRemovingLevel(null)}
+            onConfirm={async () => {
+              const going = removingLevel;
+              setRemovingLevel(null);
+              try {
+                await clearShapeLowStock(product.id, going.productUnitId);
+                await lowLevels.reload();
+              } catch (e: unknown) {
+                setLowNote(messageOf(e, 'Could not remove that level'));
+              }
+            }}
+          />
+        )}
       </section>
 
       <section className={styles.empties}>
