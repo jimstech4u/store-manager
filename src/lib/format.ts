@@ -83,6 +83,40 @@ export function formatAmount(
  * "12 pieces" and "1.4 kg" both read naturally; "12.0000 pieces" reads like a machine, and
  * this audience reads it as an error. Trailing zeros are dropped rather than padded.
  */
+/**
+ * HALVES AND QUARTERS THE WAY A SHOP SAYS THEM: "2 1/2", never "2.5".
+ *
+ * Lives here rather than in the printer's own module because it is not a printer concern. The
+ * receipt does it, and so must the PDF, the shared picture and the page a customer opens from a
+ * link — those three were showing "0.5 Crate" while the paper in the same customer's hand said
+ * "1/2 Crate", which is two documents disagreeing about the quantity.
+ *
+ * `asFraction` in `escpos-text` is this plus the printer's ASCII flattening. Keeping them apart
+ * is what lets a PDF keep its naira sign while still spelling the fraction.
+ *
+ * The leading boundary matters: without it "10.5" would have its ".5" rewritten inside a figure
+ * that is not a quantity at all.
+ */
+export function spellFractions(text: string): string {
+  /*
+   * The whole-number part, or nothing.
+   *
+   * "2.5" is two and a half; "0.5" is a half. A first version tested the digits for truthiness,
+   * and "0" is a non-empty string — so half a crate printed as "0 1/2", which reads like a
+   * quantity somebody got wrong. Reported off a real receipt.
+   */
+  const lead = (whole: string) => (whole && whole !== '0' ? `${whole} ` : '');
+  return text
+    .replace(/(^|[\s(])(\d*)\.25(?![\d])/g, (_m, pre, whole) => `${pre}${lead(whole)}1/4`)
+    .replace(/(^|[\s(])(\d*)\.5(?![\d])/g, (_m, pre, whole) => `${pre}${lead(whole)}1/2`)
+    .replace(/(^|[\s(])(\d*)\.75(?![\d])/g, (_m, pre, whole) => `${pre}${lead(whole)}3/4`);
+}
+
+/** A quantity said the way a shop says it — "2 1/2 crates" rather than "2.5 crates". */
+export function formatQtySpoken(value: string | number | null | undefined): string {
+  return spellFractions(formatQty(value));
+}
+
 export function formatQty(value: string | number | null | undefined): string {
   const n = toNumber(value);
   if (n === null) return '—';

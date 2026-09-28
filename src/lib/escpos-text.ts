@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReceiptImageInput } from '@/lib/share';
+import { spellFractions } from '@/lib/format';
 
 /**
  * A RECEIPT IN THE PRINTER'S OWN LETTERS, not as a picture of one.
@@ -116,23 +117,16 @@ function printable(text: string): string {
     .replace(/[^\x20-\x7e]/g, '');
 }
 
-/**
- * The whole-number part of a fraction, or nothing.
- *
- * "2.5" is two and a half; "0.5" is a half. A first version tested the digits for truthiness, and
- * "0" is a non-empty string — so half a crate printed as "0 1/2", which reads like a quantity
- * somebody got wrong. Reported off a real receipt.
- */
-function lead(whole: string): string {
-  return whole && whole !== '0' ? `${whole} ` : '';
-}
-
 /** A decimal quantity written the way a shop says it: 0.5 → "1/2", 2.5 → "2 1/2". */
 export function asFraction(text: string): string {
-  return printable(text)
-    .replace(/(^|[\s(])(\d*)\.25(?![\d])/g, (_m, pre, whole) => `${pre}${lead(whole)}1/4`)
-    .replace(/(^|[\s(])(\d*)\.5(?![\d])/g, (_m, pre, whole) => `${pre}${lead(whole)}1/2`)
-    .replace(/(^|[\s(])(\d*)\.75(?![\d])/g, (_m, pre, whole) => `${pre}${lead(whole)}3/4`);
+  /*
+   * The printer's flattening, then the SHARED spelling.
+   *
+   * The substitution used to live here, so the PDF, the shared picture and the customer's link
+   * had no way to reach it without also flattening their naira signs to "N". It moved to
+   * `format.ts`; this is that plus what only the printer needs.
+   */
+  return spellFractions(printable(text));
 }
 
 /** Exported so anything else that shows a quantity can spell it the way the paper will. */
@@ -365,6 +359,12 @@ export function receiptLines(input: ReceiptImageInput, layout: ReceiptLayout): P
       // A heading inside the totals — the money is finished, so the heavy line goes here.
       ruleDouble();
       one(layout.strongTotals, asFraction(t.label));
+      /*
+       * And a light rule under the heading itself, so it reads as the head of a list rather than
+       * as the first entry in one. Without it "Still with you" sat flush against the first thing
+       * they are holding and the two ran together.
+       */
+      rule();
       inHolding = true;
       return;
     }

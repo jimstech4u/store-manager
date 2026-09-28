@@ -435,7 +435,23 @@ export default function ProductPage() {
            * still takes its number in the chosen shape, because that figure IS about this item.
            */
           const shopSaid = shopLevel == null ? null : formatQty(shopLevel);
-          const shopWord = pluralUnit(product.baseUnit, Number(shopLevel) || 2);
+          /*
+           * SAID IN THE SHOP'S SMALLEST SHAPE FOR THIS ITEM, not in `base_unit`.
+           *
+           * `base_unit` is a fallback word off a global list, and for a product sold in crates and
+           * bottles it says "piece" — so the box read "Warn me at this many crates" directly above
+           * "Follows the shop: 10 pieces", naming a unit this product does not have. Reported as a
+           * crate-and-pieces mismatch.
+           *
+           * The level IS in base units, and the smallest configured shape is what one base unit
+           * is: `shapes` is sorted biggest first, so the last of them is the shop's own word for
+           * the thing being counted. `base_unit` stays as the fallback for an item with no shapes
+           * configured at all.
+           */
+          const smallest = shapes.length > 0 ? shapes[shapes.length - 1] : null;
+          const shopWord = smallest
+            ? smallest.plural.toLowerCase()
+            : pluralUnit(product.baseUnit, Number(shopLevel) || 2);
 
           return (
             <>

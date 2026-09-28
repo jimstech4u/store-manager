@@ -10,7 +10,14 @@ import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { useResource } from '@/lib/stacks/resource';
 import { ACCOUNT_DERIVED_SCOPE } from '@/lib/stacks/customer-account';
 import { getSupabase } from '@/lib/supabase/client';
-import { formatDateTime, formatMoney, formatQty, pluralUnit, messageOf } from '@/lib/format';
+import {
+  formatDateTime,
+  formatMoney,
+  formatQty,
+  formatQtySpoken,
+  pluralUnit,
+  messageOf,
+} from '@/lib/format';
 import { owedRowsFromReceipt, rollUpOwed } from '@/lib/empties-rollup';
 import {
   renderReceiptCanvas,
@@ -309,11 +316,11 @@ export function Receipt({
     ],
     lines: lines.map((l) => ({
     name: l.product_name,
-    detail: `${formatQty(l.entered_qty)} ${
+    detail: `${formatQtySpoken(l.entered_qty)} ${
     l.pack_name ?? pluralUnit(l.base_unit, Number(l.entered_qty))
     } x ${formatMoney(l.unit_price)}`,
     // The same thing without the unit price, for the paper — see ShareLine.qty.
-    qty: `${formatQty(l.entered_qty)} ${
+    qty: `${formatQtySpoken(l.entered_qty)} ${
     l.pack_name ?? pluralUnit(l.base_unit, Number(l.entered_qty))
     }`,
     amount: formatMoney(l.line_total),

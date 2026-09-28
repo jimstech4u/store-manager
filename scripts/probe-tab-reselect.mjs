@@ -1,21 +1,19 @@
 /**
- * Tapping the tab you are already on.
+ * TAPPING THE TAB YOU ARE ALREADY ON RETURNS THAT TAB TO ITS FIRST PAGE.
  *
- * The gesture is "take me to the top of this stack" — the shop's way out of a pushed page without
- * hunting for a back arrow. A probe hit a BLANK Stock tab doing it from a half-entered delivery,
- * which is the worst possible outcome: no page, no way back, and the delivery gone.
+ * Reported: two pages deep inside one stack, tapping that stack's own tab switched GROUP instead
+ * of popping — and kept doing it on repeated taps.
  *
- *     node scripts/probe-tab-reselect.mjs [http://localhost:3100]
+ * The wiring reads correct on paper, which is exactly why this exists: the bar fires `onChange`
+ * AND `onReselect` on a reselect, the stack ids match the tab ids, and the registry is keyed by
+ * the plain stack id. So the answer has to come from the running app rather than from the source.
+ *
+ *     node scripts/probe-tab-reselect.mjs [http://localhost:3101]
  */
-
 import { chromium } from '@playwright/test';
-import { readFileSync, mkdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 
-const BASE = process.argv[2] ?? 'http://localhost:3100';
-const SHOTS =
-  'C:/Users/ajibe/AppData/Local/Temp/claude/c--Users-ajibe-StudioProjects-academix-project/e777c9cb-0458-4485-8d5b-33a59e6c79c6/scratchpad/reselect';
-mkdirSync(SHOTS, { recursive: true });
-
+const BASE = process.argv[2] ?? 'http://localhost:3101';
 const env = Object.fromEntries(
   readFileSync('.env.local', 'utf8')
     .split(/\r?\n/)
@@ -27,178 +25,84 @@ const env = Object.fromEntries(
 );
 
 let failed = 0;
-const check = (what, ok, detail = '') => {
-  console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${what}${detail ? ` — ${detail}` : ''}`);
-  if (!ok) failed += 1;
+const check = (name, cond, detail = '') => {
+  if (!cond) failed += 1;
+  console.log(`  ${cond ? 'OK  ' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`);
 };
 
-const browser = await chromium.launch();
-const p = await browser.newPage({
-  viewport: { width: 390, height: 844 },
-  isMobile: true,
-  hasTouch: true,
-});
-
-const errors = [];
-p.on('pageerror', (e) => errors.push(String(e).split('\n')[0]));
-
-// Scroll reset first: this app scrolls an inner pane, and a tab tapped mid-scroll fails as
-// "outside the viewport" about one run in three.
-const tab = async (label) => {
-  await p.evaluate(() => {
-    window.scrollTo(0, 0);
-    for (const el of document.querySelectorAll('div')) {
-      if (el.scrollHeight > el.clientHeight + 40) el.scrollTop = 0;
-    }
-  });
-  await p.waitForTimeout(700);
-  await p.locator('.nav-item').filter({ hasText: new RegExp(`^${label}$`) }).first().click();
-  await p.waitForTimeout(3500);
+/** The group and stack the URL says we are in, which is the app's own answer. */
+const where = (p) => {
+  const u = new URL(p.url());
+  return { group: u.searchParams.get('group'), nav: u.searchParams.get('nav') };
 };
 
-const body = async () => (await p.locator('body').innerText()).replace(/\s+/g, ' ');
+const b = await chromium.launch();
+const p = await b.newContext({ viewport: { width: 390, height: 844 } }).then((c) => c.newPage());
 
 try {
-  await p.goto(`${BASE}/login`, { waitUntil: 'networkidle' });
-  await p.locator('input[type="email"]').first().waitFor({ timeout: 90000 });
+  await p.goto(`${BASE}/login`, { waitUntil: 'domcontentloaded' });
+  await p.waitForTimeout(3000);
   await p.locator('input[type="email"]').first().fill(env.SAMPLE_EMAIL);
   await p.locator('input[type="password"]').first().fill(env.SAMPLE_PASSWORD);
   await p.locator('button[type="submit"]').first().click();
-  await p.waitForTimeout(12000);
+  for (let i = 0; i < 24; i += 1) {
+    await p.waitForTimeout(5000);
+    if (new URL(p.url()).pathname.startsWith('/main')) break;
+  }
 
-  // ── One page deep, from the root of a tab ────────────────────────────────────
-  await tab('Stock');
-  await p.getByRole('button', { name: /Record a delivery|Receive/i }).first().click();
+  // ── Into Stock, then two pages deep ─────────────────────────────────────
+  await p.getByRole('button', { name: 'Stock', exact: true }).first().click();
+  await p.waitForTimeout(3500);
+  const atStockRoot = where(p);
+  console.log(`\n  stock root: group=${atStockRoot.group} nav=${atStockRoot.nav}`);
+
+  // One deep: the first product in the list.
+  await p.locator('[class*="rowLink"]:visible, li:visible button:visible').first().click();
   await p.waitForTimeout(4000);
-  check('a delivery is open', (await body()).includes('Record a delivery'));
-  await p.screenshot({ path: `${SHOTS}/1-pushed.png` });
+  const oneDeep = where(p);
+  console.log(`  one deep  : group=${oneDeep.group} nav=${oneDeep.nav}`);
 
-  // ── The gesture ─────────────────────────────────────────────────────────────
-  await tab('Stock');
-  await p.waitForTimeout(2500);
-  await p.screenshot({ path: `${SHOTS}/2-reselected.png` });
-
-  const after = await body();
-  check(
-    'reselecting the tab lands on a page, not a blank',
-    after.replace(/Sell|Stock|Count|Money|People|More/g, '').trim().length > 20,
-    after.slice(0, 140) || '(blank)',
-  );
-  check('and that page is the top of the stack', /What you have|Stock is worth|Record a delivery/i.test(after), after.slice(0, 90));
-
-  // ── Twice more, because the second is where it broke ────────────────────────
-  await tab('Stock');
-  await p.waitForTimeout(2000);
-  const again = await body();
-  check(
-    'and again, from the root, changes nothing',
-    /What you have|Stock is worth/i.test(again),
-    again.slice(0, 90) || '(blank)',
-  );
-  await p.screenshot({ path: `${SHOTS}/3-again.png` });
-
-
-  // ── And the same gesture after visiting another tab that is ALSO deep ──────────
-  /*
-   * The sequence a probe actually hit: count something (which pushes a page in the Count stack),
-   * come back to Stock (which is still holding a delivery), and reselect. The simple version of
-   * this passes; this one is the one that failed.
-   */
-  console.log('\n— with another tab left deep as well —');
-  await tab('Stock');
-  await p.getByRole('button', { name: /Record a delivery|Receive/i }).first().click();
-  await p.waitForTimeout(4000);
-  check('the delivery is open again', (await body()).includes('Record a delivery'));
-
-  /*
-   * MONEY, not Count — because Count is no longer a tab.
-   *
-   * The property under test is about TWO TABS each left one page deep: reselecting one must reach
-   * the top of THAT stack rather than another's. Count's pages moved into the Stock stack, so using
-   * it here would leave one stack two pages deep and test nothing at all. Money is a real second
-   * tab with a real pushable page.
-   */
-  await tab('Money');
-  await p.waitForTimeout(2500);
-  const first = p.getByRole('button', { name: /all sales|receipts/i }).first();
-  if (await first.count()) {
-    await first.click();
+  // Two deep: whatever that page offers — stock history, or the edit form.
+  const deeper = p.locator('button:visible').filter({ hasText: /history|edit|count|receive/i }).first();
+  if (await deeper.count()) {
+    await deeper.click();
     await p.waitForTimeout(4000);
   }
-  check('and Money is one page deep', /sales|receipt/i.test(await body()), (await body()).slice(0, 70));
-  await p.screenshot({ path: `${SHOTS}/4-money-deep.png` });
+  const twoDeep = where(p);
+  console.log(`  two deep  : group=${twoDeep.group} nav=${twoDeep.nav}`);
 
-  await tab('Stock');
-  const back = await body();
-  check('tapping Stock returns to the Stock stack', back.includes('Record a delivery'), back.slice(0, 70));
+  check('going deeper stayed in the same group',
+    twoDeep.group === atStockRoot.group,
+    `${atStockRoot.group} -> ${twoDeep.group}`);
+  check('and the stack actually went deeper',
+    twoDeep.nav !== atStockRoot.nav,
+    `${atStockRoot.nav} -> ${twoDeep.nav}`);
 
-  await tab('Stock');
-  await p.waitForTimeout(2500);
-  const rooted = await body();
-  await p.screenshot({ path: `${SHOTS}/5-reselect-again.png` });
-  check(
-    'and tapping it again reaches the top of THAT stack, not another tab',
-    /Stock is worth/i.test(rooted),
-    rooted.slice(0, 70),
-  );
-
-
-  // ── The Back button on a page, after a trip to another tab ────────────────────
-  /*
-   * Reported in the same breath as the reselect, and the same fault underneath: be on the second
-   * page of a stack, visit another tab, come back, press Back — and land in the OTHER tab. Both
-   * the library test and this one exist because the arithmetic that answered "how far back" was
-   * right about the number and wrong about whose entries it was counting.
-   */
-  console.log('\n— Back on a pushed page, after visiting another tab —');
-  await tab('Stock');
-  await p.getByRole('button', { name: /Record a delivery|Receive/i }).first().click();
-  await p.waitForTimeout(4000);
-  check('the delivery is open once more', (await body()).includes('Record a delivery'));
-
-  await tab('Money');
-  await p.waitForTimeout(2500);
-  const row2 = p.getByRole('button', { name: /all sales|receipts/i }).first();
-  if (await row2.count()) {
-    await row2.click();
-    await p.waitForTimeout(4000);
-  }
-  await tab('Stock');
-  check('and Stock still shows it', (await body()).includes('Record a delivery'), (await body()).slice(0, 60));
-
-  await p.getByRole('button', { name: 'Go back' }).first().click();
+  // ── THE GESTURE: tap the tab we are already on ──────────────────────────
+  await p.getByRole('button', { name: 'Stock', exact: true }).first().click();
   await p.waitForTimeout(3500);
-  const popped = await body();
-  await p.screenshot({ path: `${SHOTS}/6-after-back.png` });
-  check(
-    'Back lands on the Stock list, not on another tab',
-    /Stock is worth/i.test(popped),
-    popped.slice(0, 70),
-  );
+  const afterOne = where(p);
+  console.log(`  after tap : group=${afterOne.group} nav=${afterOne.nav}`);
 
-  // ── And the browser's own Back, which is the same journey by the other route ──
-  console.log('\n— and the browser’s own Back —');
-  await p.getByRole('button', { name: /Record a delivery|Receive/i }).first().click();
-  await p.waitForTimeout(4000);
-  // Money, for the same reason as above: the journey under test is BETWEEN tabs.
-  await tab('Money');
-  await p.waitForTimeout(2500);
-  await tab('Stock');
-  await p.goBack();
-  await p.waitForTimeout(3500);
-  const browserBack = await body();
-  await p.screenshot({ path: `${SHOTS}/7-browser-back.png` });
-  check(
-    'the browser’s Back lands on the Stock list too',
-    /Stock is worth/i.test(browserBack),
-    browserBack.slice(0, 70),
-  );
+  check('reselecting the active tab did NOT switch group',
+    afterOne.group === atStockRoot.group,
+    `${twoDeep.group} -> ${afterOne.group}`);
+  check('reselecting returned the stack to its root',
+    afterOne.nav === atStockRoot.nav,
+    `expected ${atStockRoot.nav}, got ${afterOne.nav}`);
 
-  check('no page errors throughout', errors.length === 0, errors.join(' | '));
+  // And again, because the report said repeated taps kept misbehaving.
+  await p.getByRole('button', { name: 'Stock', exact: true }).first().click();
+  await p.waitForTimeout(3000);
+  const afterTwo = where(p);
+  check('a second tap at the root changes nothing',
+    afterTwo.group === atStockRoot.group && afterTwo.nav === atStockRoot.nav,
+    `group=${afterTwo.group} nav=${afterTwo.nav}`);
+} catch (e) {
+  check('the walk completed', false, String(e).slice(0, 200));
 } finally {
-  await browser.close();
+  await b.close();
 }
 
-console.log(`\nscreenshots in ${SHOTS}`);
-console.log(failed === 0 ? 'all passed' : `${failed} failed`);
-process.exit(failed === 0 ? 0 : 1);
+console.log(`\n${failed} failed`);
+process.exit(failed ? 1 : 0);

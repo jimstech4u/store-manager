@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { useDemandState } from '@academix-admin/state-stack';
 import { getSupabase } from '@/lib/supabase/client';
-import { formatDateTime, formatMoney, formatQty, pluralUnit } from '@/lib/format';
+import { formatDateTime, formatMoney, formatQtySpoken, pluralUnit } from '@/lib/format';
 import { owedRowsFromReceipt, rollUpOwed } from '@/lib/empties-rollup';
 
 interface SharedReceipt {
@@ -246,7 +246,7 @@ export default function SharedReceiptPage({
                   a receipt for thirty-six pieces.
                 */}
                 <span>
-                  {formatQty(l.entered_qty)}{' '}
+                  {formatQtySpoken(l.entered_qty)}{' '}
                   {l.unit_name ?? pluralUnit(l.base_unit, Number(l.entered_qty))} ×{' '}
                   {formatMoney(l.unit_price)}
                 </span>
