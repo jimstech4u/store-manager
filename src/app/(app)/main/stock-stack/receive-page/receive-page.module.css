@@ -339,3 +339,75 @@
   font-weight: 600;
   color: var(--text);
 }
+
+/* ── What is already on the load ───────────────────────────────────────────────────
+
+  Compose above, list below — the arrangement the charges on this page already use. Every product
+  used to render its own block of five fields, so a twenty-line delivery was a hundred boxes down
+  one page.
+*/
+.loadList {
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.loadLine {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+/* The cross is its own target, on the left and away from the figures, because it is the one
+   control here that destroys something. */
+.loadRemove {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.loadRemove:hover {
+  color: var(--danger, var(--text));
+}
+
+/* The line itself is the target that puts it back in the boxes. */
+.loadBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-1) 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.loadName {
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.loadFacts {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}

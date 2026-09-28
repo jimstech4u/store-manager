@@ -189,12 +189,19 @@ export default function ReceivePage() {
   const notifyProducts = useListNotifier<Product>('products');
 
   const [picking, setPicking] = useState(false);
+
+  /*
+   * THE LINE BEING TYPED, held apart from the load.
+   *
+   * Picking a product used to append a blank line straight onto the delivery, so a picker opened
+   * by accident left an empty row on it — and every row carried its own five boxes.
+   */
+  const [draft, setDraft] = useState<ReceiveLine | null>(null);
+  const patchDraft = (next: Partial<ReceiveLine>) =>
+    setDraft((prev) => (prev ? { ...prev, ...next } : prev));
   const [busy, setBusy] = useState(false);
   const error = useProblem();
   const [done, setDone] = useState(false);
-
-  const patch = (key: string, next: Partial<ReceiveLine>) =>
-    setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...next } : l)));
 
   /*
    * An item created from here lands on THIS delivery.
@@ -219,9 +226,7 @@ export default function ReceivePage() {
     const options = buyUnits.get(p.id) ?? [];
     const lead = options.find((u) => u.isDefault) ?? options[0] ?? null;
 
-    setLines((prev) => [
-      ...prev,
-      {
+    setDraft({
         key: newKey(),
         productId: p.id,
         productName: p.name,
@@ -237,8 +242,7 @@ export default function ReceivePage() {
         buyUnitId: lead?.productUnitId ?? null,
         buyUnitName: lead?.name ?? null,
         buyUnitFactor: lead?.baseQty ?? null,
-      },
-    ]);
+    });
     setPicking(false);
   };
 
@@ -318,6 +322,19 @@ export default function ReceivePage() {
         }));
 
       if (payload.length === 0) throw new Error('Add at least one item that came in');
+
+      /*
+       * WHO IT CAME FROM — "and then supplier is needed".
+       *
+       * `record_purchase` takes it as optional, and it has to stay optional there: every delivery
+       * recorded before suppliers existed has none, and a database that refused them could not
+       * hold the shop's own history. But a delivery being entered TODAY knows who brought it, and
+       * a load filed against nobody is one that never appears on a supplier's account — so the
+       * money owed for it cannot be chased, matched to a payment, or argued about later.
+       *
+       * Asked here, where the answer is known, rather than enforced where the past lives.
+       */
+      if (!supplier) throw new Error('Say who this load came from.');
 
       const { error: err } = await getSupabase().rpc('record_purchase', {
         p_store_id: store.id,
@@ -466,41 +483,85 @@ export default function ReceivePage() {
         </InfoPanel>
       )}
 
+      {/*
+        ONE LINE AT A TIME, AND A LIST OF WHAT IS ON THE LOAD.
+
+        Reported as "in record delivery, the forms inputs are a lot". Every product rendered its
+        own block of five fields, so a twenty-line load was a hundred boxes down one page and the
+        shop scrolled past all of them to reach the total.
+
+        This is the arrangement the rest of the app already uses — including the charges further
+        down THIS page: compose above, list below. It is also the only arrangement where a
+        half-typed line cannot be saved, which the old one allowed: picking a product appended a
+        blank row, and a picker opened by accident left an empty line on the delivery.
+      */}
+      {lines.length > 0 && (
+        <ul className={styles.loadList}>
+          {lines.map((l) => (
+            <li key={l.key} className={styles.loadLine}>
+              <button
+                type="button"
+                className={styles.loadRemove}
+                onClick={() => setLines((prev) => prev.filter((x) => x.key !== l.key))}
+                aria-label={`Take ${l.productName} off this load`}
+              >
+                <CloseIcon />
+              </button>
+              {/*
+                TAPPING A LINE PUTS IT BACK IN THE BOXES.
+
+                A list with only a cross means correcting a mistyped price is "take it off and
+                type the whole line again", which is how the price gets mistyped a second time.
+              */}
+              <button
+                type="button"
+                className={styles.loadBody}
+                onClick={() => {
+                  setLines((prev) => prev.filter((x) => x.key !== l.key));
+                  setDraft(l);
+                }}
+              >
+                <span className={styles.loadName}>{l.productName}</span>
+                <span className={styles.loadFacts}>
+                  {formatQty(Number(l.qty) || 0)}{' '}
+                  {(l.buyUnitName ?? l.packName ?? l.baseUnit).toLowerCase()}
+                  {Number(l.freeQty) > 0 ? ` + ${formatQty(Number(l.freeQty))} free` : ''}
+                  {Number(l.unitCost) > 0 ? ` at ${formatMoney(Number(l.unitCost))}` : ''}
+                  {l.expiresOn ? ` · goes off ${new Date(l.expiresOn).toLocaleDateString()}` : ''}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
       <div className={styles.lines}>
-        {lines.map((l) => {
-          const landed = landedFor(l);
-          const raw = Number(l.qty) > 0 ? (Number(l.unitCost) || 0) : 0;
-          const perBaseRaw = l.packId && l.packQty ? raw / Number(l.packQty) : raw;
+        {draft && (() => {
+          const landed = landedFor(draft);
+          const raw = Number(draft.qty) > 0 ? (Number(draft.unitCost) || 0) : 0;
+          const perBaseRaw = draft.packId && draft.packQty ? raw / Number(draft.packQty) : raw;
 
           return (
-            <div className={styles.line} key={l.key}>
+            <div className={styles.line}>
               <div className={styles.lineHead}>
-                <p className={styles.lineName}>{l.productName}</p>
-                <button
-                  type="button"
-                  className={styles.remove}
-                  onClick={() => setLines((prev) => prev.filter((x) => x.key !== l.key))}
-                  aria-label={`Remove ${l.productName}`}
-                >
-                  <CloseIcon />
-                </button>
+                <p className={styles.lineName}>{draft.productName}</p>
               </div>
 
               <div className={styles.grid}>
                 <Field
                   label="How many"
                   numeric
-                  value={l.qty}
-                  onChange={(e) => patch(l.key, { qty: e.target.value })}
-                  suffix={l.buyUnitName ?? l.packName ?? l.baseUnit}
+                  value={draft.qty}
+                  onChange={(e) => patchDraft({ qty: e.target.value })}
+                  suffix={draft.buyUnitName ?? draft.packName ?? draft.baseUnit}
                   placeholder="0"
                 />
                 <Field
-                  label={`Price per ${(l.buyUnitName ?? l.packName ?? l.baseUnit).toLowerCase()}`}
+                  label={`Price per ${(draft.buyUnitName ?? draft.packName ?? draft.baseUnit).toLowerCase()}`}
                   numeric
                   prefix="₦"
-                  value={l.unitCost}
-                  onChange={(e) => patch(l.key, { unitCost: e.target.value })}
+                  value={draft.unitCost}
+                  onChange={(e) => patchDraft({ unitCost: e.target.value })}
                   placeholder="0"
                   hint="What the invoice says."
                 />
@@ -517,9 +578,9 @@ export default function ReceivePage() {
                 label="Free, on top"
                 optional
                 numeric
-                value={l.freeQty}
-                onChange={(e) => patch(l.key, { freeQty: e.target.value })}
-                suffix={l.buyUnitName ?? l.packName ?? l.baseUnit}
+                value={draft.freeQty}
+                onChange={(e) => patchDraft({ freeQty: e.target.value })}
+                suffix={draft.buyUnitName ?? draft.packName ?? draft.baseUnit}
                 placeholder="0"
                 hint="Thrown in by the supplier. It lands on the shelf and lowers your cost."
               />
@@ -534,8 +595,8 @@ export default function ReceivePage() {
                 label="Goes off on"
                 optional
                 type="date"
-                value={l.expiresOn}
-                onChange={(e) => patch(l.key, { expiresOn: e.target.value })}
+                value={draft.expiresOn}
+                onChange={(e) => patchDraft({ expiresOn: e.target.value })}
                 hint="Leave it blank if this does not go off."
               />
 
@@ -545,24 +606,24 @@ export default function ReceivePage() {
                 Only shown when there is a genuine choice: a product bought only in crates has one
                 answer, and a select with one option is a question with no purpose.
               */}
-              {(buyUnits.get(l.productId)?.length ?? 0) > 1 && (
+              {(buyUnits.get(draft.productId)?.length ?? 0) > 1 && (
                 <label className={styles.unitChoice}>
                   <span className={styles.unitChoiceLabel}>It arrived in</span>
                   <select
                     className={styles.unitSelect}
-                    value={l.buyUnitId ?? ''}
+                    value={draft.buyUnitId ?? ''}
                     onChange={(e) => {
                       const chosen = buyUnits
-                        .get(l.productId)
+                        .get(draft.productId)
                         ?.find((u) => u.productUnitId === e.target.value);
-                      patch(l.key, {
+                      patchDraft({
                         buyUnitId: chosen?.productUnitId ?? null,
                         buyUnitName: chosen?.name ?? null,
                         buyUnitFactor: chosen?.baseQty ?? null,
                       });
                     }}
                   >
-                    {(buyUnits.get(l.productId) ?? []).map((u) => (
+                    {(buyUnits.get(draft.productId) ?? []).map((u) => (
                       <option key={u.productUnitId} value={u.productUnitId}>
                         {u.plural}
                       </option>
@@ -571,10 +632,10 @@ export default function ReceivePage() {
                 </label>
               )}
 
-              {Number(l.qty) > 0 && (
+              {Number(draft.qty) > 0 && (
                 <div className={styles.lineFoot}>
                   <span>
-                    {formatQty(baseQtyOf(l))} {pluralUnit(l.baseUnit, baseQtyOf(l))} in total
+                    {formatQty(baseQtyOf(draft))} {pluralUnit(draft.baseUnit, baseQtyOf(draft))} in total
                   </span>
                   {landed !== null && (
                     <span className={styles.landed}>
@@ -586,9 +647,21 @@ export default function ReceivePage() {
                   )}
                 </div>
               )}
+
+              {/* Put on the load only once it says something. */}
+              <Button
+                fullWidth
+                disabled={!(Number(draft.qty) > 0)}
+                onClick={() => {
+                  setLines((prev) => [...prev, draft]);
+                  setDraft(null);
+                }}
+              >
+                <PlusIcon /> Put it on the load
+              </Button>
             </div>
           );
-        })}
+        })()}
       </div>
 
       <Button size="large" fullWidth onClick={() => setPicking(true)}>
