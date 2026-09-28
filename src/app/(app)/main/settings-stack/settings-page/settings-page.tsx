@@ -329,6 +329,21 @@ export default function SettingsPage() {
             </button>
           )}
 
+          {canOpen('groups_page') && (
+            <button
+              type="button"
+              className={styles.linkRow}
+              onClick={() => nav.push('groups_page')}
+            >
+              <span className={styles.linkMain}>
+                <span className={styles.linkName}>Groups you file under</span>
+                <span className={styles.sectionNote}>
+                  NBL, soft drinks, water — the headings on your printed price list
+                </span>
+              </span>
+            </button>
+          )}
+
           {canOpen('words_page') && (
             <button
               type="button"

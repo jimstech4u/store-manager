@@ -59,6 +59,7 @@ import StaffChargesPage from './settings-stack/staff-charges-page/staff-charges-
 import BankPage from './settings-stack/bank-page/bank-page';
 import BankFormPage from './settings-stack/bank-form-page/bank-form-page';
 import WordsPage from './settings-stack/words-page/words-page';
+import GroupsPage from './settings-stack/groups-page/groups-page';
 
 /**
  * EVERY PAGE THAT IS NOT A TAB'S OWN FRONT PAGE — registered in every tab.
@@ -91,6 +92,8 @@ const SAYS_ITSELF = new Set([
   'review_page',
   'staff_page',
   'words_page',
+  // Appended, never inserted: the URL names a route by its position in this list.
+  'groups_page',
 ]);
 
 function gateAll(pages: Record<string, ComponentType>): Record<string, ComponentType> {
@@ -158,6 +161,7 @@ export const RECORD_PAGES: Record<string, ComponentType> = gateAll({
   bank_page: BankPage,
   bank_form_page: BankFormPage,
   words_page: WordsPage,
+  groups_page: GroupsPage,
   /*
    * LAST, and it must stay last. A route is written into the URL as its POSITION in this map, so a
    * page inserted anywhere but the end sends every URL after it to a different page — including one

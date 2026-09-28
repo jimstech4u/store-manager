@@ -39,6 +39,18 @@ export interface SaleDocument {
   occurredAt: string;
   customer: { id: string; name: string } | null;
   lines: DocumentLine[];
+  /*
+   * THE REST OF WHAT THE RECEIPT SAID (0195).
+   *
+   * A document stored before that migration has none of these, and they stay UNDEFINED rather
+   * than defaulting to empty — "this version did not capture its charges" and "this version had
+   * no charges" are different facts, and a screen that renders the second for the first invents
+   * a receipt that never existed.
+   */
+  charges?: { label: string; amount: number }[];
+  depositTotal?: number;
+  payments?: { amount: number; method: string; reference: string | null }[];
+  transferDetails?: string | null;
 }
 
 function toDocument(d: Record<string, unknown>): SaleDocument {
@@ -52,6 +64,22 @@ function toDocument(d: Record<string, unknown>): SaleDocument {
     note: (d.note as string | null) ?? null,
     occurredAt: String(d.occurred_at),
     customer: (d.customer as { id: string; name: string } | null) ?? null,
+    // `undefined` where the key is absent, which is how an older document says "not captured".
+    charges: d.charges
+      ? ((d.charges ?? []) as Record<string, unknown>[]).map((c) => ({
+          label: String(c.label ?? 'Charge'),
+          amount: Number(c.amount) || 0,
+        }))
+      : undefined,
+    depositTotal: d.deposit_total == null ? undefined : Number(d.deposit_total) || 0,
+    payments: d.payments
+      ? ((d.payments ?? []) as Record<string, unknown>[]).map((p) => ({
+          amount: Number(p.amount) || 0,
+          method: String(p.method ?? 'cash'),
+          reference: (p.reference as string | null) ?? null,
+        }))
+      : undefined,
+    transferDetails: (d.transfer_details as string | null) ?? null,
     lines: ((d.lines ?? []) as Record<string, unknown>[]).map((l) => ({
       productId: String(l.product_id),
       productName: String(l.product_name ?? ''),

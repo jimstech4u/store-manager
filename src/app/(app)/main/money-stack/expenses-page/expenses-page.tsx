@@ -3,8 +3,8 @@
 import { useCallback, useState } from 'react';
 import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
-import { Button } from '@/components/ui/Button';
 import { InfoPanel } from '@/components/ui/Explain';
+import { FloatingAction } from '@/components/ui/FloatingAction';
 import { PlusIcon } from '@/components/ui/Icon';
 import { FilterBar } from '@/components/ui/FilterBar';
 import { LoadArea, useLoadArea } from '@/components/ui/LoadArea';
@@ -196,12 +196,6 @@ export default function ExpensesPage() {
               </div>
             )}
 
-            {can('expenses.record') && (
-              <Button size="large" fullWidth onClick={() => void nav.push('expense_page')}>
-                <PlusIcon /> Record money going out
-              </Button>
-            )}
-
             {data.byCategory.length > 0 && (
               <>
                 <h2 className={styles.section}>What it went on</h2>
@@ -277,6 +271,25 @@ export default function ExpensesPage() {
           </>
         )}
       </LoadArea>
+
+      {/*
+        RECORDING A SPEND LEADS SOMEWHERE ELSE, so it floats.
+
+        It sat in the page between the summary and the list of what the money went on — a
+        full-width green button in the middle of something somebody is reading, pushing the list
+        below the fold on a phone. The rule on this site is that a control floats when it leads to
+        another screen and ends the page when it commits what is above it. This one opens a form,
+        like 'Money out' on the Money page and 'Take payment' at the till.
+
+        The header plus stays: the same door, where somebody who knows the screen already looks.
+      */}
+      {can('expenses.record') && (
+        <FloatingAction
+          label="Money out"
+          icon={<PlusIcon />}
+          onClick={() => void nav.push('expense_page')}
+        />
+      )}
     </PageScaffold>
   );
 }

@@ -1,0 +1,80 @@
+/*
+  THE GROUPS A SHOP FILES UNDER, one card each.
+
+  Deliberately the same shape as "Words you measure in": a card per row, what uses it said quietly
+  at the top, the destructive control in the corner away from the field, and the Save appearing
+  only once something has actually changed. A shop that has learned one of these screens should
+  not have to learn the other.
+
+  Its own stylesheet rather than a shared one. They look alike today because they do the same job;
+  tying them together would mean a change to the words screen silently redrawing this one.
+*/
+.list {
+  list-style: none;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.item {
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.itemHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+/* How many products are filed under it — the fact that decides whether retiring it matters. */
+.used {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.retire {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--touch-min, 44px);
+  height: var(--touch-min, 44px);
+  margin: calc(var(--space-2) * -1) calc(var(--space-2) * -1) 0 0;
+  padding: 0;
+  color: var(--danger, #b3261e);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.add {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+}
+
+.addActions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/*
+  Said as a sentence rather than an empty box, because a shop with no groups has not done anything
+  wrong — it just has not needed one yet, and this says what they are for.
+*/
+.none {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}

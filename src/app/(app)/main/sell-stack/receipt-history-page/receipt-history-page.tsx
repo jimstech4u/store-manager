@@ -89,14 +89,66 @@ export default function ReceiptHistoryPage() {
       qty: `${formatQty(l.enteredQty)} ${l.unitName ?? pluralUnit('piece', l.enteredQty)}`,
       amount: formatMoney(l.lineTotal),
     })),
-    totals: [
-      ...(doc.feeAmount > 0
-        ? [{ label: doc.feeLabel || 'Extra charge', value: formatMoney(doc.feeAmount) }]
-        : []),
-      { label: 'Total', value: formatMoney(doc.total), strong: true },
-    ],
+    totals: (() => {
+      /*
+       * THE WHOLE RECEIPT, not its two ends.
+       *
+       * This drew the goods and then the total, so a version went from N7,200 straight to N8,000
+       * with nothing to account for the difference — the charge and the deposit were simply not
+       * in the stored document. 0195 puts them there.
+       *
+       * A document stored BEFORE that has `charges` undefined, which is not the same as having
+       * none: it means that version never captured them. So the old single `feeAmount` is the
+       * fallback for those, and nothing is invented for what was not recorded.
+       */
+      const itemsTotal = doc.lines.reduce((sum, l) => sum + l.lineTotal, 0);
+      const charges = doc.charges;
+      const deposit = doc.depositTotal ?? 0;
+      const extras = doc.total - itemsTotal;
+
+      return [
+        ...(extras > 0.005 ? [{ label: 'Items', value: formatMoney(itemsTotal) }] : []),
+
+        ...(charges
+          ? charges.map((c) => ({ label: c.label, value: formatMoney(c.amount) }))
+          : doc.feeAmount > 0
+            ? [{ label: doc.feeLabel || 'Extra charge', value: formatMoney(doc.feeAmount) }]
+            : []),
+
+        ...(deposit > 0.005
+          ? [{ label: 'Deposit on containers', value: formatMoney(deposit) }]
+          : []),
+
+        { label: 'Total', value: formatMoney(doc.total), strong: true },
+
+        ...(doc.payments ?? []).map((p) => ({
+          label: `Paid (${p.method})${p.reference ? ` ${p.reference}` : ''}`,
+          value: formatMoney(p.amount),
+        })),
+
+        /*
+         * WHAT THIS VERSION SENT OUT, from its own lines.
+         *
+         * Not the customer's running position, which is a fact about today rather than about
+         * this version — an old revision that says what somebody owes NOW would be a document
+         * that changes every time it is opened.
+         */
+        ...(() => {
+          const out = doc.lines.filter((l) => l.containersOut > 0);
+          if (out.length === 0) return [];
+          return [
+            { label: 'Still with you', value: '', strong: true },
+            ...out.map((l) => ({
+              name: l.productName,
+              value: formatQty(l.containersOut),
+            })).map((r) => ({ label: r.name, value: r.value })),
+          ];
+        })(),
+      ];
+    })(),
     note: doc.note,
-    transferDetails: null,
+    // The account the original printed. Part of what that version SAID, and a reprint has to match.
+    transferDetails: doc.transferDetails ?? null,
   });
 
   /** Put an old version on paper, whichever way this device reaches its printer. */
