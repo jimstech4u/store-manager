@@ -40,19 +40,40 @@ export function DiscountsEditor({
   discounts,
   setDiscounts,
   soldUnits,
+  onlyUnitId = null,
 }: {
   discounts: Discount[];
   setDiscounts: (next: Discount[]) => void;
   /** Only units a customer can actually buy — a band on something unsellable is unreachable. */
   soldUnits: ProductUnit[];
+  /**
+   * LOCKED TO ONE SHAPE, for the screen that exists to set one shape's price.
+   *
+   * The price screen is reached by tapping a price, so the shape is already chosen and asking
+   * again would be asking something the shop has just answered. The bands for the OTHER shapes
+   * still travel through `discounts` untouched: they are saved as a whole set, and a screen that
+   * dropped the ones it was not showing would delete them.
+   */
+  onlyUnitId?: string | null;
 }) {
   const [unitId, setUnitId] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [price, setPrice] = useState('');
 
-  const chosen = soldUnits.find((u) => u.storeUnitId === (unitId || soldUnits[0]?.storeUnitId));
+  const chosen = soldUnits.find(
+    (u) => u.storeUnitId === (onlyUnitId ?? (unitId || soldUnits[0]?.storeUnitId)),
+  );
   const nameOf = (id: string) => soldUnits.find((u) => u.storeUnitId === id);
+
+  /*
+   * Carried with its REAL index, because removing is by position in the whole set. Filtering to
+   * one shape and then removing by the filtered index takes out somebody else's band — silently,
+   * and on a screen showing the shape whose band survived.
+   */
+  const shown = discounts
+    .map((d, index) => ({ d, index }))
+    .filter(({ d }) => onlyUnitId === null || d.storeUnitId === onlyUnitId);
 
   const fromQty = Number(from);
   const toQty = to.trim() === '' ? null : Number(to);
@@ -99,6 +120,16 @@ export function DiscountsEditor({
     );
   }
 
+  // Locked to a shape the shop does not sell in. A band on it could never fire, so it is not
+  // offered — said plainly rather than shown as a form that saves nothing.
+  if (onlyUnitId !== null && !chosen) {
+    return (
+      <p className={styles.none}>
+        This shape is not one a customer can buy, so there is no quantity price to set.
+      </p>
+    );
+  }
+
   return (
     <>
       <Explain label="What is this for?">
@@ -109,13 +140,13 @@ export function DiscountsEditor({
         </p>
       </Explain>
 
-      {discounts.length > 0 && (
+      {shown.length > 0 && (
         <ul className={styles.list}>
-          {discounts.map((d, i) => {
+          {shown.map(({ d, index }) => {
             const u = nameOf(d.storeUnitId);
             const many = u ? u.plural.toLowerCase() : 'of them';
             return (
-              <li key={d.id ?? `new-${i}`} className={styles.row}>
+              <li key={d.id ?? `new-${index}`} className={styles.row}>
                 <span className={styles.sentence}>
                   <strong>
                     {d.minQty}
@@ -127,7 +158,7 @@ export function DiscountsEditor({
                   type="button"
                   className={styles.remove}
                   aria-label={`Remove the ${d.minQty}${d.maxQty ? `–${d.maxQty}` : '+'} ${many} price`}
-                  onClick={() => setDiscounts(discounts.filter((_, n) => n !== i))}
+                  onClick={() => setDiscounts(discounts.filter((_, n) => n !== index))}
                 >
                   <TrashIcon />
                 </button>
@@ -138,7 +169,7 @@ export function DiscountsEditor({
       )}
 
       {/* One set of boxes. The shop names the band as it adds it. */}
-      {soldUnits.length > 1 && (
+      {onlyUnitId === null && soldUnits.length > 1 && (
         <label className={styles.unitChoice}>
           <span className={styles.unitChoiceLabel}>When they buy</span>
           <select

@@ -61,11 +61,34 @@
   color: var(--text);
 }
 
-/* A line under the heading, saying what the section is for before the fields start. */
+/*
+  A line under the heading, saying what the section is for before the fields start.
+
+  THE PULL-UP ONLY APPLIES WHERE THERE IS SOMETHING TO PULL UP TO. `.section` leaves `--space-4`
+  under itself for the fields that normally follow, so a note directly beneath it has to take that
+  back or it floats half a line adrift of its own heading.
+
+  It used to take it back unconditionally, and this class is used in five other places — after the
+  `.subsection` heading, which leaves only `--space-1`, and after the shape boxes, which leave
+  nothing. In both the negative margin dragged the note UP THROUGH the thing above it: "When does
+  it go off?" was printed over the line before it, which is what the shop saw and called not
+  professional.
+
+  So the pull-up is stated as what it actually is — an adjustment between two specific siblings.
+*/
 .sectionNote {
-  margin: calc(var(--space-4) * -1) 0 var(--space-4);
+  margin: 0 0 var(--space-4);
   font-size: var(--text-sm);
   color: var(--text-muted);
+}
+
+.section + .sectionNote {
+  margin-top: calc(var(--space-4) * -1);
+}
+
+/* Under a subsection heading the gap is already small, so the note just sits closer to it. */
+.subsection + .sectionNote {
+  margin-bottom: var(--space-3);
 }
 
 /* The first section opens the page, so it needs neither the rule nor the space above it — those
@@ -340,4 +363,83 @@
   font-size: var(--text-sm);
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
+}
+
+/* ── What is still undated ────────────────────────────────────────────────────────── */
+
+/*
+  THE SHELF COUNTED DOWN AS THE DATES ARE ADDED, the way the count screen counts down the missing.
+
+  A shop with five hundred crates does not want to be told at the end that "the dates cover 340 but
+  you counted 500" and left to do the subtraction. It wants to see what is still to account for
+  while it is accounting for it — so this says the remainder, in the shapes the shop counts in, and
+  goes green when there is none left.
+*/
+.batchLeft {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+  border-radius: var(--radius);
+  background: var(--surface-sunken, var(--surface));
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.batchLeftQty {
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.batchLeftDone {
+  color: var(--success, var(--primary));
+  font-weight: 600;
+}
+
+/* ── Lots already on the shelf, being re-dated ─────────────────────────────────────── */
+
+/*
+  ONE LOT, ONE CARD: what it is, then the date, then the one button that changes it.
+
+  These were laid out with `.shapeBoxes`, which gives every child `flex: 1 1 7rem` because it exists
+  to put "Crates" and "Bottles" side by side at equal weight. A date field and a Save button are not
+  equal weights: the button stretched to half the row as a great empty slab, and "Expiry for 66
+  still on the shelf" wrapped over three lines beside it.
+
+  The quantity is the SUBJECT — which lot is this — so it goes on its own line above, and the two
+  controls share the row beneath, the button only as wide as its word.
+*/
+.expiryLot {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2) var(--space-3);
+  align-items: end;
+  padding: var(--space-3);
+  margin-bottom: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.expiryLotWhat {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text);
+}
+
+.expiryLotWhat span {
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* The button sits on the field's baseline rather than stretching, and never shrinks below its
+   own word — a Save that has wrapped to two lines reads as a mistake. */
+.expiryLotSave {
+  white-space: nowrap;
 }

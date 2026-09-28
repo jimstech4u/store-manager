@@ -38,3 +38,20 @@
 .actions > * {
   flex: 1;
 }
+
+/*
+  The second question on this screen, opened properly.
+
+  The ordinary price and the bulk price are one decision — "what does this go for, and what if
+  they take five?" — so they sit on one screen. They are still two questions, and a rule with air
+  above it is what stops the bands reading as more boxes belonging to the price above.
+*/
+.section {
+  margin: var(--space-7) 0 var(--space-4);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border);
+  font-size: var(--text-xl, 1.25rem);
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--text);
+}

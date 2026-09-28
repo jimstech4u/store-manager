@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { PageScaffold } from '@/components/ui/PageScaffold';
@@ -8,11 +8,19 @@ import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
+import { LoadArea, useLoadArea } from '@/components/ui/LoadArea';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
 import { useSellingUnits } from '@/lib/stacks/selling-units';
 import { catalogChanged } from '@/lib/stacks/catalog-stack';
+import { DiscountsEditor, type Discount } from '@/components/catalog/DiscountsEditor';
+import {
+  fetchDiscounts,
+  saveDiscounts,
+  useProductUnits,
+  type ProductUnit,
+} from '@/lib/stacks/product-units';
 import { formatMoney, messageOf } from '@/lib/format';
 import styles from './shape-price-page.module.css';
 
@@ -54,6 +62,42 @@ export default function ShapePricePage() {
   const [price, setPrice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  /*
+   * ── AND WHAT THEY PAY FOR TAKING MORE ─────────────────────────────────────────
+   *
+   * The quantity bands lived only in the full product form, so a shop standing at the shelf with
+   * this screen open — the screen it reaches BY TAPPING A PRICE — had to leave it, open eleven
+   * other questions, and find them there. The ordinary price and the bulk price are one decision
+   * and are now made in one place.
+   *
+   * The whole set is held, not just this shape's. `saveDiscounts` replaces every band on the
+   * product, so keeping only the ones on screen would delete the crate's bands when somebody
+   * edited the bottle's.
+   */
+  const { units: allShapes } = useProductUnits(productId);
+  const storeUnitId = useMemo(
+    () => allShapes.find((u: ProductUnit) => u.id === shapeId)?.storeUnitId ?? null,
+    [allShapes, shapeId],
+  );
+  const soldShapes = useMemo(() => allShapes.filter((u: ProductUnit) => u.isSold), [allShapes]);
+
+  const [discounts, setDiscounts] = useState<Discount[]>([]);
+  const bandsSeed = useLoadArea(() => fetchDiscounts(productId as string), [productId], {
+    key: `shape-price-discounts:${productId ?? 'none'}`,
+    whenNot: !productId,
+  });
+  /*
+   * Seeded ONCE per product, by id rather than by a boolean. A flag set for the lifetime of the
+   * component is how the product form came to open a second item with the first one's boxes —
+   * and then save the blanks over real prices.
+   */
+  const bandsSeeded = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (bandsSeeded.current === productId || !bandsSeed.data) return;
+    bandsSeeded.current = productId;
+    setDiscounts(bandsSeed.data);
+  }, [bandsSeed.data, productId]);
+
   // Seeded from the shape once, then owned by the form — re-seeding on every render would fight
   // whoever is typing.
   const value = price ?? (shape?.price != null ? String(shape.price) : '');
@@ -75,6 +119,18 @@ export default function ShapePricePage() {
         p_price: value.trim() === '' ? null : asked,
       });
       if (error) throw error;
+
+      /*
+       * The bands after the price, and only when they have actually been read.
+       *
+       * `fetchDiscounts` throws on a failed read rather than returning none, and this only writes
+       * what that read produced — because `saveDiscounts` replaces the whole set, and saving an
+       * empty set that came from a failed read would delete every quantity price on the product.
+       */
+      if (productId && bandsSeed.data !== null) {
+        await saveDiscounts(productId, discounts);
+      }
+
       catalogChanged();
       await nav.pop();
     } catch (e) {
@@ -156,6 +212,22 @@ export default function ShapePricePage() {
           {formatMoney(margin, 2)} on each one, over what it cost you.
         </p>
       )}
+
+      {/* ── Cheaper for taking more ──────────────────────────────────────────── */}
+      <h2 className={styles.section}>Cheaper for taking more</h2>
+      <LoadArea area={bandsSeed} what="the quantity prices">
+        {() =>
+          storeUnitId && (
+            <DiscountsEditor
+              discounts={discounts}
+              setDiscounts={setDiscounts}
+              soldUnits={soldShapes}
+              /* Already chosen by tapping this price — asking again asks what was just answered. */
+              onlyUnitId={storeUnitId}
+            />
+          )
+        }
+      </LoadArea>
 
       {/* The actions END the page rather than being pinned to its foot — see CLAUDE.md. */}
       <div className={styles.actions}>

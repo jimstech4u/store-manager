@@ -1359,13 +1359,64 @@ export function ProductForm({
               )}
 
               {/*
-                SAID BEFORE SAVING, not after. The server refuses a set that does not add up, and
-                being told at the save button — having typed a whole item — is being told too late.
+                WHAT IS STILL UNDATED, counted down as the lines go on.
+
+                The shop asked for this the way the count screen does it when stock is missing:
+                the total stands there and each line takes from it, so somebody working down a
+                delivery note can see how much is left to account for WHILE they account for it.
+
+                Said in the shapes they counted in, not in base units. "340 of 500" means nothing
+                to somebody holding crates; "13 crates and 4 bottles still to date" is the same
+                fact in the words they used to type it.
               */}
-              {anyBatch && batchBase !== shelfBase && (
+              {shelfBase - batchBase > 0 && (
+                <p className={styles.batchLeft}>
+                  <span>Still to date</span>
+                  <span className={styles.batchLeftQty}>
+                    {stockInShapes(
+                      countedShapes.map((u) => ({
+                        name: u.name,
+                        plural: u.plural,
+                        baseQty: baseOf[u.storeUnitId] ?? 1,
+                        onHandBase: shelfBase - batchBase,
+                      })),
+                    )}
+                  </span>
+                </p>
+              )}
+
+              {anyBatch && batchBase === shelfBase && (
+                <p className={`${styles.batchLeft} ${styles.batchLeftDone}`}>
+                  <span>Every one is dated.</span>
+                </p>
+              )}
+
+              {/*
+                AND THE OTHER WAY, which is not a remainder but a mistake. Said before saving, not
+                after: the server refuses a set that does not add up, and being told at the save
+                button — having typed a whole item — is being told too late.
+              */}
+              {batchBase > shelfBase && (
                 <p className={styles.batchWarn}>
-                  The dates cover {String(batchBase)} but you counted {String(shelfBase)}. They
-                  describe the same shelf, so they have to agree.
+                  The dates cover{' '}
+                  {stockInShapes(
+                    countedShapes.map((u) => ({
+                      name: u.name,
+                      plural: u.plural,
+                      baseQty: baseOf[u.storeUnitId] ?? 1,
+                      onHandBase: batchBase,
+                    })),
+                  )}{' '}
+                  but you counted{' '}
+                  {stockInShapes(
+                    countedShapes.map((u) => ({
+                      name: u.name,
+                      plural: u.plural,
+                      baseQty: baseOf[u.storeUnitId] ?? 1,
+                      onHandBase: shelfBase,
+                    })),
+                  )}
+                  . They describe the same shelf, so they have to agree.
                 </p>
               )}
             </>
@@ -1412,9 +1463,18 @@ export function ProductForm({
                 const value = expiryDates[layer.layerId] ?? layer.expiresOn ?? '';
                 const changed = (value || null) !== layer.expiresOn;
                 return (
-                  <div key={layer.layerId} className={styles.shapeBoxes}>
+                  <div key={layer.layerId} className={styles.expiryLot}>
+                    {/*
+                      WHICH LOT, on its own line. It is the subject of the card — the shop is
+                      picking out one delivery still on the shelf — and it was previously the
+                      label of the date box, where it wrapped over three lines beside a button
+                      stretched to half the row.
+                    */}
+                    <p className={styles.expiryLotWhat}>
+                      {formatQty(layer.remaining)} <span>still on the shelf</span>
+                    </p>
                     <Field
-                      label={`Expiry for ${formatQty(layer.remaining)} still on the shelf`}
+                      label="Goes off"
                       type="date"
                       value={value}
                       onChange={(e) =>
@@ -1423,11 +1483,12 @@ export function ProductForm({
                     />
                     <Button
                       variant="secondary"
+                      className={styles.expiryLotSave}
                       busy={expiryUpdating === layer.layerId}
                       disabled={!changed || expiryUpdating !== null}
                       onClick={() => void saveExpiry(layer.layerId, layer.expiresOn)}
                     >
-                      Save date
+                      Save
                     </Button>
                   </div>
                 );
