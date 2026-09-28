@@ -247,11 +247,32 @@ export function useAmendDraft(saleId: string | null) {
 }
 
 /** What the corrected receipt comes to: the lines, plus the named charges. */
-export function amendTotal(draft: AmendDraft): number {
-  const lines = (draft.order?.lines ?? []).reduce(
+/** The goods alone, before anything is added to them. */
+export function amendItems(draft: AmendDraft): number {
+  return (draft.order?.lines ?? []).reduce(
     (sum, l) => sum + (Number(l.qty) || 0) * (Number(l.unitPrice) || 0),
     0,
   );
-  const charges = (draft.order?.charges ?? []).reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
-  return lines + charges;
+}
+
+/** Everything the shop added by name — transport, loading. */
+export function amendCharges(draft: AmendDraft): number {
+  return (draft.order?.charges ?? []).reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
+}
+
+/** And what is being held against the containers going out. */
+export function amendDeposits(draft: AmendDraft): number {
+  return (draft.order?.deposits ?? []).reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
+}
+
+/**
+ * What the corrected receipt should come to.
+ *
+ * THE DEPOSIT COUNTS. This was `lines + charges`, while a sale's own total is lines + charges +
+ * deposits — so a correction to a receipt carrying a deposit computed a total lower than the
+ * receipt it was correcting, and the screen disagreed with the paper before anybody changed
+ * anything.
+ */
+export function amendTotal(draft: AmendDraft): number {
+  return amendItems(draft) + amendCharges(draft) + amendDeposits(draft);
 }

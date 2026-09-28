@@ -17,7 +17,7 @@ import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { useTillShapes } from '@/lib/stacks/till-shapes';
 import { findByBarcode } from '@/lib/stacks/mid-sale';
-import { amendTotal, useAmendDraft } from '@/lib/stacks/amend-draft';
+import { amendCharges, amendDeposits, amendItems, amendTotal, useAmendDraft } from '@/lib/stacks/amend-draft';
 import { formatMoney } from '@/lib/format';
 
 import styles from './amend-page.module.css';
@@ -226,6 +226,40 @@ export default function AmendPage() {
 
               {was && (
                 <div className={styles.totals}>
+                  {/*
+                    THE WHOLE ARITHMETIC, not just the two ends of it.
+
+                    This showed "It said N5,000 / It should say N5,000" and nothing else, so a
+                    seller looking at a corrected receipt could not see WHICH part had moved —
+                    and when the two figures matched, could not tell whether that was right or
+                    whether their edit had failed to register.
+
+                    The steps only appear when there is more than one, because on a plain sale
+                    "Items" and "It should say" are the same number twice.
+                  */}
+                  {(amendCharges(draft) > 0.005 || amendDeposits(draft) > 0.005) && (
+                    <>
+                      <div className={styles.totalRow}>
+                        <span>Items</span>
+                        <span>{formatMoney(amendItems(draft))}</span>
+                      </div>
+                      {(order?.charges ?? [])
+                        .filter((c) => Number(c.amount) > 0)
+                        .map((c) => (
+                          <div className={styles.totalRow} key={c.key}>
+                            <span>{c.label || 'Charge'}</span>
+                            <span>{formatMoney(Number(c.amount))}</span>
+                          </div>
+                        ))}
+                      {amendDeposits(draft) > 0.005 && (
+                        <div className={styles.totalRow}>
+                          <span>Deposit on containers</span>
+                          <span>{formatMoney(amendDeposits(draft))}</span>
+                        </div>
+                      )}
+                    </>
+                  )}
+
                   <div className={styles.totalRow}>
                     <span>It said</span>
                     <span>{formatMoney(was.total)}</span>
