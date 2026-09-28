@@ -19,6 +19,7 @@
  *   36. Crates come back, and the deposit goes back with them.
  *   37. The shop keeps a deposit instead, and the books can tell the two apart.
  *   38. Crates that are never coming back are written off, with a fee.
+ *   39. The yard and the customer's crates are two sides of one pile.
  */
 import {
   admin,
@@ -239,6 +240,151 @@ export const scenarios = [
         (charges ?? []).some((c) => Math.abs(Number(c.amount) - charged) < 0.01),
         (charges ?? []).map((c) => `${c.direction} ${c.amount}`).join(', ') || 'nothing recorded',
       );
+    },
+  },
+
+  {
+    name: "39. The yard and the customer's crates are two sides of one pile",
+    async run(ctx) {
+      const { storeId, product, customer, crateShape } = ctx;
+
+      /*
+       * ONE POPULATION OF CRATES, IN TWO PLACES.
+       *
+       * What is stacked in the yard and what a customer is holding are the same crates at
+       * different moments. A return moves one from their pile to ours. A breakage takes one out
+       * of the population altogether — and WHOSE hands it broke in decides whether the yard
+       * feels it: one that shatters in a customer's compound was already not in this yard, so
+       * taking it off here would count the same loss twice.
+       *
+       * `yard_empties` is built exactly that way — the last physical count, plus every movement
+       * recorded since it. This walks the chain and checks the figure after each step, because
+       * each rule being right on its own is not the same as the running total being right.
+       *
+       * ON DATES: the movements are left for the SERVER to stamp. The yard counts movements
+       * recorded after the count's own `counted_at`, which is a server clock — a client-supplied
+       * timestamp from a till whose clock lags by a second lands just behind it and is silently
+       * skipped. That is worth knowing about the till, and it is not what this scenario is for.
+       */
+      const yardOf = async () => {
+        const { data } = await shop.rpc('yard_empties', { p_store_id: storeId });
+        const row = (data ?? []).find((r) => r.product_unit_id === crateShape);
+        return row ? Number(row.in_yard) : null;
+      };
+
+      // ── A count, so there is a floor to measure from ──────────────────────
+      const { error: countErr } = await shop.rpc('count_empties', {
+        p_store_id: storeId,
+        // A yard is counted in ONE pass — one `counted_at` across every stack — so the argument
+        // is a list even when only one shape is being counted.
+        p_parts: [{ product_unit_id: crateShape, qty: 10 }],
+        p_note: 'ten stacked by the door',
+      });
+      check('the yard can be counted', !countErr, countErr?.message ?? '');
+      expectQty('and the count is what it says', await yardOf(), 10);
+
+      // ── Three go out full, on a sale ──────────────────────────────────────
+      const owedStart = await emptiesOut(customer, crateShape);
+      await sell(storeId, {
+        customerId: customer,
+        label: 'three crates out',
+        lines: [
+          {
+            product_id: product,
+            qty: 3,
+            pack_id: null,
+            sale_unit_id: crateShape,
+            base_qty: 36,
+            unit_price: 5200,
+            line_total: 15600,
+            containers_out: 3,
+            deposit_charged: 0,
+          },
+        ],
+        payments: [{ amount: 15600, method: 'cash' }],
+      });
+      expectQty(
+        'three crates leave with the goods',
+        (await emptiesOut(customer, crateShape)) - owedStart,
+        3,
+      );
+
+      /*
+       * AND THE YARD FEELS IT: ten becomes seven.
+       *
+       * I expected the yard to stay at ten, reasoning that the crates went out FULL and the yard
+       * holds empties. That is wrong about this trade. There is ONE population of crates and it
+       * flows supplier to shop to customer and back — a crate carrying drinks out of the door is
+       * a crate that is no longer in this yard, whatever is inside it.
+       *
+       * Which is exactly what makes the yard reconcilable: what is stacked here plus what
+       * customers hold plus what has been lost equals what the shop ever had.
+       */
+      expectQty('three crates out is three fewer in the yard', await yardOf(), 7);
+
+      // ── Two come back ─────────────────────────────────────────────────────
+      const owedAfterSale = await emptiesOut(customer, crateShape);
+      const { error: backErr } = await shop.rpc('record_customer_empties', {
+        p_store_id: storeId,
+        p_customer_id: customer,
+        p_product_unit_id: crateShape,
+        p_direction: 'returned',
+        p_qty: 2,
+        p_reason: 'two back',
+        p_ref_table: null,
+        p_ref_id: null,
+        p_occurred_at: null,
+        p_side: 'they_hold',
+      });
+      check('two can come back', !backErr, backErr?.message ?? '');
+      expectQty('a return raises the yard', await yardOf(), 9);
+      expectQty(
+        'and lowers what they owe by the same',
+        owedAfterSale - (await emptiesOut(customer, crateShape)),
+        2,
+      );
+
+      // ── And the third breaks at their place ───────────────────────────────
+      const owedNow = await emptiesOut(customer, crateShape);
+      const { error: brokeErr } = await shop.rpc('record_customer_empties', {
+        p_store_id: storeId,
+        p_customer_id: customer,
+        p_product_unit_id: crateShape,
+        p_direction: 'damaged',
+        p_qty: 1,
+        p_reason: 'broken at their place',
+        p_ref_table: null,
+        p_ref_id: null,
+        p_occurred_at: null,
+        p_side: 'they_hold',
+      });
+      check('a breakage at theirs can be recorded', !brokeErr, brokeErr?.message ?? '');
+
+      expectQty('one broken at theirs does NOT come off our yard', await yardOf(), 9);
+      expectQty(
+        'but they stop owing it',
+        owedNow - (await emptiesOut(customer, crateShape)),
+        1,
+      );
+
+      /*
+       * AND YOU CANNOT BREAK WHAT THEY DO NOT HAVE. The ledger refuses a damage bigger than what
+       * is outstanding, which is what stops a mistyped return turning into a negative debt.
+       */
+      const { error: tooMany } = await shop.rpc('record_customer_empties', {
+        p_store_id: storeId,
+        p_customer_id: customer,
+        p_product_unit_id: crateShape,
+        p_direction: 'damaged',
+        p_qty: 99,
+        p_reason: 'more than they hold',
+        p_ref_table: null,
+        p_ref_id: null,
+        p_occurred_at: null,
+        p_side: 'they_hold',
+      });
+      check('breaking more than they hold is refused', Boolean(tooMany),
+        tooMany ? tooMany.message.slice(0, 60) : 'IT WAS ACCEPTED');
     },
   },
 ];
