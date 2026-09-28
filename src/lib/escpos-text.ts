@@ -110,7 +110,9 @@ function printable(text: string): string {
     .replace(/[“”]/g, '"')
     .replace(/[×]/g, 'x')
     .replace(/[–—]/g, '-')
-    .replace(/ /g, ' ')
+    // Written as an escape, not as the character itself: a literal non-breaking space in
+    // source is invisible to whoever reads this next, and lint is right to refuse it.
+    .replace(/\u00a0/g, ' ')
     .replace(/[^\x20-\x7e]/g, '');
 }
 
@@ -284,9 +286,31 @@ export function receiptLines(input: ReceiptImageInput, layout: ReceiptLayout): P
       return;
     }
 
+    /*
+     * IT DOES NOT FIT, so the label wraps INSIDE ITS OWN COLUMN and the number stays put.
+     *
+     * This used to wrap the label across the full width and then put the value alone on the next
+     * line, right-aligned. "Nigerian Breweries (NBL) crates" came out with the 5 stranded on a
+     * line of its own under it, reading as a quantity belonging to nothing.
+     *
+     * Roughly two thirds for the words and a third for the figure. A count is a few characters
+     * and a maker's name is many, so giving them equal halves would wrap the name for no reason;
+     * giving the words everything is what produced the stranded number.
+     */
+    const labelCols = Math.max(4, Math.floor(cols(size) * 0.65));
     const flat = labelSpans.map((s) => s.text).join('');
-    for (const row of wrap(flat, cols(size))) one(size, row);
-    one(size, ' '.repeat(Math.max(0, cols(size) - right.length)) + right);
+    const rows = wrap(flat, labelCols);
+
+    rows.forEach((row, i) => {
+      if (i > 0) {
+        // Continuation lines are words only; the figure was settled on the first row.
+        one(size, row);
+        return;
+      }
+      const rowDots = row.length * (dots / cols(size));
+      const gap = Math.max(1, Math.round((dots - rowDots - rightDots) / spaceDots));
+      put([{ size, text: row }, { size: 'ss', text: ' '.repeat(gap) }, { size, text: right }]);
+    });
   };
 
   // ── The shop ────────────────────────────────────────────────────────────────
@@ -324,17 +348,32 @@ export function receiptLines(input: ReceiptImageInput, layout: ReceiptLayout): P
   ruleDouble();
 
   // ── The money, then what they are still holding ─────────────────────────────
-  for (const t of input.totals) {
+  /*
+   * A RULE UNDER EACH THING THEY ARE STILL HOLDING, and a heavy one to close the list.
+   *
+   * The money above is one running sum and reads as a block. What is still with the customer is a
+   * LIST of separate debts — five NBL crates, half a Goldberg crate — and run together with no
+   * dividers they read as one entry that has wrapped. This is the half of a receipt that gets
+   * argued over months later, so each line is closed off on its own.
+   *
+   * The last one is NOT given a light rule: the heavy rule that ends the section does that job,
+   * and two lines together would read as a mistake.
+   */
+  let inHolding = false;
+  input.totals.forEach((t, i) => {
     if (t.value === '') {
       // A heading inside the totals — the money is finished, so the heavy line goes here.
       ruleDouble();
       one(layout.strongTotals, asFraction(t.label));
-      continue;
+      inHolding = true;
+      return;
     }
     const size = t.strong ? layout.strongTotals : layout.totals;
     // The value can be a fraction too — "Goldberg 60cl crate 1/2" — so it gets the same treatment.
     spread(withSmallFraction(asFraction(t.label), size), t.value, size);
-  }
+
+    if (inHolding && i < input.totals.length - 1) rule();
+  });
   ruleDouble();
 
   if (input.note) {
