@@ -34,6 +34,7 @@ import { useLoadArea } from '@/components/ui/LoadArea';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { formatQty, messageOf, pluralUnit } from '@/lib/format';
 import { baseQtyByShape, stockInShapes } from '@/lib/shape-quantities';
+import { productExpiryLayers, setProductExpiry } from '@/lib/stacks/expiry';
 
 /**
  * Add a product, or change one. The BODY of a page — see `product-form-page`.
@@ -160,6 +161,8 @@ export function ProductForm({
    * as 3.208 packs, worked out in somebody's head in front of the shelf.
    */
   const [shelfByShape, setShelfByShape] = useState<Record<string, string>>({});
+  /** A recount changes the current shelf, never the opening movement it corrects. */
+  const [stockReason, setStockReason] = useState('');
 
   /*
    * WHAT ONE OF THEM COST, in the shape the shop buys in.
@@ -368,17 +371,24 @@ export function ProductForm({
    * waits for this (see `seedStatus`), so what is saved always started from what was there.
    */
   const editingId = product?.id ?? null;
+  const expirySeed = useLoadArea(() => productExpiryLayers(editingId as string), [editingId], {
+    key: `product-expiry-lots:${editingId ?? 'none'}`,
+    scope: SHAPES_SCOPE,
+    whenNot: !editingId,
+  });
+  const [expiryDates, setExpiryDates] = useState<Record<string, string>>({});
+  const [expiryUpdating, setExpiryUpdating] = useState<string | null>(null);
   const groupsSeed = useLoadArea(() => groupsFor(editingId as string), [editingId], {
     key: `product-groups-of:${editingId ?? 'none'}`,
     scope: GROUPS_SCOPE,
     whenNot: !editingId,
   });
-  const groupsSeeded = useRef(false);
+  const groupsSeeded = useRef<string | null | undefined>(undefined);
   useEffect(() => {
-    if (groupsSeeded.current || !groupsSeed.data) return;
-    groupsSeeded.current = true;
+    if (groupsSeeded.current === editingId || !groupsSeed.data) return;
+    groupsSeeded.current = editingId;
     setGroupIds(groupsSeed.data.map((g) => g.id));
-  }, [groupsSeed.data]);
+  }, [editingId, groupsSeed.data]);
 
   /*
    * Whether the rest of the form has anything to attach itself to.
@@ -458,12 +468,12 @@ export function ProductForm({
 
   // Copied once the server has answered — an answer of none included, which is not the same as
   // not having heard yet.
-  const seeded = useRef(false);
+  const seeded = useRef<string | null | undefined>(undefined);
   useEffect(() => {
-    if (seeded.current || !existingUnitsLoaded) return;
-    seeded.current = true;
+    if (seeded.current === editingId || !existingUnitsLoaded) return;
+    seeded.current = editingId;
     setUnits(existingUnits);
-  }, [existingUnits, existingUnitsLoaded]);
+  }, [editingId, existingUnits, existingUnitsLoaded]);
 
   // The discount bands, read and copied once, the same way — a failed read used to leave none, and
   // saving then deleted every band the item had.
@@ -472,12 +482,12 @@ export function ProductForm({
     scope: SHAPES_SCOPE,
     whenNot: !editingId,
   });
-  const discountsSeeded = useRef(false);
+  const discountsSeeded = useRef<string | null | undefined>(undefined);
   useEffect(() => {
-    if (discountsSeeded.current || !discountsSeed.data) return;
-    discountsSeeded.current = true;
+    if (discountsSeeded.current === editingId || !discountsSeed.data) return;
+    discountsSeeded.current = editingId;
     setDiscounts(discountsSeed.data);
-  }, [discountsSeed.data]);
+  }, [discountsSeed.data, editingId]);
 
   /*
    * The unit a product ROW is measured in.
@@ -666,7 +676,7 @@ export function ProductForm({
        * what the shop actually said — twelve bottles to a crate — which is the only figure here
        * that is not a guess.
        */
-      if (!editing && anyShelfSaid) {
+      if (anyShelfSaid && (!editing || hadStock === false)) {
         const { error } = await supabase.rpc('open_stock_by_count', {
           p_store_id: storeId,
           p_product_id: id,
@@ -708,6 +718,26 @@ export function ProductForm({
             : null,
         });
         if (error) throw error;
+      } else if (editing && anyShelfSaid) {
+        /*
+         * An existing item is not "opened" again. This is a fresh physical count: the database
+         * retains the opening count, records what this one replaces, and makes the reason part of
+         * the audit trail. A blank shelf section remains a no-op, so changing a price cannot
+         * accidentally count the product as zero.
+         */
+        if (!stockReason.trim()) {
+          throw new Error('Say why this shelf count is being corrected.');
+        }
+        const { data: periodId, error: periodError } = await supabase.rpc('ensure_open_period', {
+          p_product_id: id,
+        });
+        if (periodError) throw periodError;
+        const { error: countError } = await supabase.rpc('enter_stock_count', {
+          p_period_id: periodId,
+          p_counted: shelfBase,
+          p_reason: stockReason.trim(),
+        });
+        if (countError) throw countError;
       }
 
       /*
@@ -779,7 +809,7 @@ export function ProductForm({
        * "nobody looked", and inventing a nought for it would put a figure on the yard that nobody
        * ever counted.
        */
-      if (!editing && returnableShapes.length > 0) {
+      if (returnableShapes.length > 0) {
         for (const u of returnableShapes) {
           const said = (emptiesByShape[u.storeUnitId] ?? '').trim();
           if (said === '') continue;
@@ -790,7 +820,7 @@ export function ProductForm({
             p_store_id: storeId,
             p_category_id: pool,
             p_qty: Number(said) || 0,
-            p_note: 'Counted when the item was added',
+            p_note: editing ? 'Counted while the product was corrected' : 'Counted when the item was added',
           });
           if (error) throw error;
         }
@@ -841,6 +871,29 @@ export function ProductForm({
       problem.show(messageOf(e, 'That could not be saved.'));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveExpiry = async (layerId: string, was: string | null) => {
+    const next = (expiryDates[layerId] ?? was ?? '').trim() || null;
+    if (next === was) return;
+    if (!stockReason.trim()) {
+      problem.show('Say why this expiry date is being corrected.');
+      return;
+    }
+    setExpiryUpdating(layerId);
+    try {
+      await setProductExpiry({ layerId, expiresOn: next, reason: stockReason.trim() });
+      setExpiryDates((current) => {
+        const updated = { ...current };
+        delete updated[layerId];
+        return updated;
+      });
+      await expirySeed.reload();
+    } catch (e) {
+      problem.show(messageOf(e, 'That expiry date could not be corrected.'));
+    } finally {
+      setExpiryUpdating(null);
     }
   };
 
@@ -1150,12 +1203,13 @@ export function ProductForm({
         gone and the count screen is the way — which is the right tool anyway: it records a count
         as a count, with the variance, rather than as an opening.
       */}
-      {(!editing || hadStock === false) && hasAShape && (
+      {hasAShape && (
         <>
           <h2 className={styles.section}>What you have now</h2>
           <p className={styles.sectionNote}>
-            Counted on the shelf, not worked out from deliveries. Most shops starting here have
-            stock and no delivery history, and an invented delivery invents a cost.
+            {editing
+              ? 'Enter a fresh physical shelf count only when correcting stock. It keeps the earlier count and records why this one replaced it.'
+              : 'Counted on the shelf, not worked out from deliveries. Most shops starting here have stock and no delivery history, and an invented delivery invents a cost.'}
           </p>
           {/*
             A BOX PER COUNTED SHAPE. "Crates on the shelf" and "Bottles on the shelf", not one
@@ -1188,8 +1242,18 @@ export function ProductForm({
               : 'Leave them blank if you would rather count later.'}
           </p>
 
+          {editing && anyShelfSaid && (
+            <Field
+              label="Why is this count being corrected?"
+              required
+              value={stockReason}
+              onChange={(e) => setStockReason(e.target.value)}
+              placeholder="For example: corrected the opening count"
+            />
+          )}
+
           {/* ── When it goes off ──────────────────────────────────────────────── */}
-          {shelfBase > 0 && countedShapes.length > 0 && (
+          {(!editing || hadStock === false) && shelfBase > 0 && countedShapes.length > 0 && (
             <>
               <h3 className={styles.subsection}>When does it go off?</h3>
               <p className={styles.sectionNote}>
@@ -1324,6 +1388,51 @@ export function ProductForm({
               )}{' '}
               on the shelf.
             </p>
+          )}
+
+          {editing && (
+            <>
+              <h2 className={styles.section}>Expiry dates already recorded</h2>
+              <p className={styles.sectionNote}>
+                Correct the date on the lot that is still on the shelf. This never changes its
+                quantity, cost, or the order stock is sold in.
+              </p>
+              {expirySeed.error && (
+                <p className={styles.batchWarn}>
+                  The expiry lots could not be loaded: {expirySeed.error}
+                </p>
+              )}
+              {!expirySeed.error && expirySeed.data === null && (
+                <p className={styles.sectionNote}>Loading the stock lots…</p>
+              )}
+              {!expirySeed.error && expirySeed.data?.length === 0 && (
+                <p className={styles.sectionNote}>There are no stock lots left to date.</p>
+              )}
+              {expirySeed.data?.map((layer) => {
+                const value = expiryDates[layer.layerId] ?? layer.expiresOn ?? '';
+                const changed = (value || null) !== layer.expiresOn;
+                return (
+                  <div key={layer.layerId} className={styles.shapeBoxes}>
+                    <Field
+                      label={`Expiry for ${formatQty(layer.remaining)} still on the shelf`}
+                      type="date"
+                      value={value}
+                      onChange={(e) =>
+                        setExpiryDates((current) => ({ ...current, [layer.layerId]: e.target.value }))
+                      }
+                    />
+                    <Button
+                      variant="secondary"
+                      busy={expiryUpdating === layer.layerId}
+                      disabled={!changed || expiryUpdating !== null}
+                      onClick={() => void saveExpiry(layer.layerId, layer.expiresOn)}
+                    >
+                      Save date
+                    </Button>
+                  </div>
+                );
+              })}
+            </>
           )}
 
           {/*

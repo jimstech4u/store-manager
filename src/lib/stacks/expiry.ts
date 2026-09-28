@@ -42,6 +42,54 @@ export interface ExpirySummary {
   nextDate: string | null;
 }
 
+/** A dated (or deliberately undated) lot shown while its product is being corrected. */
+export interface ProductExpiryLayer {
+  layerId: string;
+  qty: number;
+  remaining: number;
+  expiresOn: string | null;
+  receivedAt: string;
+}
+
+/**
+ * The lots for one product, including undated ones.
+ *
+ * `expiring_stock` is intentionally a warning list, so it excludes undated stock and anything
+ * outside the chosen window. The product form needs the complete shelf in order to repair a date
+ * that was missed during setup.
+ */
+export async function productExpiryLayers(productId: string): Promise<ProductExpiryLayer[]> {
+  const { data, error } = await getSupabase()
+    .from('stock_layers')
+    .select('id, qty_base, remaining_base, expires_on, received_at')
+    .eq('product_id', productId)
+    .gt('remaining_base', 0)
+    .order('received_at', { ascending: true });
+  if (error) throw error;
+  return ((data ?? []) as Record<string, unknown>[]).map((layer) => ({
+    layerId: String(layer.id),
+    qty: Number(layer.qty_base) || 0,
+    remaining: Number(layer.remaining_base) || 0,
+    expiresOn: (layer.expires_on as string | null) ?? null,
+    receivedAt: String(layer.received_at),
+  }));
+}
+
+/** Correct a lot's expiry date without changing its quantity, cost or FIFO position. */
+export async function setProductExpiry(args: {
+  layerId: string;
+  expiresOn: string | null;
+  reason: string;
+}): Promise<void> {
+  const { error } = await getSupabase().rpc('set_stock_layer_expiry', {
+    p_layer_id: args.layerId,
+    p_expires_on: args.expiresOn,
+    p_reason: args.reason,
+  });
+  if (error) throw error;
+  stockMoved();
+}
+
 /** How far ahead to look. The screen offers these; the alarm uses 30. */
 export const WINDOWS = [7, 30, 90] as const;
 
