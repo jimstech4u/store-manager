@@ -414,10 +414,18 @@
   controls share the row beneath, the button only as wide as its word.
 */
 .expiryLot {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--space-2) var(--space-3);
-  align-items: end;
+  /*
+   * ONE COLUMN, READ DOWN.
+   *
+   * This was a two-column grid with the button in the second column, `align-items: end`. On a
+   * phone that leaves a tall Save sitting beside a date box it does not line up with, and the
+   * reason underneath in a third position — three controls in three alignments for one small job.
+   * Down the page they read in the order they are done: this is the lot, this is its new date,
+   * this is why, now save it.
+   */
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
   padding: var(--space-3);
   margin-bottom: var(--space-2);
   border: 1px solid var(--border);
@@ -426,7 +434,6 @@
 }
 
 .expiryLotWhat {
-  grid-column: 1 / -1;
   margin: 0;
   font-size: var(--text-sm);
   font-weight: 700;
@@ -440,13 +447,14 @@
 
 /* The button sits on the field's baseline rather than stretching, and never shrinks below its
    own word — a Save that has wrapped to two lines reads as a mistake. */
+/* Full width and last, because it is the one control that commits the change. */
 .expiryLotSave {
   white-space: nowrap;
+  width: 100%;
 }
 
 /* The reason spans the card, under the date and its button — it explains the change they have
    just made above it, so it reads after them rather than between them. */
 .expiryLotWhy {
-  grid-column: 1 / -1;
-  margin-top: var(--space-1);
+  margin: 0;
 }

@@ -8,7 +8,7 @@ import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { Button } from '@/components/ui/Button';
 import { Explain } from '@/components/ui/Explain';
 import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/components/ui/Dialog';
-import { CashIcon, HistoryIcon, RefreshIcon, ReceiptIcon, ReturnIcon, TrashIcon } from '@/components/ui/Icon';
+import { CashIcon, EditIcon, HistoryIcon, RefreshIcon, ReceiptIcon, ReturnIcon, TrashIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { usePermission } from '@/hooks/usePermission';
@@ -132,6 +132,28 @@ export default function AccountPage() {
           onClick: () => void reload(),
           ariaLabel: 'Check for changes',
         },
+        /*
+          CHANGING WHAT THEY ARE CALLED.
+
+          `update_customer` and `update_customer_phone` have both existed, permission-checked, for
+          as long as the customers have — and no screen ever called either. So a name typed wrong
+          at the counter stayed wrong, and the only way anybody found to change one was to add the
+          customer again on the same number, which RENAMED the first (0203) and put two people's
+          trade on one book.
+
+          Beside the archive, behind the same permission, because it is the same kind of act: it
+          changes what everybody else in the shop sees in every picker.
+        */
+        ...(account && can('customers.manage')
+          ? [
+              {
+                key: 'edit',
+                icon: <EditIcon />,
+                onClick: () => void nav.push('customer_edit_page', { id: customerId }),
+                ariaLabel: `Edit ${account.customer.name}`,
+              },
+            ]
+          : []),
         /*
           TAKING SOMEBODY OFF THE LIST.
 

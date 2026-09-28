@@ -147,8 +147,22 @@ export default function ReceiptHistoryPage() {
       ];
     })(),
     note: doc.note,
-    // The account the original printed. Part of what that version SAID, and a reprint has to match.
-    transferDetails: doc.transferDetails ?? null,
+    /*
+     * THE ACCOUNT, ONLY WHERE THAT VERSION WAS ACTUALLY PAID BY TRANSFER.
+     *
+     * This passed `doc.transferDetails` straight through, on the reasoning that a reprint has to
+     * match what the original said. The snapshot carries the account because the SHOP has "show
+     * transfer details" switched on, not because that receipt was a transfer — so a version paid
+     * in cash reprinted with the shop's bank account underneath it. Reported from a reprint of
+     * Destiny's corrected receipt: the wrong cash payment, with an account number beside it.
+     *
+     * `Receipt.tsx` and the shared-link page have both always asked this question; this path was
+     * the one that did not. Where the version did not capture its payments at all, the account is
+     * left off: bank details printed on the strength of a guess is the wrong way to be wrong.
+     */
+    transferDetails: (doc.payments ?? []).some((p) => p.method === 'transfer')
+      ? (doc.transferDetails ?? null)
+      : null,
   });
 
   /** Put an old version on paper, whichever way this device reaches its printer. */

@@ -51,6 +51,7 @@ import PeoplePage from './people-stack/people-page/people-page';
 import AccountPage from './people-stack/account-page/account-page';
 import AccountActionPage from './people-stack/account-action-page/account-action-page';
 import CustomerFormPage from './people-stack/customer-form-page/customer-form-page';
+import CustomerEditPage from './people-stack/customer-edit-page/customer-edit-page';
 import ShopPage from './settings-stack/shop-page/shop-page';
 import ReviewPage from './settings-stack/review-page/review-page';
 import StaffPage from './settings-stack/staff-page/staff-page';
@@ -182,6 +183,8 @@ export const RECORD_PAGES: Record<string, ComponentType> = gateAll({
   printing_page: PrintingPage,
   receipt_history_page: ReceiptHistoryPage,
   updates_page: UpdatesPage,
+  // Appended, like every one above it: a route is written into the URL as its POSITION here.
+  customer_edit_page: CustomerEditPage,
 });
 
 /** Handed to each stack's `additionalNavLinks` — one array, so its identity never changes. */

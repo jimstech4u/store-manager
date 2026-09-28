@@ -1,0 +1,10 @@
+/* The actions end the page rather than being pinned to its foot — see CLAUDE.md. */
+.actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+.actions > * {
+  flex: 1;
+}

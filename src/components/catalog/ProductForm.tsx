@@ -1320,6 +1320,34 @@ export function ProductForm({
             })}
           </div>
 
+          {/*
+            WHAT THE SHELF SAYS RIGHT NOW — shown, never typed into the boxes.
+
+            Reported as "it did not read what was in stock back to packs and pieces": the boxes sat
+            at 0 on an item holding three hundred, so the section looked broken or looked as though
+            the shop had nothing.
+
+            They stay empty on purpose. This is a PHYSICAL COUNT, and a box arriving pre-filled
+            with the system's own figure is answered by pressing Save — which records "I counted,
+            and it agreed" when nobody counted anything, and quietly buries the very difference a
+            count exists to find. So the figure is stated beside the boxes instead: the shop can
+            see what is expected, and still has to say what is actually there.
+          */}
+          {editing && countedShapes.length > 0 && Number(product?.onHand ?? 0) > 0 && (
+            <p className={styles.saidBack}>
+              The shelf currently says{' '}
+              {stockInShapes(
+                countedShapes.map((u) => ({
+                  name: u.name,
+                  plural: u.plural,
+                  baseQty: baseOf[u.storeUnitId] ?? 1,
+                  onHandBase: Number(product?.onHand ?? 0),
+                })),
+              )}
+              .
+            </p>
+          )}
+
           <p className={styles.sectionNote}>
             {minimum
               ? 'Put 0 where there are none. "None" and "did not look" are different answers.'
@@ -1384,16 +1412,6 @@ export function ProductForm({
                         }))
                       }
                     />
-                    <Button
-                      variant="secondary"
-                      className={styles.expiryLotSave}
-                      busy={expiryUpdating === layer.layerId}
-                      disabled={!ready || expiryUpdating !== null}
-                      onClick={() => void saveExpiry(layer.layerId, layer.expiresOn)}
-                    >
-                      Save
-                    </Button>
-
                     {/*
                       ASKED ONLY ONCE THE DATE HAS MOVED, and asked here rather than anywhere else.
                       A box demanding a reason for a correction nobody has made yet is a box that
@@ -1414,6 +1432,19 @@ export function ProductForm({
                           placeholder="For example: keyed from the wrong carton"
                         />
                       </div>
+                    )}
+
+                    {/* Last, because it is the one control that commits the change. */}
+                    {changed && (
+                      <Button
+                        variant="secondary"
+                        className={styles.expiryLotSave}
+                        busy={expiryUpdating === layer.layerId}
+                        disabled={!ready || expiryUpdating !== null}
+                        onClick={() => void saveExpiry(layer.layerId, layer.expiresOn)}
+                      >
+                        Save this date
+                      </Button>
                     )}
                   </div>
                 );
