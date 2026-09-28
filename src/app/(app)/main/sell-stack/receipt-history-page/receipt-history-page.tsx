@@ -18,7 +18,7 @@ import { openPrinterAppWith } from '@/lib/print-handoff';
 import { printCanvas } from '@/lib/bluetooth-print';
 import { printCanvasOverUsb } from '@/lib/usb-print';
 import { renderReceiptCanvas } from '@/lib/share';
-import { formatDateTime, formatMoney, formatQty, messageOf, pluralUnit } from '@/lib/format';
+import { formatDateTime, formatMoney, formatQtySpoken, messageOf, pluralUnit } from '@/lib/format';
 import styles from './receipt-history-page.module.css';
 
 /**
@@ -85,8 +85,8 @@ export default function ReceiptHistoryPage() {
     ],
     lines: doc.lines.map((l) => ({
       name: l.productName,
-      detail: `${formatQty(l.enteredQty)} ${l.unitName ?? pluralUnit('piece', l.enteredQty)} x ${formatMoney(l.unitPrice)}`,
-      qty: `${formatQty(l.enteredQty)} ${l.unitName ?? pluralUnit('piece', l.enteredQty)}`,
+      detail: `${formatQtySpoken(l.enteredQty)} ${l.unitName ?? pluralUnit('piece', l.enteredQty)} x ${formatMoney(l.unitPrice)}`,
+      qty: `${formatQtySpoken(l.enteredQty)} ${l.unitName ?? pluralUnit('piece', l.enteredQty)}`,
       amount: formatMoney(l.lineTotal),
     })),
     totals: (() => {
@@ -140,7 +140,7 @@ export default function ReceiptHistoryPage() {
             { label: 'Still with you', value: '', strong: true },
             ...out.map((l) => ({
               name: l.productName,
-              value: formatQty(l.containersOut),
+              value: formatQtySpoken(l.containersOut),
             })).map((r) => ({ label: r.name, value: r.value })),
           ];
         })(),

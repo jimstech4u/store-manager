@@ -14,7 +14,7 @@ import { usePermission } from '@/hooks/usePermission';
 import { useNav } from '@academix-admin/navigation-stack';
 import { useStackBack } from '@/hooks/useStackBack';
 import { getSupabase } from '@/lib/supabase/client';
-import { formatDateTime, formatQty, pluralUnit, messageOf } from '@/lib/format';
+import { formatDateTime, formatQtySpoken, pluralUnit, messageOf } from '@/lib/format';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 
 interface PendingProduct {
@@ -230,7 +230,7 @@ export default function ReviewPage() {
                 <div className={styles.cardMain}>
                   <p className={styles.cardName}>{p.name}</p>
                   <p className={styles.cardMeta}>
-                    {formatQty(p.on_hand)} {pluralUnit(p.base_unit, Number(p.on_hand))} in stock ·
+                    {formatQtySpoken(p.on_hand)} {pluralUnit(p.base_unit, Number(p.on_hand))} in stock ·
                     added {formatDateTime(p.created_at)}
                   </p>
 
@@ -351,18 +351,18 @@ export default function ReviewPage() {
                   {/* The trace, in words. A signed delta is not something a shop owner should
                       have to decode. */}
                   <div className={styles.trace}>
-                    <span className={styles.traceStep}>{formatQty(s.balance_before)}</span>
+                    <span className={styles.traceStep}>{formatQtySpoken(s.balance_before)}</span>
                     <span className={styles.traceArrow} aria-hidden="true">
                       →
                     </span>
                     <span className={styles.traceDelta}>
                       {Number(s.qty) > 0 ? '+' : '−'}
-                      {formatQty(Math.abs(Number(s.qty)))}
+                      {formatQtySpoken(Math.abs(Number(s.qty)))}
                     </span>
                     <span className={styles.traceArrow} aria-hidden="true">
                       →
                     </span>
-                    <span className={styles.traceStep}>{formatQty(s.balance_after)}</span>
+                    <span className={styles.traceStep}>{formatQtySpoken(s.balance_after)}</span>
                   </div>
                 </div>
 

@@ -21,7 +21,7 @@ import {
 import { accountsChanged } from '@/lib/stacks/customer-account';
 import { useSellingUnits, type SellingUnit } from '@/lib/stacks/selling-units';
 import { rollUpOwed, saidAsPart, type OwedRow } from '@/lib/empties-rollup';
-import { formatMoney, formatQty, messageOf } from '@/lib/format';
+import { formatMoney, formatQtySpoken, messageOf } from '@/lib/format';
 import styles from './empties-record-page.module.css';
 
 /**
@@ -272,7 +272,7 @@ export default function EmptiesRecordPage() {
         .map((b) => {
           const n = Number(byShape[b.productUnitId]);
           return Number.isFinite(n) && n > 0
-            ? `${formatQty(n)} ${(n === 1 ? b.name : b.plural).toLowerCase()}`
+            ? `${formatQtySpoken(n)} ${(n === 1 ? b.name : b.plural).toLowerCase()}`
             : null;
         })
         .filter(Boolean)

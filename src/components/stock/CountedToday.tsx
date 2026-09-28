@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/Button';
 import type { ReactNode } from 'react';
 import { CheckIcon } from '@/components/ui/Icon';
 import { stockInShapes, type SellingUnit } from '@/lib/stacks/selling-units';
-import { formatQty } from '@/lib/format';
+import { formatQtySpoken } from '@/lib/format';
 import {
   countTime,
   countedByWords,
@@ -46,7 +46,7 @@ export function CountedToday({
   const say = (base: number) =>
     shapes.length > 0
       ? stockInShapes(shapes.map((u) => ({ ...u, onHandBase: base })))
-      : `${formatQty(base)} ${baseUnit ?? ''}`.trim();
+      : `${formatQtySpoken(base)} ${baseUnit ?? ''}`.trim();
 
   return (
     <section className={styles.card} aria-label="Counted today">

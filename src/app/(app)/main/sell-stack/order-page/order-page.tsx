@@ -7,7 +7,7 @@ import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/components/ui/Dialog';
 import { useStackBack } from '@/hooks/useStackBack';
-import { formatMoney, formatQty, messageOf } from '@/lib/format';
+import { formatMoney, formatQtySpoken, messageOf } from '@/lib/format';
 import {
   acceptOnlineOrder,
   declineOrder,
@@ -185,7 +185,7 @@ export default function OrderPage() {
                         <span className={styles.lineTotal}>{formatMoney(line.line_total)}</span>
                       </div>
                       <p className={styles.lineMeta}>
-                        {formatQty(line.qty)} {line.unit} × {formatMoney(line.unit_price)}
+                        {formatQtySpoken(line.qty)} {line.unit} × {formatMoney(line.unit_price)}
                       </p>
                       {/*
                         Said as a figure, not a verdict. The shop knows what is arriving this
@@ -193,7 +193,7 @@ export default function OrderPage() {
                       */}
                       {short && (
                         <p className={styles.short}>
-                          Your count says {formatQty(line.in_stock)} in stock.
+                          Your count says {formatQtySpoken(line.in_stock)} in stock.
                         </p>
                       )}
                     </li>

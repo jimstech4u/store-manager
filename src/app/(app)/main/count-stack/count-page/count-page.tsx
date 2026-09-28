@@ -16,7 +16,7 @@ import { usePermission } from '@/hooks/usePermission';
 import { useStackBack } from '@/hooks/useStackBack';
 import { searchProducts, useProductList, type Product } from '@/lib/stacks/catalog-stack';
 import { useListChannel } from '@/hooks/useListChannel';
-import { formatQty, pluralUnit } from '@/lib/format';
+import { formatQtySpoken, pluralUnit } from '@/lib/format';
 import { stockInShapes, useSellingUnits } from '@/lib/stacks/selling-units';
 import { countedByWords, useTodaysCounts } from '@/lib/stacks/count-gate';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
@@ -63,7 +63,7 @@ export default function CountPage() {
     if (shapes && shapes.length > 0) return stockInShapes(shapes);
 
     const base = Number(p.onHand);
-    return `${formatQty(base)} ${pluralUnit(p.baseUnit, base)}`;
+    return `${formatQtySpoken(base)} ${pluralUnit(p.baseUnit, base)}`;
   };
 
   /*

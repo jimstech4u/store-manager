@@ -11,7 +11,7 @@ import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { useEmptiesCustomers, type EmptiesCustomer } from '@/lib/stacks/customer-ledgers';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
-import { formatQty } from '@/lib/format';
+import { formatQtySpoken } from '@/lib/format';
 import styles from './empties-page.module.css';
 
 /**
@@ -118,7 +118,7 @@ export default function EmptiesPage() {
             </span>
             <span className={styles.owed}>
               {r.stillOut > 0 ? (
-                <span className={styles.owedQty}>{formatQty(r.stillOut)}</span>
+                <span className={styles.owedQty}>{formatQtySpoken(r.stillOut)}</span>
               ) : (
                 <span className={styles.clear}>all back</span>
               )}
@@ -155,7 +155,7 @@ export default function EmptiesPage() {
                 <span className={styles.owed}>
                   {r.stillOut > 0 ? (
                     <>
-                      <span className={styles.owedQty}>{formatQty(r.stillOut)}</span>
+                      <span className={styles.owedQty}>{formatQtySpoken(r.stillOut)}</span>
                       <span className={styles.owedNote}>
                         across {r.shapesOut} {r.shapesOut === 1 ? 'shape' : 'shapes'}
                       </span>

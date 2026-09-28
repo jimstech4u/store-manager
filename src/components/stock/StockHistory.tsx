@@ -9,7 +9,7 @@ import { RecordLink } from '@/components/ui/RecordLink';
 import { Explain } from '@/components/ui/Explain';
 import { ChevronRightIcon } from '@/components/ui/Icon';
 import { getSupabase } from '@/lib/supabase/client';
-import { formatQty } from '@/lib/format';
+import { formatQtySpoken } from '@/lib/format';
 import styles from './StockHistory.module.css';
 
 /**
@@ -250,7 +250,7 @@ export function StockHistory({
             <li className={styles.row} key={row.id ?? `${row.at}-${index}`}>
               <span className={`${styles.delta} ${up ? styles.up : styles.down}`}>
                 {up ? '+' : ''}
-                {formatQty(row.qty_delta)}
+                {formatQtySpoken(row.qty_delta)}
               </span>
 
               <span className={styles.body}>
@@ -276,7 +276,7 @@ export function StockHistory({
 
               {/* What was on the shelf after this — the number being checked against. */}
               <span className={styles.balance}>
-                {formatQty(row.balance)} {unit}
+                {formatQtySpoken(row.balance)} {unit}
               </span>
 
               {opens && (

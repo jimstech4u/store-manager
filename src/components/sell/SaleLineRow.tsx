@@ -4,7 +4,7 @@ import { useState } from 'react';
 import styles from './SaleLineRow.module.css';
 import { Field } from '@/components/ui/Field';
 import { CloseIcon, MinusIcon, PlusIcon } from '@/components/ui/Icon';
-import { formatMoney, formatQty } from '@/lib/format';
+import { formatMoney, formatQtySpoken } from '@/lib/format';
 import { partsFor, snapQty, type QuantityRules } from '@/lib/quantity-rules';
 import type { SaleUnit } from '@/lib/stacks/catalog-stack';
 
@@ -256,7 +256,7 @@ export function SaleLineRow({
           return (
             <div className={styles.fractionBlock}>
               <span className={styles.fractionLabel}>
-                Add a part{part > 0 ? ` — now ${formatQty(safe)}` : ''}
+                Add a part{part > 0 ? ` — now ${formatQtySpoken(safe)}` : ''}
               </span>
               <div
                 className={styles.fractionRow}
@@ -363,7 +363,7 @@ export function SaleLineRow({
                 priceReason: null,
               });
             }}
-            hint={`Split across ${formatQty(Number(line.qty) || 0)} ${
+            hint={`Split across ${formatQtySpoken(Number(line.qty) || 0)} ${
               line.saleUnitName?.toLowerCase() ?? line.baseUnit
             }`}
           />

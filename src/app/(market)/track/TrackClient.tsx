@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
 import { getSupabase } from '@/lib/supabase/client';
-import { formatMoney, formatQty, messageOf } from '@/lib/format';
+import { formatMoney, formatQtySpoken, messageOf } from '@/lib/format';
 import { owedRowsFromReceipt, rollUpOwed } from '@/lib/empties-rollup';
 import styles from './track.module.css';
 
@@ -315,7 +315,7 @@ export function TrackClient({ initialToken }: { initialToken?: string } = {}) {
                     <span className={styles.lineName}>
                       {l.name}
                       <span className={styles.lineQty}>
-                        {formatQty(l.qty)} {l.unit} × {formatMoney(l.unit_price)}
+                        {formatQtySpoken(l.qty)} {l.unit} × {formatMoney(l.unit_price)}
                       </span>
                     </span>
                     <span className={styles.lineTotal}>{formatMoney(l.line_total)}</span>

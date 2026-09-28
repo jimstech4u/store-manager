@@ -32,7 +32,7 @@ import styles from './ProductForm.module.css';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 import { useLoadArea } from '@/components/ui/LoadArea';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
-import { formatQty, messageOf, pluralUnit } from '@/lib/format';
+import { formatQtySpoken, messageOf, pluralUnit } from '@/lib/format';
 import { isAllowedQty, partsFor, snapQty } from '@/lib/quantity-rules';
 import { baseQtyByShape, stockInShapes } from '@/lib/shape-quantities';
 import { productExpiryLayers, setProductExpiry } from '@/lib/stacks/expiry';
@@ -1354,8 +1354,8 @@ export function ProductForm({
                       ? steps.length > 0
                         ? `${u.plural} go in whole ones and ${steps
                             .map((s) => s.label)
-                            .join(', ')} — ${formatQty(snapQty(asNumber, rules))}, not ${said}.`
-                        : `${u.plural} go in whole ones — ${formatQty(
+                            .join(', ')} — ${formatQtySpoken(snapQty(asNumber, rules))}, not ${said}.`
+                        : `${u.plural} go in whole ones — ${formatQtySpoken(
                             snapQty(asNumber, rules),
                           )}, not ${said}.`
                       : null
@@ -1539,7 +1539,7 @@ export function ProductForm({
                           <CloseIcon />
                         </button>
                         <span className={styles.batchWhat}>
-                          {formatQty(many)}{' '}
+                          {formatQtySpoken(many)}{' '}
                           {shape ? (many === 1 ? shape.name : shape.plural).toLowerCase() : ''}
                         </span>
                         <span className={styles.batchWhen}>
@@ -1619,7 +1619,7 @@ export function ProductForm({
                       error={
                         offGrid
                           ? `${chosenShape.plural} do not come in ${batchQty} — ` +
-                            `${formatQty(snapQty(asNumber, rules))}?`
+                            `${formatQtySpoken(snapQty(asNumber, rules))}?`
                           : null
                       }
                     />

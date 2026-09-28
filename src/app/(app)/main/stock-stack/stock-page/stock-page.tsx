@@ -27,7 +27,7 @@ import {
 } from '@/lib/stacks/selling-units';
 import { useListChannel } from '@/hooks/useListChannel';
 import { useInfiniteScroll } from '@/hooks/usePaginatedList';
-import { formatMoney, formatQty, pluralUnit } from '@/lib/format';
+import { formatMoney, formatQtySpoken, pluralUnit } from '@/lib/format';
 import styles from './stock-page.module.css';
 
 /**
@@ -314,7 +314,7 @@ export default function StockPage() {
                 const unit = pluralUnit(p.baseUnit, qty);
                 return (
                   <>
-                    <span className={styles.qtyValue}>{formatQty(qty)}</span>
+                    <span className={styles.qtyValue}>{formatQtySpoken(qty)}</span>
                     <span className={styles.qtyUnit}>{unit}</span>
                   </>
                 );
@@ -467,7 +467,7 @@ export default function StockPage() {
                         <span
                           className={`${styles.qtyValue} ${out ? styles.qtyLow : ''} ${low ? styles.qtyRunning : ''}`}
                         >
-                          {formatQty(onHand)}
+                          {formatQtySpoken(onHand)}
                         </span>
                         <span className={styles.qtyUnit}>
                           {pluralUnit(p.baseUnit, Number(p.onHand))}

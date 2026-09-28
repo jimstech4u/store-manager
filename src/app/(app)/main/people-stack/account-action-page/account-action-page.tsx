@@ -36,18 +36,28 @@ import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
  * Tuesday.
  */
 
-type ActionKind = 'payment' | 'charge' | 'excess';
+/*
+ * `refund` is the fourth, and the one that was missing.
+ *
+ * `excess` RECORDS that the shop owes somebody. Nothing anywhere recorded the shop PAYING it,
+ * so a credit — however it arose — could only ever be written down, never cleared. The commonest
+ * way one arises is change: a N9,750 bill settled with N10,000 leaves the books saying the shop
+ * owes N250 it counted back across the counter a second later.
+ */
+type ActionKind = 'payment' | 'charge' | 'excess' | 'refund';
 
 const SUBTITLES: Record<ActionKind, string> = {
   payment: 'Money they have handed over',
   charge: 'Something they owe you that was not a sale',
   excess: 'Money you owe them',
+  refund: 'Money you have handed back to them',
 };
 
 const TITLES: Record<ActionKind, string> = {
   payment: 'Record a payment',
   charge: 'Record a charge',
   excess: 'Record what you owe them',
+  refund: 'Give money back',
 };
 
 export default function AccountActionPage() {
@@ -88,7 +98,25 @@ export default function AccountActionPage() {
     setBusy(true);
     const supabase = getSupabase();
     try {
-      if (kind === 'payment') {
+      if (kind === 'refund') {
+        /*
+         * MONEY LEAVING, for a customer. `payments.direction` has had 'out' since the table was
+         * written and `customer_balance` already nets it; nothing ever wrote one (0210).
+         *
+         * Not allocated to a receipt: an allocation says which receipt a payment SETTLES, and
+         * money going the other way settles nothing — it clears what the shop was holding.
+         */
+        const { error } = await supabase.rpc('record_money_back', {
+          p_store_id: store.id,
+          p_customer_id: customerId,
+          p_amount: Number(amount),
+          p_method: method,
+          p_reason: note.trim() || null,
+          p_client_uuid: crypto.randomUUID(),
+          p_bank_account_id: null,
+        });
+        if (error) throw error;
+      } else if (kind === 'payment') {
         const { error } = await supabase.rpc('record_payment', {
           p_store_id: store.id,
           p_customer_id: customerId,
@@ -133,7 +161,8 @@ export default function AccountActionPage() {
 
   // A reason is what makes a charge answerable weeks later, so it is required for both directions
   // and optional only on a payment, where the amount and the method already say what happened.
-  const ready = Number(amount) > 0 && (kind === 'payment' || note.trim() !== '');
+  const ready =
+    Number(amount) > 0 && (kind === 'payment' || kind === 'refund' || note.trim() !== '');
 
   return (
     <PageScaffold onBack={goBack} title={TITLES[kind]} subtitle={SUBTITLES[kind]}>
@@ -185,7 +214,7 @@ export default function AccountActionPage() {
         </p>
       )}
 
-      {kind === 'payment' && (
+      {(kind === 'payment' || kind === 'refund') && (
         <div className={styles.field}>
           <label className={styles.label} htmlFor="pay-method">
             How did it come in?
@@ -205,8 +234,8 @@ export default function AccountActionPage() {
       )}
 
       <Field
-        label={kind === 'payment' ? 'Reference' : 'What it is for'}
-        optional={kind === 'payment'}
+        label={kind === 'payment' || kind === 'refund' ? 'Reference' : 'What it is for'}
+        optional={kind === 'payment' || kind === 'refund'}
         value={note}
         onChange={(e) => setNote(e.target.value)}
         placeholder={

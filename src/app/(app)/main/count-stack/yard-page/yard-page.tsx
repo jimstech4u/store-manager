@@ -12,7 +12,7 @@ import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { useAuth } from '@/providers/AuthProvider';
 import { useYard, type YardGroupRow, type YardRow } from '@/lib/stacks/yard';
-import { formatQty } from '@/lib/format';
+import { formatQtySpoken } from '@/lib/format';
 import styles from './yard-page.module.css';
 
 /**
@@ -67,7 +67,7 @@ export default function YardPage() {
   if (!store) return null;
 
   const say = (n: number | null, one: string, many: string) =>
-    n === null ? null : `${formatQty(n)} ${Math.abs(n) === 1 ? one : many}`;
+    n === null ? null : `${formatQtySpoken(n)} ${Math.abs(n) === 1 ? one : many}`;
 
   const rowsForGrain: (YardGroupRow | YardRow)[] = grain === 'group' ? groups : loose;
 
@@ -166,7 +166,7 @@ export default function YardPage() {
                   {r.countedAt && (
                     <span className={styles.note}>
                       counted {new Date(r.countedAt).toLocaleDateString()}
-                      {moved !== 0 && `, ${moved > 0 ? '+' : ''}${formatQty(moved)} since`}
+                      {moved !== 0 && `, ${moved > 0 ? '+' : ''}${formatQtySpoken(moved)} since`}
                     </span>
                   )}
                 </span>

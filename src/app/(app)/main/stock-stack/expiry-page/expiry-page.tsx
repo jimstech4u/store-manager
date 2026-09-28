@@ -19,7 +19,7 @@ import {
   WINDOWS,
   type ExpiringLayer,
 } from '@/lib/stacks/expiry';
-import { formatMoney, formatQty, messageOf } from '@/lib/format';
+import { formatMoney, formatQtySpoken, messageOf } from '@/lib/format';
 import styles from './expiry-page.module.css';
 
 /**
@@ -98,7 +98,7 @@ export default function ExpiryPage() {
           {l.productName}
         </RecordLink>
         <span className={styles.detail}>
-          {formatQty(l.remaining)} left of this delivery
+          {formatQtySpoken(l.remaining)} left of this delivery
           {l.supplier ? ` · from ${l.supplier}` : ''}
         </span>
         <span className={styles.detail}>
@@ -146,7 +146,7 @@ export default function ExpiryPage() {
           controller={confirm}
           title="Write this off?"
           message={
-            `${formatQty(pending.remaining)} of ${pending.productName} comes off the shelf and is ` +
+            `${formatQtySpoken(pending.remaining)} of ${pending.productName} comes off the shelf and is ` +
             `recorded as damage worth ${formatMoney(pending.valueAtCost)}. The delivery it came ` +
             `from keeps its history.`
           }

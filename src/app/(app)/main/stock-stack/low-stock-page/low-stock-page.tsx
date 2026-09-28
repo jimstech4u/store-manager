@@ -12,7 +12,7 @@ import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 import { ProductPicker } from '@/components/catalog/ProductPicker';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
-import { formatQty, messageOf, pluralUnit } from '@/lib/format';
+import { formatQtySpoken, messageOf, pluralUnit } from '@/lib/format';
 import {
   setItemLowStock,
   setShopLowStock,
@@ -178,17 +178,17 @@ export default function LowStockPage() {
                   >
                     <span className={styles.rowName}>{item.name}</span>
                     <span className={styles.rowDetail}>
-                      Warns at {formatQty(item.ownLevel)}{' '}
+                      Warns at {formatQtySpoken(item.ownLevel)}{' '}
                       {pluralUnit(item.baseUnit, item.ownLevel)}
                       {/*
                         Said against the general rule, because "warns at 5" means nothing on its own —
                         the reason a shop set it is that everything else warns at something different.
                       */}
                       {item.shopLevel !== null && item.shopLevel !== item.ownLevel && (
-                        <> · everything else at {formatQty(item.shopLevel)}</>
+                        <> · everything else at {formatQtySpoken(item.shopLevel)}</>
                       )}
                       {' · '}
-                      {formatQty(item.onHand)} on hand
+                      {formatQtySpoken(item.onHand)} on hand
                     </span>
                   </button>
                   <button

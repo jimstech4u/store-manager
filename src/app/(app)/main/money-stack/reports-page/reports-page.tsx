@@ -34,7 +34,7 @@ import {
   type StaffRow,
 } from '@/lib/stacks/report-readers';
 import { stockReport, type StockReport } from '@/lib/stacks/reports';
-import { formatDateTime, formatMoney, formatQty } from '@/lib/format';
+import { formatDateTime, formatMoney, formatQtySpoken } from '@/lib/format';
 import { QrCode } from '@/components/ui/QrCode';
 import { appUrl } from '@/lib/app-url';
 import styles from './reports-page.module.css';
@@ -498,7 +498,7 @@ function ProductsReport({ rows }: { rows: ProductRow[] }) {
         {rows.map((r) => (
           <tr key={r.productId}>
             <td>{r.productName}</td>
-            <td>{formatQty(r.soldBase)}</td>
+            <td>{formatQtySpoken(r.soldBase)}</td>
             <td>{formatMoney(r.revenue)}</td>
             <td>{formatMoney(r.margin)}</td>
           </tr>
@@ -633,7 +633,7 @@ function StockTable({ report }: { report: StockReport | null }) {
             <tr key={l.name}>
               <td>{l.name}</td>
               <td>
-                {formatQty(l.onHand)} {l.unit}
+                {formatQtySpoken(l.onHand)} {l.unit}
               </td>
               <td>{formatMoney(l.unitCost)}</td>
               <td>{formatMoney(l.value)}</td>

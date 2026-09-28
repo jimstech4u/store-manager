@@ -31,7 +31,7 @@ import { unitGaps, useProductUnits } from '@/lib/stacks/product-units';
 import { productEmptiesOut, type ShapeOut } from '@/lib/stacks/empties';
 import { LoadArea, useLoadArea } from '@/components/ui/LoadArea';
 import { saidAsPart } from '@/lib/empties-rollup';
-import { formatMoney, formatQty, pluralUnit, messageOf } from '@/lib/format';
+import { formatMoney, formatQtySpoken, pluralUnit, messageOf } from '@/lib/format';
 import styles from './product-page.module.css';
 import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/components/ui/Dialog';
 
@@ -142,7 +142,7 @@ export default function ProductPage() {
   });
   const taken = new Set((lowLevels.data ?? []).map((l) => l.productUnitId));
   const freeShapes = shapes.filter((u) => !taken.has(u.productUnitId));
-  const shopSaidGeneral = rule.data?.level == null ? null : formatQty(rule.data.level);
+  const shopSaidGeneral = rule.data?.level == null ? null : formatQtySpoken(rule.data.level);
 
 
   const removeDialog = useConfirm();
@@ -225,7 +225,7 @@ export default function ProductPage() {
               ? `There ${onHand === 1 ? 'is' : 'are'} still ${
                   sellingUnits.length > 0
                     ? stockInShapes(sellingUnits)
-                    : `${formatQty(product.onHand)} ${pluralUnit(product.baseUnit, onHand)}`
+                    : `${formatQtySpoken(product.onHand)} ${pluralUnit(product.baseUnit, onHand)}`
                 } on the shelf. Removing it now takes that stock out of what your shop is worth — ` +
                 'do this only if the item is finished, written off, or was never really there. '
               : '') +
@@ -274,7 +274,7 @@ export default function ProductPage() {
               stockInShapes(sellingUnits)
             ) : (
               <>
-                {formatQty(product.onHand)}{' '}
+                {formatQtySpoken(product.onHand)}{' '}
                 <span className={styles.factUnit}>{pluralUnit(product.baseUnit, onHand)}</span>
               </>
             )}
@@ -432,7 +432,7 @@ export default function ProductPage() {
               ×
             </button>
             <span className={styles.lowLineText}>
-              <strong>{l.plural}</strong> at {formatQty(l.level)}
+              <strong>{l.plural}</strong> at {formatQtySpoken(l.level)}
             </span>
           </div>
         ))}
@@ -500,7 +500,7 @@ export default function ProductPage() {
           <ConfirmDialog
             controller={removeLevelDialog}
             title={`Put ${removingLevel.plural.toLowerCase()} back on the shop's level?`}
-            message={`This item warns at ${formatQty(removingLevel.level)} ${removingLevel.plural.toLowerCase()}. Removing that means it follows the shop${
+            message={`This item warns at ${formatQtySpoken(removingLevel.level)} ${removingLevel.plural.toLowerCase()}. Removing that means it follows the shop${
               shopSaidGeneral == null ? '' : `, which warns at ${shopSaidGeneral}`
             }.`}
             confirmText="Remove it"
@@ -546,7 +546,7 @@ export default function ProductPage() {
                         */}
                         <span className={styles.emptiesMeta}>
                           {sh.innerPlural
-                            ? `one is ${formatQty(sh.baseQty)} ${
+                            ? `one is ${formatQtySpoken(sh.baseQty)} ${
                                 sh.baseQty === 1
                                   ? (sh.innerName ?? '').toLowerCase()
                                   : sh.innerPlural.toLowerCase()

@@ -7,7 +7,7 @@ import { Field } from '@/components/ui/Field';
 import { Explain, InfoPanel, WorkedExample } from '@/components/ui/Explain';
 import { ClipboardCheckIcon, WarningIcon } from '@/components/ui/Icon';
 import { useTheme } from '@/context/ThemeContext';
-import { describeVariance, formatMoney, formatQty } from '@/lib/format';
+import { describeVariance, formatMoney, formatQtySpoken } from '@/lib/format';
 
 /**
  * Foundation preview.
@@ -76,28 +76,28 @@ export default function FoundationPreview() {
                 <span className={styles.crodsLetter} aria-hidden="true">O</span>
                 Opening stock
               </span>
-              <span className={styles.crodsValue}>{formatQty(OPENING)}</span>
+              <span className={styles.crodsValue}>{formatQtySpoken(OPENING)}</span>
             </div>
             <div className={styles.crodsRow}>
               <span className={styles.crodsLabel}>
                 <span className={styles.crodsLetter} aria-hidden="true">R</span>
                 Received
               </span>
-              <span className={styles.crodsValue}>{formatQty(RECEIVING)}</span>
+              <span className={styles.crodsValue}>{formatQtySpoken(RECEIVING)}</span>
             </div>
             <div className={styles.crodsRow}>
               <span className={styles.crodsLabel}>
                 <span className={styles.crodsLetter} aria-hidden="true">S</span>
                 Sold
               </span>
-              <span className={styles.crodsValue}>−{formatQty(SALES)}</span>
+              <span className={styles.crodsValue}>−{formatQtySpoken(SALES)}</span>
             </div>
             <div className={styles.crodsRow}>
               <span className={styles.crodsLabel}>
                 <span className={styles.crodsLetter} aria-hidden="true">D</span>
                 Damaged
               </span>
-              <span className={styles.crodsValue}>−{formatQty(DAMAGED)}</span>
+              <span className={styles.crodsValue}>−{formatQtySpoken(DAMAGED)}</span>
             </div>
 
             <div className={`${styles.crodsRow} ${styles.crodsExpected}`}>
@@ -105,7 +105,7 @@ export default function FoundationPreview() {
                 <strong>Should be on the shelf</strong>
               </span>
               <span className={styles.crodsValue}>
-                <strong>{formatQty(EXPECTED)}</strong>
+                <strong>{formatQtySpoken(EXPECTED)}</strong>
               </span>
             </div>
 

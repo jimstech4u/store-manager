@@ -12,7 +12,7 @@ import { useOverlayRoute } from '@academix-admin/navigation-stack';
 import { useTheme } from '@/context/ThemeContext';
 import { useProductSearch, type Product } from '@/lib/stacks/catalog-stack';
 import { stockInShapes, useSellingUnits } from '@/lib/stacks/selling-units';
-import { formatMoney, formatQty, pluralUnit } from '@/lib/format';
+import { formatMoney, formatQtySpoken, pluralUnit } from '@/lib/format';
 import { usePermission } from '@/hooks/usePermission';
 import styles from './ProductPicker.module.css';
 
@@ -231,7 +231,7 @@ export function ProductPicker({
                     const shapes = byProduct.get(p.id);
                     return shapes && shapes.length > 0
                       ? stockInShapes(shapes)
-                      : `${formatQty(p.onHand)} ${pluralUnit(p.baseUnit, Number(p.onHand))}`;
+                      : `${formatQtySpoken(p.onHand)} ${pluralUnit(p.baseUnit, Number(p.onHand))}`;
                   })()}{' '}
                   left
                   {p.categoryName ? ` · ${p.categoryName}` : ''}

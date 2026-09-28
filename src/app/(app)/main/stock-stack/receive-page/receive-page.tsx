@@ -17,7 +17,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { fetchProduct, stockMoved, useProductList, type Product } from '@/lib/stacks/catalog-stack';
 import { useListNotifier } from '@/hooks/useListChannel';
 import { getSupabase } from '@/lib/supabase/client';
-import { formatMoney, formatQty, pluralUnit, messageOf } from '@/lib/format';
+import { formatMoney, formatQtySpoken, pluralUnit, messageOf } from '@/lib/format';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 
 interface ReceiveLine {
@@ -523,9 +523,9 @@ export default function ReceivePage() {
               >
                 <span className={styles.loadName}>{l.productName}</span>
                 <span className={styles.loadFacts}>
-                  {formatQty(Number(l.qty) || 0)}{' '}
+                  {formatQtySpoken(Number(l.qty) || 0)}{' '}
                   {(l.buyUnitName ?? l.packName ?? l.baseUnit).toLowerCase()}
-                  {Number(l.freeQty) > 0 ? ` + ${formatQty(Number(l.freeQty))} free` : ''}
+                  {Number(l.freeQty) > 0 ? ` + ${formatQtySpoken(Number(l.freeQty))} free` : ''}
                   {Number(l.unitCost) > 0 ? ` at ${formatMoney(Number(l.unitCost))}` : ''}
                   {l.expiresOn ? ` · goes off ${new Date(l.expiresOn).toLocaleDateString()}` : ''}
                 </span>
@@ -538,8 +538,6 @@ export default function ReceivePage() {
       <div className={styles.lines}>
         {draft && (() => {
           const landed = landedFor(draft);
-          const raw = Number(draft.qty) > 0 ? (Number(draft.unitCost) || 0) : 0;
-          const perBaseRaw = draft.packId && draft.packQty ? raw / Number(draft.packQty) : raw;
 
           return (
             <div className={styles.line}>
@@ -632,19 +630,28 @@ export default function ReceivePage() {
                 </label>
               )}
 
-              {Number(draft.qty) > 0 && (
+              {/*
+                WHAT THE LOAD'S OWN COSTS DO TO THE PRICE — and nothing else.
+
+                This said "2,400 pieces in total, N125.00 each" for two hundred crates. Both
+                figures were in BASE UNITS, which is not how the delivery arrived, not how the
+                invoice reads, and not how anybody checks a lorry. The count was a restatement of
+                what the seller had just typed, in the wrong word, so it is gone.
+
+                The landed cost stays only when there IS one — when charges on the load have moved
+                it away from the invoice price — and it is said per the shape it arrived in, which
+                is the figure a shop compares against what it paid last time.
+              */}
+              {Number(draft.qty) > 0 && landed !== null && fees !== 0 && (
                 <div className={styles.lineFoot}>
-                  <span>
-                    {formatQty(baseQtyOf(draft))} {pluralUnit(draft.baseUnit, baseQtyOf(draft))} in total
-                  </span>
-                  {landed !== null && (
-                    <span className={styles.landed}>
-                      {fees !== 0 && (
-                        <span className={styles.rawCost}>{formatMoney(perBaseRaw, 2)}</span>
-                      )}
-                      {formatMoney(landed, 2)} each
+                  <span>Once this load&rsquo;s costs are shared in</span>
+                  <span className={styles.landed}>
+                    <span className={styles.rawCost}>
+                      {formatMoney(Number(draft.unitCost) || 0, 2)}
                     </span>
-                  )}
+                    {formatMoney(landed * (draft.buyUnitFactor ?? 1), 2)} a{' '}
+                    {(draft.buyUnitName ?? draft.packName ?? draft.baseUnit).toLowerCase()}
+                  </span>
                 </div>
               )}
 
@@ -868,7 +875,7 @@ export default function ReceivePage() {
             <>
               {shapes && shapes.length > 0
                 ? stockInShapes(shapes)
-                : `${formatQty(p.onHand)} ${pluralUnit(p.baseUnit, Number(p.onHand))}`}{' '}
+                : `${formatQtySpoken(p.onHand)} ${pluralUnit(p.baseUnit, Number(p.onHand))}`}{' '}
               in stock
               {p.categoryName ? ` · ${p.categoryName}` : ''}
             </>

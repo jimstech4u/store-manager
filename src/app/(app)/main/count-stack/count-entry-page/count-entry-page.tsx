@@ -13,7 +13,7 @@ import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
 import { useProduct } from '@/lib/stacks/catalog-stack';
-import { describeVariance, formatMoney, formatQty, pluralUnit, messageOf } from '@/lib/format';
+import { describeVariance, formatMoney, formatQtySpoken, pluralUnit, messageOf } from '@/lib/format';
 import { leadUnit, stockInShapes, useSellingUnits, type SellingUnit } from '@/lib/stacks/selling-units';
 import { countYard, useYard } from '@/lib/stacks/yard';
 import styles from '../count-page/count-page.module.css';
@@ -434,7 +434,7 @@ export default function CountEntryPage() {
         said:
           shapes.length > 0
             ? stockInShapes(shapes.map((u) => ({ ...u, onHandBase: partBase })))
-            : `${formatQty(partBase)}`,
+            : `${formatQtySpoken(partBase)}`,
         note: partNote.trim(),
       },
     ]);
@@ -719,7 +719,7 @@ export default function CountEntryPage() {
                 </span>
                 <span className={styles.crodsValue}>
                   {sign}
-                  {formatQty(inUnits(value as number))}
+                  {formatQtySpoken(inUnits(value as number))}
                 </span>
               </div>
             ))}
@@ -730,7 +730,7 @@ export default function CountEntryPage() {
               </span>
               <span className={styles.crodsValue}>
                 <strong>
-                  {formatQty(inUnits(state.expected))} {unitName(inUnits(state.expected))}
+                  {formatQtySpoken(inUnits(state.expected))} {unitName(inUnits(state.expected))}
                 </strong>
               </span>
             </div>
@@ -741,7 +741,7 @@ export default function CountEntryPage() {
               </span>
               <span className={styles.crodsValue}>
                 <strong>
-                  {formatQty(inUnits(state.actual ?? 0))} {unitName(inUnits(state.actual ?? 0))}
+                  {formatQtySpoken(inUnits(state.actual ?? 0))} {unitName(inUnits(state.actual ?? 0))}
                 </strong>
               </span>
             </div>
@@ -765,7 +765,7 @@ export default function CountEntryPage() {
                 <p className={styles.gapMeaning}>
                   You counted{' '}
                   <strong>
-                    {formatQty(Math.abs(inUnits(variance)))}{' '}
+                    {formatQtySpoken(Math.abs(inUnits(variance)))}{' '}
                     {unitName(Math.abs(inUnits(variance)))}
                   </strong>{' '}
                   {variance < 0 ? 'fewer than' : 'more than'} your records expected.
@@ -798,12 +798,12 @@ export default function CountEntryPage() {
                 {leftToAccount > 0.0001 ? (
                   <>
                     <strong>
-                      {formatQty(inUnits(leftToAccount))} {unitName(inUnits(leftToAccount))}
+                      {formatQtySpoken(inUnits(leftToAccount))} {unitName(inUnits(leftToAccount))}
                     </strong>{' '}
                     still to account for
                   </>
                 ) : (
-                  <>All {formatQty(Math.abs(inUnits(variance)))}{' '}
+                  <>All {formatQtySpoken(Math.abs(inUnits(variance)))}{' '}
                   {unitName(Math.abs(inUnits(variance)))} accounted for</>
                 )}
               </p>
@@ -854,7 +854,7 @@ export default function CountEntryPage() {
                           value={partQty}
                           onChange={(e) => setPartQty(e.target.value)}
                           placeholder="0"
-                          hint={`Up to ${formatQty(inUnits(leftToAccount))} ${unitName(
+                          hint={`Up to ${formatQtySpoken(inUnits(leftToAccount))} ${unitName(
                             inUnits(leftToAccount),
                           )}`}
                         />
@@ -915,15 +915,15 @@ export default function CountEntryPage() {
                 rows={[
                   {
                     label: 'Records expected',
-                    value: `${formatQty(inUnits(state.expected))} ${unitName(inUnits(state.expected))}`,
+                    value: `${formatQtySpoken(inUnits(state.expected))} ${unitName(inUnits(state.expected))}`,
                   },
                   {
                     label: 'You counted',
-                    value: `${formatQty(inUnits(state.actual ?? 0))} ${unitName(inUnits(state.actual ?? 0))}`,
+                    value: `${formatQtySpoken(inUnits(state.actual ?? 0))} ${unitName(inUnits(state.actual ?? 0))}`,
                   },
                   {
                     label: 'Not accounted for',
-                    value: `${formatQty(Math.abs(inUnits(variance)))} ${unitName(
+                    value: `${formatQtySpoken(Math.abs(inUnits(variance)))} ${unitName(
                       Math.abs(inUnits(variance)),
                     )} · ${formatMoney(lossValue)}`,
                     emphasis: true,

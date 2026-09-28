@@ -28,7 +28,7 @@ import {
   fetchPublicProductPage,
   type MediaItem,
 } from '@/lib/stacks/storefront';
-import { formatMoney, formatQty } from '@/lib/format';
+import { formatMoney, formatQtySpoken } from '@/lib/format';
 
 /**
  * One shop's public page, reached by its code.
@@ -355,8 +355,8 @@ export default function StorefrontPage({ code }: { code: string }) {
                 <InfoPanel tone="info" title="Cheaper when you buy more">
                   {tiers.map((t, i) => (
                     <p key={i}>
-                      {formatQty(t.min_qty)}
-                      {t.max_qty ? ` – ${formatQty(t.max_qty)}` : ' or more'}:{' '}
+                      {formatQtySpoken(t.min_qty)}
+                      {t.max_qty ? ` – ${formatQtySpoken(t.max_qty)}` : ' or more'}:{' '}
                       <strong>{formatMoney(t.price)}</strong> each
                     </p>
                   ))}

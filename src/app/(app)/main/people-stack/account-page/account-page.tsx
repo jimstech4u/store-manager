@@ -18,7 +18,7 @@ import {
   ledgerPageFor,
   useCustomerAccount,
 } from '@/lib/stacks/customer-account';
-import { formatMoney, formatQty, messageOf } from '@/lib/format';
+import { formatMoney, formatQtySpoken, messageOf } from '@/lib/format';
 import { rollUpOwed, type OwedRow } from '@/lib/empties-rollup';
 import { LoadArea, useLoadArea } from '@/components/ui/LoadArea';
 import { emptiesOwed, LEDGERS_SCOPE } from '@/lib/stacks/customer-ledgers';
@@ -392,6 +392,26 @@ export default function AccountPage() {
         )}
 
         {/*
+          AND CLEARING IT.
+
+          "we need a way to reconcile money i owe them as well after i have given back." Recording
+          that the shop owes somebody has always been possible; paying it never was, so a credit
+          could only ever accumulate. Offered when there IS one, because a button to hand back
+          nothing is a button that invents a refund.
+        */}
+        {can('payments.record') && Number(account.balance) < 0 && (
+          <Button
+            variant="secondary"
+            fullWidth
+            onClick={() =>
+              void nav.push('account_action_page', { id: customerId, kind: 'refund' })
+            }
+          >
+            <CashIcon /> Give back {formatMoney(Math.abs(Number(account.balance)))}
+          </Button>
+        )}
+
+        {/*
           Both of these PUSH ONTO A LEDGER SCREEN rather than opening a one-shot form. A deposit and
           a pile of crates are running accounts: what matters first is what is there and how it got
           that way, and only then what to do about it.
@@ -452,7 +472,7 @@ export default function AccountPage() {
                   {h.amount !== null && Number(h.amount) !== 0
                     ? formatMoney(Math.abs(Number(h.amount)))
                     : h.qty_units !== null
-                      ? `${formatQty(Math.abs(Number(h.qty_units)))}`
+                      ? `${formatQtySpoken(Math.abs(Number(h.qty_units)))}`
                       : ''}
                 </span>
               </div>
@@ -460,7 +480,7 @@ export default function AccountPage() {
                 {new Date(h.occurred_at).toLocaleString()}
                 {h.detail ? ` · ${h.detail}` : ''}
                 {h.qty_units !== null && h.amount !== null && Number(h.amount) !== 0
-                  ? ` · ${formatQty(Math.abs(Number(h.qty_units)))} containers`
+                  ? ` · ${formatQtySpoken(Math.abs(Number(h.qty_units)))} containers`
                   : ''}
                 {` · ${h.actor}`}
               </p>

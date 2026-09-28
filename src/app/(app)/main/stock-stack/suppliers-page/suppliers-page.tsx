@@ -14,7 +14,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
 import { useResource } from '@/lib/stacks/resource';
 import { SUPPLIERS_SCOPE } from '@/lib/stacks/suppliers';
-import { formatMoney, formatQty } from '@/lib/format';
+import { formatMoney, formatQtySpoken } from '@/lib/format';
 import styles from './suppliers-page.module.css';
 
 interface SupplierAccount {
@@ -113,7 +113,7 @@ export default function SuppliersPage() {
           {s.deliveries === 0
             ? 'no deliveries yet'
             : `${s.deliveries} ${s.deliveries === 1 ? 'delivery' : 'deliveries'}`}
-          {s.emptiesOut > 0 && ` · ${formatQty(s.emptiesOut)} containers back`}
+          {s.emptiesOut > 0 && ` · ${formatQtySpoken(s.emptiesOut)} containers back`}
         </span>
       </span>
 
