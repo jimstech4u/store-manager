@@ -111,10 +111,19 @@ export const scenarios = [
       const periodId = (await shop.rpc('ensure_open_period', { p_product_id: product })).data;
       const shelf = await onHand(product);
 
-      const { data: entered } = await shop.rpc('enter_stock_count', {
+      /*
+       * WITH A REASON, because this item has been counted earlier in the run.
+       *
+       * Without one the call is refused, `entered` comes back undefined, and every assertion
+       * below it reports a figure that was never computed — which is how this scenario came to
+       * claim "the count is off by 180" when nothing had gone wrong at all.
+       */
+      const { data: entered, error: enterErr } = await shop.rpc('enter_stock_count', {
         p_period_id: periodId,
         p_counted: shelf - 15,
+        p_reason: 'recount for the shortfall scenario',
       });
+      check('the shelf can be counted again, with a reason', !enterErr, enterErr?.message ?? '');
       expectQty('the count is fifteen short', entered?.variance, -15);
 
       /*
@@ -161,7 +170,11 @@ export const scenarios = [
       );
 
       const partial = await shop.rpc('ensure_open_period', { p_product_id: product });
-      await shop.rpc('enter_stock_count', { p_period_id: partial.data, p_counted: shelf - 20 });
+      await shop.rpc('enter_stock_count', {
+        p_period_id: partial.data,
+        p_counted: shelf - 20,
+        p_reason: 'recount for the partial-explanation scenario',
+      });
       const { error: half } = await shop.rpc('resolve_variance', {
         p_period_id: partial.data,
         p_parts: [{ qty: 2, reason: 'miscount' }],

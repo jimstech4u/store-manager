@@ -310,7 +310,18 @@ export const scenarios = [
       check('a counting period opens', !openErr, openErr?.message ?? '');
       if (openErr) return;
 
+      /*
+       * A RECOUNT CARRIES A REASON.
+       *
+       * The benchmark runs a whole week through one shop in ninety seconds, so by here this item
+       * has already been counted "today" — and counting it again replaces a figure somebody else
+       * recorded. `enter_stock_count` asks why, and refuses without it.
+       *
+       * The scenario was written before that gate and passed no reason, so it failed on a rule
+       * working exactly as intended. Saying why is what a shop would do.
+       */
       const { error: countErr } = await shop.rpc('enter_stock_count', {
+        p_reason: 'counted again for the benchmark',
         p_period_id: periodId,
         p_counted: counted,
       });

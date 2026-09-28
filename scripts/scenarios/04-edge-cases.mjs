@@ -180,10 +180,20 @@ export const scenarios = [
         },
       ];
 
+      /*
+       * WITH THE CUSTOMER THE TITLE ALREADY PROMISED.
+       *
+       * This sold a CRATE — a returnable shape — to nobody, and the database refuses that: the
+       * crates come back empty, so somebody has to owe them. The rule predates this scenario and
+       * the scenario simply never caught up; its own name says "one customer".
+       *
+       * Keeping the walk-in would be asserting that a shop may lend containers to nobody, which
+       * is the opposite of what this system is for.
+       */
       const { data: draftId } = await shop.rpc('save_draft_order', {
         p_store_id: storeId,
         p_client_uuid: clientUuid,
-        p_customer_id: null,
+        p_customer_id: ctx.customer,
         p_label: 'double settle',
         p_lines: lines,
         p_charges: null,
