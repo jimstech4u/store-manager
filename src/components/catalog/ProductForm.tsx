@@ -362,6 +362,22 @@ export function ProductForm({
   const anyShelfSaid = countedShapes.some((u) => (shelfByShape[u.storeUnitId] ?? '').trim() !== '');
 
   /*
+   * "WHEN DOES IT GO OFF?" AND "EXPIRY DATES ALREADY RECORDED" WERE THE SAME SECTION TWICE.
+   *
+   * The shop spotted it: "they are same dry duplicate that we did not see". One composed new
+   * dated lots and listed them; the other listed the lots already on the shelf so their dates
+   * could be corrected. Two headings, two layouts, two places to look - for one question, which
+   * is "what is on this shelf, and when does each part of it go off".
+   *
+   * So there is one section now. THE LINES COME FIRST, which is also what was asked for, and the
+   * form to add another sits under them: a shop reads what it has already said before saying
+   * anything else, and a composer above its own output reads as though the list belonged to the
+   * next thing rather than the last.
+   */
+  const canAddBatches =
+    (!editing || hadStock === false) && shelfBase > 0 && countedShapes.length > 0;
+
+  /*
    * The groups this product is already in.
    *
    * Only when editing: a new product has none, and asking the server about an id that does not
@@ -377,8 +393,20 @@ export function ProductForm({
     scope: SHAPES_SCOPE,
     whenNot: !editingId,
   });
+
+  /** The lots already on this shelf. Empty on a new item, which has none by definition. */
+  const recordedLots = editing ? (expirySeed.data ?? []) : [];
   const [expiryDates, setExpiryDates] = useState<Record<string, string>>({});
   const [expiryUpdating, setExpiryUpdating] = useState<string | null>(null);
+  /*
+   * WHY THIS DATE IS BEING CORRECTED, asked on the lot being corrected.
+   *
+   * `saveExpiry` demanded `stockReason` — the "why is this count being corrected?" box, which only
+   * appears when the shop is ALSO entering a fresh shelf count. Anyone correcting just a date got
+   * "Say why this expiry date is being corrected" over a screen with nowhere to say it. The Save
+   * button could not succeed at all unless two unrelated corrections happened to be made together.
+   */
+  const [expiryReason, setExpiryReason] = useState<Record<string, string>>({});
   const groupsSeed = useLoadArea(() => groupsFor(editingId as string), [editingId], {
     key: `product-groups-of:${editingId ?? 'none'}`,
     scope: GROUPS_SCOPE,
@@ -878,14 +906,25 @@ export function ProductForm({
   const saveExpiry = async (layerId: string, was: string | null) => {
     const next = (expiryDates[layerId] ?? was ?? '').trim() || null;
     if (next === was) return;
-    if (!stockReason.trim()) {
+    /*
+     * ITS OWN REASON, falling back to the count's only when one is genuinely being made. The
+     * button that calls this is disabled until there is one, so this is the backstop rather than
+     * the message anybody should ever see.
+     */
+    const why = (expiryReason[layerId] ?? '').trim() || stockReason.trim();
+    if (!why) {
       problem.show('Say why this expiry date is being corrected.');
       return;
     }
     setExpiryUpdating(layerId);
     try {
-      await setProductExpiry({ layerId, expiresOn: next, reason: stockReason.trim() });
+      await setProductExpiry({ layerId, expiresOn: next, reason: why });
       setExpiryDates((current) => {
+        const updated = { ...current };
+        delete updated[layerId];
+        return updated;
+      });
+      setExpiryReason((current) => {
         const updated = { ...current };
         delete updated[layerId];
         return updated;
@@ -1298,13 +1337,119 @@ export function ProductForm({
           )}
 
           {/* ── When it goes off ──────────────────────────────────────────────── */}
-          {(!editing || hadStock === false) && shelfBase > 0 && countedShapes.length > 0 && (
+          {(canAddBatches || recordedLots.length > 0 || (editing && expirySeed.error)) && (
             <>
               <h3 className={styles.subsection}>When does it go off?</h3>
               <p className={styles.sectionNote}>
-                Only if it has a date on it. Say the shape, how many and the date, then add the
-                line — a shelf two deliveries deep has two, and they are not always the same shape.
+                {canAddBatches
+                  ? 'Only if it has a date on it. A shelf two deliveries deep has two lines, and they are not always the same shape.'
+                  : 'Correct the date on a lot still on the shelf. It never changes its quantity, cost, or the order stock is sold in.'}
               </p>
+
+              {editing && expirySeed.error && (
+                <p className={styles.batchWarn}>
+                  The dated lots could not be loaded: {expirySeed.error}
+                </p>
+              )}
+              {editing && !expirySeed.error && expirySeed.data === null && (
+                <p className={styles.sectionNote}>Loading the dated lots…</p>
+              )}
+
+              {/*
+                THE LINES, ABOVE THE FORM THAT ADDS ONE.
+
+                Two kinds sit here and they are genuinely different, so they look different: a lot
+                ALREADY ON THE SHELF can have its date corrected but not its quantity — that
+                quantity is stock history — while a line being added now can be taken off again,
+                because nothing has been written yet.
+              */}
+              {recordedLots.map((layer) => {
+                const value = expiryDates[layer.layerId] ?? layer.expiresOn ?? '';
+                const changed = (value || null) !== layer.expiresOn;
+                const why = expiryReason[layer.layerId] ?? '';
+                const ready = changed && (why.trim() !== '' || stockReason.trim() !== '');
+                return (
+                  <div key={layer.layerId} className={styles.expiryLot}>
+                    <p className={styles.expiryLotWhat}>
+                      {formatQty(layer.remaining)} <span>already on the shelf</span>
+                    </p>
+                    <Field
+                      label="Goes off"
+                      type="date"
+                      value={value}
+                      onChange={(e) =>
+                        setExpiryDates((current) => ({
+                          ...current,
+                          [layer.layerId]: e.target.value,
+                        }))
+                      }
+                    />
+                    <Button
+                      variant="secondary"
+                      className={styles.expiryLotSave}
+                      busy={expiryUpdating === layer.layerId}
+                      disabled={!ready || expiryUpdating !== null}
+                      onClick={() => void saveExpiry(layer.layerId, layer.expiresOn)}
+                    >
+                      Save
+                    </Button>
+
+                    {/*
+                      ASKED ONLY ONCE THE DATE HAS MOVED, and asked here rather than anywhere else.
+                      A box demanding a reason for a correction nobody has made yet is a box that
+                      reads as required before there is anything to explain.
+                    */}
+                    {changed && stockReason.trim() === '' && (
+                      <div className={styles.expiryLotWhy}>
+                        <Field
+                          label="Why is this date being corrected?"
+                          required
+                          value={why}
+                          onChange={(e) =>
+                            setExpiryReason((current) => ({
+                              ...current,
+                              [layer.layerId]: e.target.value,
+                            }))
+                          }
+                          placeholder="For example: keyed from the wrong carton"
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {batches.length > 0 && (
+                <ul className={styles.batchList}>
+                  {batches.map((b) => {
+                    const shape = countedShapes.find((u) => u.storeUnitId === b.storeUnitId);
+                    const many = Number(b.qty) || 0;
+                    return (
+                      <li key={b.key} className={styles.batchLine}>
+                        <button
+                          type="button"
+                          className={styles.batchRemove}
+                          onClick={() => setBatches((prev) => prev.filter((x) => x.key !== b.key))}
+                          aria-label="Remove this date"
+                        >
+                          <CloseIcon />
+                        </button>
+                        <span className={styles.batchWhat}>
+                          {formatQty(many)}{' '}
+                          {shape ? (many === 1 ? shape.name : shape.plural).toLowerCase() : ''}
+                        </span>
+                        <span className={styles.batchWhen}>
+                          {b.expiresOn ? new Date(b.expiresOn).toLocaleDateString() : ''}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+
+              {editing && !expirySeed.error && recordedLots.length === 0 && !canAddBatches && (
+                <p className={styles.sectionNote}>There are no dated lots on this shelf.</p>
+              )}
 
               {/*
                 ONE FORM, AND A LIST — not a form per line.
@@ -1315,6 +1460,7 @@ export function ProductForm({
                 could not say the third thing at all. Composing above and listing below is also
                 how every other repeated thing in this app works: a charge, a deposit, a payment.
               */}
+              {canAddBatches && (
               <div className={styles.batchCompose}>
                 {countedShapes.length > 1 && (
                   <label className={styles.batchShape}>
@@ -1409,33 +1555,6 @@ export function ProductForm({
                   <PlusIcon /> Add this date
                 </Button>
               </div>
-
-              {batches.length > 0 && (
-                <ul className={styles.batchList}>
-                  {batches.map((b) => {
-                    const shape = countedShapes.find((u) => u.storeUnitId === b.storeUnitId);
-                    const many = Number(b.qty) || 0;
-                    return (
-                      <li key={b.key} className={styles.batchLine}>
-                        <button
-                          type="button"
-                          className={styles.batchRemove}
-                          onClick={() => setBatches((prev) => prev.filter((x) => x.key !== b.key))}
-                          aria-label="Remove this date"
-                        >
-                          <CloseIcon />
-                        </button>
-                        <span className={styles.batchWhat}>
-                          {formatQty(many)}{' '}
-                          {shape ? (many === 1 ? shape.name : shape.plural).toLowerCase() : ''}
-                        </span>
-                        <span className={styles.batchWhen}>
-                          {b.expiresOn ? new Date(b.expiresOn).toLocaleDateString() : ''}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
               )}
 
               {/*
@@ -1519,61 +1638,6 @@ export function ProductForm({
               )}{' '}
               on the shelf.
             </p>
-          )}
-
-          {editing && (
-            <>
-              <h2 className={styles.section}>Expiry dates already recorded</h2>
-              <p className={styles.sectionNote}>
-                Correct the date on the lot that is still on the shelf. This never changes its
-                quantity, cost, or the order stock is sold in.
-              </p>
-              {expirySeed.error && (
-                <p className={styles.batchWarn}>
-                  The expiry lots could not be loaded: {expirySeed.error}
-                </p>
-              )}
-              {!expirySeed.error && expirySeed.data === null && (
-                <p className={styles.sectionNote}>Loading the stock lots…</p>
-              )}
-              {!expirySeed.error && expirySeed.data?.length === 0 && (
-                <p className={styles.sectionNote}>There are no stock lots left to date.</p>
-              )}
-              {expirySeed.data?.map((layer) => {
-                const value = expiryDates[layer.layerId] ?? layer.expiresOn ?? '';
-                const changed = (value || null) !== layer.expiresOn;
-                return (
-                  <div key={layer.layerId} className={styles.expiryLot}>
-                    {/*
-                      WHICH LOT, on its own line. It is the subject of the card — the shop is
-                      picking out one delivery still on the shelf — and it was previously the
-                      label of the date box, where it wrapped over three lines beside a button
-                      stretched to half the row.
-                    */}
-                    <p className={styles.expiryLotWhat}>
-                      {formatQty(layer.remaining)} <span>still on the shelf</span>
-                    </p>
-                    <Field
-                      label="Goes off"
-                      type="date"
-                      value={value}
-                      onChange={(e) =>
-                        setExpiryDates((current) => ({ ...current, [layer.layerId]: e.target.value }))
-                      }
-                    />
-                    <Button
-                      variant="secondary"
-                      className={styles.expiryLotSave}
-                      busy={expiryUpdating === layer.layerId}
-                      disabled={!changed || expiryUpdating !== null}
-                      onClick={() => void saveExpiry(layer.layerId, layer.expiresOn)}
-                    >
-                      Save
-                    </Button>
-                  </div>
-                );
-              })}
-            </>
           )}
 
           {/*

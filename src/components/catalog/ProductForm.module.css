@@ -443,3 +443,10 @@
 .expiryLotSave {
   white-space: nowrap;
 }
+
+/* The reason spans the card, under the date and its button — it explains the change they have
+   just made above it, so it reads after them rather than between them. */
+.expiryLotWhy {
+  grid-column: 1 / -1;
+  margin-top: var(--space-1);
+}
