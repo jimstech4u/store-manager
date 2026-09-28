@@ -68,4 +68,14 @@
 }
 
 /* The action ENDS the page rather than being pinned to its foot — see CLAUDE.md. */
-.actions { margin: var(--space-5) 0 var(--space-4); }
+.actions {
+  margin: var(--space-5) 0 var(--space-4);
+  /*
+    Stacked commits need a gap between them, or two full-width buttons meet at their borders and
+    read as one control with a line through it. Same fix as the receipt page's pair, found by
+    sweeping every `.actions` that had a margin around the block and nothing between its children.
+  */
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}

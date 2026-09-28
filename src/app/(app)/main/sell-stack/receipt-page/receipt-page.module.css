@@ -7,4 +7,14 @@
  */
 .correct {
   margin: var(--space-5) 0 var(--space-4);
+  /*
+   * AND A GAP BETWEEN THEM.
+   *
+   * Two full-width secondary buttons stacked with no gap read as one control with a line through
+   * it — and the line is the two borders touching, so it looks like a rendering fault rather than
+   * a boundary. Reported as "no margin".
+   */
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
 }
