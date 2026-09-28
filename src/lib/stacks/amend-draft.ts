@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect } from 'react';
 import { useDemandState } from '@academix-admin/state-stack';
-import { saleCharges, saleDocument, salePaid, type SaleDocument } from '@/lib/stacks/amend';
+import {
+  saleCharges,
+  saleDeposits,
+  saleDocument,
+  salePaid,
+  type SaleDocument,
+} from '@/lib/stacks/amend';
 import type { DraftLine, DraftOrder } from '@/lib/stacks/draft-orders';
 
 /**
@@ -64,7 +70,11 @@ const empty = (saleId: string): AmendDraft => ({
 });
 
 /** The receipt's lines, in the shape the till's own row component edits. */
-function toOrder(doc: SaleDocument, charges: { label: string; amount: number }[]): DraftOrder {
+function toOrder(
+  doc: SaleDocument,
+  charges: { label: string; amount: number }[],
+  deposits: { productName: string; amount: number }[],
+): DraftOrder {
   return {
     id: doc.saleId,
     clientUuid: doc.saleId,
@@ -111,7 +121,19 @@ function toOrder(doc: SaleDocument, charges: { label: string; amount: number }[]
       amount: String(c.amount),
       note: undefined,
     })),
-    deposits: [],
+    /*
+     * WHAT IT IS HOLDING ON DEPOSIT, so the corrected total matches the receipt.
+     *
+     * Seeded empty before, which made the correction compute a total lower than the paper it was
+     * correcting by exactly the deposit, and show a breakdown missing a line the customer can see
+     * on their copy. `amend_sale` now preserves the figure through the rewrite (0190); this is so
+     * the screen agrees with what will be preserved.
+     */
+    deposits: deposits.map((d, i) => ({
+      key: `deposit-${i}`,
+      amount: String(d.amount),
+      note: d.productName || undefined,
+    })),
     note: doc.note ?? '',
     synced: true,
   };
@@ -136,13 +158,14 @@ export function useAmendDraft(saleId: string | null) {
   useEffect(() => {
     if (!saleId || state.order) return;
     void demand(async ({ set }) => {
-      const [doc, paid, charges] = await Promise.all([
+      const [doc, paid, charges, deposits] = await Promise.all([
         saleDocument(saleId),
         salePaid(saleId),
         saleCharges(saleId),
+        saleDeposits(saleId),
       ]);
       if (!doc) return;
-      set({ ...empty(saleId), was: doc, order: toOrder(doc, charges), alreadyPaid: paid }, {
+      set({ ...empty(saleId), was: doc, order: toOrder(doc, charges, deposits), alreadyPaid: paid }, {
         override: true,
       });
     });
@@ -220,14 +243,15 @@ export function useAmendDraft(saleId: string | null) {
   const reset = useCallback(() => {
     if (!saleId) return;
     void demand(async ({ set }) => {
-      const [doc, paid, charges] = await Promise.all([
+      const [doc, paid, charges, deposits] = await Promise.all([
         saleDocument(saleId),
         salePaid(saleId),
         saleCharges(saleId),
+        saleDeposits(saleId),
       ]);
       set(
         doc
-          ? { ...empty(saleId), was: doc, order: toOrder(doc, charges), alreadyPaid: paid }
+          ? { ...empty(saleId), was: doc, order: toOrder(doc, charges, deposits), alreadyPaid: paid }
           : empty(saleId),
         { override: true },
       );

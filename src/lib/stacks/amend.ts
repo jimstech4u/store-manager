@@ -112,6 +112,35 @@ export async function saleCharges(saleId: string): Promise<{ label: string; amou
   }));
 }
 
+/**
+ * WHAT THE RECEIPT IS HOLDING ON DEPOSIT, summed off its lines.
+ *
+ * `sale_document` does not carry it, the same way it does not carry the itemised charges — so a
+ * correction seeded from that alone believed the sale had no deposit, computed a total lower than
+ * the receipt it was correcting, and showed a breakdown missing a line the paper has.
+ *
+ * Per product, because that is how `sale_lines` keeps it and how `amend_sale` puts it back (0190).
+ */
+export async function saleDeposits(
+  saleId: string,
+): Promise<{ productId: string; productName: string; amount: number }[]> {
+  const { data, error } = await getSupabase()
+    .from('sale_lines')
+    .select('product_id, deposit_charged, products(name)')
+    .eq('sale_id', saleId)
+    .gt('deposit_charged', 0);
+  if (error) throw error;
+  return ((data ?? []) as unknown as {
+    product_id: string;
+    deposit_charged: string;
+    products: { name: string } | null;
+  }[]).map((r) => ({
+    productId: r.product_id,
+    productName: r.products?.name ?? '',
+    amount: Number(r.deposit_charged) || 0,
+  }));
+}
+
 export interface Revision {
   revision: number;
   document: SaleDocument;
