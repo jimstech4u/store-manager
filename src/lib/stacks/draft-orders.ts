@@ -489,7 +489,7 @@ export function useDraftOrders(storeId: string | null) {
    * moved and the way back is voiding the sale.
    */
   const closeOrder = useCallback(
-    (clientUuid: string) => {
+    (clientUuid: string, opts?: { settled?: boolean }) => {
       let closed: DraftOrder | null = null;
       let closedAt = -1;
 
@@ -517,7 +517,20 @@ export function useDraftOrders(storeId: string | null) {
       });
 
       const order = closed as DraftOrder | null;
-      if (!order?.id || order.settled) return;
+      /*
+       * `opts.settled` IS THE CALLER SAYING SO, and it is not the same as reading the flag.
+       *
+       * The settle path marks the order settled and closes it on the next line. Reading
+       * `order.settled` out of the state those two share is a bet on how the updates batch — and
+       * the bet lost: `cancel_draft_order` was called on a draft the shop had just settled, the
+       * server quite rightly refused with "that order has already been paid for — void the sale
+       * instead", and the seller came back from a perfectly good receipt to that sentence under a
+       * "Not saved to the shop yet" banner.
+       *
+       * The flag is still checked, for any caller that has it right; the argument is what makes
+       * the settle path certain.
+       */
+      if (!order?.id || order.settled || opts?.settled) return;
 
       /*
        * Told after the tab has gone, not before.
@@ -533,11 +546,30 @@ export function useDraftOrders(storeId: string | null) {
           p_draft_id: order.id,
         });
         if (!err) return;
+
+        /*
+         * A REFUSAL THAT MEANS "IT IS ALREADY CLOSED" IS NOT A FAILURE.
+         *
+         * `cancel_draft_order` refuses a settled order, and a settled order is one the shop has
+         * finished with — which is the state closing wanted. Putting the tab back and shouting
+         * about it turns a completed sale into an error message.
+         */
+        const already = /already been paid|no longer open/i.test(err.message ?? '');
+        if (already) return;
+
+        /*
+         * Put back, AND SELECTED AGAIN if it was the tab being served.
+         *
+         * Restoring the row without restoring `activeId` left the till showing a customer tab
+         * with "No customer being served" underneath it — every tab present, none of them
+         * chosen. Reported exactly that way.
+         */
         setOrders((prev) =>
           prev.some((o) => o.clientUuid === order.clientUuid)
             ? prev
             : [...prev.slice(0, closedAt), order, ...prev.slice(closedAt)],
         );
+        setActiveId((current) => current ?? order.clientUuid);
         setError(messageOf(err, 'Could not close that order'));
       })();
     },

@@ -604,9 +604,15 @@ export default function SellPage() {
      */
     updateOrder(activeOrder.clientUuid, { settled: true });
 
-    // Only once the sale is recorded. Closing optimistically would lose the order if the write
-    // failed.
-    closeOrder(activeOrder.clientUuid);
+    /*
+     * Only once the sale is recorded. Closing optimistically would lose the order if the write
+     * failed.
+     *
+     * `{ settled: true }` is told rather than inferred. `updateOrder` above sets the same flag,
+     * but whether `closeOrder` SEES it depends on how those two state updates batch — and when it
+     * did not, the shop was asked to cancel a draft it had just been paid for.
+     */
+    closeOrder(activeOrder.clientUuid, { settled: true });
   };
 
   // Point the published callback at THIS render's `addProduct`, every render. Without this the
