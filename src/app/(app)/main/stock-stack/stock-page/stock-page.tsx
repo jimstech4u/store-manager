@@ -37,6 +37,25 @@ import styles from './stock-page.module.css';
  * browses the whole catalogue with a cursor. A 300-line distributor cannot scroll to find
  * anything, and paging through fuzzy matches is not how anyone looks for a product.
  */
+
+/**
+ * WHAT ONE COSTS, OR THE FACT THAT NOBODY HAS SAID.
+ *
+ * Reported as "product search where cost is just 0". The figure was right — 103 of this shop's 104
+ * items genuinely have no recorded cost, because the opening stock was entered as a COUNT and a
+ * count carries no price. The reading was the problem: "cost ₦0.00 a crate" states that a crate of
+ * beer cost nothing, on every line of the list, and a shop that reads that on its own catalogue
+ * stops trusting the column — including on the one item where the figure is real.
+ *
+ * Zero is not a cost anybody paid. It is the absence of one, and it is said as that until a
+ * delivery puts a real figure there.
+ */
+function costLine(amount: number, unit: string): string {
+  return amount > 0
+    ? `cost ${formatMoney(amount, 2)} a ${unit}`
+    : `cost not recorded yet`;
+}
+
 export default function StockPage() {
   const nav = useNav();
   const goBack = useStackBack();
@@ -279,8 +298,8 @@ export default function StockPage() {
                 {(() => {
                   const lead = leadUnit(byProduct.get(p.id));
                   return lead
-                    ? `cost ${formatMoney(lead.cost, 2)} a ${lead.name.toLowerCase()}`
-                    : `cost ${formatMoney(p.avgUnitCost, 2)} a ${p.baseUnit}`;
+                    ? costLine(lead.cost, lead.name.toLowerCase())
+                    : costLine(Number(p.avgUnitCost), p.baseUnit);
                 })()}
                 {p.categoryName && <span>· {p.categoryName}</span>}
               </p>
@@ -407,8 +426,8 @@ export default function StockPage() {
                     <p className={styles.itemName}>{p.name}</p>
                     <p className={styles.itemMeta}>
                       {lead
-                        ? `cost ${formatMoney(lead.cost, 2)} a ${lead.name.toLowerCase()}`
-                        : `cost ${formatMoney(p.avgUnitCost, 2)} a ${p.baseUnit}`}
+                        ? costLine(lead.cost, lead.name.toLowerCase())
+                        : costLine(Number(p.avgUnitCost), p.baseUnit)}
                       {pricedUnit(sellingUnits)?.price != null && (
                         <span>· sells for {formatMoney(pricedUnit(sellingUnits)!.price!)}</span>
                       )}

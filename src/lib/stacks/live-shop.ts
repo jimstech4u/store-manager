@@ -43,6 +43,44 @@ const REACHES: Record<string, string[]> = {
   products: ['catalog_flow', 'catalog_derived'],
   store_customers: ['customer_flow', 'money_flow'],
   expenses: ['expenses'],
+
+  /*
+   * ── WHAT A SHOP ACTUALLY EDITS (0208) ─────────────────────────────────────
+   *
+   * "we can edit any data in the app and we want to ensure that site used or using are updating
+   * as well ... shapes and all of that."
+   *
+   * This map had eleven tables and none of them held a shape, a price, a maker or an expiry date
+   * — so a price changed on the back till stayed old on the front one until somebody happened to
+   * leave a screen and come back. On ONE device it was always right, because `catalogChanged`
+   * invalidates the derived scope, which is what makes this the kind of fault that gets reported
+   * as "it sometimes shows the old figure" and never reproduces for the person looking.
+   */
+  // A shape: its price, whether it is sold, whether it comes back, what it holds.
+  product_units: ['catalog_flow', 'catalog_derived'],
+  // The cheaper price for taking more, and the mirror the storefront reads.
+  product_price_tiers: ['catalog_derived'],
+  product_sale_units: ['catalog_derived'],
+  // A lot's expiry date, corrected on the product form.
+  stock_layers: ['catalog_derived'],
+  // The makers, and which product belongs to which — what the empties roll-up reads.
+  product_categories: ['catalog_flow', 'catalog_derived', 'customer_ledgers'],
+  product_category_links: ['catalog_flow', 'catalog_derived', 'customer_ledgers'],
+  /*
+   * Which receipt a payment settles. Taking a payment back removes its allocation and writes no
+   * `payments` row for the receipt at all (0205), so without this the other till goes on showing
+   * a receipt as paid by money that has been reversed.
+   */
+  payment_allocations: ['account_derived', 'money_flow', 'customer_flow'],
+  // A delivery, and who it came from.
+  purchases: ['catalog_derived', 'money_flow'],
+  suppliers: ['money_flow'],
+  /*
+   * A customer's phone number, which lives on the shared identity rather than on the customer.
+   * Realtime applies row security, so this is only ever heard for identities the member can
+   * already read.
+   */
+  identities: ['customer_flow'],
 };
 
 /** Columns that name who wrote a row, where the table has one. */
