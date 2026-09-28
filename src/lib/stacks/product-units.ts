@@ -410,13 +410,36 @@ export async function saveDiscounts(productId: string, discounts: Discount[]) {
     .eq('product_id', productId);
   if (delErr) throw delErr;
 
+  /*
+   * THE SHAPE ITSELF, not only the mirror of it (0207).
+   *
+   * `product_sale_units` is rebuilt every time anything about a product's shapes changes, and it
+   * drops the shapes that are no longer sold. The band used to hang off that alone, under
+   * `on delete cascade` — so taking a shape off sale DESTROYED every quantity price on it, with
+   * no warning and nothing in the audit log. A band belongs to a shape; `product_units` is where
+   * a shape lives, and that is what it names now.
+   *
+   * `product_sale_units.id` IS the shape's own id — the mirror has carried it since 0148 — so the
+   * two columns hold the same value while the shape is on sale, and only the derived one goes
+   * null when it comes off.
+   */
+  const unitIdByStoreUnit = new Map(
+    ((storeUnits ?? []) as { id: string; store_unit_id: string }[]).map((u) => [
+      u.store_unit_id,
+      u.id,
+    ]),
+  );
+
   const rows = discounts
     .map((d) => {
       const saleUnitId = saleUnitByName.get(nameByStoreUnit.get(d.storeUnitId) ?? '');
-      if (!saleUnitId) return null;
+      const productUnitId = unitIdByStoreUnit.get(d.storeUnitId) ?? null;
+      // A band that names no shape at all could never be shown again, let alone fire.
+      if (!saleUnitId && !productUnitId) return null;
       return {
         product_id: productId,
-        sale_unit_id: saleUnitId,
+        product_unit_id: productUnitId,
+        sale_unit_id: saleUnitId ?? null,
         min_qty: Number(d.minQty),
         max_qty: d.maxQty.trim() === '' ? null : Number(d.maxQty),
         price: Number(d.price),

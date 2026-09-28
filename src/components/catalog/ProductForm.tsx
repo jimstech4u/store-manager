@@ -33,6 +33,7 @@ import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 import { useLoadArea } from '@/components/ui/LoadArea';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { formatQty, messageOf, pluralUnit } from '@/lib/format';
+import { isAllowedQty, partsFor, snapQty } from '@/lib/quantity-rules';
 import { baseQtyByShape, stockInShapes } from '@/lib/shape-quantities';
 import { productExpiryLayers, setProductExpiry } from '@/lib/stacks/expiry';
 
@@ -1216,24 +1217,68 @@ export function ProductForm({
             number that never said which it meant.
           */}
           <div className={styles.shapeBoxes}>
-            {countedShapes.map((u) => (
-              <Field
-                key={u.storeUnitId}
-                label={u.plural}
-                numeric
-                required={minimum}
-                value={shelfByShape[u.storeUnitId] ?? ''}
-                onChange={(e) =>
-                  setShelfByShape((prev) => ({ ...prev, [u.storeUnitId]: e.target.value }))
-                }
-                placeholder="0"
-                hint={
-                  (baseOf[u.storeUnitId] ?? 1) > 1
-                    ? `one is ${baseOf[u.storeUnitId]}`
-                    : undefined
-                }
-              />
-            ))}
+            {countedShapes.map((u) => {
+              /*
+               * COUNTED IN THE AMOUNTS THIS SHAPE COMES IN.
+               *
+               * A shelf holding nineteen and a half cans is an ordinary count, and the box has
+               * always taken it. Nineteen and a QUARTER cans is not a count, it is a typing
+               * mistake — unless the shop has said it sells quarters, in which case it is a count
+               * again. The till has known this since `quantity-rules.ts`; the shelf boxes were
+               * plain number fields and knew none of it.
+               *
+               * Snapped when the seller leaves the box, never while they are still typing: "19."
+               * on the way to "19.5" would become "19" under their hands.
+               */
+              const rules = {
+                wholeDigit: u.wholeDigit,
+                allowQuarter: u.allowQuarter,
+                allowHalf: u.allowHalf,
+                allowThreeQuarter: u.allowThreeQuarter,
+              };
+              const said = shelfByShape[u.storeUnitId] ?? '';
+              const asNumber = Number(said);
+              const offGrid =
+                said.trim() !== '' && Number.isFinite(asNumber) && !isAllowedQty(asNumber, rules);
+              const steps = partsFor(rules);
+              const per = baseOf[u.storeUnitId] ?? 1;
+
+              return (
+                <Field
+                  key={u.storeUnitId}
+                  label={u.plural}
+                  numeric
+                  required={minimum}
+                  value={said}
+                  onChange={(e) =>
+                    setShelfByShape((prev) => ({ ...prev, [u.storeUnitId]: e.target.value }))
+                  }
+                  onBlur={() => {
+                    if (said.trim() === '' || !Number.isFinite(asNumber)) return;
+                    const snapped = snapQty(asNumber, rules);
+                    if (snapped !== asNumber) {
+                      setShelfByShape((prev) => ({
+                        ...prev,
+                        [u.storeUnitId]: String(snapped),
+                      }));
+                    }
+                  }}
+                  placeholder="0"
+                  error={
+                    offGrid
+                      ? steps.length > 0
+                        ? `${u.plural} go in whole ones and ${steps
+                            .map((s) => s.label)
+                            .join(', ')} — ${formatQty(snapQty(asNumber, rules))}, not ${said}.`
+                        : `${u.plural} go in whole ones — ${formatQty(
+                            snapQty(asNumber, rules),
+                          )}, not ${said}.`
+                      : null
+                  }
+                  hint={per > 1 ? `one is ${per}` : undefined}
+                />
+              );
+            })}
           </div>
 
           <p className={styles.sectionNote}>
@@ -1288,13 +1333,48 @@ export function ProductForm({
                   </label>
                 )}
 
-                <Field
-                  label="How many"
-                  numeric
-                  value={batchQty}
-                  onChange={(e) => setBatchQty(e.target.value)}
-                  placeholder="0"
-                />
+                {/*
+                  The same amounts the shelf is counted in. A dated lot is part of that same
+                  shelf, so "eight and a quarter crates going off in March" is the same typing
+                  mistake here as it is above, and is caught the same way.
+                */}
+                {(() => {
+                  const chosenShape =
+                    countedShapes.find(
+                      (u) => u.storeUnitId === (batchUnit || countedShapes[0].storeUnitId),
+                    ) ?? countedShapes[0];
+                  const rules = {
+                    wholeDigit: chosenShape.wholeDigit,
+                    allowQuarter: chosenShape.allowQuarter,
+                    allowHalf: chosenShape.allowHalf,
+                    allowThreeQuarter: chosenShape.allowThreeQuarter,
+                  };
+                  const asNumber = Number(batchQty);
+                  const offGrid =
+                    batchQty.trim() !== '' &&
+                    Number.isFinite(asNumber) &&
+                    !isAllowedQty(asNumber, rules);
+                  return (
+                    <Field
+                      label="How many"
+                      numeric
+                      value={batchQty}
+                      onChange={(e) => setBatchQty(e.target.value)}
+                      onBlur={() => {
+                        if (batchQty.trim() === '' || !Number.isFinite(asNumber)) return;
+                        const snapped = snapQty(asNumber, rules);
+                        if (snapped !== asNumber) setBatchQty(String(snapped));
+                      }}
+                      placeholder="0"
+                      error={
+                        offGrid
+                          ? `${chosenShape.plural} do not come in ${batchQty} — ` +
+                            `${formatQty(snapQty(asNumber, rules))}?`
+                          : null
+                      }
+                    />
+                  );
+                })()}
                 <Field
                   label="Goes off"
                   type="date"
