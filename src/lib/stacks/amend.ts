@@ -49,7 +49,21 @@ export interface SaleDocument {
    */
   charges?: { label: string; amount: number }[];
   depositTotal?: number;
-  payments?: { amount: number; method: string; reference: string | null }[];
+  /**
+   * What the receipt has already taken.
+   *
+   * `paymentId` is what lets a correction screen act on one rather than only print it. Without it
+   * "Correct payment" could add money and nothing else, so a receipt paid N1,600 in cash that was
+   * really a transfer became a receipt paid N3,200 (0205, 0206). It is optional for the same
+   * reason the rest of this block is: a document stored before the id was carried does not have
+   * one, and a version that cannot be acted on should say so rather than pretend.
+   */
+  payments?: {
+    paymentId: string | null;
+    amount: number;
+    method: string;
+    reference: string | null;
+  }[];
   transferDetails?: string | null;
 }
 
@@ -74,6 +88,7 @@ function toDocument(d: Record<string, unknown>): SaleDocument {
     depositTotal: d.deposit_total == null ? undefined : Number(d.deposit_total) || 0,
     payments: d.payments
       ? ((d.payments ?? []) as Record<string, unknown>[]).map((p) => ({
+          paymentId: (p.payment_id as string | null) ?? null,
           amount: Number(p.amount) || 0,
           method: String(p.method ?? 'cash'),
           reference: (p.reference as string | null) ?? null,

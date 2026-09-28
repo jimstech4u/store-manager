@@ -258,6 +258,25 @@ export function useAmendDraft(saleId: string | null) {
     });
   }, [saleId, demand]);
 
+  /**
+   * Re-read only WHAT THE RECEIPT HAS ALREADY TAKEN, keeping everything the seller has typed.
+   *
+   * Taking back a payment keyed the wrong way changes `was.payments` and `alreadyPaid`, and
+   * nothing else on this correction. `reset` would be the obvious call and it is the wrong one:
+   * it starts again from `empty(saleId)`, so a seller who had added two lines and a charge before
+   * noticing the wrong payment would lose all of it — silently, which is how this codebase has
+   * lost typed work before.
+   */
+  const refreshTaken = useCallback(async () => {
+    if (!saleId) return;
+    await demand(async ({ set, get }) => {
+      const [doc, paid] = await Promise.all([saleDocument(saleId), salePaid(saleId)]);
+      if (!doc) return;
+      const current = get() ?? empty(saleId);
+      set({ ...current, was: doc, alreadyPaid: paid }, { override: true });
+    });
+  }, [saleId, demand]);
+
   return {
     draft: state,
     loaded: Boolean(state.order),
@@ -267,6 +286,7 @@ export function useAmendDraft(saleId: string | null) {
     removeLine,
     addLine,
     reset,
+    refreshTaken,
   };
 }
 

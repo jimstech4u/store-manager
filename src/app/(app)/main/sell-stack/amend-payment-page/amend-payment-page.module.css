@@ -1,0 +1,102 @@
+/*
+  CORRECT PAYMENT — what the receipt has already taken, above what is being added now.
+
+  The screen used to be one form for adding money, so the only correction it could express was
+  "and another payment". A receipt paid N1,600 in cash that was really a transfer became a receipt
+  paid N3,200. What it already holds has to be on the screen before it can be corrected.
+*/
+
+.section {
+  margin: var(--space-6) 0 var(--space-3);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+  font-size: var(--text-lg, 1.125rem);
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--text);
+}
+
+.paid {
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* A line reads as a sentence — how much, by what means — with the one destructive control on the
+   right, away from the figures. */
+.paidRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.paidWhat {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.paidHow {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  text-transform: capitalize;
+  overflow-wrap: anywhere;
+}
+
+.paidRemove {
+  display: grid;
+  place-items: center;
+  width: var(--touch-min, 44px);
+  height: var(--touch-min, 44px);
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.paidRemove:hover {
+  color: var(--danger, var(--text));
+}
+
+/* A version stored before the payment id was carried cannot be acted on from here. */
+.paidOld {
+  flex: 0 1 auto;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  text-align: right;
+}
+
+/*
+  THE REASON, ASKED FOR BEFORE ANYTHING MOVES.
+
+  Set apart from the list, because it is a question about one of those lines and not another line
+  itself — and tinted, because what follows it changes the books.
+*/
+.voidBox {
+  padding: var(--space-3);
+  margin-bottom: var(--space-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken, var(--surface));
+}
+
+.voidActions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.voidActions > * {
+  flex: 1;
+}
