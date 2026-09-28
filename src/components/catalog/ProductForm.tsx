@@ -162,6 +162,25 @@ export function ProductForm({
    * as 3.208 packs, worked out in somebody's head in front of the shelf.
    */
   const [shelfByShape, setShelfByShape] = useState<Record<string, string>>({});
+
+  /*
+   * THE OPENING FIGURE IS THE ONE IN THE BOXES — while it is still an opening figure.
+   *
+   * "is the input box for crate is 5 and bottle is 6 the intial stock ... and have users edit
+   * that in the input box, but cannot after a stock history exist."
+   *
+   * That is the right distinction, and it is the one I got wrong twice. An item with NO movements
+   * has an opening figure and nothing else: it is a statement somebody typed, and correcting a
+   * typo in it should be typing over it. Once stock has MOVED, the same boxes mean something
+   * different — they are a fresh physical count, measured against what the system expects — and a
+   * box pre-filled with the system's own expectation is answered by pressing Save, which records
+   * "I counted, and it agreed" when nobody counted and buries the difference a count exists to
+   * find. So: filled and editable before there is a history, and not offered at all after.
+   *
+   * Seeded ONCE per item, keyed by id. A flag set for the component's lifetime is how this form
+   * came to open a second item holding the first one's boxes.
+   */
+  const shelfSeeded = useRef<string | null | undefined>(undefined);
   /** A recount changes the current shelf, never the opening movement it corrects. */
   const [stockReason, setStockReason] = useState('');
 
@@ -313,6 +332,7 @@ export function ProductForm({
     ? units.filter((u) => u.name.trim() !== '')
     : units;
 
+
   /** And the shapes that come back empty — a crate and a bottle answer separately. */
   const returnableShapes = units.filter((u) => u.isReturnable);
 
@@ -388,6 +408,32 @@ export function ProductForm({
    * waits for this (see `seedStatus`), so what is saved always started from what was there.
    */
   const editingId = product?.id ?? null;
+
+  useEffect(() => {
+    if (shelfSeeded.current === editingId) return;
+    if (!editing || hadStock !== false || !existingUnitsLoaded) return;
+    if (countedShapes.length === 0) return;
+    shelfSeeded.current = editingId;
+    const onHand = Number(product?.onHand ?? 0);
+    if (!(onHand > 0)) return;
+    /*
+     * Split largest shape first, the way the shelf is read: 66 is 5 crates and 6 bottles, not
+     * 66 bottles and not 5.5 crates. The remainder falls to the next shape down, which is what
+     * `stockInShapes` says in words — this is the same arithmetic, put in the boxes.
+     */
+    const bySize = [...countedShapes].sort(
+      (a, b) => (baseOf[b.storeUnitId] ?? 1) - (baseOf[a.storeUnitId] ?? 1),
+    );
+    let left = onHand;
+    const next: Record<string, string> = {};
+    bySize.forEach((u, i) => {
+      const per = baseOf[u.storeUnitId] ?? 1;
+      const whole = i === bySize.length - 1 ? left / per : Math.floor(left / per);
+      next[u.storeUnitId] = String(Number(whole.toFixed(4)));
+      left -= whole * per;
+    });
+    setShelfByShape(next);
+  }, [editing, editingId, hadStock, existingUnitsLoaded, countedShapes, baseOf, product?.onHand]);
   const expirySeed = useLoadArea(() => productExpiryLayers(editingId as string), [editingId], {
     key: `product-expiry-lots:${editingId ?? 'none'}`,
     scope: SHAPES_SCOPE,
@@ -1283,8 +1329,8 @@ export function ProductForm({
               const per = baseOf[u.storeUnitId] ?? 1;
 
               return (
+                <div key={u.storeUnitId} className={styles.shapeBox}>
                 <Field
-                  key={u.storeUnitId}
                   label={u.plural}
                   numeric
                   required={minimum}
@@ -1316,37 +1362,49 @@ export function ProductForm({
                   }
                   hint={per > 1 ? `one is ${per}` : undefined}
                 />
+
+                {/*
+                  THE PARTS THIS SHAPE SELLS IN, OFFERED.
+
+                  "malta gunisness intial stock is 133.5 which i got error only in whole but that
+                  is wrong because i selected halves too."
+
+                  A box that only REFUSES a half is a box that argues with somebody holding half a
+                  tray. The till has offered these as buttons all along — `partsFor` is the same
+                  call the sell page makes — and the shelf boxes only ever had the refusal half of
+                  the same rule. Tapping one adds the part to whatever whole number is typed, so
+                  "133" then "½" is 133.5.
+                */}
+                {steps.length > 0 && (
+                  <div className={styles.shapeParts}>
+                    {steps.map((p) => {
+                      const whole = Math.floor(Number(said) || 0);
+                      const next = Number((whole + p.value).toFixed(4));
+                      return (
+                        <button
+                          key={p.label}
+                          type="button"
+                          className={`${styles.shapePart} ${
+                            Math.abs((Number(said) || 0) - next) < 1e-9 ? styles.shapePartOn : ''
+                          }`}
+                          aria-label={`${whole} and ${p.label} ${u.plural.toLowerCase()}`}
+                          onClick={() =>
+                            setShelfByShape((prev) => ({
+                              ...prev,
+                              [u.storeUnitId]: String(next),
+                            }))
+                          }
+                        >
+                          {p.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                </div>
               );
             })}
           </div>
-
-          {/*
-            WHAT THE SHELF SAYS RIGHT NOW — shown, never typed into the boxes.
-
-            Reported as "it did not read what was in stock back to packs and pieces": the boxes sat
-            at 0 on an item holding three hundred, so the section looked broken or looked as though
-            the shop had nothing.
-
-            They stay empty on purpose. This is a PHYSICAL COUNT, and a box arriving pre-filled
-            with the system's own figure is answered by pressing Save — which records "I counted,
-            and it agreed" when nobody counted anything, and quietly buries the very difference a
-            count exists to find. So the figure is stated beside the boxes instead: the shop can
-            see what is expected, and still has to say what is actually there.
-          */}
-          {editing && countedShapes.length > 0 && Number(product?.onHand ?? 0) > 0 && (
-            <p className={styles.saidBack}>
-              The shelf currently says{' '}
-              {stockInShapes(
-                countedShapes.map((u) => ({
-                  name: u.name,
-                  plural: u.plural,
-                  baseQty: baseOf[u.storeUnitId] ?? 1,
-                  onHandBase: Number(product?.onHand ?? 0),
-                })),
-              )}
-              .
-            </p>
-          )}
 
           <p className={styles.sectionNote}>
             {minimum
@@ -1398,8 +1456,23 @@ export function ProductForm({
                 const ready = changed && (why.trim() !== '' || stockReason.trim() !== '');
                 return (
                   <div key={layer.layerId} className={styles.expiryLot}>
+                    {/*
+                      SAID IN THE SHAPES THE SHOP COUNTS IN.
+
+                      This printed the raw base figure — "66 already on the shelf" — which is true
+                      and useless: nobody has 66 of anything, they have 5 crates and 6 bottles.
+                      The shop asked for this everywhere the base unit is still leaking through.
+                    */}
                     <p className={styles.expiryLotWhat}>
-                      {formatQty(layer.remaining)} <span>already on the shelf</span>
+                      {stockInShapes(
+                        countedShapes.map((u) => ({
+                          name: u.name,
+                          plural: u.plural,
+                          baseQty: baseOf[u.storeUnitId] ?? 1,
+                          onHandBase: Number(layer.remaining),
+                        })),
+                      )}{' '}
+                      <span>already on the shelf</span>
                     </p>
                     <Field
                       label="Goes off"

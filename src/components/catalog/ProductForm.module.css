@@ -458,3 +458,41 @@
 .expiryLotWhy {
   margin: 0;
 }
+
+/* ── A shelf box and the parts it sells in ─────────────────────────────────────────
+
+  The box only ever had the REFUSAL half of the quantity rule: it would tell somebody holding half
+  a tray that cans go in whole ones. The till has offered the parts as buttons all along.
+*/
+.shapeBox {
+  flex: 1 1 7rem;
+  min-width: 7rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.shapeParts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.shapePart {
+  min-width: 2.75rem;
+  min-height: var(--touch-min, 44px);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.shapePartOn {
+  border-color: var(--primary);
+  background: var(--primary-subtle, var(--surface));
+  color: var(--primary);
+}

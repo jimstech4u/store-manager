@@ -11,6 +11,7 @@ import { useDebounced } from '@/components/ui/SearchField';
 import { useOverlayRoute } from '@academix-admin/navigation-stack';
 import { useTheme } from '@/context/ThemeContext';
 import { useProductSearch, type Product } from '@/lib/stacks/catalog-stack';
+import { stockInShapes, useSellingUnits } from '@/lib/stacks/selling-units';
 import { formatMoney, formatQty, pluralUnit } from '@/lib/format';
 import { usePermission } from '@/hooks/usePermission';
 import styles from './ProductPicker.module.css';
@@ -80,6 +81,14 @@ export function ProductPicker({
   }, [open, isOpen, ops]);
 
   const { products, status } = useProductSearch(storeId, open ? debounced : null);
+
+  /*
+   * The shop's shapes, so a result can say "5 crates 6 bottles" rather than "66 pieces".
+   *
+   * The same cached read every other catalogue screen uses — one key, one shape — so opening the
+   * picker costs nothing a shop has not already paid for.
+   */
+  const { byProduct } = useSellingUnits(storeId);
 
   const close = () => {
     ops.close();
@@ -210,7 +219,21 @@ export function ProductPicker({
                 renderMeta(p)
               ) : (
                 <>
-                  {formatQty(p.onHand)} {pluralUnit(p.baseUnit, Number(p.onHand))} left
+                  {/*
+                    WHAT IS LEFT, IN THE SHAPES THE SHOP COUNTS IN.
+
+                    This said "66 pieces left" for five crates and six bottles. True, and not a
+                    sentence anybody at a counter uses — they are choosing between crates. The
+                    stock list has said it in shapes for a while; the picker, which is where the
+                    figure is actually read during a sale, was still on base units.
+                  */}
+                  {(() => {
+                    const shapes = byProduct.get(p.id);
+                    return shapes && shapes.length > 0
+                      ? stockInShapes(shapes)
+                      : `${formatQty(p.onHand)} ${pluralUnit(p.baseUnit, Number(p.onHand))}`;
+                  })()}{' '}
+                  left
                   {p.categoryName ? ` · ${p.categoryName}` : ''}
                   {p.listPrice ? ` · ${formatMoney(p.listPrice)}` : ''}
                 </>
