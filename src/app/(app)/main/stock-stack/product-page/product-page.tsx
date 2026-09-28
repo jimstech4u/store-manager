@@ -422,8 +422,20 @@ export default function ProductPage() {
           const chosen = lowUnit;
           const per = lowPer;
           const shopLevel = rule.data?.level ?? null;
-          /** The shop's level said in the same shape, so the two figures can be compared. */
-          const shopInShape = shopLevel == null ? null : shopLevel / per;
+          /*
+           * THE SHOP'S LEVEL IS SHOWN AS THE SHOP SET IT, not divided into this product's shape.
+           *
+           * It used to be `shopLevel / per`, so a general level of 10 displayed against a pack of
+           * twelve as "Follows the shop: 0.8333" — a number nobody typed, in a shape the shop was
+           * not thinking in when they set it. Reported exactly that way.
+           *
+           * The conversion was wrong in principle as well as ugly. One general level applies to
+           * everything the shop sells, so it cannot be expressed in any single product's shape;
+           * it is a count of base units and that is the only honest way to say it. The box below
+           * still takes its number in the chosen shape, because that figure IS about this item.
+           */
+          const shopSaid = shopLevel == null ? null : formatQty(shopLevel);
+          const shopWord = pluralUnit(product.baseUnit, Number(shopLevel) || 2);
 
           return (
             <>
@@ -465,16 +477,14 @@ export default function ProductPage() {
                 value={lowLevel}
                 onChange={(e) => setLowLevel(e.target.value)}
                 placeholder={
-                  shopInShape == null
+                  shopSaid == null
                     ? 'No warnings set up yet'
-                    : `Follows the shop: ${formatQty(shopInShape)}`
+                    : `Follows the shop: ${shopSaid} ${shopWord}`
                 }
                 hint={
-                  shopInShape == null
+                  shopSaid == null
                     ? 'Your shop has no general level, so nothing warns unless you set one here.'
-                    : `Leave it blank to follow the shop's level of ${formatQty(shopInShape)} ${
-                        chosen ? chosen.plural.toLowerCase() : ''
-                      }.`
+                    : `Leave it blank to follow the shop's general level of ${shopSaid} ${shopWord}.`
                 }
               />
             </>
