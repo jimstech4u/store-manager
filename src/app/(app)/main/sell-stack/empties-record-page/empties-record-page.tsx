@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { Button } from '@/components/ui/Button';
@@ -20,7 +20,7 @@ import {
 } from '@/lib/stacks/customer-ledgers';
 import { accountsChanged } from '@/lib/stacks/customer-account';
 import { useSellingUnits, type SellingUnit } from '@/lib/stacks/selling-units';
-import { saidAsPart, type OwedRow } from '@/lib/empties-rollup';
+import { rollUpOwed, saidAsPart, type OwedRow } from '@/lib/empties-rollup';
 import { formatMoney, formatQty, messageOf } from '@/lib/format';
 import styles from './empties-record-page.module.css';
 
@@ -98,27 +98,90 @@ export default function EmptiesRecordPage() {
 
   const { byProduct } = useSellingUnits(store?.id ?? null);
 
-  /* What they are holding, by product — the shapes of one beer are one choice, not several. */
+  /*
+   * WHAT THEY ARE HOLDING, SAID THE WAY THE SHOP SAYS IT.
+   *
+   * This listed one PRODUCT at a time — "Amstel Malta Bottle (330mL) — ½ crates owed" — and the
+   * shop's objection was that nobody owes Amstel crates. They owe NBL crates. A Goldberg crate
+   * settles a Gulder crate because both go back to Nigerian Breweries, and a customer bringing
+   * five crates to the counter is bringing five NBL crates, not a list of beers.
+   *
+   * `rollUpOwed` has stated that rule since it was written: whole crates add up across the maker,
+   * fractions stay with their product, because half a crate is a physical part-load of one
+   * particular beer and two halves are not a crate anybody can hand over. It was never wired to
+   * this screen, and until the makers were restored it had nothing to roll up by anyway.
+   *
+   * So a choice is now one ROLLED-UP LINE. A maker line can be settled by any of that maker's
+   * crates; a part line settles the one product it names.
+   */
+  const owedRows = useMemo(
+    () => (area.data ?? []).filter((r) => r.owed > 0 && (r.side ?? 'they_hold') === 'they_hold'),
+    [area.data],
+  );
+
+  const lines = useMemo(() => rollUpOwed(owedRows), [owedRows]);
+
+  /**
+   * The owed rows a line may take from, most owed first.
+   *
+   * A MAKER LINE SPREADS. Three NBL crates against a customer owing two Goldberg and one Gulder
+   * clears both, largest first — which is what interchangeable means, and the only way a line
+   * that says "3 crates Nigerian Breweries" can be settled at all.
+   *
+   * A PART LINE DOES NOT. It names one product because only that product's own bottles fill it.
+   */
+  const rowsFor = useCallback(
+    (line: (typeof lines)[number]) =>
+      owedRows
+      .filter((r) => {
+        // `OwedLine.unit` is singular for one and for a part, plural above that, so both are
+        // compared — matching only the plural silently drops every line that says "1 crate".
+        const sameShape =
+          r.unitName.toLowerCase() === line.unit.toLowerCase() ||
+          r.unitPlural.toLowerCase() === line.unit.toLowerCase();
+        if (!sameShape) return false;
+        return line.isPart
+          ? line.products.includes(r.productName)
+          : (r.groupName ?? r.productName) === line.label;
+      })
+        .sort((a, b) => b.owed - a.owed),
+    [owedRows],
+  );
+
+  /* Kept for the write-off path below, which works product by product. */
   const holding = useMemo<Held[]>(() => {
     const map = new Map<string, Held>();
-    for (const r of area.data ?? []) {
-      if (!(r.owed > 0) || (r.side ?? 'they_hold') !== 'they_hold') continue;
+    for (const r of owedRows) {
       const h = map.get(r.productId) ?? { productId: r.productId, productName: r.productName, rows: [] };
       h.rows.push(r);
       map.set(r.productId, h);
     }
     for (const h of map.values()) h.rows.sort((a, b) => b.baseQty - a.baseQty);
     return [...map.values()].sort((a, b) => a.productName.localeCompare(b.productName));
-  }, [area.data]);
+  }, [owedRows]);
 
-  const [pickedProduct, setPickedProduct] = useState('');
+  /*
+   * The chosen LINE, by its position in the roll-up. Not by product id any more: a maker line is
+   * several products, and "3 crates Nigerian Breweries" has no single product to name it by.
+   */
+  const [pickedLine, setPickedLine] = useState('');
   const [byShape, setByShape] = useState<Record<string, string>>({});
   const [why, setWhy] = useState('');
   const [takeFee, setTakeFee] = useState(false);
   const [fee, setFee] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const picked = holding.find((h) => h.productId === pickedProduct) ?? null;
+  const line = pickedLine === '' ? null : (lines[Number(pickedLine)] ?? null);
+  const lineRows = useMemo(() => (line ? rowsFor(line) : []), [line, rowsFor]);
+
+  /*
+   * A line that resolves to ONE product keeps the old per-shape form, so three loose bottles can
+   * still settle a quarter of a crate. A maker line cannot: "three NBL bottles" is not a thing
+   * anybody hands over, because the bottles of one maker's beers are not interchangeable the way
+   * their crates are.
+   */
+  const singleProduct = lineRows.length > 0 && lineRows.every((r) => r.productId === lineRows[0].productId);
+  const picked = singleProduct ? (holding.find((h) => h.productId === lineRows[0].productId) ?? null) : null;
 
   /*
    * THE BOXES: every shape of this product the shop ticked as coming back, largest first. Until the
@@ -155,6 +218,35 @@ export default function EmptiesRecordPage() {
    */
   const allocation = useMemo(() => {
     const out = new Map<string, { row: OwedRow; qty: number }>();
+
+    /*
+     * A MAKER LINE SPREADS ACROSS THAT MAKER'S PRODUCTS, most owed first.
+     *
+     * Three NBL crates against a customer owing two Goldberg and one Gulder clears both. That is
+     * what interchangeable means, and it is the only way a line reading "3 crates Nigerian
+     * Breweries" can be settled at all — there is no single product to put it against.
+     */
+    if (line && !singleProduct) {
+      let left = Number(byShape.line);
+      if (!Number.isFinite(left) || left <= 0) return out;
+      for (const r of lineRows) {
+        if (left <= 1e-9) break;
+        const take = Math.min(left, r.owed);
+        if (take > 1e-9) out.set(r.productUnitId, { row: r, qty: take });
+        left -= take;
+      }
+      // Anything the maker's rows cannot absorb is put against the first, so the guard below
+      // reports it as more than they owe rather than silently losing it.
+      if (left > 1e-9 && lineRows[0]) {
+        const had = out.get(lineRows[0].productUnitId);
+        out.set(lineRows[0].productUnitId, {
+          row: lineRows[0],
+          qty: (had?.qty ?? 0) + left,
+        });
+      }
+      return out;
+    }
+
     if (!picked || picked.rows.length === 0) return out;
     for (const b of boxes) {
       const n = Number(byShape[b.productUnitId]);
@@ -166,14 +258,17 @@ export default function EmptiesRecordPage() {
       out.set(row.productUnitId, { row, qty: (had?.qty ?? 0) + qty });
     }
     return out;
-  }, [picked, boxes, byShape]);
+  }, [picked, boxes, byShape, line, singleProduct, lineRows]);
 
   const parts = [...allocation.values()];
   const over = parts.find((p) => p.qty > p.row.owed + 1e-9) ?? null;
 
   /* What was written off, in the shapes it was counted in: "Goldberg 60cl: 1 crate 3 bottles". */
-  const said = picked
-    ? `${picked.productName}: ${boxes
+  const said = !picked
+    ? line
+      ? `${line.label}: ${byShape.line ?? ''} ${line.unit.toLowerCase()}`
+      : ''
+    : `${picked.productName}: ${boxes
         .map((b) => {
           const n = Number(byShape[b.productUnitId]);
           return Number.isFinite(n) && n > 0
@@ -181,15 +276,14 @@ export default function EmptiesRecordPage() {
             : null;
         })
         .filter(Boolean)
-        .join(' ')}`
-    : '';
+        .join(' ')}`;
 
   const feeAmount = takeFee ? Number(fee) || 0 : 0;
   const fromDeposit = Math.min(feeAmount, Math.max(held, 0));
   const onAccount = feeAmount - fromDeposit;
 
   const canSave =
-    !!picked &&
+    !!line &&
     parts.length > 0 &&
     !over &&
     (!damaged || why.trim().length > 0) &&
@@ -197,7 +291,7 @@ export default function EmptiesRecordPage() {
     !busy;
 
   const save = async () => {
-    if (!store || !customerId || !picked) return;
+    if (!store || !customerId || !line) return;
     setBusy(true);
     try {
       if (damaged) {
@@ -264,49 +358,87 @@ export default function EmptiesRecordPage() {
               <select
                 id="which-one"
                 className={styles.select}
-                value={pickedProduct}
+                value={pickedLine}
                 onChange={(e) => {
-                  setPickedProduct(e.target.value);
+                  setPickedLine(e.target.value);
                   setByShape({});
                 }}
               >
                 <option value="">Choose one…</option>
-                {holding.map((h) => (
-                  <option key={h.productId} value={h.productId}>
-                    {h.productName} —{' '}
-                    {h.rows
-                      .map((r) => `${saidAsPart(r.owed)} ${(r.owed === 1 ? r.unitName : r.unitPlural).toLowerCase()}`)
-                      .join(', ')}{' '}
-                    owed
+                {lines.map((l, i) => (
+                  <option key={`${l.label}|${l.unit}|${l.said}`} value={String(i)}>
+                    {l.said} {l.unit.toLowerCase()} — {l.label}
                   </option>
                 ))}
               </select>
 
-              {picked && (
+              {line && (
                 <>
                   <p className={styles.label}>How many</p>
-                  <div className={styles.shapeBoxes}>
-                    {boxes.map((b, i) => (
+                  {picked ? (
+                    <div className={styles.shapeBoxes}>
+                      {boxes.map((b, i) => (
+                        <Field
+                          key={b.productUnitId}
+                          label={b.plural}
+                          numeric
+                          value={byShape[b.productUnitId] ?? ''}
+                          onChange={(e) =>
+                            setByShape((prev) => ({ ...prev, [b.productUnitId]: e.target.value }))
+                          }
+                          placeholder="0"
+                          hint={b.baseQty > 1 ? `one is ${b.baseQty}` : undefined}
+                          autoFocus={i === 0}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    /*
+                      ONE BOX for a maker line: the crates of a maker are interchangeable, so the
+                      only question is how many came back. Which of that maker's beers they belong
+                      to is worked out below, most owed first.
+                    */
+                    <div className={styles.shapeBoxes}>
                       <Field
-                        key={b.productUnitId}
-                        label={b.plural}
+                        label={line.unit}
                         numeric
-                        value={byShape[b.productUnitId] ?? ''}
+                        value={byShape.line ?? ''}
                         onChange={(e) =>
-                          setByShape((prev) => ({ ...prev, [b.productUnitId]: e.target.value }))
+                          setByShape((prev) => ({ ...prev, line: e.target.value }))
                         }
                         placeholder="0"
-                        hint={b.baseQty > 1 ? `one is ${b.baseQty}` : undefined}
-                        autoFocus={i === 0}
+                        autoFocus
                       />
-                    ))}
-                  </div>
+                    </div>
+                  )}
+
+                  {/*
+                    ALL OF IT, IN ONE TAP.
+
+                    "sometimes customer always bring all so having to enter one one again would be
+                    a lot." A customer clearing their crates is the ordinary case, not the
+                    exception, and typing each figure back in is work the screen already knows the
+                    answer to.
+                  */}
+                  <Button
+                    variant="secondary"
+                    fullWidth
+                    onClick={() => {
+                      if (picked) {
+                        const next: Record<string, string> = {};
+                        for (const r of picked.rows) next[r.productUnitId] = String(r.owed);
+                        setByShape(next);
+                      } else {
+                        setByShape({ line: String(line.qty) });
+                      }
+                    }}
+                  >
+                    They brought all {line.said} {line.unit.toLowerCase()} back
+                  </Button>
+
                   <p className={styles.hint}>
-                    They owe{' '}
-                    {picked.rows
-                      .map((r) => `${saidAsPart(r.owed)} ${(r.owed === 1 ? r.unitName : r.unitPlural).toLowerCase()}`)
-                      .join(' and ')}
-                    . Part of it is fine — the rest stays out.
+                    They owe {line.said} {line.unit.toLowerCase()} of {line.label}. Part of it is
+                    fine — the rest stays out.
                   </p>
                   {over && (
                     <p className={styles.error} role="alert">
