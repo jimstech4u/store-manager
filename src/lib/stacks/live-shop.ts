@@ -81,7 +81,42 @@ const REACHES: Record<string, string[]> = {
    * already read.
    */
   identities: ['customer_flow'],
+
+  /*
+   * ── THE REST OF WHAT A SHOP WRITES (0226) ───────────────────────────────────
+   *
+   * The audit found nine tables no other till ever heard. Each is a figure some screen shows.
+   */
+  deposit_holdings: ['customer_ledgers', 'account_derived'],
+  variance_resolutions: ['counts-today', 'catalog_derived', 'variance-reasons'],
+  supplier_payments: ['suppliers', 'money_flow'],
+  supplier_empties: ['suppliers', 'yard'],
+  empties_counts: ['yard'],
+  store_units: ['catalog_flow', 'catalog_derived', 'product_shapes'],
+  store_settings: ['store_settings', 'settings_flow', 'low_stock'],
+  product_low_stock_levels: ['catalog_derived', 'low_stock'],
+  sale_charges: ['account_derived', 'money_flow'],
 };
+
+/*
+ * TABLES WITH NO `store_id` — heard WITHOUT the shop filter.
+ *
+ * Every subscription filtered `store_id=eq.<shop>`, and six of these tables have no such column. The
+ * channel still joined (measured: SUBSCRIBED either way), so nothing looked wrong — but a filter on
+ * a column that does not exist matches nothing, and a price, a shape, a maker link or a payment's
+ * allocation changed on one till was never heard on another. Realtime applies row security, so an
+ * unfiltered subscription still only carries rows of shops this member belongs to.
+ */
+const NO_STORE_COLUMN = new Set([
+  'product_units',
+  'product_price_tiers',
+  'product_sale_units',
+  'product_category_links',
+  'payment_allocations',
+  'identities',
+  'product_low_stock_levels',
+  'sale_charges',
+]);
 
 /** Columns that name who wrote a row, where the table has one. */
 const WRITER_COLUMNS = ['created_by', 'counted_by', 'edited_by'] as const;
@@ -113,7 +148,9 @@ export function useLiveShop(storeId: string | null, userId: string | null) {
     for (const table of Object.keys(REACHES)) {
       channel = channel.on(
         'postgres_changes',
-        { event: '*', schema: 'public', table, filter: `store_id=eq.${storeId}` },
+        NO_STORE_COLUMN.has(table)
+          ? { event: '*', schema: 'public', table }
+          : { event: '*', schema: 'public', table, filter: `store_id=eq.${storeId}` },
         (payload) =>
           heard(
             table,
