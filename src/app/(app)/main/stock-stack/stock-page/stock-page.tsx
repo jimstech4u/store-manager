@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { InfoPanel } from '@/components/ui/Explain';
@@ -14,7 +16,16 @@ import { useNav } from '@academix-admin/navigation-stack';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
 import { useStackBack } from '@/hooks/useStackBack';
-import { searchProducts, useProductList, type Product } from '@/lib/stacks/catalog-stack';
+import {
+  productsPager,
+  searchProducts,
+  useProductList,
+  type Product,
+  type StockFilter,
+} from '@/lib/stacks/catalog-stack';
+import { ListFilters } from '@/components/ui/ListFilters';
+import { csvName, fetchAllPages, shareCsv, toCsv } from '@/lib/export-csv';
+import { useSayInShapes } from '@/lib/stacks/selling-units';
 import { useExpirySummary } from '@/lib/stacks/expiry';
 import {
   alsoReadsAs,
@@ -71,7 +82,13 @@ export default function StockPage() {
    */
   const [searchId, searchOps, isSearchOpen] = useSearchController();
 
-  const browse = useProductList(store?.id ?? null);
+  /*
+   * WHAT THE LIST SHOWS — running low, none left, nothing priced — asked of the server, so it holds
+   * across every page scrolled to and the export gets every match.
+   */
+  const [filter, setFilter] = useState<StockFilter>('all');
+  const browse = useProductList(store?.id ?? null, filter);
+  const say = useSayInShapes(store?.id ?? null);
 
   /*
    * What is going off, as a single figure rather than a list.
@@ -324,10 +341,45 @@ export default function StockPage() {
         )}
       />
 
+      <ListFilters<StockFilter>
+        options={[
+          { value: 'all', label: 'Everything' },
+          { value: 'low', label: 'Running low' },
+          { value: 'out', label: 'None left' },
+          { value: 'no_price', label: 'No price' },
+        ]}
+        value={filter}
+        onChange={setFilter}
+        onExport={async () => {
+          const rows = await fetchAllPages(productsPager(store.id, filter));
+          const csv = toCsv(rows, [
+            { head: 'Item', value: (p) => p.name },
+            { head: 'Group', value: (p) => p.categoryName ?? '' },
+            { head: 'On hand', value: (p) => say(p.id, Number(p.onHand), p.baseUnit) },
+            { head: `On hand (${'base units'})`, value: (p) => Number(p.onHand) },
+            { head: 'Cost per base unit', value: (p) => Number(p.avgUnitCost) || 0 },
+            { head: 'Worth', value: (p) => Math.round(Number(p.onHand) * (Number(p.avgUnitCost) || 0) * 100) / 100 },
+            { head: 'Warns at (base units)', value: (p) => p.lowStockLevel ?? '' },
+          ]);
+          const how = await shareCsv(csvName('stock', filter), csv);
+          return how === 'downloaded' ? `${rows.length} items saved to your downloads.` : how === 'shared' ? `${rows.length} items shared.` : null;
+        }}
+      />
+
       {products.length === 0 ? (
+        filter !== 'all' ? (
+          <InfoPanel tone="info" title="Nothing here">
+            {filter === 'low'
+              ? 'Nothing is running low.'
+              : filter === 'out'
+                ? 'Every item has some left.'
+                : 'Every item has a price.'}
+          </InfoPanel>
+        ) : (
         <InfoPanel tone="info" title="Nothing here yet">
           Add what you sell and it will show up here with what it cost and what you have left.
         </InfoPanel>
+        )
       ) : (
         <>
           {(

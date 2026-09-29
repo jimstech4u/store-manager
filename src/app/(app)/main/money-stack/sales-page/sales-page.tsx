@@ -1,5 +1,8 @@
 'use client';
 
+import { useState } from 'react';
+import { ListFilters } from '@/components/ui/ListFilters';
+import { csvName, fetchAllPages, shareCsv, toCsv } from '@/lib/export-csv';
 import { useCallback } from 'react';
 import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
@@ -29,6 +32,8 @@ import styles from './sales-page.module.css';
  * open, and an offset page-2 would silently skip whatever arrived in the meantime.
  */
 
+type SalesFilter = 'all' | 'today' | 'unpaid' | 'paid';
+
 interface SaleRow {
   id: string;
   occurred_at: string;
@@ -49,10 +54,15 @@ export default function SalesPage() {
   // Browsing here; searching happens in the sheet, where the results get the whole screen.
   const [searchId, searchOps, isSearchOpen] = useSearchController();
 
+  /* Unpaid, paid, today — asked of the server (0228), so it holds across pages and into an export. */
+  const [filter, setFilter] = useState<SalesFilter>('all');
+
   const fetchPage = useCallback(
     async (cursor: unknown | null, limit: number) => {
       if (!store) return { rows: [] as SaleRow[], cursor: null };
       const c = cursor as { at: string; id: string } | null;
+      const midnight = new Date();
+      midnight.setHours(0, 0, 0, 0);
 
       const { data, error } = await getSupabase().rpc('list_sales', {
         p_store_id: store.id,
@@ -60,6 +70,9 @@ export default function SalesPage() {
         p_after_at: c?.at ?? null,
         p_after_id: c?.id ?? null,
         p_limit: limit,
+        p_filter: filter === 'unpaid' || filter === 'paid' ? filter : null,
+        p_from: filter === 'today' ? midnight.toISOString() : null,
+        p_to: null,
       });
       if (error) throw error;
 
@@ -67,15 +80,15 @@ export default function SalesPage() {
       const last = rows[rows.length - 1];
       return { rows, cursor: last ? { at: last.occurred_at, id: last.id } : null };
     },
-    [store],
+    [store, filter],
   );
 
   const list = usePaginatedList<SaleRow>({
     fetchPage,
     getId: (s) => s.id,
-    key: 'sales',
+    key: filter === 'all' ? 'sales' : `sales:${filter}`,
     scope: 'money_flow',
-    deps: [store?.id ?? ''],
+    deps: [store?.id ?? '', filter],
     enabled: Boolean(store),
   });
 
@@ -170,10 +183,46 @@ export default function SalesPage() {
         )}
       />
 
+      <ListFilters<SalesFilter>
+        options={[
+          { value: 'all', label: 'All' },
+          { value: 'today', label: 'Today' },
+          { value: 'unpaid', label: 'Unpaid' },
+          { value: 'paid', label: 'Paid' },
+        ]}
+        value={filter}
+        onChange={setFilter}
+        onExport={async () => {
+          const rows = await fetchAllPages(fetchPage);
+          const csv = toCsv(rows, [
+            { head: 'Date', value: (s) => new Date(s.occurred_at).toLocaleString() },
+            { head: 'Receipt', value: (s) => `#${s.id.slice(0, 8).toUpperCase()}` },
+            { head: 'Customer', value: (s) => s.customer_name ?? 'Walk-in' },
+            { head: 'Items', value: (s) => s.line_count },
+            { head: 'Total', value: (s) => Number(s.total) || 0 },
+            { head: 'Paid', value: (s) => Number(s.paid) || 0 },
+            { head: 'Outstanding', value: (s) => Number(s.outstanding) || 0 },
+            { head: 'Note', value: (s) => s.note ?? '' },
+          ]);
+          const how = await shareCsv(csvName('sales', filter), csv);
+          return how === 'downloaded' ? `${rows.length} sales saved to your downloads.` : how === 'shared' ? `${rows.length} sales shared.` : null;
+        }}
+      />
+
       {list.items.length === 0 ? (
+        filter !== 'all' ? (
+          <InfoPanel tone="info" title="None here">
+            {filter === 'unpaid'
+              ? 'Every sale is paid for.'
+              : filter === 'paid'
+                ? 'No sale is fully paid yet.'
+                : 'No sales yet today.'}
+          </InfoPanel>
+        ) : (
         <InfoPanel tone="info" title="No sales yet">
           Sales appear here as soon as you take a payment.
         </InfoPanel>
+        )
       ) : (
         <>
           <ul className={styles.list}>

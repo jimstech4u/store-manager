@@ -15,8 +15,8 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 | --- | --- | --- | --- |
 | Q1 | **Price gate at the till** — an item with no price cannot be settled; a mid-sale "set the price" page is pushed for it, the way the count gate pushes the count. Line chip, note, pay button, Take payment refusal, `price_gate_page`, server refuses N0 (0221). `probe-price-gate-ui.mjs` 9/9 | Sell · Backend | ☑ |
 | Q2 | **Add-customer needs two taps** on Take payment / Correct payment — the correction's `onCustomerForAmend` was never provided by anyone; Take payment now attaches to the order it is paying for (`onCustomerForPayment`). Not clicked through: it would create a real customer | Sell | ◐ |
-| Q3 | **Filters** on Stock, Count, Yard, Sales, Money, People, Suppliers — server-side, so they survive pagination | All lists · Backend | ☐ |
-| Q4 | **Export the filtered list** (CSV) from every list that has filters — all matching rows, not just the loaded page | All lists | ☐ |
+| Q3 | **Filters, on the server** (0228) — Stock: running low / none left / no price; People: owes you / you owe them / has your empties; Sales: today / unpaid / paid (plus a date range the server takes). They hold across every page. Count, Yard and Suppliers are short, whole lists already | All lists · Backend | ☑ |
+| Q4 | **Export the filtered list** — every matching row, walked page by page on the server, as CSV (shared on a phone, downloaded elsewhere). Probe: none left 4, no price 50, owes 5, empties 7, unpaid 7, all sales 41 — each the server's count | All lists | ☑ |
 | Q5 | Change handed back on **Correct payment** is recorded as money out — worked out as Take payment does (paid − still owed − old debt, capped at cash in), kept on the correction, written after it lands | Sell | ◐ |
 | Q6 | Every **edit form tells its lists** — checked: products (list channel), customers (edit page), suppliers (scope), banks (state) already do; groups and units are create-only there. And other tills now hear all of them (0226) | All stacks | ☑ |
 | Q7 | **Search lists stop flashing "nothing found"** — lists answer before they say empty (`usePaginatedList`); search-viewer 0.3.1 reads a stale "no results" as loading while the text differs from the term searched. Frame-by-frame: loading from the instant the box changes, then the match | All searches · Library | ☑ |
@@ -161,6 +161,7 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 | 0225 | the empties one sale still owes | ☑ |
 | 0226 | the tables other tills never heard | ☑ |
 | 0227 | the review queue skips its own reversals | ☑ |
+| 0228 | lists filter on the server | ☑ |
 
 ---
 

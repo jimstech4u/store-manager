@@ -1,5 +1,8 @@
 'use client';
 
+import { useState } from 'react';
+import { ListFilters } from '@/components/ui/ListFilters';
+import { csvName, fetchAllPages, shareCsv, toCsv } from '@/lib/export-csv';
 import { useCallback } from 'react';
 import styles from '../../money-stack/money-page/money-page.module.css';
 import { usePermission } from '@/hooks/usePermission';
@@ -18,6 +21,8 @@ import { usePaginatedList, useInfiniteScroll } from '@/hooks/usePaginatedList';
 import { useProvideCustomers } from '@/lib/stacks/customer-directory';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatMoney } from '@/lib/format';
+
+type PeopleFilter = 'all' | 'owes' | 'credit' | 'empties';
 
 interface CustomerRow {
   id: string;
@@ -47,6 +52,9 @@ export default function PeoplePage() {
    */
   const [searchId, searchOps, isSearchOpen] = useSearchController();
 
+  /* Who owes, who is owed, who holds our containers — asked of the server (0228). */
+  const [filter, setFilter] = useState<PeopleFilter>('all');
+
   const fetchPage = useCallback(
     async (cursor: unknown | null, limit: number) => {
       if (!store) return { rows: [] as CustomerRow[], cursor: null };
@@ -57,21 +65,22 @@ export default function PeoplePage() {
         p_after_name: c?.name ?? null,
         p_after_id: c?.id ?? null,
         p_limit: limit,
+        p_filter: filter === 'all' ? null : filter,
       });
       if (error) throw error;
       const rows = (data ?? []) as CustomerRow[];
       const last = rows[rows.length - 1];
       return { rows, cursor: last ? { name: last.display_name, id: last.id } : null };
     },
-    [store],
+    [store, filter],
   );
 
   const list = usePaginatedList<CustomerRow>({
     fetchPage,
     getId: (r) => r.id,
-    key: 'customers',
+    key: filter === 'all' ? 'customers' : `customers:${filter}`,
     scope: 'customer_flow',
-    deps: [store?.id],
+    deps: [store?.id, filter],
     enabled: Boolean(store),
   });
 
@@ -237,10 +246,42 @@ export default function PeoplePage() {
         )}
       />
 
+      <ListFilters<PeopleFilter>
+        options={[
+          { value: 'all', label: 'Everyone' },
+          { value: 'owes', label: 'Owes you' },
+          { value: 'credit', label: 'You owe them' },
+          { value: 'empties', label: 'Has your empties' },
+        ]}
+        value={filter}
+        onChange={setFilter}
+        onExport={async () => {
+          const rows = await fetchAllPages(fetchPage);
+          const csv = toCsv(rows, [
+            { head: 'Name', value: (c) => c.display_name },
+            { head: 'Business', value: (c) => c.business_name ?? '' },
+            { head: 'Phone', value: (c) => c.phone },
+            { head: 'Balance (owes you is positive)', value: (c) => Number(c.balance) || 0 },
+          ]);
+          const how = await shareCsv(csvName('people', filter), csv);
+          return how === 'downloaded' ? `${rows.length} people saved to your downloads.` : how === 'shared' ? `${rows.length} people shared.` : null;
+        }}
+      />
+
       {list.items.length === 0 ? (
+        filter !== 'all' ? (
+          <InfoPanel tone="info" title="Nobody here">
+            {filter === 'owes'
+              ? 'Nobody owes you anything.'
+              : filter === 'credit'
+                ? 'You owe nobody anything.'
+                : 'Nobody is holding your containers.'}
+          </InfoPanel>
+        ) : (
         <InfoPanel tone="info" title="No customers saved yet">
           You only need to save someone when they are buying on credit. Cash sales need nothing.
         </InfoPanel>
+        )
       ) : (
         <>
           <ul className={styles.list}>

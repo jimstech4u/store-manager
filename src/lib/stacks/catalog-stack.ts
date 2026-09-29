@@ -182,34 +182,44 @@ export function useProductSearch(storeId: string | null, query: string | null) {
   };
 }
 
+/** What the Stock list can be narrowed to — applied by the server (0228), so it survives paging. */
+export type StockFilter = 'all' | 'low' | 'out' | 'no_price';
+
+/** One page of the catalogue, name-ordered, with a filter — for the list and for an export. */
+export function productsPager(storeId: string, filter: StockFilter = 'all') {
+  return async (cursor: unknown | null, limit: number) => {
+    const c = cursor as { name: string; id: string } | null;
+    const { data, error } = await getSupabase().rpc('list_products', {
+      p_store_id: storeId,
+      p_after_name: c?.name ?? null,
+      p_after_id: c?.id ?? null,
+      p_limit: limit,
+      p_filter: filter === 'all' ? null : filter,
+    });
+    if (error) throw error;
+    const rows = ((data ?? []) as ProductRow[]).map(toProduct);
+    const last = rows[rows.length - 1];
+    return { rows, cursor: last ? { name: last.name, id: last.id } : null };
+  };
+}
+
 /** Name-ordered browse, cursor-paginated. */
-export function useProductList(storeId: string | null) {
+export function useProductList(storeId: string | null, filter: StockFilter = 'all') {
   const fetchPage = useCallback(
     async (cursor: unknown | null, limit: number) => {
       if (!storeId) return { rows: [] as Product[], cursor: null };
-      const c = cursor as { name: string; id: string } | null;
-
-      const { data, error } = await getSupabase().rpc('list_products', {
-        p_store_id: storeId,
-        p_after_name: c?.name ?? null,
-        p_after_id: c?.id ?? null,
-        p_limit: limit,
-      });
-      if (error) throw error;
-
-      const rows = ((data ?? []) as ProductRow[]).map(toProduct);
-      const last = rows[rows.length - 1];
-      return { rows, cursor: last ? { name: last.name, id: last.id } : null };
+      return productsPager(storeId, filter)(cursor, limit);
     },
-    [storeId],
+    [storeId, filter],
   );
 
   const list = usePaginatedList<Product>({
     fetchPage,
     getId: (p) => p.id,
-    key: 'products',
+    // One key per question: a filtered list must never be restored as the whole catalogue.
+    key: filter === 'all' ? 'products' : `products:${filter}`,
     scope: 'catalog_flow',
-    deps: [storeId],
+    deps: [storeId, filter],
     enabled: Boolean(storeId),
   });
 
