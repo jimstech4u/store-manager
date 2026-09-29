@@ -9,9 +9,14 @@ import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 import { useStackBack } from '@/hooks/useStackBack';
+import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
-import { accountsChanged, useCustomerAccount } from '@/lib/stacks/customer-account';
-import { messageOf } from '@/lib/format';
+import {
+  accountsChanged,
+  useCustomerAccount,
+  type AccountEmpties,
+} from '@/lib/stacks/customer-account';
+import { formatQtySpoken, messageOf } from '@/lib/format';
 import styles from './customer-edit-page.module.css';
 
 /**
@@ -38,6 +43,7 @@ export default function CustomerEditPage() {
   const goBack = useStackBack();
   const location = useLocation();
   const problem = useProblem();
+  const { store } = useAuth();
 
   const customerId = (location?.params?.id as string | undefined) ?? null;
 
@@ -48,12 +54,31 @@ export default function CustomerEditPage() {
    * an edit form matters more than anywhere — a form that empties itself mid-typing saves the
    * emptiness.
    */
-  const { account, loaded, error, reload } = useCustomerAccount(customerId);
+  const { account, history, loaded, error, reload } = useCustomerAccount(customerId);
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [business, setBusiness] = useState('');
   const [busy, setBusy] = useState(false);
+
+  /*
+   * ── WHAT THEY HAD WHEN THE ACCOUNT OPENED ────────────────────────────────────
+   *
+   * "edit customer form did not load back inital balace input and empties to edit, which we can
+   * still edit unless sales has been done just like product inital stock."
+   *
+   * The same rule, and the shop is right that it is the same rule. An opening figure is somebody's
+   * statement about the day the book started; until they have traded, correcting a typo in it
+   * should be typing over it. Once a sale exists the figure is load-bearing — every later balance
+   * is measured from it — and it stops being editable here.
+   *
+   * WRITTEN AS A DIFFERENCE, never as an overwrite. These are ledgers: the balance is a backfilled
+   * charge, the deposit is its own ledger, and `customer_empties` is append-only and refuses an
+   * update outright. So a corrected figure is recorded as the movement that gets from the old one
+   * to the new, which is also what keeps the correction legible afterwards.
+   */
+  const [owes, setOwes] = useState('');
+  const [deposit, setDeposit] = useState('');
 
   /*
    * Seeded ONCE per customer, keyed by id rather than by a boolean.
@@ -68,7 +93,17 @@ export default function CustomerEditPage() {
     setName(account.customer.name ?? '');
     setPhone(account.customer.phone ?? '');
     setBusiness(account.customer.business ?? '');
+    setOwes(String(Number(account.balance) || 0));
+    setDeposit(String(Number(account.deposits_held) || 0));
   }, [account, customerId]);
+
+  /*
+   * HAS ANYTHING ACTUALLY HAPPENED ON THIS ACCOUNT?
+   *
+   * `history` carries every event; a sale is the one that makes an opening figure permanent. Until
+   * then the account is still just what somebody typed on the day it was created.
+   */
+  const hasTraded = (history ?? []).some((h) => h.kind === 'sale');
 
   const save = async () => {
     if (!customerId) return;
@@ -104,6 +139,54 @@ export default function CustomerEditPage() {
           p_phone: phone.trim(),
         });
         if (phoneErr) throw phoneErr;
+      }
+
+      /*
+       * AND THE OPENING FIGURES, as the movement that corrects them.
+       *
+       * Only while nothing has traded, and only where the figure actually moved — a save that
+       * re-states the same number must write nothing, or every visit to this screen would leave
+       * another entry on the account.
+       */
+      if (!hasTraded && account && store) {
+        const wasOwed = Number(account.balance) || 0;
+        const nowOwed = Number(owes) || 0;
+        if (Math.abs(nowOwed - wasOwed) > 0.005) {
+          const { error: e1 } = await supabase.rpc('backfill_debtor', {
+            p_store_id: store.id,
+            p_customer_id: customerId,
+            p_amount: nowOwed - wasOwed,
+            p_as_of: new Date().toISOString().slice(0, 10),
+            p_note: 'Opening balance corrected',
+          });
+          if (e1) throw e1;
+        }
+
+        const wasHeld = Number(account.deposits_held) || 0;
+        const nowHeld = Number(deposit) || 0;
+        if (Math.abs(nowHeld - wasHeld) > 0.005) {
+          const up = nowHeld > wasHeld;
+          const { error: e2 } = await supabase.rpc(
+            up ? 'take_customer_deposit' : 'settle_customer_deposit',
+            up
+              ? {
+                  p_store_id: store.id,
+                  p_customer_id: customerId,
+                  p_amount: nowHeld - wasHeld,
+                  p_reason: 'Opening deposit corrected',
+                  p_occurred_at: null,
+                }
+              : {
+                  p_store_id: store.id,
+                  p_customer_id: customerId,
+                  p_amount: wasHeld - nowHeld,
+                  p_keep: false,
+                  p_reason: 'Opening deposit corrected',
+                  p_occurred_at: null,
+                },
+          );
+          if (e2) throw e2;
+        }
       }
 
       accountsChanged();
@@ -162,6 +245,69 @@ export default function CustomerEditPage() {
                   onChange={(e) => setBusiness(e.target.value)}
                   placeholder="Some Stores"
                 />
+
+                {/*
+                  WHAT THEY HAD WHEN THE ACCOUNT OPENED.
+
+                  Offered only while nothing has traded. After a sale these figures are
+                  load-bearing — every later balance is measured from them — and the way to move
+                  them is a payment, a charge or a return, each of which says what happened.
+                */}
+                {!hasTraded ? (
+                  <>
+                    <h2 className={styles.section}>What they had when you started</h2>
+                    <p className={styles.sectionNote}>
+                      Nothing has been sold to them yet, so this is still just what was typed on
+                      the day. Correct it here.
+                    </p>
+
+                    <Field
+                      label="They owe you"
+                      numeric
+                      prefix="₦"
+                      value={owes}
+                      onChange={(e) => setOwes(e.target.value)}
+                      placeholder="0"
+                      hint="From before you started keeping the book here. A minus figure means you owe them."
+                    />
+
+                    <Field
+                      label="Deposit you are holding"
+                      numeric
+                      prefix="₦"
+                      value={deposit}
+                      onChange={(e) => setDeposit(e.target.value)}
+                      placeholder="0"
+                      hint="Money of theirs you are keeping against what they take away."
+                    />
+
+                    {/*
+                      THE CONTAINERS ARE NOT RE-TYPED HERE.
+
+                      They have their own screen, which knows what is owed in which shape, rolls
+                      it up by maker, and refuses to take back more than is out. A second set of
+                      boxes on this page would be a second answer to "what are they holding", and
+                      the two would disagree from the first correction onwards.
+                    */}
+                    {(account?.empties ?? []).length > 0 && (
+                      <p className={styles.sectionNote}>
+                        They are holding{' '}
+                        {(account?.empties ?? [])
+                          .map(
+                            (e: AccountEmpties) =>
+                              `${formatQtySpoken(e.qty)} ${(Number(e.qty) === 1 ? e.unit : e.unit_plural).toLowerCase()} of ${e.product}`,
+                          )
+                          .join(', ')}
+                        . Change that on their empties screen, where a return is recorded properly.
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className={styles.sectionNote}>
+                    They have traded with you, so what they owe and what you hold now move by
+                    payments, charges and returns — each of which says what happened.
+                  </p>
+                )}
 
                 <InfoPanel tone="info" title="Receipts already printed do not change">
                   Every version of a receipt keeps the name it was made out to, so what a customer

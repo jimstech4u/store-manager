@@ -8,3 +8,25 @@
 .actions > * {
   flex: 1;
 }
+
+/* The second question on this screen: what they had on the day the book started. */
+.section {
+  margin: var(--space-7) 0 var(--space-4);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border);
+  font-size: var(--text-xl, 1.25rem);
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--text);
+}
+
+.sectionNote {
+  margin: calc(var(--space-4) * -1) 0 var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* Only the note that follows the heading is pulled up; the others sit normally. */
+.sectionNote:not(.section + .sectionNote) {
+  margin-top: 0;
+}
