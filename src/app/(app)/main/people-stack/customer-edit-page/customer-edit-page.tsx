@@ -219,7 +219,7 @@ export default function CustomerEditPage() {
        * figures are written as a difference through three ledgers, and a second opinion computed
        * on this screen is how two places come to disagree about one customer.
        */
-      const { data: fresh } = await supabase.rpc('customer_balance', {
+      const { data: fresh } = await supabase.rpc('customer_balance_total', {
         p_store_customer_id: customerId,
       });
       const balance = String(fresh ?? account?.balance ?? '0');

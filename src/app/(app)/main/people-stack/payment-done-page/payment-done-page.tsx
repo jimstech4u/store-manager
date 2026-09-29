@@ -72,7 +72,12 @@ export default function PaymentDonePage() {
       };
       const [{ data: who }, { data: bal, error: balErr }] = await Promise.all([
         supabase.from('store_customers').select('display_name').eq('id', row.store_customer_id).maybeSingle(),
-        supabase.rpc('customer_balance', { p_store_customer_id: row.store_customer_id }),
+        /*
+         * THE WHOLE ACCOUNT — `customer_balance_total`, the figure the statement heads with ("They
+         * owe you"). `customer_balance` is only the unpaid receipts, and it put ₦28,800 on a receipt
+         * for an account that owed ₦52,250 once its opening balance and charges were counted.
+         */
+        supabase.rpc('customer_balance_total', { p_store_customer_id: row.store_customer_id }),
       ]);
       return {
         customerId: row.store_customer_id,
