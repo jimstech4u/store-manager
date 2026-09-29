@@ -24,7 +24,7 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 | Q9 | **Base units still leaking** — product page, receive picker and count list already spoke in shapes (base unit only for an item with none); stock history, the low-stock page and the review queue now do too (`useSayInShapes`). Malta's history reads "+133 cans 12 pieces". The stock-value report keeps base units because its cost column is per base unit | Stock · Count | ☑ |
 | Q10 | Expiry on stock with a history — done as Q18 (0224) | Stock | ☑ |
 | Q11 | Destiny's receipt — checked: she holds 1½ 7up crates across two receipts (1 from 28 Sep, ½ from 29 Sep), and her account and both receipts agree. If the crate is back, it is one tap now: All back on that receipt | Data | ☑ |
-| Q12 | Audit sweep findings (section 5) | All | ☐ |
+| Q12 | Audit sweep findings (section 5) — A1, A2, F2, F3 done; F1 waits on an iPhone | All | ☑ |
 | Q13 | **All items** — the open order on its own, marked NOT A RECEIPT on screen, paper and PDF; share on WhatsApp / share with the tracking link, PDF, print. From the till (under Scan) and Take payment. `probe-all-items-and-line-ui.mjs` | Sell | ☑ |
 | Q15 | **Till stuck on "that order is no longer open"** (29 Sep, live) — my probes' clean-up deleted the shop's open drafts; the till then could not save, pay or close, and a second Close cancelled A406 Hotel (₦142,600, reopened). Probes now clean only their own tabs (`probe-drafts.mjs`); the till re-saves a dead order as a new one, treats "no such order" as closed, and re-selects a tab a failed close puts back. `probe-dead-order-ui.mjs` 8/8 | Sell | ☑ |
 | Q16 | **Stock is whole** — no ½/¼ on shelf, lot, count or yard boxes (`Field whole`); server refuses a fractional base figure or count (0222). Malta Guinness Can re-said as 133 cans 12 pieces, 24 to a can | Stock · Count · Backend | ☑ |
@@ -112,17 +112,17 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 | Sell | empties-record | roll-up by maker, "all of it" | ☑ |
 | Sell | empties | fractions set small | ☑ |
 | Sell | receipt-history | account printed only on transfer | ☑ |
-| Stock | product form | dated stock one section; shelf in shapes & prefilled; parts buttons; per-lot reason | ◐ |
+| Stock | product form | dated stock one section; shelf in shapes & prefilled; whole numbers only; dating stock with a history | ☑ |
 | Stock | shape-price | cheaper prices on the page | ◐ |
 | Stock | receive | compose-and-list, supplier required | ◐ |
 | Stock | supplier-account / supplier-payment | collect a credit | ◐ |
 | Stock | stock list | cost "not recorded yet" | ☑ |
 | Count | count list | pagination | ☑ |
 | Count | count entry | everything in shapes | ◐ |
-| People | customer-edit (new) | name, phone, business, opening figures | ◐ |
-| People | account | Edit button, Give back button | ◐ |
+| People | customer-edit (new) | name, phone, business, opening figures | ☑ |
+| People | account | Edit button, Give back button, empties settled from the line, payment receipts | ☑ |
 | Money | — | receives list patches from edits | ◐ |
-| Shared | 6 pickers | autoFocus; 2 stop flashing empty | ◐ |
+| Shared | 6 pickers | focused inside the tap; never flash empty; page to the end | ☑ |
 | Sell | price-gate (new) | price the shapes on this sale | ☑ |
 | Sell | order-items (new) | All items, NOT A RECEIPT, share / PDF / print | ☑ |
 | Sell | sale-line (new) | one line, the till's row; add or change | ☑ |
@@ -203,4 +203,4 @@ Large "over" figures usually mean an opening quantity keyed short, not stock app
 | --- | --- | --- |
 | F1 | **iOS keyboard never rises on open** — search-viewer 0.3.1 / selection-viewer 0.5.2 focus inside the tap (layout effect; an invisible stand-in when the box is not mounted yet) and no longer remount. Proven: a text box has focus in the tap that opens both. The keyboard itself needs your iPhone to confirm | ◐ |
 | F2 | **Search pages flash "nothing found"** — see Q7 | ☑ |
-| F3 | Only four list channels exist (`customers`, `debtors`, `products`, `sales`); the other writers (groups, units, bank, shop) feed derived figures that already re-read — **Q6 narrows to renames showing on list rows** | ☐ |
+| F3 | Only four list channels exist (`customers`, `debtors`, `products`, `sales`); the other writers (groups, units, bank, shop) feed derived figures that already re-read — **Q6 narrows to renames showing on list rows** — see Q6 | ☑ |
