@@ -407,3 +407,12 @@
   font-size: var(--text-sm);
   color: var(--text-muted);
 }
+
+/* Where the next page is fetched. It carries the word only while it is working, so an idle list
+   does not end on a label that looks like a row. */
+.sentinel {
+  padding: var(--space-4);
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}

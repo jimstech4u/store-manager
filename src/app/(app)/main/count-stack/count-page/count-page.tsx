@@ -15,6 +15,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
 import { useStackBack } from '@/hooks/useStackBack';
 import { searchProducts, useProductList, type Product } from '@/lib/stacks/catalog-stack';
+import { useInfiniteScroll } from '@/hooks/usePaginatedList';
 import { useListChannel } from '@/hooks/useListChannel';
 import { formatQtySpoken, pluralUnit } from '@/lib/format';
 import { stockInShapes, useSellingUnits } from '@/lib/stacks/selling-units';
@@ -42,6 +43,20 @@ export default function CountPage() {
   const [searchId, searchOps, isSearchOpen] = useSearchController();
 
   const browse = useProductList(store?.id ?? null);
+
+  /*
+   * THE LIST GOES ON PAST THE FIRST PAGE.
+   *
+   * Reported as "count page does not paginate". `useProductList` has always been paged and this
+   * screen never asked for the next one, so a shop with a hundred items could only ever count the
+   * first twenty-odd — and counting is the one job that has to reach every item on the shelf.
+   *
+   * The same sentinel the stock list uses: loading starts before it comes into view, so the list
+   * stays ahead of the reader rather than stalling at the bottom.
+   */
+  const sentinelRef = useInfiniteScroll(browse.loadMore, {
+    enabled: browse.hasMore && !browse.loading,
+  });
 
   /*
    * What the records say, in the unit the shelf is counted in.
@@ -228,6 +243,12 @@ export default function CountPage() {
             </li>
           ))}
         </ul>
+      )}
+
+      {browse.hasMore && (
+        <div ref={sentinelRef} className={styles.sentinel}>
+          {browse.loadingMore ? 'Loading more…' : ''}
+        </div>
       )}
 
       {/* ── Counting sheet ──────────────────────────────────────────────────────── */}

@@ -13,7 +13,7 @@ import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
 import { useProduct } from '@/lib/stacks/catalog-stack';
-import { describeVariance, formatMoney, formatQtySpoken, pluralUnit, messageOf } from '@/lib/format';
+import { formatMoney, formatQtySpoken, pluralUnit, messageOf } from '@/lib/format';
 import { leadUnit, stockInShapes, useSellingUnits, type SellingUnit } from '@/lib/stacks/selling-units';
 import { countYard, useYard } from '@/lib/stacks/yard';
 import styles from '../count-page/count-page.module.css';
@@ -181,6 +181,26 @@ export default function CountEntryPage() {
 
   /** A base-unit figure, said in the unit the shop counts in. */
   const inUnits = (base: number) => base / per;
+
+  /**
+   * A base-unit figure, SAID IN THE SHAPES THE SHOP COUNTS IN.
+   *
+   * "no decimal but the count in the real shapes". `inUnits` divides by the biggest shape, so a
+   * shelf of 180 packs and 11 loose pieces read "180.9167" — a number nobody has ever said out
+   * loud, and one that invites the reader to think a ninth of a pack is missing. `stockInShapes`
+   * splits it the way the shelf is actually read: packs first, then what is left over.
+   */
+  const inShapes = (base: number) =>
+    shapes.length > 0
+      ? stockInShapes(
+          shapes.map((u: SellingUnit) => ({
+            name: u.name,
+            plural: u.plural,
+            baseQty: u.baseQty,
+            onHandBase: base,
+          })),
+        )
+      : `${formatQtySpoken(inUnits(base))} ${unitName(inUnits(base))}`;
 
   /** What one, or several, of them are called. */
   const unitName = (n: number) =>
@@ -719,7 +739,7 @@ export default function CountEntryPage() {
                 </span>
                 <span className={styles.crodsValue}>
                   {sign}
-                  {formatQtySpoken(inUnits(value as number))}
+                  {inShapes(value as number)}
                 </span>
               </div>
             ))}
@@ -729,9 +749,7 @@ export default function CountEntryPage() {
                 <strong>Should be on the shelf</strong>
               </span>
               <span className={styles.crodsValue}>
-                <strong>
-                  {formatQtySpoken(inUnits(state.expected))} {unitName(inUnits(state.expected))}
-                </strong>
+                <strong>{inShapes(state.expected)}</strong>
               </span>
             </div>
 
@@ -740,9 +758,7 @@ export default function CountEntryPage() {
                 <strong>{today && !today.countedByYou ? 'Counted' : 'You counted'}</strong>
               </span>
               <span className={styles.crodsValue}>
-                <strong>
-                  {formatQtySpoken(inUnits(state.actual ?? 0))} {unitName(inUnits(state.actual ?? 0))}
-                </strong>
+                <strong>{inShapes(state.actual ?? 0)}</strong>
               </span>
             </div>
           </div>
@@ -759,15 +775,21 @@ export default function CountEntryPage() {
                   {variance < 0 ? 'Some of it is not there' : 'There is more than there should be'}
                 </p>
                 <p className={styles.gapNumber}>
-                  {describeVariance(inUnits(variance), unit?.name ?? active?.baseUnit ?? 'piece')}
+                  {/*
+                    THE HEADLINE, IN SHAPES. `describeVariance` names one unit and a figure, which
+                    is right for a shop that counts in one thing — and prints "0.9167 packs" for
+                    one that counts in packs and pieces.
+                  */}
+                  {Math.abs(variance) < 0.0001
+                    ? 'Matches exactly'
+                    : `${inShapes(Math.abs(variance))} ${
+                        variance < 0 ? 'missing' : 'more than expected'
+                      }`}
                 </p>
                 {/* WHAT IT MEANS, in one sentence, before anything is asked. */}
                 <p className={styles.gapMeaning}>
                   You counted{' '}
-                  <strong>
-                    {formatQtySpoken(Math.abs(inUnits(variance)))}{' '}
-                    {unitName(Math.abs(inUnits(variance)))}
-                  </strong>{' '}
+                  <strong>{inShapes(Math.abs(variance))}</strong>{' '}
                   {variance < 0 ? 'fewer than' : 'more than'} your records expected.
                   {lossValue > 0 && (
                     <>
@@ -798,13 +820,12 @@ export default function CountEntryPage() {
                 {leftToAccount > 0.0001 ? (
                   <>
                     <strong>
-                      {formatQtySpoken(inUnits(leftToAccount))} {unitName(inUnits(leftToAccount))}
+                      {inShapes(leftToAccount)}
                     </strong>{' '}
                     still to account for
                   </>
                 ) : (
-                  <>All {formatQtySpoken(Math.abs(inUnits(variance)))}{' '}
-                  {unitName(Math.abs(inUnits(variance)))} accounted for</>
+                  <>All {inShapes(Math.abs(variance))} accounted for</>
                 )}
               </p>
 
@@ -915,17 +936,15 @@ export default function CountEntryPage() {
                 rows={[
                   {
                     label: 'Records expected',
-                    value: `${formatQtySpoken(inUnits(state.expected))} ${unitName(inUnits(state.expected))}`,
+                    value: inShapes(state.expected),
                   },
                   {
                     label: 'You counted',
-                    value: `${formatQtySpoken(inUnits(state.actual ?? 0))} ${unitName(inUnits(state.actual ?? 0))}`,
+                    value: inShapes(state.actual ?? 0),
                   },
                   {
                     label: 'Not accounted for',
-                    value: `${formatQtySpoken(Math.abs(inUnits(variance)))} ${unitName(
-                      Math.abs(inUnits(variance)),
-                    )} · ${formatMoney(lossValue)}`,
+                    value: `${inShapes(Math.abs(variance))} · ${formatMoney(lossValue)}`,
                     emphasis: true,
                   },
                 ]}
