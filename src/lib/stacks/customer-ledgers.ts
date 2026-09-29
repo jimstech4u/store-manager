@@ -254,6 +254,16 @@ export async function recordEmpties(args: {
   reason?: string;
   /** Defaults to ours-with-them, which is the common case and what every caller meant before. */
   side?: 'they_hold' | 'we_hold';
+  /**
+   * WHEN AND AGAINST WHAT — for containers brought in WITH a sale.
+   *
+   * A receipt says what is still with the customer as at the moment of the sale. Crates they
+   * carried in to the counter came back at that moment too, so they are dated there and point at
+   * the sale; recorded "now", a second later, the receipt printed them as still out.
+   */
+  occurredAt?: string | null;
+  refTable?: string | null;
+  refId?: string | null;
 }) {
   const { error } = await getSupabase().rpc('record_customer_empties', {
     p_store_id: args.storeId,
@@ -263,6 +273,9 @@ export async function recordEmpties(args: {
     p_qty: args.qty,
     p_reason: args.reason?.trim() || null,
     p_side: args.side ?? 'they_hold',
+    p_occurred_at: args.occurredAt ?? null,
+    p_ref_table: args.refTable ?? null,
+    p_ref_id: args.refId ?? null,
   });
   if (error) throw error;
   ledgersChanged();

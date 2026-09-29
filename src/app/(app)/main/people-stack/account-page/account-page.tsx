@@ -21,6 +21,7 @@ import {
 import { formatMoney, formatQtySpoken, messageOf } from '@/lib/format';
 import { rollUpOwed, type OwedRow } from '@/lib/empties-rollup';
 import { LoadArea, useLoadArea } from '@/components/ui/LoadArea';
+import { EmptiesBroughtBack } from '@/components/empties/EmptiesBroughtBack';
 import { emptiesOwed, LEDGERS_SCOPE } from '@/lib/stacks/customer-ledgers';
 import { getSupabase } from '@/lib/supabase/client';
 import { useListNotifier } from '@/hooks/useListChannel';
@@ -289,30 +290,14 @@ export default function AccountPage() {
         identical — same product, same shape — and React drew one of them. Read here from the same
         ledger the empties screen uses (`customer_empties_owed`), which carries the side.
       */}
-      <h2 className={styles.section}>Empties still out</h2>
-      <LoadArea area={owedArea} what="what they are holding" compact>
-        {() =>
-          theyHold.length === 0 ? (
-            <p className={styles.sectionNote}>Nothing of yours is with this customer.</p>
-          ) : (
-            <ul className={styles.list}>
-              {theyHold.map((l, i) => (
-                <li key={`they-${l.label}-${l.unit}-${i}`} className={styles.row}>
-                  <div className={styles.rowMain}>
-                    <p className={styles.rowName}>
-                      {l.label} {l.unit.toLowerCase()}
-                    </p>
-                    {l.products.length > 1 && (
-                      <p className={styles.rowNote}>{l.products.join(' + ')}</p>
-                    )}
-                  </div>
-                  <span className={styles.rowQty}>{l.said}</span>
-                </li>
-              ))}
-            </ul>
-          )
-        }
-      </LoadArea>
+      {/*
+        EACH LINE SETTLES WHERE IT IS READ — all of it back after a confirm, or part of it on the
+        empties page. "the account page could have the settle click in the line so we know that one
+        is settled."
+      */}
+      {customerId && store && (
+        <EmptiesBroughtBack storeId={store.id} customerId={customerId} title="Empties still out" />
+      )}
 
       {weHold.length > 0 && (
         <>

@@ -201,6 +201,50 @@ export function rollUpOwed(input: OwedRow[]): OwedLine[] {
   return [...wholes, ...parts];
 }
 
+/**
+ * WHAT "ALL OF THIS LINE CAME BACK" SETTLES, row by row.
+ *
+ * A WHOLE line is the whole crates of every product under that maker in that shape — "3 NBL crates"
+ * built from 2 Goldberg and 1 Gulder settles 2 Goldberg and 1 Gulder, and leaves each product's
+ * half-crate alone, because the half is its own line.
+ *
+ * A PART line is the fraction of the one product it names, and nothing else.
+ *
+ * Rows of the same product and shape are added before they are split, exactly as `rollUpOwed`
+ * does, so the two can never disagree about what a line is made of.
+ */
+export function settleLine(
+  line: OwedLine,
+  input: OwedRow[],
+): { productUnitId: string; qty: number }[] {
+  const combined = new Map<string, OwedRow>();
+  for (const r of input) {
+    if ((r.side ?? 'they_hold') !== line.side) continue;
+    const k = `${r.productId}|${r.productUnitId}`;
+    const had = combined.get(k);
+    combined.set(k, had ? { ...had, owed: had.owed + r.owed } : { ...r });
+  }
+
+  const sameShape = (r: OwedRow) =>
+    r.unitName.toLowerCase() === line.unit.toLowerCase() ||
+    r.unitPlural.toLowerCase() === line.unit.toLowerCase();
+
+  const out: { productUnitId: string; qty: number }[] = [];
+  for (const r of combined.values()) {
+    if (!(r.owed > 0) || !sameShape(r)) continue;
+    const whole = Math.floor(r.owed + 1e-9);
+    if (line.isPart) {
+      const rest = r.owed - whole;
+      if (r.productName === line.label && rest > 1e-9) {
+        out.push({ productUnitId: r.productUnitId, qty: Number(rest.toFixed(4)) });
+      }
+    } else if ((r.groupName ?? r.productName) === line.label && whole > 0) {
+      out.push({ productUnitId: r.productUnitId, qty: whole });
+    }
+  }
+  return out;
+}
+
 /** The whole thing as one sentence: "8 NBL crates, ½ Goldberg crate, 4 Goldberg bottles". */
 export function owedInWords(rows: OwedRow[]): string {
   // One side at a time: "nothing" for a customer who holds none of ours is true even while we hold

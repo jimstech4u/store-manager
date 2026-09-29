@@ -74,6 +74,7 @@ export default function ReceiptPage() {
       <Receipt
         saleId={saleId}
         storeId={store.id}
+        emptiesAtCounter={fresh}
         after={
           can('sales.amend') && (
             <div className={styles.correct}>

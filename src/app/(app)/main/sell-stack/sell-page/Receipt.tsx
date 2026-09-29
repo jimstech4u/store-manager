@@ -33,6 +33,7 @@ import { usePermission } from '@/hooks/usePermission';
 import { asInstruction, receiptLines } from '@/lib/escpos-text';
 import { PrintPreview } from '@/components/settings/PrintPreview';
 import { appUrl } from '@/lib/app-url';
+import { EmptiesBroughtBack } from '@/components/empties/EmptiesBroughtBack';
 
 interface SaleDetail {
   sale: {
@@ -109,9 +110,15 @@ export function Receipt({
   saleId,
   storeId,
   after,
+  emptiesAtCounter = false,
 }: {
   saleId: string;
   storeId: string;
+  /**
+   * The sale was just made, at the counter: ask whether they brought empties in with them, BEFORE
+   * the receipt is printed or shared, so "still with you" is true on the paper.
+   */
+  emptiesAtCounter?: boolean;
   /**
    * What the page puts under the receipt — drawn only once the receipt is, so no action stands
    * under a loader acting on a receipt nobody can see yet.
@@ -470,6 +477,25 @@ export function Receipt({
         <p className={styles.shareNote} role="status">
           {shareNote}
         </p>
+      )}
+
+      {/*
+        EMPTIES THEY CARRIED IN, settled before the paper goes out.
+
+        "so receipt will not carry 'still with you' if they brought it already." Recorded at the
+        sale's moment and against the sale, so the receipt — which reads its containers as at the
+        sale — re-reads and prints the true figure, or none at all.
+      */}
+      {emptiesAtCounter && customer && sale.status !== 'voided' && stillWithYou.length > 0 && (
+        <div data-print-no-print>
+          <EmptiesBroughtBack
+            storeId={storeId}
+            customerId={customer.id}
+            atSale={{ id: sale.id, occurredAt: sale.occurred_at }}
+            title="Did they bring any empties back?"
+            onRecorded={() => void res.reload()}
+          />
+        </div>
       )}
 
       {/*

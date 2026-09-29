@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { getSupabase } from '@/lib/supabase/client';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { Button } from '@/components/ui/Button';
@@ -68,6 +69,24 @@ export default function EmptiesRecordPage() {
   const direction =
     (location?.params?.direction as 'returned' | 'damaged' | undefined) ?? 'returned';
   const damaged = direction === 'damaged';
+  /*
+   * FROM A RECEIPT AT THE COUNTER: which sale they came in with, and which line was tapped.
+   *
+   * The sale's id travels, never its time — read here, so what is recorded is dated at the sale's
+   * own moment and the receipt, which reads containers as at the sale, prints the true figure.
+   */
+  const saleId = (location?.params?.sale as string | undefined) ?? null;
+  const lineParam = (location?.params?.line as string | undefined) ?? '';
+  const [saleAt, setSaleAt] = useState<string | null>(null);
+  useEffect(() => {
+    if (!saleId) return;
+    void getSupabase()
+      .from('sales')
+      .select('occurred_at')
+      .eq('id', saleId)
+      .maybeSingle()
+      .then(({ data }) => setSaleAt((data as { occurred_at: string } | null)?.occurred_at ?? null));
+  }, [saleId]);
 
   /*
    * Read here rather than handed over from the screen behind.
@@ -164,7 +183,7 @@ export default function EmptiesRecordPage() {
    * The chosen LINE, by its position in the roll-up. Not by product id any more: a maker line is
    * several products, and "3 crates Nigerian Breweries" has no single product to name it by.
    */
-  const [pickedLine, setPickedLine] = useState('');
+  const [pickedLine, setPickedLine] = useState(lineParam);
   const [byShape, setByShape] = useState<Record<string, string>>({});
   const [why, setWhy] = useState('');
   const [takeFee, setTakeFee] = useState(false);
@@ -288,6 +307,9 @@ export default function EmptiesRecordPage() {
     !over &&
     (!damaged || why.trim().length > 0) &&
     (!takeFee || (feeAmount > 0 && heldKnown)) &&
+    // From a receipt, wait for the sale's moment: recorded "now" instead, the receipt would still
+    // print these as with the customer.
+    (!saleId || saleAt !== null) &&
     !busy;
 
   const save = async () => {
@@ -314,6 +336,9 @@ export default function EmptiesRecordPage() {
             direction,
             qty: p.qty,
             reason: why,
+            ...(saleId && saleAt
+              ? { occurredAt: saleAt, refTable: 'sales', refId: saleId }
+              : {}),
           });
         }
       }
