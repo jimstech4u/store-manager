@@ -9,6 +9,7 @@ import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 import { useStackBack } from '@/hooks/useStackBack';
+import { useListNotifier } from '@/hooks/useListChannel';
 import { useAuth } from '@/providers/AuthProvider';
 import { getSupabase } from '@/lib/supabase/client';
 import {
@@ -44,6 +45,30 @@ export default function CustomerEditPage() {
   const location = useLocation();
   const problem = useProblem();
   const { store } = useAuth();
+
+  /*
+   * THE LISTS ARE TOLD WHAT CHANGED, rather than being made to read it all again.
+   *
+   * "I edit to be owing but card did not update in list that they owe ... even if server refresh
+   * will say the same thing."
+   *
+   * Both lists that carry a customer deliberately never re-read on resume — `useListChannel`
+   * exists so a shop that has paged through two hundred debtors is not dumped back at the top
+   * every time it looks at one. The bargain is that the page making the change says which row it
+   * touched, and this page never held up its end: it invalidated `account_derived`, which the
+   * headline figures read, and neither list does.
+   *
+   * People carries the name and phone; Money carries the balance. Both move here, so both are
+   * told.
+   */
+  const notifyPeople = useListNotifier<{
+    id: string;
+    display_name: string;
+    business_name: string | null;
+    phone: string;
+    balance: string;
+  }>('customers');
+  const notifyDebtors = useListNotifier<{ id: string; balance: string }>('debtors');
 
   const customerId = (location?.params?.id as string | undefined) ?? null;
 
@@ -188,6 +213,28 @@ export default function CustomerEditPage() {
           if (e2) throw e2;
         }
       }
+
+      /*
+       * WHAT THE ROW NOW SAYS. The balance is read back rather than worked out here: the opening
+       * figures are written as a difference through three ledgers, and a second opinion computed
+       * on this screen is how two places come to disagree about one customer.
+       */
+      const { data: fresh } = await supabase.rpc('customer_balance', {
+        p_store_customer_id: customerId,
+      });
+      const balance = String(fresh ?? account?.balance ?? '0');
+
+      notifyPeople({
+        type: 'patch',
+        id: customerId,
+        patch: {
+          display_name: name.trim(),
+          business_name: business.trim() || null,
+          phone: phone.trim(),
+          balance,
+        },
+      });
+      notifyDebtors({ type: 'patch', id: customerId, patch: { balance } });
 
       accountsChanged();
       await nav.pop();

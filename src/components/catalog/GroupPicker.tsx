@@ -87,7 +87,14 @@ export function GroupPicker({
       searchProp={{
         text: 'Nigerian Breweries, Guinness, Cway…',
         onChange: setQuery,
-        autoFocus: false,
+        /*
+         * THE KEYBOARD COMES UP WITH THE SHEET.
+         *
+         * A picker is opened to type in — nobody taps "search products" in order to look at a
+         * list they could already see. This was false in all six pickers, with no note saying
+         * why, so every search cost an extra tap on the one control the sheet exists for.
+         */
+        autoFocus: true,
         textColor: dark ? '#f2f5f4' : '#12201d',
         background: dark ? '#1b2322' : '#eef2f1',
         padding: { l: '4px', r: '4px', t: '0px', b: '0px' },

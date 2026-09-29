@@ -2,6 +2,7 @@
 
 import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
+import { Qty } from '@/components/ui/Qty';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { InfoPanel } from '@/components/ui/Explain';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
@@ -155,7 +156,7 @@ export default function EmptiesPage() {
                 <span className={styles.owed}>
                   {r.stillOut > 0 ? (
                     <>
-                      <span className={styles.owedQty}>{formatQtySpoken(r.stillOut)}</span>
+                      <Qty value={r.stillOut} className={styles.owedQty} />
                       <span className={styles.owedNote}>
                         across {r.shapesOut} {r.shapesOut === 1 ? 'shape' : 'shapes'}
                       </span>

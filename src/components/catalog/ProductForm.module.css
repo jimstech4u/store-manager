@@ -207,6 +207,7 @@
 .shapeBoxes {
   display: flex;
   flex-wrap: wrap;
+  align-items: stretch;
   gap: var(--space-2);
 }
 
@@ -464,6 +465,14 @@
   The box only ever had the REFUSAL half of the quantity rule: it would tell somebody holding half
   a tray that cans go in whole ones. The till has offered the parts as buttons all along.
 */
+/*
+  A BOX AND ITS PARTS, AS ONE COLUMN THAT LINES UP WITH ITS NEIGHBOURS.
+
+  The parts row floated at whatever height the box above it happened to end — and a box with a
+  hint ("one is 12") is taller than one without, so the ½ under Crates sat lower than the ½ under
+  Bottles and the row read as two unrelated controls. `align-items: stretch` on the row and
+  `margin-top: auto` here push every parts row to the same bottom edge.
+*/
 .shapeBox {
   flex: 1 1 7rem;
   min-width: 7rem;
@@ -472,10 +481,15 @@
   gap: var(--space-1);
 }
 
+.shapeBox > :first-child {
+  flex: 1;
+}
+
 .shapeParts {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-1);
+  margin-top: auto;
 }
 
 .shapePart {

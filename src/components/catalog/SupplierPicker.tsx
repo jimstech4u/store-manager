@@ -71,7 +71,14 @@ export function SupplierPicker({
         onChange: (value: string) => setQuery(value),
         background: dark ? '#1b2422' : '#eef2f1',
         textColor: dark ? '#f2f5f4' : '#12201d',
-        autoFocus: false,
+        /*
+         * THE KEYBOARD COMES UP WITH THE SHEET.
+         *
+         * A picker is opened to type in — nobody taps "search products" in order to look at a
+         * list they could already see. This was false in all six pickers, with no note saying
+         * why, so every search cost an extra tap on the one control the sheet exists for.
+         */
+        autoFocus: true,
       }}
       noResultProp={{
         view: (

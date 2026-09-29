@@ -1,0 +1,14 @@
+/*
+  The fraction, set under the whole it qualifies.
+
+  Smaller and lifted slightly, the way a fraction is set in print — "5 1/2" then reads as five and
+  a bit rather than as two figures of equal weight competing for the eye. `em` so it tracks
+  whatever size the figure around it is using, from a list row to the big number on a count.
+*/
+.part {
+  font-size: 0.7em;
+  vertical-align: 0.18em;
+  margin-left: 0.12em;
+  font-variant-numeric: normal;
+  letter-spacing: -0.02em;
+}

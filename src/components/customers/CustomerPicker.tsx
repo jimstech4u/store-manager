@@ -141,7 +141,14 @@ export function CustomerPicker({
         onChange: (value: string) => setQuery(value),
         background: dark ? '#1b2422' : '#eef2f1',
         textColor: dark ? '#f2f5f4' : '#12201d',
-        autoFocus: false,
+        /*
+         * THE KEYBOARD COMES UP WITH THE SHEET.
+         *
+         * A picker is opened to type in — nobody taps "search products" in order to look at a
+         * list they could already see. This was false in all six pickers, with no note saying
+         * why, so every search cost an extra tap on the one control the sheet exists for.
+         */
+        autoFocus: true,
       }}
       loadingProp={{ view: <ViewerLoading text="Looking" /> }}
       noResultProp={{
@@ -180,8 +187,20 @@ export function CustomerPicker({
       maxHeight="92dvh"
       closeThreshold={0.2}
       zIndex={1000}
+      /*
+        SETTLING IS NOT EMPTY.
+
+        "search view and selection viewer shows empty for a search result for a brief before
+        actually showing the record even if it is the same match by name."
+
+        Two gaps produced that flash. Between a keystroke and the debounce firing, the results on
+        screen belong to the PREVIOUS term; and the instant the new term lands, its results have
+        not been fetched, so the list is legitimately empty for a frame. Neither is "nothing
+        matched" — both are "we have not looked yet", and saying so is the difference between a
+        sheet that feels slow and one that looks wrong.
+      */
       selectionState={
-        list.loading && list.items.length === 0
+        (list.loading || query !== debounced) && list.items.length === 0
           ? 'loading'
           : list.error && list.items.length === 0
             ? 'error'

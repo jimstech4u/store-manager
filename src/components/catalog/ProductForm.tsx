@@ -411,7 +411,20 @@ export function ProductForm({
 
   useEffect(() => {
     if (shelfSeeded.current === editingId) return;
-    if (!editing || hadStock !== false || !existingUnitsLoaded) return;
+    /*
+     * FILLED WHETHER OR NOT THE SHELF HAS A HISTORY — asked for twice, and right both times.
+     *
+     * I first left this empty once stock had moved, on the reasoning that a box pre-filled with
+     * the system's own figure gets answered by pressing Save, recording "I counted and it agreed"
+     * when nobody counted. That danger is real but it is already answered elsewhere on this form:
+     * an item with a history REQUIRES a written reason before a count is accepted, so nothing is
+     * recorded by pressing Save alone.
+     *
+     * What was left was a section headed "What you have now" showing nothing, on an item holding
+     * five crates — which reads as the form having failed to load, and is the one thing a shop
+     * cannot be asked to work around.
+     */
+    if (!editing || !existingUnitsLoaded) return;
     if (countedShapes.length === 0) return;
     shelfSeeded.current = editingId;
     const onHand = Number(product?.onHand ?? 0);
