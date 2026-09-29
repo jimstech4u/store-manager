@@ -74,14 +74,16 @@ try {
   const first = await rows();
   check('opens on the first page', first >= 50, `${first} rows`);
 
-  for (let i = 0; i < 12; i += 1) {
+  for (let i = 0; i < 20; i += 1) {
     await p.evaluate(() => {
       const c = [...document.querySelectorAll('.selection-viewer-content')].find(
         (el) => el.getBoundingClientRect().height > 0,
       );
-      if (c) c.scrollTop = c.scrollHeight;
+      // The SHEET's scroller, which is what a finger moves — the content box itself never scrolls.
+      const sc = c?.closest('.react-modal-sheet-content-scroller') ?? c;
+      if (sc) sc.scrollTop = sc.scrollHeight;
     });
-    await p.waitForTimeout(900);
+    await p.waitForTimeout(1500);
   }
   const all = await rows();
   const { count: active } = await admin
@@ -154,8 +156,8 @@ try {
   check('no ½ button on the shelf boxes', (await p.getByRole('button', { name: '½', exact: true }).count()) === 0);
 
   if (await cans.count()) {
-    await cans.fill('');
-    await cans.pressSequentially('5.5');
+    // Pasted, the way a figure with a point can arrive at all: a whole-number keypad has no point.
+    await cans.fill('5.5');
     await p.waitForTimeout(500);
     check('a typed 5.5 stays whole', (await cans.inputValue()) === '5', `"${await cans.inputValue()}"`);
   }
