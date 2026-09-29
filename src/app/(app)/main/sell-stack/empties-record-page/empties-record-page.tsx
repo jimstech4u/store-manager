@@ -14,6 +14,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import {
   depositLedger,
   emptiesOwed,
+  saleEmptiesOwed,
   recordEmpties,
   writeOffEmpties,
   type DepositMove,
@@ -78,15 +79,17 @@ export default function EmptiesRecordPage() {
   const saleId = (location?.params?.sale as string | undefined) ?? null;
   const lineParam = (location?.params?.line as string | undefined) ?? '';
   const [saleAt, setSaleAt] = useState<string | null>(null);
+  // Dated at the sale only when asked at the counter; from an older receipt, dated now.
+  const atSale = location?.params?.at === 'sale';
   useEffect(() => {
-    if (!saleId) return;
+    if (!saleId || !atSale) return;
     void getSupabase()
       .from('sales')
       .select('occurred_at')
       .eq('id', saleId)
       .maybeSingle()
       .then(({ data }) => setSaleAt((data as { occurred_at: string } | null)?.occurred_at ?? null));
-  }, [saleId]);
+  }, [saleId, atSale]);
 
   /*
    * Read here rather than handed over from the screen behind.
@@ -95,8 +98,14 @@ export default function EmptiesRecordPage() {
    * in the meantime — and settling against a snapshot taken on the previous screen is how somebody
    * records three crates back against an obligation that is already two.
    */
-  const area = useLoadArea<OwedRow[]>(() => emptiesOwed(customerId!), [customerId], {
-    key: `empties-owed:${customerId ?? 'none'}`,
+  /*
+   * From a receipt, only what THAT SALE still owes (0225); otherwise everything they hold.
+   */
+  const area = useLoadArea<OwedRow[]>(
+    () => (saleId ? saleEmptiesOwed(saleId) : emptiesOwed(customerId!)),
+    [customerId, saleId],
+    {
+    key: saleId ? `sale-empties-owed:${saleId}` : `empties-owed:${customerId ?? 'none'}`,
     scope: LEDGERS_SCOPE,
     onFail: showProblem,
     whenNot: !customerId,
@@ -309,7 +318,7 @@ export default function EmptiesRecordPage() {
     (!takeFee || (feeAmount > 0 && heldKnown)) &&
     // From a receipt, wait for the sale's moment: recorded "now" instead, the receipt would still
     // print these as with the customer.
-    (!saleId || saleAt !== null) &&
+    (!atSale || saleAt !== null) &&
     !busy;
 
   const save = async () => {
@@ -336,8 +345,8 @@ export default function EmptiesRecordPage() {
             direction,
             qty: p.qty,
             reason: why,
-            ...(saleId && saleAt
-              ? { occurredAt: saleAt, refTable: 'sales', refId: saleId }
+            ...(saleId
+              ? { occurredAt: atSale ? saleAt : null, refTable: 'sales', refId: saleId }
               : {}),
           });
         }

@@ -38,11 +38,13 @@ export function lineShape(line: DraftLine, shapes: SellingUnit[]): SellingUnit |
 }
 
 /**
- * Every shape on these lines with no price.
+ * Every line on this sale with NO price — neither the shop's for its shape nor one typed on it.
  *
- * The price is the SHOP's, not the line's. A figure typed on the line sells this one sale, and the
- * next seller meets the same blank — so the gate asks for the shape's price, and offers what was
- * typed as the answer.
+ * A PRICE TYPED ON THE LINE COUNTS. "detect the price if I write into the price box in the sales
+ * line, to remove the 'no price set' instead of a push." The seller agreed a figure with the
+ * customer and typed it; the sale can go ahead on it. What cannot go ahead is a line at nothing,
+ * and that is all this now stops. Setting the SHOP's price for the shape — so the next seller does
+ * not meet the same blank — is still one tap on the chip, never forced.
  */
 export function unpricedOnSale(
   lines: DraftLine[],
@@ -50,6 +52,8 @@ export function unpricedOnSale(
 ): Unpriced[] {
   const out = new Map<string, Unpriced>();
   for (const l of lines) {
+    // Priced on the line: the sale goes ahead at what was agreed.
+    if (Number(l.unitPrice) > 0) continue;
     const shape = lineShape(l, byProduct.get(l.productId) ?? []);
     // No shape it is sold in at all is a different fault, said on the item; the server still
     // refuses a line at N0 (0221).

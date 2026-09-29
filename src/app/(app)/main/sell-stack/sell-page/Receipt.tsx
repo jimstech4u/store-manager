@@ -486,13 +486,17 @@ export function Receipt({
         sale's moment and against the sale, so the receipt — which reads its containers as at the
         sale — re-reads and prints the true figure, or none at all.
       */}
-      {emptiesAtCounter && customer && sale.status !== 'voided' && stillWithYou.length > 0 && (
+      {customer && sale.status !== 'voided' && (
         <div data-print-no-print>
           <EmptiesBroughtBack
             storeId={storeId}
             customerId={customer.id}
-            atSale={{ id: sale.id, occurredAt: sale.occurred_at }}
-            title="Did they bring any empties back?"
+            forSale={{
+              id: sale.id,
+              // At the counter: back at the sale's moment, so the paper is right before it prints.
+              occurredAt: emptiesAtCounter ? sale.occurred_at : null,
+            }}
+            title={emptiesAtCounter ? 'Did they bring any empties back?' : 'Empties from this receipt'}
             onRecorded={() => void res.reload()}
           />
         </div>

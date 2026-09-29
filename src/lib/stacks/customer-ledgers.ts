@@ -218,6 +218,28 @@ export async function emptiesOwed(customerId: string): Promise<OwedRow[]> {
   }));
 }
 
+/**
+ * What ONE SALE still owes in containers (0225) — what it sent out, less what has come back against
+ * it, and never more than the customer still holds. The receipt settles only this; the rest of
+ * what a customer holds is the account's business.
+ */
+export async function saleEmptiesOwed(saleId: string): Promise<OwedRow[]> {
+  const { data, error } = await getSupabase().rpc('sale_empties_outstanding', { p_sale_id: saleId });
+  if (error) throw error;
+  return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+    productId: String(r.product_id),
+    productName: String(r.product_name ?? ''),
+    productUnitId: String(r.product_unit_id),
+    unitName: String(r.unit_name ?? ''),
+    unitPlural: String(r.unit_plural ?? ''),
+    baseQty: Number(r.base_qty) || 1,
+    groupId: (r.group_id as string | null) ?? null,
+    groupName: (r.group_name as string | null) ?? null,
+    side: 'they_hold' as const,
+    owed: Number(r.owed) || 0,
+  }));
+}
+
 export async function emptiesLedger(customerId: string): Promise<EmptiesMove[]> {
   const { data, error } = await getSupabase().rpc('customer_empties_ledger', {
     p_store_customer_id: customerId,

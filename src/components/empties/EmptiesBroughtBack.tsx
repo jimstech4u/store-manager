@@ -6,7 +6,12 @@ import { Button } from '@/components/ui/Button';
 import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/components/ui/Dialog';
 import { LoadArea, useLoadArea } from '@/components/ui/LoadArea';
 import { rollUpOwed, settleLine, type OwedLine, type OwedRow } from '@/lib/empties-rollup';
-import { emptiesOwed, LEDGERS_SCOPE, recordEmpties } from '@/lib/stacks/customer-ledgers';
+import {
+  emptiesOwed,
+  LEDGERS_SCOPE,
+  recordEmpties,
+  saleEmptiesOwed,
+} from '@/lib/stacks/customer-ledgers';
 import { accountsChanged } from '@/lib/stacks/customer-account';
 import { messageOf } from '@/lib/format';
 import styles from './EmptiesBroughtBack.module.css';
@@ -34,14 +39,23 @@ import styles from './EmptiesBroughtBack.module.css';
 export function EmptiesBroughtBack({
   storeId,
   customerId,
-  atSale = null,
+  forSale = null,
   title = 'Did they bring any back?',
   onRecorded,
 }: {
   storeId: string;
   customerId: string;
-  /** The sale they came in with, when this is asked at the counter. */
-  atSale?: { id: string; occurredAt: string } | null;
+  /**
+   * ONE SALE'S CONTAINERS ONLY — on its receipt.
+   *
+   * "the empties to be settled before the receipt is just the qty that sale contributed, not the
+   * whole empties the customer has." What comes back is recorded against the sale; once the sale's
+   * own are all back the block has nothing to say and is not drawn.
+   *
+   * `occurredAt` is the sale's moment when this is asked AT THE COUNTER (a fresh receipt), so the
+   * paper's "still with you" — read as at the sale — is true. Null on an older receipt: dated now.
+   */
+  forSale?: { id: string; occurredAt: string | null } | null;
   title?: string;
   /** After anything is recorded — the receipt re-reads, so the paper says the new figure. */
   onRecorded?: () => void;
@@ -49,11 +63,15 @@ export function EmptiesBroughtBack({
   const nav = useNav();
   const problem = useProblem();
 
-  const area = useLoadArea<OwedRow[]>(() => emptiesOwed(customerId), [customerId], {
-    key: `empties-owed:${customerId}`,
-    scope: LEDGERS_SCOPE,
-    onFail: problem.show,
-  });
+  const area = useLoadArea<OwedRow[]>(
+    () => (forSale ? saleEmptiesOwed(forSale.id) : emptiesOwed(customerId)),
+    [customerId, forSale?.id],
+    {
+      key: forSale ? `sale-empties-owed:${forSale.id}` : `empties-owed:${customerId}`,
+      scope: LEDGERS_SCOPE,
+      onFail: problem.show,
+    },
+  );
   const rows = useMemo(
     () => (area.data ?? []).filter((r) => r.owed > 0 && (r.side ?? 'they_hold') === 'they_hold'),
     [area.data],
@@ -76,10 +94,10 @@ export function EmptiesBroughtBack({
             productUnitId: part.productUnitId,
             direction: 'returned',
             qty: part.qty,
-            reason: atSale ? 'Brought back with this sale' : 'Brought back',
-            occurredAt: atSale?.occurredAt ?? null,
-            refTable: atSale ? 'sales' : null,
-            refId: atSale?.id ?? null,
+            reason: forSale ? 'Brought back against this receipt' : 'Brought back',
+            occurredAt: forSale?.occurredAt ?? null,
+            refTable: forSale ? 'sales' : null,
+            refId: forSale?.id ?? null,
           });
         }
       }
@@ -94,6 +112,9 @@ export function EmptiesBroughtBack({
   };
 
   const words = (l: OwedLine) => `${l.said} ${l.label} ${l.unit.toLowerCase()}`;
+
+  // On a receipt, a sale whose containers are all back has nothing to ask.
+  if (forSale && area.data !== null && lines.length === 0) return null;
 
   return (
     <section className={styles.block} aria-label={title}>
@@ -130,7 +151,8 @@ export function EmptiesBroughtBack({
                           void nav.push('empties_record_page', {
                             id: customerId,
                             line: String(i),
-                            ...(atSale ? { sale: atSale.id } : {}),
+                            ...(forSale ? { sale: forSale.id } : {}),
+                            ...(forSale?.occurredAt ? { at: 'sale' } : {}),
                           })
                         }
                       >
@@ -163,8 +185,8 @@ export function EmptiesBroughtBack({
           title={asking.line ? `All ${words(asking.line)} back?` : 'Everything back?'}
           message={
             asking.line
-              ? `${words(asking.line)} come off what they hold${atSale ? ', and the receipt stops listing them' : ''}.`
-              : `${lines.map(words).join(', ')} come off what they hold${atSale ? ', and the receipt stops listing them' : ''}.`
+              ? `${words(asking.line)} come off what they hold${forSale ? ', against this receipt' : ''}.`
+              : `${lines.map(words).join(', ')} come off what they hold${forSale ? ', against this receipt' : ''}.`
           }
           confirmText="Yes, they are back"
           onDismiss={() => setAsking(null)}

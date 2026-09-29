@@ -27,6 +27,8 @@ import { receiptLines } from '@/lib/escpos-text';
 import { renderReceiptCanvas, shareLink, type ReceiptImageInput } from '@/lib/share';
 import { receiptPdf, sharePdf } from '@/lib/pdf';
 import { printDocument, printRouteOf } from '@/lib/print-document';
+import { swapTo } from '@/lib/finish-flow';
+import { CashIcon } from '@/components/ui/Icon';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatDateTime, formatMoney, formatQtySpoken, messageOf } from '@/lib/format';
 import styles from './order-items-page.module.css';
@@ -101,7 +103,7 @@ export default function OrderItemsPage() {
   const { unpriced } = useUnpricedOnSale(store?.id ?? null, order?.lines);
 
   const [note, setNote] = useState<string | null>(null);
-  const [busy, setBusy] = useState<'share' | 'pdf' | 'print' | null>(null);
+  const [busy, setBusy] = useState<'share' | 'pdf' | 'print' | 'pay' | null>(null);
 
   if (!store) return null;
 
@@ -212,7 +214,39 @@ export default function OrderItemsPage() {
 
               {order.lines.length > 0 && (
                 <div className={styles.actions} data-print-no-print>
+                  {/*
+                    ON TO PAYMENT, from the list the customer just agreed to. This page is swapped
+                    for Take payment — popped, not left underneath — so Back from the payment goes
+                    to the till, never back to a list of items. The till's gates first, as the pay
+                    button does: an uncounted or unpriced item is dealt with before money is.
+                  */}
                   <Button
+                    fullWidth
+                    busy={busy === 'pay'}
+                    busyLabel="Opening"
+                    onClick={async () => {
+                      if (uncounted.length > 0) {
+                        void nav.push('count_gate_page', { why: 'pay' });
+                        return;
+                      }
+                      if (unpriced.length > 0) {
+                        void nav.push('price_gate_page', { why: 'pay' });
+                        return;
+                      }
+                      setBusy('pay');
+                      try {
+                        const saved = await push(order);
+                        await swapTo(nav, 'take_payment_page', { id: saved.id ?? order.id ?? '' });
+                      } finally {
+                        setBusy(null);
+                      }
+                    }}
+                  >
+                    <CashIcon /> Take payment · {formatMoney(draftTotal(order))}
+                  </Button>
+
+                  <Button
+                    variant="secondary"
                     fullWidth
                     disabled={!link}
                     onClick={() => {

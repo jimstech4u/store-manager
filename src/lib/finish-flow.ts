@@ -62,3 +62,16 @@ export async function finishInto(
   if (top?.key === 'receipt_page' && top.params?.id === receipt.id) return;
   await nav.push('receipt_page', { id: receipt.id, ...(receipt.fresh ? { fresh: '1' } : {}) });
 }
+
+/**
+ * THIS PAGE, SWAPPED FOR ANOTHER — a real pop, then a push, so Back skips the page swapped out.
+ *
+ * "in All items we should be able to go to Take payment: pop All items and push Take payment."
+ * `replace` rewrites the stack but not the browser's entries, and a later Back can land on the
+ * swapped-out page's address; popping first gives its entry back.
+ */
+export async function swapTo(nav: Nav, key: string, params: Record<string, string>): Promise<void> {
+  const popped = await nav.pop();
+  if (popped) await historySettled();
+  await nav.push(key, params);
+}

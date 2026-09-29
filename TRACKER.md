@@ -32,6 +32,9 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 | Q18 | **Date stock that already has a history** — `date_shelf_stock` (0224) splits an undated lot or makes one for stock that has none, moving no stock; the edit form offers it once an item has a history. Also: a pre-filled shelf no longer forces a recount and a reason on every save | Stock · Backend | ☑ |
 | Q20 | **Empties brought back, settled where they are read** — every line a customer holds offers All back (confirmed) and Part (the empties page, line chosen), plus "They brought everything back". On a just-settled receipt it is asked BEFORE printing or sharing, recorded at the sale's moment against the sale, so "still with you" on the paper is true (server-proven: 5 → 4). On the account page, dated now. Account: `probe-empties-brought-back-ui.mjs` 5/5; receipt: not clicked through (needs a real sale) | Sell · People | ◐ |
 | Q19 | **Robustness sweep of the till** — (a) settling an order another till closed: saved again and settled, or the other till's receipt shown; (b) Take payment / All items / sale line find an order by any id it has had (`formerIds`); (c) the order is saved, awaited, before it is settled — the customer just chosen reaches the shop ("customer is needed" after adding one); (d) a finished sale or correction is unwound before its receipt is shown, so Back never lands on "This sale is no longer open" (`finish-flow.ts`). Needs one real sale to click through | Sell | ◐ |
+| Q21 | **All items → Take payment** — the list is swapped for payment (`swapTo`: a real pop, then the push), gates first; Back from payment is the till. Probe 8/8 | Sell | ☑ |
+| Q22 | **A price typed on the line satisfies the price gate** — only a line at nothing is stopped; setting the shop's price is still one tap on the chip | Sell | ☑ |
+| Q23 | **A receipt settles only its own empties** — `sale_empties_outstanding` (0225): what the sale sent out, less what came back against it, capped at what the customer still holds. On every receipt (dated at the sale when fresh, now otherwise); gone once settled. The account keeps the whole picture | Sell · Backend | ☑ |
 | Q14 | **A line opens from Take payment** — the till's own `SaleLineRow` on `sale_line_page`; Add an item and Scan there push it with the product. Line logic shared with the till (`sale-line-ops`). Same probe, 19/19 | Sell | ☑ |
 
 **Blocked on the shop** — nothing can be done until you give the figure:
@@ -151,6 +154,7 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 | 0222 | stock is whole; the half is a shape (Malta re-said) | ☑ |
 | 0223 | the product picker reaches every item | ☑ |
 | 0224 | date stock already on the shelf | ☑ |
+| 0225 | the empties one sale still owes | ☑ |
 
 ---
 
