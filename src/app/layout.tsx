@@ -94,6 +94,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               "if(app)location.replace('/main');}catch(e){}})();",
           }}
         />
+        {/*
+          THE NAVIGATION RECORDER, switched on for this device only (Settings → Updates → Record
+          navigation). It has to be set before navigation-stack loads, so it is read here, in the
+          head, ahead of every script that could import it.
+        */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{if(localStorage.getItem('nav-report')==='1')" +
+              "window.__NAV_STACK_DEVTOOLS__=true;}catch(e){}})();",
+          }}
+        />
       </head>
       <body>
         {/* First, and above everything that reads state: it registers the pathname hook that

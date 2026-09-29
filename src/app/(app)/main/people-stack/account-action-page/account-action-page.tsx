@@ -1,5 +1,6 @@
 'use client';
 
+import { swapTo } from '@/lib/finish-flow';
 import { useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
@@ -98,6 +99,8 @@ export default function AccountActionPage() {
     setBusy(true);
     const supabase = getSupabase();
     try {
+      // The payment this records, so the confirmation can be read back by its id.
+      let paymentId: string | null = null;
       if (kind === 'refund') {
         /*
          * MONEY LEAVING, for a customer. `payments.direction` has had 'out' since the table was
@@ -106,7 +109,7 @@ export default function AccountActionPage() {
          * Not allocated to a receipt: an allocation says which receipt a payment SETTLES, and
          * money going the other way settles nothing — it clears what the shop was holding.
          */
-        const { error } = await supabase.rpc('record_money_back', {
+        const { data: backId, error } = await supabase.rpc('record_money_back', {
           p_store_id: store.id,
           p_customer_id: customerId,
           p_amount: Number(amount),
@@ -116,8 +119,9 @@ export default function AccountActionPage() {
           p_bank_account_id: null,
         });
         if (error) throw error;
+        paymentId = (backId as string | null) ?? null;
       } else if (kind === 'payment') {
-        const { error } = await supabase.rpc('record_payment', {
+        const { data: paidId, error } = await supabase.rpc('record_payment', {
           p_store_id: store.id,
           p_customer_id: customerId,
           p_amount: Number(amount),
@@ -127,6 +131,7 @@ export default function AccountActionPage() {
           p_bank_account_id: null,
         });
         if (error) throw error;
+        paymentId = (paidId as string | null) ?? null;
       } else {
         /*
          * A charge and an excess are the same row with the direction turned round, which is why
@@ -151,7 +156,13 @@ export default function AccountActionPage() {
        * know which screens exist. The write knows it happened; it announces it.
        */
       accountsChanged();
-      await nav.pop();
+      /*
+       * MONEY RECORDED IS CONFIRMED on a page of its own — who, how much, when, and where the
+       * account stands now — swapped in for this form, so Back is the account and never a form for
+       * a payment already made. A charge has no money in it and just returns.
+       */
+      if (paymentId) await swapTo(nav, 'payment_done_page', { id: paymentId });
+      else await nav.pop();
     } catch (e) {
       problem.show(messageOf(e, 'That could not be recorded.'));
     } finally {

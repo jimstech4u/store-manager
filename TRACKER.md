@@ -35,6 +35,8 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 | Q21 | **All items → Take payment** — the list is swapped for payment (`swapTo`: a real pop, then the push), gates first; Back from payment is the till. Probe 8/8 | Sell | ☑ |
 | Q22 | **A price typed on the line satisfies the price gate** — only a line at nothing is stopped; setting the shop's price is still one tap on the chip | Sell | ☑ |
 | Q23 | **A receipt settles only its own empties** — `sale_empties_outstanding` (0225): what the sale sent out, less what came back against it, capped at what the customer still holds. On every receipt (dated at the sale when fresh, now otherwise); gone once settled. The account keeps the whole picture | Sell · Backend | ☑ |
+| Q24 | **Payment confirmed on its own page** — customer, amount, method, time, and where the account stands now; swapped in for the form so Back is the account; Share as text. Probe 8/8 | People | ☑ |
+| Q25 | **Back on Stock lands on Sell (PWA)** — not reproducible in Chrome or WebKit: straight, after a reload, after a relaunch on Sell with Stock restored two deep, and at the root (`probe-stock-back-ui.mjs`, both engines, 0 failed). Settings → Updates → **Record navigation** now captures the library's own trace on the phone for a report | Navigation | ◐ |
 | Q14 | **A line opens from Take payment** — the till's own `SaleLineRow` on `sale_line_page`; Add an item and Scan there push it with the product. Line logic shared with the till (`sale-line-ops`). Same probe, 19/19 | Sell | ☑ |
 
 **Blocked on the shop** — nothing can be done until you give the figure:

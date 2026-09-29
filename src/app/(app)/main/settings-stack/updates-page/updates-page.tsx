@@ -5,6 +5,7 @@ import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { Explain } from '@/components/ui/Explain';
 import { AppVersion } from '@/components/ui/AppVersion';
+import { NavReport } from '@/components/ui/NavReport';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
@@ -107,6 +108,9 @@ export default function UpdatesPage() {
             */}
             <h2 className={styles.section}>This app</h2>
             <AppVersion />
+
+            <h2 className={styles.section}>Something went to the wrong page?</h2>
+            <NavReport />
           </>
         )}
       </PageState>
