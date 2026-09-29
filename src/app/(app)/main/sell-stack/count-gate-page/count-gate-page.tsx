@@ -334,6 +334,7 @@ export default function CountGatePage() {
                       key={u.productUnitId}
                       label={u.plural}
                       numeric
+                      whole={u.wholeDigit}
                       value={byShape[u.productUnitId] ?? ''}
                       onChange={(e) =>
                         setByShape((prev) => ({ ...prev, [u.productUnitId]: e.target.value }))

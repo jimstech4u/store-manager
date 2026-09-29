@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePermission } from '@/hooks/usePermission';
 import styles from './CustomerPicker.module.css';
 import { SelectionViewer, useSelectionController } from '@academix-admin/selection-viewer';
@@ -111,6 +111,20 @@ export function CustomerPicker({
     deps: [storeId, debounced],
     enabled: open,
   });
+
+  /*
+   * ASKED AGAIN EVERY TIME IT OPENS — without blanking what is shown.
+   *
+   * "customer picker does not ... load all customer." The list is kept between opens, and once it
+   * held everybody it knew of it never asked again: a customer added since — on another phone, or
+   * on the People tab — was not in it, and the seller went looking for somebody the shop already
+   * had. `refresh` re-reads the span on screen and corrects it in place, so the rows stay drawn.
+   */
+  const refreshRef = useRef(list.refresh);
+  refreshRef.current = list.refresh;
+  useEffect(() => {
+    if (open) refreshRef.current();
+  }, [open]);
 
   /*
    * Offered at both ends of a list that runs to hundreds — and only to somebody who may add a

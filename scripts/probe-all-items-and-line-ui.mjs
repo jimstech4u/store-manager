@@ -13,6 +13,7 @@
  */
 
 import { chromium } from '@playwright/test';
+import { trackDrafts } from './probe-drafts.mjs';
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync, mkdirSync } from 'node:fs';
 
@@ -48,7 +49,7 @@ const sweep = async () => {
     .from('draft_orders')
     .select('id')
     .eq('status', 'open')
-    .gte('created_at', startedAt);
+    .in('client_uuid', [...PROBE_DRAFTS]);
   const ids = (mine ?? []).map((d) => d.id);
   if (ids.length === 0) return;
   await admin.from('draft_order_lines').delete().in('draft_order_id', ids);
@@ -58,6 +59,8 @@ const sweep = async () => {
 
 const browser = await chromium.launch();
 const p = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+// Only the tabs THIS browser saves are ever cleaned up — never the shop's own (see probe-drafts).
+const PROBE_DRAFTS = trackDrafts(p);
 const errors = [];
 p.on('pageerror', (e) => errors.push(String(e).split('\n')[0]));
 

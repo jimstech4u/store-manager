@@ -112,16 +112,29 @@ export async function searchProducts(storeId: string, query: string): Promise<Pr
 
 /** Relevance-ordered search. Pass null to disable (e.g. while the picker is closed). */
 export function useProductSearch(storeId: string | null, query: string | null) {
-  const fetchPage = useCallback(async () => {
-    if (!storeId) return { rows: [] as Product[], cursor: null };
-    const { data, error } = await getSupabase().rpc('search_products', {
-      p_store_id: storeId,
-      p_query: query || null,
-      p_limit: 50,
-    });
-    if (error) throw error;
-    return { rows: ((data ?? []) as ProductRow[]).map(toProduct), cursor: null };
-  }, [storeId, query]);
+  /*
+   * PAGED, by how many rows are already here (0223).
+   *
+   * It asked for 50 and nothing more, so a shop with 105 items could never reach the 51st without
+   * typing — "check all pickers if no one has the same bug." The order is total (rank, then name),
+   * so an offset is stable from one page to the next.
+   */
+  const fetchPage = useCallback(
+    async (cursor: unknown | null, limit: number) => {
+      if (!storeId) return { rows: [] as Product[], cursor: null };
+      const offset = typeof cursor === 'number' ? cursor : 0;
+      const { data, error } = await getSupabase().rpc('search_products', {
+        p_store_id: storeId,
+        p_query: query || null,
+        p_limit: limit,
+        p_offset: offset,
+      });
+      if (error) throw error;
+      const rows = ((data ?? []) as ProductRow[]).map(toProduct);
+      return { rows, cursor: offset + rows.length };
+    },
+    [storeId, query],
+  );
 
   const list = usePaginatedList<Product>({
     fetchPage,
@@ -153,8 +166,7 @@ export function useProductSearch(storeId: string | null, query: string | null) {
      * not lose the list somebody was reading.
      */
     persist: true,
-    // 50 in one page and no cursor: a short page would otherwise be read as "the end", which is
-    // correct here — search does not paginate.
+    // 50 a page. A short page is the end; a full one asks for the next as the list is scrolled.
     pageSize: 50,
     deps: [storeId, query],
     enabled: Boolean(storeId) && query !== null,
@@ -165,6 +177,8 @@ export function useProductSearch(storeId: string | null, query: string | null) {
     status: list.loading ? ('loading' as const) : list.error ? ('error' as const) : ('ready' as const),
     error: list.error,
     reload: list.reload,
+    loadMore: list.loadMore,
+    hasMore: list.hasMore,
   };
 }
 

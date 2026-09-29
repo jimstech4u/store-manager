@@ -80,7 +80,10 @@ export function ProductPicker({
     if (!open && isOpen) ops.close();
   }, [open, isOpen, ops]);
 
-  const { products, status } = useProductSearch(storeId, open ? debounced : null);
+  const { products, status, loadMore, hasMore } = useProductSearch(
+    storeId,
+    open ? debounced : null,
+  );
 
   /*
    * The shop's shapes, so a result can say "5 crates 6 bottles" rather than "66 pieces".
@@ -177,6 +180,14 @@ export function ProductPicker({
         gapBetweenHandleAndTitle: '12px',
         gapBetweenTitleAndSearch: '8px',
         gapBetweenSearchAndContent: '12px',
+      }}
+      /*
+       * The next 50 as the list is scrolled — the customer picker has always done this; this one
+       * stopped at 50 (0223).
+       */
+      onPaginate={() => {
+        loadMore();
+        return hasMore;
       }}
       childrenDirection="vertical"
       snapPoints={[0, 1]}

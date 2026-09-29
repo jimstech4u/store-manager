@@ -33,7 +33,7 @@ import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 import { useLoadArea } from '@/components/ui/LoadArea';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { formatQtySpoken, messageOf, pluralUnit } from '@/lib/format';
-import { isAllowedQty, partsFor, snapQty } from '@/lib/quantity-rules';
+import { isAllowedQty, snapQty, stockRules } from '@/lib/quantity-rules';
 import { baseQtyByShape, stockInShapes } from '@/lib/shape-quantities';
 import { productExpiryLayers, setProductExpiry } from '@/lib/stacks/expiry';
 
@@ -1317,28 +1317,18 @@ export function ProductForm({
           <div className={styles.shapeBoxes}>
             {countedShapes.map((u) => {
               /*
-               * COUNTED IN THE AMOUNTS THIS SHAPE COMES IN.
+               * WHOLE ONES, IN EVERY BOX (0222).
                *
-               * A shelf holding nineteen and a half cans is an ordinary count, and the box has
-               * always taken it. Nineteen and a QUARTER cans is not a count, it is a typing
-               * mistake — unless the shop has said it sells quarters, in which case it is a count
-               * again. The till has known this since `quantity-rules.ts`; the shelf boxes were
-               * plain number fields and knew none of it.
-               *
-               * Snapped when the seller leaves the box, never while they are still typing: "19."
-               * on the way to "19.5" would become "19" under their hands.
+               * The shelf boxes used to take a half wherever the shape SELLS in halves, and offered
+               * ½ and ¼ buttons for it — which is how Malta Guinness went in as 133.5 cans. A half
+               * is how a can is sold, not how a shelf is counted: the half on the shelf is 12
+               * pieces, and it goes in the Piece box. Only a weighed thing takes a fraction.
                */
-              const rules = {
-                wholeDigit: u.wholeDigit,
-                allowQuarter: u.allowQuarter,
-                allowHalf: u.allowHalf,
-                allowThreeQuarter: u.allowThreeQuarter,
-              };
+              const rules = stockRules(u);
               const said = shelfByShape[u.storeUnitId] ?? '';
               const asNumber = Number(said);
               const offGrid =
                 said.trim() !== '' && Number.isFinite(asNumber) && !isAllowedQty(asNumber, rules);
-              const steps = partsFor(rules);
               const per = baseOf[u.storeUnitId] ?? 1;
 
               return (
@@ -1362,58 +1352,15 @@ export function ProductForm({
                     }
                   }}
                   placeholder="0"
+                  whole={u.wholeDigit}
                   error={
                     offGrid
-                      ? steps.length > 0
-                        ? `${u.plural} go in whole ones and ${steps
-                            .map((s) => s.label)
-                            .join(', ')} — ${formatQtySpoken(snapQty(asNumber, rules))}, not ${said}.`
-                        : `${u.plural} go in whole ones — ${formatQtySpoken(
-                            snapQty(asNumber, rules),
-                          )}, not ${said}.`
+                      ? `${u.plural} are counted in whole ones — put the part in a smaller shape.`
                       : null
                   }
                   hint={per > 1 ? `one is ${per}` : undefined}
                 />
 
-                {/*
-                  THE PARTS THIS SHAPE SELLS IN, OFFERED.
-
-                  "malta gunisness intial stock is 133.5 which i got error only in whole but that
-                  is wrong because i selected halves too."
-
-                  A box that only REFUSES a half is a box that argues with somebody holding half a
-                  tray. The till has offered these as buttons all along — `partsFor` is the same
-                  call the sell page makes — and the shelf boxes only ever had the refusal half of
-                  the same rule. Tapping one adds the part to whatever whole number is typed, so
-                  "133" then "½" is 133.5.
-                */}
-                {steps.length > 0 && (
-                  <div className={styles.shapeParts}>
-                    {steps.map((p) => {
-                      const whole = Math.floor(Number(said) || 0);
-                      const next = Number((whole + p.value).toFixed(4));
-                      return (
-                        <button
-                          key={p.label}
-                          type="button"
-                          className={`${styles.shapePart} ${
-                            Math.abs((Number(said) || 0) - next) < 1e-9 ? styles.shapePartOn : ''
-                          }`}
-                          aria-label={`${whole} and ${p.label} ${u.plural.toLowerCase()}`}
-                          onClick={() =>
-                            setShelfByShape((prev) => ({
-                              ...prev,
-                              [u.storeUnitId]: String(next),
-                            }))
-                          }
-                        >
-                          {p.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
                 </div>
               );
             })}
@@ -1606,12 +1553,7 @@ export function ProductForm({
                     countedShapes.find(
                       (u) => u.storeUnitId === (batchUnit || countedShapes[0].storeUnitId),
                     ) ?? countedShapes[0];
-                  const rules = {
-                    wholeDigit: chosenShape.wholeDigit,
-                    allowQuarter: chosenShape.allowQuarter,
-                    allowHalf: chosenShape.allowHalf,
-                    allowThreeQuarter: chosenShape.allowThreeQuarter,
-                  };
+                  const rules = stockRules(chosenShape);
                   const asNumber = Number(batchQty);
                   const offGrid =
                     batchQty.trim() !== '' &&
@@ -1621,6 +1563,7 @@ export function ProductForm({
                     <Field
                       label="How many"
                       numeric
+                      whole={chosenShape.wholeDigit}
                       value={batchQty}
                       onChange={(e) => setBatchQty(e.target.value)}
                       onBlur={() => {
@@ -1798,6 +1741,7 @@ export function ProductForm({
                     key={u.storeUnitId}
                     label={`Empty ${u.plural.toLowerCase()}`}
                     numeric
+                    whole
                     required={minimum}
                     value={emptiesByShape[u.storeUnitId] ?? ''}
                     onChange={(e) =>

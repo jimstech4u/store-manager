@@ -16,6 +16,7 @@
  */
 
 import { chromium } from '@playwright/test';
+import { trackDrafts } from './probe-drafts.mjs';
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync, mkdirSync } from 'node:fs';
 
@@ -51,6 +52,8 @@ const p = await browser.newPage({
   isMobile: true,
   hasTouch: true,
 });
+// Only the tabs THIS browser saves are ever cleaned up — never the shop's own (see probe-drafts).
+const PROBE_DRAFTS = trackDrafts(p);
 
 const errors = [];
 p.on('pageerror', (e) => errors.push(String(e).split('\n')[0]));
@@ -313,7 +316,7 @@ try {
     .select('id')
     .eq('store_id', storeId)
     .eq('status', 'open')
-    .gte('created_at', startedAt);
+    .in('client_uuid', [...PROBE_DRAFTS]);
   for (const r of open ?? []) await shop.rpc('cancel_draft_order', { p_draft_id: r.id });
   console.log(`\n  ok  ${(open ?? []).length} draft tab(s) opened by this walk, closed again`);
 }

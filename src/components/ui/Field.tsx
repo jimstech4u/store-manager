@@ -21,6 +21,12 @@ export interface FieldProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 
   numeric?: boolean;
   /** Marks the field as not required, in words. */
   optional?: boolean;
+  /**
+   * WHOLE NUMBERS ONLY — a keypad with no decimal point, and anything but digits dropped as it is
+   * typed. For stock: a shelf holds 133 cans and 12 pieces, never 133.5 cans. A part of a shape is
+   * counted in the smaller shape.
+   */
+  whole?: boolean;
 }
 
 export function Field({
@@ -32,10 +38,12 @@ export function Field({
   suffix,
   numeric = false,
   optional = false,
+  whole = false,
   required,
   className,
   id: idProp,
   inputMode,
+  onChange,
   ...rest
 }: FieldProps) {
   const autoId = useId();
@@ -87,11 +95,21 @@ export function Field({
           className={inputClasses}
           // 'decimal' rather than 'numeric' for quantities: bulk goods are genuinely fractional
           // (1.4 kg), and a keypad with no decimal point makes that impossible to type.
-          inputMode={inputMode ?? (numeric ? 'decimal' : undefined)}
+          inputMode={inputMode ?? (whole ? 'numeric' : numeric ? 'decimal' : undefined)}
           required={required}
           aria-invalid={error ? true : undefined}
           aria-describedby={[hintId, errorId].filter(Boolean).join(' ') || undefined}
           {...rest}
+          onChange={
+            onChange && whole
+              ? (e) => {
+                  // Cut at the point, never joined across it: "5.5" is 5, not 55.
+                  const digits = e.target.value.split(/[.,]/)[0].replace(/[^0-9]/g, '');
+                  if (digits !== e.target.value) e.target.value = digits;
+                  onChange(e);
+                }
+              : onChange
+          }
           // After the spread, so a caller cannot accidentally pin the type and defeat the reveal.
           type={isPassword ? (revealed ? 'text' : 'password') : rest.type}
         />

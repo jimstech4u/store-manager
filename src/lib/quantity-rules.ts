@@ -118,6 +118,19 @@ export function snapQty(value: number, rules: QuantityRules): number {
   return Number(best.toFixed(4));
 }
 
+/**
+ * The rules for STOCK in a shape — what is on the shelf, delivered or dated — as opposed to what
+ * is sold.
+ *
+ * Whole ones only, unless the thing is weighed. "we should remove 0.5 allowed in product qty ...
+ * there shouldn't be decimals entered, only whole. The solution to the half is that we have two
+ * shapes." Half a can of 24 is sold as a half; on the shelf it is 12 pieces, counted in the Piece
+ * box. The server holds the same line (0222).
+ */
+export function stockRules(shape: { wholeDigit: boolean }): QuantityRules {
+  return { wholeDigit: shape.wholeDigit, allowQuarter: false, allowHalf: false, allowThreeQuarter: false };
+}
+
 /** Whether a quantity is one this shop can actually sell. */
 export function isAllowedQty(value: number, rules: QuantityRules): boolean {
   return snapQty(value, rules) === Number(value.toFixed(4));

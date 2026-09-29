@@ -26,6 +26,11 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 | Q11 | Destiny's receipt still prints "1 crate still with you" — needs one re-correction under 0209 | Data | ☐ |
 | Q12 | Audit sweep findings (section 5) | All | ☐ |
 | Q13 | **All items** — the open order on its own, marked NOT A RECEIPT on screen, paper and PDF; share on WhatsApp / share with the tracking link, PDF, print. From the till (under Scan) and Take payment. `probe-all-items-and-line-ui.mjs` | Sell | ☑ |
+| Q15 | **Till stuck on "that order is no longer open"** (29 Sep, live) — my probes' clean-up deleted the shop's open drafts; the till then could not save, pay or close, and a second Close cancelled A406 Hotel (₦142,600, reopened). Probes now clean only their own tabs (`probe-drafts.mjs`); the till re-saves a dead order as a new one, treats "no such order" as closed, and re-selects a tab a failed close puts back. `probe-dead-order-ui.mjs` 8/8 | Sell | ☑ |
+| Q16 | **Stock is whole** — no ½/¼ on shelf, lot, count or yard boxes (`Field whole`); server refuses a fractional base figure or count (0222). Malta Guinness Can re-said as 133 cans 12 pieces, 24 to a can | Stock · Count · Backend | ☑ |
+| Q17 | **Pickers reach everything** — product picker pages past 50 (0223); customer picker re-checks on open; no "nothing found" flash while a term is being fetched (`usePaginatedList`). Selection-viewer paginated on an element that never scrolls — fixed in the library, **publish pending** | Shared · Library | ◐ |
+| Q18 | **Date stock that already has a history** — the edit form only offers expiry before any history, and an item with no lots (Malta) has nothing to date | Stock · Backend | ☐ |
+| Q19 | **Robustness sweep of the till** — every server refusal that can leave a tab, payment or close stuck | Sell | ☐ |
 | Q14 | **A line opens from Take payment** — the till's own `SaleLineRow` on `sale_line_page`; Add an item and Scan there push it with the product. Line logic shared with the till (`sale-line-ops`). Same probe, 19/19 | Sell | ☑ |
 
 **Blocked on the shop** — nothing can be done until you give the figure:
@@ -35,7 +40,7 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 | Four Piece-only sachets (Action Bitters, Eaglejie, Elder's, Striker) | sachets per pack | ⛔ |
 | Best London Dry Gin carton | packs per carton | ⛔ |
 | Supa Komando Bottle (25cl) — returnable with no maker | who makes it | ⛔ |
-| Malta Guinness Can priced N13,000 **per can** with 133.5 on the shelf | per-can price, or a tray shape | ⛔ |
+| ~~Malta Guinness Can priced N13,000 per can with 133.5 on the shelf~~ | resolved: the Can is 24 pieces (0222) | ☑ |
 
 ---
 
@@ -142,6 +147,8 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 | 0219 | a resolution is dated inside its count *(fixes 0218)* | ☑ |
 | 0220 | a supplier credit can be collected | ☑ |
 | 0221 | nothing sells without a price | ☑ |
+| 0222 | stock is whole; the half is a shape (Malta re-said) | ☑ |
+| 0223 | the product picker reaches every item | ☑ |
 
 ---
 

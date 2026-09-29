@@ -244,6 +244,7 @@ export default function YardCountPage() {
                 <Field
                   label="How many"
                   numeric
+                  whole
                   autoFocus
                   value={makerQty}
                   onChange={(e) => setMakerQty(e.target.value)}
@@ -287,6 +288,7 @@ export default function YardCountPage() {
                       key={sh.productUnitId}
                       label={chosenItem.shapes.length === 1 ? 'How many' : sh.unitPlural}
                       numeric
+                      whole
                       autoFocus={chosenItem.shapes.length === 1}
                       value={itemQty[sh.productUnitId] ?? ''}
                       onChange={(e) =>

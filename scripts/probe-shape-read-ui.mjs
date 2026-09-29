@@ -6,6 +6,7 @@
  * Three of those were still saying it in base units or by division after the list was fixed, which
  * is the same defect wearing different clothes — and one only a click finds, because the function
  * they all import was already correct.
+import { trackDrafts } from './probe-drafts.mjs';
  *
  * THE SHELF IS SUPPLIED, NOT WRITTEN. No product in the sample shop has two shapes and a remainder
  * on it — everything is zero, negative, or a round number — and those read identically whichever
@@ -60,7 +61,7 @@ const closeOpenedDrafts = async (startedAt) => {
     .select('id')
     .eq('store_id', storeId)
     .eq('status', 'open')
-    .gte('created_at', startedAt);
+    .in('client_uuid', [...PROBE_DRAFTS]);
 
   for (const r of data ?? []) await shop.rpc('cancel_draft_order', { p_draft_id: r.id });
 
@@ -69,7 +70,7 @@ const closeOpenedDrafts = async (startedAt) => {
     .select('id')
     .eq('store_id', storeId)
     .eq('status', 'open')
-    .gte('created_at', startedAt);
+    .in('client_uuid', [...PROBE_DRAFTS]);
   return { closed: (data ?? []).length, left: (left ?? []).length };
 };
 
@@ -137,6 +138,8 @@ const p = await browser.newPage({
   isMobile: true,
   hasTouch: true,
 });
+// Only the tabs THIS browser saves are ever cleaned up — never the shop's own (see probe-drafts).
+const PROBE_DRAFTS = trackDrafts(p);
 const errors = [];
 p.on('pageerror', (e) => errors.push(String(e).split('\n')[0]));
 

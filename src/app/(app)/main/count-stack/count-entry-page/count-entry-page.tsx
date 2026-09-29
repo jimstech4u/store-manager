@@ -629,6 +629,7 @@ export default function CountEntryPage() {
                 <Field
                   label={u.plural}
                   numeric
+                  whole={u.wholeDigit}
                   required={shapes.length === 1}
                   value={byShape[u.productUnitId] ?? ''}
                   onChange={(e) =>
@@ -674,6 +675,7 @@ export default function CountEntryPage() {
                     <Field
                       label={`Empty ${u.plural.toLowerCase()}`}
                       numeric
+                      whole
                       optional
                       value={emptiesByShape[u.productUnitId] ?? ''}
                       onChange={(e) =>

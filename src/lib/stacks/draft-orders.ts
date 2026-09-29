@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDemandState } from '@academix-admin/state-stack';
 import { getSupabase } from '@/lib/supabase/client';
 import { messageOf } from '@/lib/format';
@@ -347,9 +347,12 @@ export function useDraftOrders(storeId: string | null) {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // `push` calls itself to save a dead order again as a new one; a ref, so it is never stale.
+  const pushRef = useRef<((order: DraftOrder) => Promise<DraftOrder>) | null>(null);
+
   /** Push one order to the server, adopting the id and share code it assigns. */
   const push = useCallback(
-    async (order: DraftOrder) => {
+    async (order: DraftOrder): Promise<DraftOrder> => {
       if (!storeId) return order;
       setSyncing(true);
       setError(null);
@@ -433,6 +436,56 @@ export function useDraftOrders(storeId: string | null) {
         );
         return { ...order, id: savedId, code, shareToken, synced: true };
       } catch (e: unknown) {
+        /*
+         * THE SHOP NO LONGER HAS THIS ORDER OPEN — find out why, and never leave the tab stuck.
+         *
+         * 29 Sep: an order was deleted under a seller's tab (a test's clean-up — see
+         * scripts/probe-drafts.mjs). Every save after that said "that order is no longer open",
+         * "Not saved to the shop yet" never went away, payment could not start, and the tab could
+         * not be closed. A retry can never succeed against an order that is not open, so:
+         *
+         *   · SETTLED — the sale is done (on this till or another). The tab has nothing left to do.
+         *   · CANCELLED OR GONE, with goods on it — the seller is still serving this customer, so
+         *     the order is saved again as a new one, with a new code, and they are told. Losing the
+         *     work in front of them is the one outcome that cannot be undone.
+         *   · CANCELLED OR GONE, and empty — nothing to keep; the tab goes.
+         */
+        const gone = /no longer open/i.test(messageOf(e, ''));
+        if (gone && order.id) {
+          const { data: row } = await getSupabase()
+            .from('draft_orders')
+            .select('status')
+            .eq('id', order.id)
+            .maybeSingle();
+          const status = (row as { status: string } | null)?.status ?? null;
+          const dropTab = () =>
+            setOrders((prev) => prev.filter((o) => o.clientUuid !== order.clientUuid));
+
+          if (status === 'settled' || order.lines.length === 0) {
+            dropTab();
+            return order;
+          }
+          /*
+           * A NEW CLIENT ID as well: the shop finds an order by it before inserting, so the old one
+           * would lead straight back to the cancelled order. The tab — and the selection, if this
+           * was the one being served — moves to the new id with it.
+           */
+          const again = { ...order, id: null, code: null, shareToken: null, clientUuid: newId() };
+          setOrders((prev) =>
+            prev.map((o) => (o.clientUuid === order.clientUuid ? { ...o, ...again } : o)),
+          );
+          setActiveId((current) => (current === order.clientUuid ? again.clientUuid : current));
+          const saved = await pushRef.current?.(again);
+          if (saved?.id) {
+            setError(
+              `This order had been closed in the shop, so it was saved again as a new order` +
+                (saved.code ? ` (${saved.code})` : '') +
+                '. Nothing on it was lost.',
+            );
+          }
+          return saved ?? again;
+        }
+
         // A failed push is not a lost order — the local copy stands and can be pushed again.
         // Saying "not saved yet" is honest; silently dropping it would not be.
         setError(messageOf(e, 'Could not save this order'));
@@ -441,8 +494,9 @@ export function useDraftOrders(storeId: string | null) {
         setSyncing(false);
       }
     },
-    [storeId, setOrders],
+    [storeId, setOrders, setActiveId],
   );
+  pushRef.current = push;
 
   const startOrder = useCallback(() => {
     const order = makeDraft();
@@ -492,6 +546,7 @@ export function useDraftOrders(storeId: string | null) {
     (clientUuid: string, opts?: { settled?: boolean }) => {
       let closed: DraftOrder | null = null;
       let closedAt = -1;
+      let wasActive = false;
 
       setOrders((prev) => {
         const at = prev.findIndex((o) => o.clientUuid === clientUuid);
@@ -508,6 +563,7 @@ export function useDraftOrders(storeId: string | null) {
          * waiting longest instead of whoever is standing in front of them.
          */
         setActiveId((current) => {
+          wasActive = current === clientUuid;
           if (current !== clientUuid) return current;
           if (next.length === 0) return null;
           return next[Math.min(at, next.length - 1)].clientUuid;
@@ -554,7 +610,12 @@ export function useDraftOrders(storeId: string | null) {
          * finished with — which is the state closing wanted. Putting the tab back and shouting
          * about it turns a completed sale into an error message.
          */
-        const already = /already been paid|no longer open/i.test(err.message ?? '');
+        /*
+         * "no such order" joins them (29 Sep). An order that no longer exists is as closed as it
+         * can be — and treating it as a failure put the tab back, which is how the next Close
+         * landed on the customer beside it.
+         */
+        const already = /already been paid|no longer open|no such order/i.test(err.message ?? '');
         if (already) return;
 
         /*
@@ -569,7 +630,15 @@ export function useDraftOrders(storeId: string | null) {
             ? prev
             : [...prev.slice(0, closedAt), order, ...prev.slice(closedAt)],
         );
-        setActiveId((current) => current ?? order.clientUuid);
+        /*
+         * SELECTED AGAIN IF IT WAS THE ONE BEING CLOSED — not merely "if nothing is selected".
+         *
+         * The close had already moved the selection to the next tab, so `current ?? …` kept THAT
+         * one selected while the closed tab reappeared beside it. The seller, seeing the tab come
+         * back, pressed Close again — on the neighbour. On 29 Sep that cancelled A406 Hotel,
+         * ₦142,600, while trying to close an empty tab.
+         */
+        setActiveId((current) => (wasActive ? order.clientUuid : (current ?? order.clientUuid)));
         setError(messageOf(err, 'Could not close that order'));
       })();
     },

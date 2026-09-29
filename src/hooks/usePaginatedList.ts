@@ -136,6 +136,21 @@ export function usePaginatedList<T>({
 
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+
+  /*
+   * WHICH QUESTION HAS BEEN ANSWERED — so "not asked yet" is never shown as "nothing found".
+   *
+   * "search view and selection viewer shows empty for a search result for a brief before actually
+   * showing the record even if it is the same match by name." The moment a term changes, this list
+   * renders once with no rows and `loading` still false — the fetch starts in an effect, after the
+   * paint — and every picker and search page read that frame as an empty result. Now a list with
+   * no rows that has not yet answered THESE deps says it is loading, and only an answer (rows, none,
+   * or a failure) for the current question can make it say anything else.
+   */
+  const depsKey = deps.map((d) => String(d)).join('\u0001');
+  const depsKeyRef = useRef(depsKey);
+  depsKeyRef.current = depsKey;
+  const [answered, setAnswered] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const cursorRef = useRef<unknown | null>(snapshot.cursor);
@@ -199,6 +214,7 @@ export function usePaginatedList<T>({
       if (inFlight.current && !reset) return;
 
       const gen = reset ? ++genRef.current : genRef.current;
+      const askedFor = depsKeyRef.current;
       inFlight.current = true;
 
       if (reset) {
@@ -236,8 +252,10 @@ export function usePaginatedList<T>({
           cursor,
           hasMore: rows.length >= pageSize,
         }));
+        setAnswered(askedFor);
       } catch (e: unknown) {
         if (gen !== genRef.current) return;
+        setAnswered(askedFor);
         /*
          * AN ERROR IS NOT THE END OF THE LIST.
          *
@@ -385,6 +403,7 @@ export function usePaginatedList<T>({
         seenRef.current = seen;
         cursorRef.current = cursor;
         setSnapshot({ items: fresh, cursor, hasMore: rows.length >= span });
+        setAnswered(depsKeyRef.current);
       } catch (e: unknown) {
         if (gen !== genRef.current) return;
         // Keep the rows. A failed refresh is a network problem, not a reason to empty a list
@@ -429,7 +448,20 @@ export function usePaginatedList<T>({
    */
   useInvalidation(scope, refresh);
 
-  return { items, setItems, loading, loadingMore, error, hasMore, loadMore, reload, refresh };
+  // Nothing on screen and this question not yet answered: that is loading, not empty.
+  const waiting = enabled && items.length === 0 && answered !== depsKey;
+
+  return {
+    items,
+    setItems,
+    loading: loading || waiting,
+    loadingMore,
+    error,
+    hasMore,
+    loadMore,
+    reload,
+    refresh,
+  };
 }
 
 /**
