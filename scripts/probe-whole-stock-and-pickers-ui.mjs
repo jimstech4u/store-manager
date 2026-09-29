@@ -155,11 +155,24 @@ try {
     (await pieces.count()) ? `"${await pieces.inputValue()}"` : 'no Pieces box');
   check('no ½ button on the shelf boxes', (await p.getByRole('button', { name: '½', exact: true }).count()) === 0);
 
+  let page = await p.locator('body').innerText();
+  check('no count reason asked when nothing was changed', !/Why is this count being corrected/.test(page));
+  check('"When does it go off?" is offered on an item with a history', /When does it go off\?/.test(page));
+  check('and it dates what is already on the shelf', /Date what is on the shelf without one/.test(page));
+  const goesOff = p.getByText('When does it go off?', { exact: true }).first();
+  if (await goesOff.count()) {
+    await goesOff.scrollIntoViewIfNeeded();
+    await p.waitForTimeout(600);
+    await p.screenshot({ path: `${SHOTS}/3-malta-dates.png` });
+  }
+
   if (await cans.count()) {
     // Pasted, the way a figure with a point can arrive at all: a whole-number keypad has no point.
     await cans.fill('5.5');
     await p.waitForTimeout(500);
     check('a typed 5.5 stays whole', (await cans.inputValue()) === '5', `"${await cans.inputValue()}"`);
+    page = await p.locator('body').innerText();
+    check('a changed box asks why', /Why is this count being corrected/.test(page));
   }
 
   check('no page errors', errors.length === 0, errors.slice(0, 2).join(' | '));

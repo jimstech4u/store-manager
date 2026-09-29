@@ -382,6 +382,23 @@ export function ProductForm({
   const anyShelfSaid = countedShapes.some((u) => (shelfByShape[u.storeUnitId] ?? '').trim() !== '');
 
   /*
+   * WHAT THE BOXES WERE FILLED WITH, so a count is only taken when somebody changed them.
+   *
+   * The edit form fills the boxes with what is on hand, so "something is in the boxes" was true on
+   * every save — and every save of an item with a history, a new name or a new price included,
+   * demanded "why is this count being corrected?" and recorded a recount nobody made. A count now
+   * happens when the figures differ from the ones loaded into them; a box left as it was is not a
+   * count.
+   */
+  const [seededShelf, setSeededShelf] = useState<Record<string, string> | null>(null);
+  const shelfEdited =
+    seededShelf === null
+      ? anyShelfSaid
+      : countedShapes.some(
+          (u) => (shelfByShape[u.storeUnitId] ?? '').trim() !== (seededShelf[u.storeUnitId] ?? '').trim(),
+        );
+
+  /*
    * "WHEN DOES IT GO OFF?" AND "EXPIRY DATES ALREADY RECORDED" WERE THE SAME SECTION TWICE.
    *
    * The shop spotted it: "they are same dry duplicate that we did not see". One composed new
@@ -394,8 +411,6 @@ export function ProductForm({
    * anything else, and a composer above its own output reads as though the list belonged to the
    * next thing rather than the last.
    */
-  const canAddBatches =
-    (!editing || hadStock === false) && shelfBase > 0 && countedShapes.length > 0;
 
   /*
    * The groups this product is already in.
@@ -446,6 +461,7 @@ export function ProductForm({
       left -= whole * per;
     });
     setShelfByShape(next);
+    setSeededShelf(next);
   }, [editing, editingId, hadStock, existingUnitsLoaded, countedShapes, baseOf, product?.onHand]);
   const expirySeed = useLoadArea(() => productExpiryLayers(editingId as string), [editingId], {
     key: `product-expiry-lots:${editingId ?? 'none'}`,
@@ -455,6 +471,27 @@ export function ProductForm({
 
   /** The lots already on this shelf. Empty on a new item, which has none by definition. */
   const recordedLots = editing ? (expirySeed.data ?? []) : [];
+
+  /*
+   * DATING STOCK THAT IS ALREADY THERE (0224).
+   *
+   * "we could not even edit the expiry date ... the only thing stopped from editing is initial
+   * stock and empties when history exists." The composer below belonged to the opening count, so
+   * it vanished the moment an item had a history — and an item counted without dates has no lot
+   * to correct either, so there was nowhere at all to say when it goes off.
+   *
+   * With a history, the lines date part of what is on the shelf and NOT YET DATED: the shelf less
+   * the lots that already carry a date. They move no stock — `date_shelf_stock` splits an undated
+   * lot, or makes one for stock that has none.
+   */
+  const datingExisting = editing && hadStock === true;
+  const datedOnShelf = recordedLots
+    .filter((l) => l.expiresOn)
+    .reduce((sum, l) => sum + l.remaining, 0);
+  const dateRoom = datingExisting ? Math.max(shelfBase - datedOnShelf, 0) : shelfBase;
+  const canAddBatches =
+    countedShapes.length > 0 &&
+    (datingExisting ? dateRoom > 0 : (!editing || hadStock === false) && shelfBase > 0);
   const [expiryDates, setExpiryDates] = useState<Record<string, string>>({});
   const [expiryUpdating, setExpiryUpdating] = useState<string | null>(null);
   /*
@@ -806,7 +843,7 @@ export function ProductForm({
             : null,
         });
         if (error) throw error;
-      } else if (editing && anyShelfSaid) {
+      } else if (editing && shelfEdited) {
         /*
          * An existing item is not "opened" again. This is a fresh physical count: the database
          * retains the opening count, records what this one replaces, and makes the reason part of
@@ -826,6 +863,20 @@ export function ProductForm({
           p_reason: stockReason.trim(),
         });
         if (countError) throw countError;
+      }
+
+      if (datingExisting && anyBatch) {
+        const { error: dateError } = await supabase.rpc('date_shelf_stock', {
+          p_product_id: id,
+          p_batches: batches
+            .filter((b) => Number(b.qty) > 0)
+            .map((b) => ({
+              qty: Number(b.qty) * (baseOf[b.storeUnitId] ?? 1),
+              expires_on: b.expiresOn || null,
+            })),
+          p_reason: stockReason.trim() || 'Dated on the shelf, from the item',
+        });
+        if (dateError) throw dateError;
       }
 
       /*
@@ -1372,7 +1423,7 @@ export function ProductForm({
               : 'Leave them blank if you would rather count later.'}
           </p>
 
-          {editing && anyShelfSaid && (
+          {editing && shelfEdited && (
             <Field
               label="Why is this count being corrected?"
               required
@@ -1388,7 +1439,9 @@ export function ProductForm({
               <h3 className={styles.subsection}>When does it go off?</h3>
               <p className={styles.sectionNote}>
                 {canAddBatches
-                  ? 'Only if it has a date on it. A shelf two deliveries deep has two lines, and they are not always the same shape.'
+                  ? datingExisting
+                    ? 'Date what is on the shelf without one. It moves no stock — it only says which of it goes off when, and that sells first.'
+                    : 'Only if it has a date on it. A shelf two deliveries deep has two lines, and they are not always the same shape.'
                   : 'Correct the date on a lot still on the shelf. It never changes its quantity, cost, or the order stock is sold in.'}
               </p>
 
@@ -1628,7 +1681,7 @@ export function ProductForm({
                 to somebody holding crates; "13 crates and 4 bottles still to date" is the same
                 fact in the words they used to type it.
               */}
-              {shelfBase - batchBase > 0 && (
+              {dateRoom - batchBase > 0 && (
                 <p className={styles.batchLeft}>
                   <span>Still to date</span>
                   <span className={styles.batchLeftQty}>
@@ -1637,14 +1690,14 @@ export function ProductForm({
                         name: u.name,
                         plural: u.plural,
                         baseQty: baseOf[u.storeUnitId] ?? 1,
-                        onHandBase: shelfBase - batchBase,
+                        onHandBase: dateRoom - batchBase,
                       })),
                     )}
                   </span>
                 </p>
               )}
 
-              {anyBatch && batchBase === shelfBase && (
+              {anyBatch && batchBase === dateRoom && (
                 <p className={`${styles.batchLeft} ${styles.batchLeftDone}`}>
                   <span>Every one is dated.</span>
                 </p>
@@ -1655,7 +1708,7 @@ export function ProductForm({
                 after: the server refuses a set that does not add up, and being told at the save
                 button — having typed a whole item — is being told too late.
               */}
-              {batchBase > shelfBase && (
+              {batchBase > dateRoom && (
                 <p className={styles.batchWarn}>
                   The dates cover{' '}
                   {stockInShapes(
@@ -1666,16 +1719,18 @@ export function ProductForm({
                       onHandBase: batchBase,
                     })),
                   )}{' '}
-                  but you counted{' '}
+                  {datingExisting ? ' but only ' : ' but you counted '}
                   {stockInShapes(
                     countedShapes.map((u) => ({
                       name: u.name,
                       plural: u.plural,
                       baseQty: baseOf[u.storeUnitId] ?? 1,
-                      onHandBase: shelfBase,
+                      onHandBase: dateRoom,
                     })),
                   )}
-                  . They describe the same shelf, so they have to agree.
+                  {datingExisting
+                    ? ' is on the shelf without a date.'
+                    : '. They describe the same shelf, so they have to agree.'}
                 </p>
               )}
             </>

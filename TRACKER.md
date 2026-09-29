@@ -28,8 +28,8 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 | Q13 | **All items** — the open order on its own, marked NOT A RECEIPT on screen, paper and PDF; share on WhatsApp / share with the tracking link, PDF, print. From the till (under Scan) and Take payment. `probe-all-items-and-line-ui.mjs` | Sell | ☑ |
 | Q15 | **Till stuck on "that order is no longer open"** (29 Sep, live) — my probes' clean-up deleted the shop's open drafts; the till then could not save, pay or close, and a second Close cancelled A406 Hotel (₦142,600, reopened). Probes now clean only their own tabs (`probe-drafts.mjs`); the till re-saves a dead order as a new one, treats "no such order" as closed, and re-selects a tab a failed close puts back. `probe-dead-order-ui.mjs` 8/8 | Sell | ☑ |
 | Q16 | **Stock is whole** — no ½/¼ on shelf, lot, count or yard boxes (`Field whole`); server refuses a fractional base figure or count (0222). Malta Guinness Can re-said as 133 cans 12 pieces, 24 to a can | Stock · Count · Backend | ☑ |
-| Q17 | **Pickers reach everything** — product picker pages past 50 (0223); customer picker re-checks on open; no "nothing found" flash while a term is being fetched (`usePaginatedList`). Selection-viewer paginated on an element that never scrolls — fixed in the library, **publish pending** | Shared · Library | ◐ |
-| Q18 | **Date stock that already has a history** — the edit form only offers expiry before any history, and an item with no lots (Malta) has nothing to date | Stock · Backend | ☐ |
+| Q17 | **Pickers reach everything** — product picker pages past 50 (0223); customer picker re-checks on open; no "nothing found" flash while a term is being fetched (`usePaginatedList`). Selection-viewer paginated on an element that never scrolls — fixed and published as 0.5.1. Probe: 105 of 105 | Shared · Library | ☑ |
+| Q18 | **Date stock that already has a history** — `date_shelf_stock` (0224) splits an undated lot or makes one for stock that has none, moving no stock; the edit form offers it once an item has a history. Also: a pre-filled shelf no longer forces a recount and a reason on every save | Stock · Backend | ☑ |
 | Q19 | **Robustness sweep of the till** — every server refusal that can leave a tab, payment or close stuck | Sell | ☐ |
 | Q14 | **A line opens from Take payment** — the till's own `SaleLineRow` on `sale_line_page`; Add an item and Scan there push it with the product. Line logic shared with the till (`sale-line-ops`). Same probe, 19/19 | Sell | ☑ |
 
@@ -149,6 +149,7 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 | 0221 | nothing sells without a price | ☑ |
 | 0222 | stock is whole; the half is a shape (Malta re-said) | ☑ |
 | 0223 | the product picker reaches every item | ☑ |
+| 0224 | date stock already on the shelf | ☑ |
 
 ---
 
