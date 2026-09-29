@@ -11,11 +11,12 @@ import { InfoPanel } from '@/components/ui/Explain';
 import { ProductPicker } from '@/components/catalog/ProductPicker';
 import { BarcodeScanner } from '@/components/catalog/BarcodeScanner';
 import { findByBarcode } from '@/lib/stacks/mid-sale';
+import { finishInto } from '@/lib/finish-flow';
 import { TakePayment } from '../sell-page/TakePayment';
 import { CustomerPicker } from '@/components/customers/CustomerPicker';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
-import { draftTotal, useDraftOrders } from '@/lib/stacks/draft-orders';
+import { draftTotal, orderById, useDraftOrders } from '@/lib/stacks/draft-orders';
 import { getSupabase } from '@/lib/supabase/client';
 import { messageOf } from '@/lib/format';
 import { applySaleLocally } from '@/lib/stacks/local-effects';
@@ -60,7 +61,7 @@ export default function TakePaymentPage() {
   );
 
   // By id first; the active tab only when no id travelled with the push.
-  const activeOrder = wantedId ? (orders.find((o) => o.id === wantedId) ?? null) : current;
+  const activeOrder = wantedId ? orderById(orders, wantedId) : current;
 
   /*
    * CHOOSING A CUSTOMER HAPPENS HERE, on this page.
@@ -165,7 +166,18 @@ export default function TakePaymentPage() {
       : {
           state: 'empty',
           title: 'This sale is no longer open',
-          body: 'It was settled or closed. Start a new one from the Sell screen.',
+          body: (
+            <>
+              It was settled or closed.{' '}
+              <Button
+                variant="secondary"
+                fullWidth
+                onClick={() => void finishInto(nav, (entry) => entry.key === 'sell_page', null)}
+              >
+                Back to the till
+              </Button>
+            </>
+          ),
         };
 
   return (
@@ -259,13 +271,57 @@ export default function TakePaymentPage() {
            * does both or neither, and a retry after a timeout returns the sale already recorded
            * without taking the deposit twice. The draft's client id is still the idempotency key.
            */
-          const { data, error: err } = await getSupabase().rpc('settle_draft_with_deposit', {
-            p_draft_id: activeOrder.id,
-            p_payments: payments,
-            p_client_uuid: activeOrder.clientUuid,
-            p_deposit: depositNow > 0 ? depositNow : null,
-            p_deposit_reason: depositReason,
-          });
+          const settleDraft = (draft: { id: string | null; clientUuid: string }) =>
+            getSupabase().rpc('settle_draft_with_deposit', {
+              p_draft_id: draft.id,
+              p_payments: payments,
+              p_client_uuid: draft.clientUuid,
+              p_deposit: depositNow > 0 ? depositNow : null,
+              p_deposit_reason: depositReason,
+            });
+          /*
+           * SAVED FIRST, then settled.
+           *
+           * "when I add a customer from the picker on Take payment, it is showing, but I get
+           * 'customer is needed'." The customer — and any charge or note typed here — goes on the
+           * order on this phone at once, and to the shop on the next background save. Settling
+           * straight after asked the shop about an order it had not been told had a customer.
+           * One save, awaited, and the shop settles exactly what is on the screen.
+           */
+          const current = await push(activeOrder);
+          let { data, error: err } = await settleDraft(current.id ? current : activeOrder);
+
+          /*
+           * THE SHOP NO LONGER HAS THIS ORDER OPEN — the payment is not lost to it.
+           *
+           * Another till may have closed the tab, or settled it, while this seller was counting
+           * money. Before 29 Sep that was a dialog saying "that order is no longer open" over a
+           * payment screen that could never succeed. Now:
+           *
+           *   · SETTLED ELSEWHERE — that sale's receipt is shown. Nothing is taken twice.
+           *   · CLOSED OR GONE — the order is saved again as a new one (`push` does it, and says so)
+           *     and settled as that, once.
+           */
+          if (err && /no longer open|no such order/i.test(err.message ?? '')) {
+            const { data: row } = await getSupabase()
+              .from('draft_orders')
+              .select('status, settled_sale_id')
+              .eq('id', activeOrder.id)
+              .maybeSingle();
+            const was = row as { status: string; settled_sale_id: string | null } | null;
+            if (was?.status === 'settled' && was.settled_sale_id) {
+              if (settled.isProvided) settled.getter()?.(was.settled_sale_id);
+              else
+                void finishInto(nav, (entry) => entry.key === 'sell_page', {
+                  id: was.settled_sale_id,
+                });
+              return;
+            }
+            const again = await push(activeOrder);
+            if (again.id && again.id !== activeOrder.id) {
+              ({ data, error: err } = await settleDraft(again));
+            }
+          }
           if (err) throw err;
           const saleId = data as string;
 
@@ -391,10 +447,7 @@ export default function TakePaymentPage() {
            * sale exists, and leaving it under the receipt means Back walks into a payment for a
            * sale already made.
            */
-          void nav.pushAndPopUntil('receipt_page', (entry) => entry.key === 'sell_page', {
-            id: saleId,
-            fresh: '1',
-          });
+          void finishInto(nav, (entry) => entry.key === 'sell_page', { id: saleId, fresh: true });
         }}
       />
 

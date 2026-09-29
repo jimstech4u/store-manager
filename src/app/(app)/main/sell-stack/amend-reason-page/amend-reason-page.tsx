@@ -1,5 +1,6 @@
 'use client';
 
+import { finishInto } from '@/lib/finish-flow';
 import { useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
@@ -93,10 +94,18 @@ export default function AmendReasonPage() {
       setState('idle');
 
       /*
-       * `replace`, not `push`: this screen is finished the moment the correction lands, and leaving
-       * it under the receipt means Back walks into a reason box for a correction already made.
+       * BACK TO THE RECEIPT THE CORRECTION STARTED FROM — the flow unwound, not replaced.
+       *
+       * `replace` swapped this screen for the receipt but left the correction's other screens, and
+       * their browser history, underneath: Back walked into a payment box for a correction already
+       * made. `finishInto` pops back to that receipt (which re-reads itself), or shows it fresh
+       * when the correction was reached some other way.
        */
-      void nav.replace('receipt_page', { id: result.saleId, fresh: '1' });
+      void finishInto(
+        nav,
+        (entry) => entry.key === 'receipt_page' && entry.params?.id === result.saleId,
+        { id: result.saleId, fresh: true },
+      );
     } catch (e) {
       setState('failed');
       setFailure(messageOf(e, 'Could not correct that receipt.'));

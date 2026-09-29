@@ -108,6 +108,15 @@ export interface DraftOrder {
    * order. This one is never reused.
    */
   shareToken?: string | null;
+  /**
+   * The server ids this order has had before, newest last.
+   *
+   * An order the shop closed underneath a seller is saved again as a NEW order (see `push`), and
+   * its id changes. A page that was opened with the old id — Take payment, All items, a sale line —
+   * must still find it, or it tells the seller "this sale is no longer open" about the customer in
+   * front of them. `orderById` looks here too.
+   */
+  formerIds?: string[];
   id: string | null;
   /** Stable client id, used for idempotency until the server assigns an id. */
   clientUuid: string;
@@ -196,6 +205,14 @@ export function makeDraftLine(partial: Partial<DraftLine> = {}): DraftLine {
     priceReason: null,
     ...partial,
   };
+}
+
+/**
+ * The order a page was opened for — by its id, or by an id it had before it was saved again.
+ */
+export function orderById(orders: DraftOrder[], id: string | null): DraftOrder | null {
+  if (!id) return null;
+  return orders.find((o) => o.id === id || (o.formerIds ?? []).includes(id)) ?? null;
 }
 
 export function lineTotal(line: DraftLine): number {
@@ -470,7 +487,14 @@ export function useDraftOrders(storeId: string | null) {
            * would lead straight back to the cancelled order. The tab — and the selection, if this
            * was the one being served — moves to the new id with it.
            */
-          const again = { ...order, id: null, code: null, shareToken: null, clientUuid: newId() };
+          const again = {
+            ...order,
+            id: null,
+            code: null,
+            shareToken: null,
+            clientUuid: newId(),
+            formerIds: [...(order.formerIds ?? []), order.id],
+          };
           setOrders((prev) =>
             prev.map((o) => (o.clientUuid === order.clientUuid ? { ...o, ...again } : o)),
           );

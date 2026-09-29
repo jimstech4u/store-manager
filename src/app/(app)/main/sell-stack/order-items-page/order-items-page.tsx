@@ -18,6 +18,7 @@ import {
   draftTotal,
   lineTotal,
   useDraftOrders,
+  orderById,
 } from '@/lib/stacks/draft-orders';
 import { useUncountedToday } from '@/lib/stacks/count-gate';
 import { useUnpricedOnSale } from '@/lib/stacks/price-gate';
@@ -55,7 +56,7 @@ export default function OrderItemsPage() {
 
   const { orders, activeOrder: current, push, syncing } = useDraftOrders(store?.id ?? null);
   // By id first; the active tab only when no id travelled with the push.
-  const order = wantedId ? (orders.find((o) => o.id === wantedId) ?? null) : current;
+  const order = wantedId ? orderById(orders, wantedId) : current;
 
   /*
    * THE CODE AND THE LINK EXIST ONCE THE SHOP HAS THE ORDER. A tab opened a second ago may not have

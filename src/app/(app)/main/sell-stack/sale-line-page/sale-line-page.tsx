@@ -10,7 +10,7 @@ import { SaleLineRow } from '@/components/sell/SaleLineRow';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { fetchProduct } from '@/lib/stacks/catalog-stack';
-import { lineTotal, useDraftOrders, type DraftLine } from '@/lib/stacks/draft-orders';
+import { lineTotal, orderById, useDraftOrders, type DraftLine } from '@/lib/stacks/draft-orders';
 import { useTillShapes } from '@/lib/stacks/till-shapes';
 import { useSellingUnits } from '@/lib/stacks/selling-units';
 import { useUncountedToday } from '@/lib/stacks/count-gate';
@@ -51,7 +51,7 @@ export default function SaleLinePage() {
 
   const { orders, activeOrder: current, updateLine, addLine, removeLine, syncing } =
     useDraftOrders(store?.id ?? null);
-  const order = wantedId ? (orders.find((o) => o.id === wantedId) ?? null) : current;
+  const order = wantedId ? orderById(orders, wantedId) : current;
 
   /* ── Adding: the product read back, and the line composed from it ─────────────────── */
   const [draft, setDraft] = useState<DraftLine | null>(null);

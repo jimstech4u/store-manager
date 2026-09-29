@@ -45,6 +45,7 @@ import {
 import { formatMoney, formatQty, messageOf } from '@/lib/format';
 import { partsFor, snapQty, startingQty } from '@/lib/quantity-rules';
 import { lineRules, resolveLinePrice, startLine } from '@/lib/stacks/sale-line-ops';
+import { finishInto } from '@/lib/finish-flow';
 
 /**
  * The sale screen — over 90% of what this product does.
@@ -562,16 +563,12 @@ export default function SellPage() {
      * so the order of these two is purely about what the seller ends up looking at.
      */
     /*
-     * `pushAndPopUntil`, so the payment screen does not stay under the receipt.
+     * THE PAYMENT SCREEN IS UNWOUND, THEN THE RECEIPT SHOWN — see `finishInto`.
      *
-     * The payment is finished the moment the sale exists. Left on the stack, Back from the
-     * receipt walks into a payment screen for a sale already made — which reads as if it did not
-     * go through. Back now returns to the till, ready for the next customer.
+     * `pushAndPopUntil` left the payment screen's entry in the browser's history, so Back from the
+     * receipt walked into "This sale is no longer open". Back now returns to the till.
      */
-    void nav.pushAndPopUntil('receipt_page', (entry) => entry.key === 'sell_page', {
-      id: saleId,
-      fresh: '1',
-    });
+    void finishInto(nav, (entry) => entry.key === 'sell_page', { id: saleId, fresh: true });
 
     /*
      * Marked settled BEFORE it is closed.
