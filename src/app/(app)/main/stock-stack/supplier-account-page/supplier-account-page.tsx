@@ -242,10 +242,30 @@ export default function SupplierAccountPage() {
             )}
 
             {owed < 0 && (
-              <InfoPanel tone="info" title="They owe you">
-                A rebate or an overpayment. It comes off the next load rather than being handed
-                back, which is why it sits here rather than in your takings.
-              </InfoPanel>
+              <>
+                <InfoPanel tone="info" title="They owe you">
+                  A rebate or an overpayment. It usually comes off the next load — and if they
+                  hand it over instead, record it here so the account closes.
+                </InfoPanel>
+
+                {/*
+                  THE FOURTH MOVEMENT, and the one that was missing.
+
+                  Everything else on a supplier account could be recorded except COLLECTING what
+                  they owed, so a credit stayed on the books whatever happened in the world.
+                  Offered only when there is one, because a button to collect nothing invents a
+                  refund.
+                */}
+                <Button
+                  variant="secondary"
+                  fullWidth
+                  onClick={() =>
+                    void nav.push('supplier_payment_page', { id: supplierId, kind: 'refunded' })
+                  }
+                >
+                  They paid back {formatMoney(Math.abs(owed))}
+                </Button>
+              </>
             )}
           </>
         )}

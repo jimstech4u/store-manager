@@ -13,18 +13,27 @@ import { getSupabase } from '@/lib/supabase/client';
 import { messageOf } from '@/lib/format';
 import styles from './supplier-payment-page.module.css';
 
-type Kind = 'paid' | 'charge' | 'credit';
+/*
+ * `refunded` is the fourth, and the one that was missing.
+ *
+ * `credit` records that a supplier OWES the shop — a rebate, an overpayment. Nothing recorded
+ * collecting it, so a credit sat on the account permanently and the page could only say it would
+ * come off the next load. That is one way a rebate is settled; it is not the only one (0220).
+ */
+type Kind = 'paid' | 'charge' | 'credit' | 'refunded';
 
 const TITLES: Record<Kind, string> = {
   paid: 'Record a payment',
   charge: 'Record a charge',
   credit: 'Record what they owe you',
+  refunded: 'They paid you back',
 };
 
 const SUBTITLES: Record<Kind, string> = {
   paid: 'Money you handed over',
   charge: 'Something you owe that no delivery carried',
   credit: 'A rebate, or a load sent back',
+  refunded: 'Money they handed back, closing what they owed you',
 };
 
 /**
@@ -54,7 +63,8 @@ export default function SupplierPaymentPage() {
 
   if (!store || !supplierId) return null;
 
-  const ready = Number(amount) > 0 && (kind === 'paid' || reason.trim() !== '');
+  const ready =
+    Number(amount) > 0 && (kind === 'paid' || kind === 'refunded' || reason.trim() !== '');
 
   const save = async () => {
     setBusy(true);
@@ -64,7 +74,7 @@ export default function SupplierPaymentPage() {
         p_supplier_id: supplierId,
         p_amount: Number(amount),
         p_direction: kind,
-        p_method: kind === 'paid' ? method : null,
+        p_method: kind === 'paid' || kind === 'refunded' ? method : null,
         p_reason: reason.trim() || null,
       });
       if (error) throw error;
@@ -103,7 +113,7 @@ export default function SupplierPaymentPage() {
         autoFocus
       />
 
-      {kind === 'paid' && (
+      {(kind === 'paid' || kind === 'refunded') && (
         <div className={styles.field}>
           <label className={styles.label} htmlFor="how-paid">
             How did it go out?
@@ -123,8 +133,8 @@ export default function SupplierPaymentPage() {
       )}
 
       <Field
-        label={kind === 'paid' ? 'Reference' : 'What it is for'}
-        optional={kind === 'paid'}
+        label={kind === 'paid' || kind === 'refunded' ? 'Reference' : 'What it is for'}
+        optional={kind === 'paid' || kind === 'refunded'}
         value={reason}
         onChange={(e) => setReason(e.target.value)}
         placeholder={

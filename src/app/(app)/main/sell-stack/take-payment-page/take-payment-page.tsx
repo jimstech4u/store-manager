@@ -196,6 +196,45 @@ export default function TakePaymentPage() {
           const saleId = data as string;
 
           /*
+           * ── CHANGE IS MONEY LEAVING, NOT A DEBT ──────────────────────────────
+           *
+           * "the 250 it shows i owe that is wrong because that was change ... i only owe if a
+           * sale settle was opened and edit smaller than the payment i collected."
+           *
+           * Exactly the distinction. `settle_sale` keeps a payment at its true tendered figure
+           * and caps only the ALLOCATION (0188), which is right for somebody who genuinely pays
+           * over to sit in credit. Samod handed over N10,000 for a N9,750 bill and took N250
+           * back across the counter a second later — and the books read "the shop owes Samod
+           * N250" because nothing recorded the money going back out.
+           *
+           * ONLY THE CASH PART. A transfer that arrives over the bill really is credit: nobody
+           * hands cash back for it, and the customer's next purchase draws it down. Change is
+           * what came out of the drawer, so it is capped at what went into the drawer.
+           */
+          const cashIn = payments
+            .filter((pay) => pay.method === 'cash')
+            .reduce((sum, pay) => sum + Number(pay.amount || 0), 0);
+          const change = Math.min(Math.max(paidTotal - total - towardsOldDebt, 0), cashIn);
+
+          if (change > 0.005 && activeOrder.customerId) {
+            const { error: backErr } = await getSupabase().rpc('record_money_back', {
+              p_store_id: store.id,
+              p_customer_id: activeOrder.customerId,
+              p_amount: change,
+              p_method: 'cash',
+              p_reason: 'Change given at the counter',
+              p_client_uuid: crypto.randomUUID(),
+              p_bank_account_id: null,
+            });
+            /*
+             * Not fatal. The sale is recorded and the customer has their goods and their change;
+             * a failure here leaves a credit on the account, which the shop can give back from
+             * the account screen. Losing the sale over it would be the worse trade.
+             */
+            if (backErr) console.warn('change was not recorded as money back', backErr.message);
+          }
+
+          /*
            * THIS DEVICE KNOWS WHAT IT JUST DID — so every screen showing a figure this sale moved
            * says the new one now, on screen or not: the shelf, what the customer owes, the
            * containers they took, the deposit taken. The invalidations below then re-read each from
