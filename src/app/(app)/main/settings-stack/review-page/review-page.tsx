@@ -1,5 +1,6 @@
 'use client';
 
+import { useSayInShapes } from '@/lib/stacks/selling-units';
 import { useState } from 'react';
 import styles from './review-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
@@ -67,6 +68,8 @@ const KIND_LABEL: Record<string, string> = {
  * word people click without knowing what they agreed to.
  */
 export default function ReviewPage() {
+  const sayStore = useAuth().store;
+  const say = useSayInShapes(sayStore?.id ?? null);
   const nav = useNav();
   const goBack = useStackBack();
   const { store } = useAuth();
@@ -230,7 +233,7 @@ export default function ReviewPage() {
                 <div className={styles.cardMain}>
                   <p className={styles.cardName}>{p.name}</p>
                   <p className={styles.cardMeta}>
-                    {formatQtySpoken(p.on_hand)} {pluralUnit(p.base_unit, Number(p.on_hand))} in stock ·
+                    {say(p.id, Number(p.on_hand), p.base_unit)} in stock ·
                     added {formatDateTime(p.created_at)}
                   </p>
 

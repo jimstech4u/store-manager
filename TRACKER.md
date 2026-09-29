@@ -21,9 +21,9 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 | Q6 | Every **edit form tells its lists** (product, supplier, bank, group, unit) — only the customer edit does | All stacks | ☐ |
 | Q7 | **Search lists on pages** (not just pickers) stop flashing "nothing found" while a term settles | Stock · Money · People · Sales | ☐ |
 | Q8 | **Fractions set small** (`Qty`) wherever a quantity is the headline — only the empties list has it | All stacks | ☐ |
-| Q9 | **Base units still leaking** — product page, low-stock page, receive-page picker line, count list "records say", stock history | Stock · Count | ☐ |
+| Q9 | **Base units still leaking** — product page, receive picker and count list already spoke in shapes (base unit only for an item with none); stock history, the low-stock page and the review queue now do too (`useSayInShapes`). Malta's history reads "+133 cans 12 pieces". The stock-value report keeps base units because its cost column is per base unit | Stock · Count | ☑ |
 | Q10 | Expiry can be **added to an undated lot** from the edit form — confirm by click-through | Stock | ☐ |
-| Q11 | Destiny's receipt still prints "1 crate still with you" — needs one re-correction under 0209 | Data | ☐ |
+| Q11 | Destiny's receipt — checked: she holds 1½ 7up crates across two receipts (1 from 28 Sep, ½ from 29 Sep), and her account and both receipts agree. If the crate is back, it is one tap now: All back on that receipt | Data | ☑ |
 | Q12 | Audit sweep findings (section 5) | All | ☐ |
 | Q13 | **All items** — the open order on its own, marked NOT A RECEIPT on screen, paper and PDF; share on WhatsApp / share with the tracking link, PDF, print. From the till (under Scan) and Take payment. `probe-all-items-and-line-ui.mjs` | Sell | ☑ |
 | Q15 | **Till stuck on "that order is no longer open"** (29 Sep, live) — my probes' clean-up deleted the shop's open drafts; the till then could not save, pay or close, and a second Close cancelled A406 Hotel (₦142,600, reopened). Probes now clean only their own tabs (`probe-drafts.mjs`); the till re-saves a dead order as a new one, treats "no such order" as closed, and re-selects a tab a failed close puts back. `probe-dead-order-ui.mjs` 8/8 | Sell | ☑ |

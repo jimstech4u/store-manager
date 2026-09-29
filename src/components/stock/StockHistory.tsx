@@ -9,7 +9,8 @@ import { RecordLink } from '@/components/ui/RecordLink';
 import { Explain } from '@/components/ui/Explain';
 import { ChevronRightIcon } from '@/components/ui/Icon';
 import { getSupabase } from '@/lib/supabase/client';
-import { formatQtySpoken } from '@/lib/format';
+import { useAuth } from '@/providers/AuthProvider';
+import { useSayInShapes } from '@/lib/stacks/selling-units';
 import styles from './StockHistory.module.css';
 
 /**
@@ -150,6 +151,12 @@ export function StockHistory({
    * It read the newest sixty and stopped, so on an item that sells all day the opening figure and
    * every delivery were below the cut: the page looked like a list of sales and nothing else.
    */
+  /*
+   * Every movement and every balance in the item's own shapes — "+2 crates", "then 14 crates 6
+   * bottles" — rather than a column of piece counts nobody can check against a stack of crates.
+   */
+  const { store } = useAuth();
+  const say = useSayInShapes(store?.id ?? null);
   const [filter, setFilter] = useState(0);
   const kinds = FILTERS[filter].kinds;
   const list = usePaginatedList<Movement>({
@@ -250,7 +257,7 @@ export function StockHistory({
             <li className={styles.row} key={row.id ?? `${row.at}-${index}`}>
               <span className={`${styles.delta} ${up ? styles.up : styles.down}`}>
                 {up ? '+' : ''}
-                {formatQtySpoken(row.qty_delta)}
+                {say(productId, Number(row.qty_delta), unit)}
               </span>
 
               <span className={styles.body}>
@@ -276,7 +283,7 @@ export function StockHistory({
 
               {/* What was on the shelf after this — the number being checked against. */}
               <span className={styles.balance}>
-                {formatQtySpoken(row.balance)} {unit}
+                {say(productId, Number(row.balance), unit)}
               </span>
 
               {opens && (

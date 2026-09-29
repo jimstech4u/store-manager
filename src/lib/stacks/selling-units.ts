@@ -1,9 +1,11 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { getSupabase } from '@/lib/supabase/client';
 import { useResource } from '@/lib/stacks/resource';
 import { DERIVED_SCOPE } from '@/lib/stacks/catalog-stack';
+import { stockInShapes as stockInShapesFn } from '@/lib/shape-quantities';
+import { formatQtySpoken, pluralUnit } from '@/lib/format';
 
 /**
  * What a product is worth and how much of it there is — in the unit the shop sells in.
@@ -351,4 +353,25 @@ export interface StockWorth {
  * on its own. Re-exported here so every screen keeps one place to import from.
  */
 export { stockInShapes } from '@/lib/shape-quantities';
+
+/**
+ * A quantity of one item, SAID IN ITS SHAPES — "5 crates 6 bottles", not "66 pieces".
+ *
+ * Every screen that showed a base-unit figure built its own words, and the ones that forgot to ask
+ * for the shapes said "Warns at 24 pieces · 1,596 on hand" to a shop that thinks in packs. The base
+ * unit is the unit the arithmetic is done in; it is said only when an item has no shapes at all.
+ */
+export function useSayInShapes(storeId: string | null) {
+  const { byProduct } = useSellingUnits(storeId);
+  return useCallback(
+    (productId: string, base: number, baseUnit: string): string => {
+      const shapes = byProduct.get(productId);
+      if (shapes && shapes.length > 0) {
+        return stockInShapesFn(shapes.map((u) => ({ ...u, onHandBase: base })));
+      }
+      return `${formatQtySpoken(base)} ${pluralUnit(baseUnit, base)}`;
+    },
+    [byProduct],
+  );
+}
 export type { ShapeQuantity } from '@/lib/shape-quantities';

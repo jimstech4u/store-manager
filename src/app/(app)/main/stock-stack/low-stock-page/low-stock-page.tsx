@@ -1,5 +1,6 @@
 'use client';
 
+import { useSayInShapes } from '@/lib/stacks/selling-units';
 import { useEffect, useState } from 'react';
 import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
@@ -41,6 +42,8 @@ import styles from './low-stock-page.module.css';
  * silence the general rule on every item anybody had ever opened.
  */
 export default function LowStockPage() {
+  const sayStore = useAuth().store;
+  const say = useSayInShapes(sayStore?.id ?? null);
   const nav = useNav();
   const goBack = useStackBack();
   const { store } = useAuth();
@@ -178,17 +181,16 @@ export default function LowStockPage() {
                   >
                     <span className={styles.rowName}>{item.name}</span>
                     <span className={styles.rowDetail}>
-                      Warns at {formatQtySpoken(item.ownLevel)}{' '}
-                      {pluralUnit(item.baseUnit, item.ownLevel)}
+                      Warns at {say(item.productId, Number(item.ownLevel), item.baseUnit)}
                       {/*
                         Said against the general rule, because "warns at 5" means nothing on its own —
                         the reason a shop set it is that everything else warns at something different.
                       */}
                       {item.shopLevel !== null && item.shopLevel !== item.ownLevel && (
-                        <> · everything else at {formatQtySpoken(item.shopLevel)}</>
+                        <> · everything else at {say(item.productId, Number(item.shopLevel), item.baseUnit)}</>
                       )}
                       {' · '}
-                      {formatQtySpoken(item.onHand)} on hand
+                      {say(item.productId, Number(item.onHand), item.baseUnit)} on hand
                     </span>
                   </button>
                   <button
