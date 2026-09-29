@@ -183,7 +183,7 @@ export function useProductSearch(storeId: string | null, query: string | null) {
 }
 
 /** What the Stock list can be narrowed to — applied by the server (0228), so it survives paging. */
-export type StockFilter = 'all' | 'low' | 'out' | 'no_price';
+export type StockFilter = 'all' | 'low' | 'out' | 'no_price' | 'in_stock';
 
 /** One page of the catalogue, name-ordered, with a filter — for the list and for an export. */
 export function productsPager(storeId: string, filter: StockFilter = 'all') {

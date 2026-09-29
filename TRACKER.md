@@ -39,6 +39,8 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 | Q25 | **Back on Stock lands on Sell (PWA)** — not reproducible in Chrome or WebKit: straight, after a reload, after a relaunch on Sell with Stock restored two deep, and at the root (`probe-stock-back-ui.mjs`, both engines, 0 failed). Settings → Updates → **Record navigation** now captures the library's own trace on the phone for a report | Navigation | ◐ |
 | Q26 | **A payment opens its receipt from history** — the statement's and the account's payment lines open the payment page as a receipt ("Owes now"), with Share to send it again | People · Money | ☑ |
 | Q27 | **"Waiting for you" does its job** — customers open their edit page (it opened the empty new-customer form); stock cards read in shapes, open the item, leave the list when marked; "Wrong" asks first and says what comes off the shelf; its reversals no longer come back as new entries (0227). Probe 6/6 | Settings | ☑ |
+| Q28 | **Export centre, like a bank statement** — Money → Export: counted today, running low, still in stock, none left, no price, who owes me (with a ₦ range), who I owe, empties held, payments received / money given back, sales, unpaid sales; a period (today … last month, or dates). Each is an A4 report (shop, title, filters, repeated heading, totals, Page n of N) that saves as a multi-page PDF, prints on A4 or on the roll, and downloads as CSV (0229). `probe-export-reports-ui.mjs` 13/13; PDF pages, roll picture and print view looked at | Money · Backend | ☑ |
+| Q29 | **Every document shares the same way** — `DocumentActions`: Share, WhatsApp, Send as picture, Print, Save as PDF, on the payment receipt, All items and the export centre. Payment receipt now says the whole account balance (live fix) | People · Sell · Money | ☑ |
 | Q14 | **A line opens from Take payment** — the till's own `SaleLineRow` on `sale_line_page`; Add an item and Scan there push it with the product. Line logic shared with the till (`sale-line-ops`). Same probe, 19/19 | Sell | ☑ |
 
 **Blocked on the shop** — nothing can be done until you give the figure:
@@ -162,6 +164,7 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 | 0226 | the tables other tills never heard | ☑ |
 | 0227 | the review queue skips its own reversals | ☑ |
 | 0228 | lists filter on the server | ☑ |
+| 0229 | reports to export (counts, balances in a range, payments, empties holders; in-stock filter) | ☑ |
 
 ---
 

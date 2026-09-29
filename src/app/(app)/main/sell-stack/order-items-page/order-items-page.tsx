@@ -5,7 +5,7 @@ import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { Button } from '@/components/ui/Button';
-import { ShareIcon, WhatsAppIcon } from '@/components/ui/Icon';
+import { InfoPanel } from '@/components/ui/Explain';
 import { PrintPreview } from '@/components/settings/PrintPreview';
 import { orderShareMessage, orderTrackLink } from '@/components/sell/ShareOrder';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -24,13 +24,12 @@ import { useUncountedToday } from '@/lib/stacks/count-gate';
 import { useUnpricedOnSale } from '@/lib/stacks/price-gate';
 import { useThisPrinter } from '@/lib/stacks/printer';
 import { receiptLines } from '@/lib/escpos-text';
-import { renderReceiptCanvas, shareLink, type ReceiptImageInput } from '@/lib/share';
-import { receiptPdf, sharePdf } from '@/lib/pdf';
-import { printDocument, printRouteOf } from '@/lib/print-document';
+import type { ReceiptImageInput } from '@/lib/share';
 import { swapTo } from '@/lib/finish-flow';
+import { DocumentActions } from '@/components/ui/DocumentActions';
 import { CashIcon } from '@/components/ui/Icon';
 import { getSupabase } from '@/lib/supabase/client';
-import { formatDateTime, formatMoney, formatQtySpoken, messageOf } from '@/lib/format';
+import { formatDateTime, formatMoney, formatQtySpoken } from '@/lib/format';
 import styles from './order-items-page.module.css';
 
 /**
@@ -102,8 +101,7 @@ export default function OrderItemsPage() {
   );
   const { unpriced } = useUnpricedOnSale(store?.id ?? null, order?.lines);
 
-  const [note, setNote] = useState<string | null>(null);
-  const [busy, setBusy] = useState<'share' | 'pdf' | 'print' | 'pay' | null>(null);
+  const [busy, setBusy] = useState<'pay' | null>(null);
 
   if (!store) return null;
 
@@ -206,12 +204,6 @@ export default function OrderItemsPage() {
                 </div>
               )}
 
-              {note && (
-                <p className={styles.note} role="status">
-                  {note}
-                </p>
-              )}
-
               {order.lines.length > 0 && (
                 <div className={styles.actions} data-print-no-print>
                   {/*
@@ -245,95 +237,34 @@ export default function OrderItemsPage() {
                     <CashIcon /> Take payment · {formatMoney(draftTotal(order))}
                   </Button>
 
-                  <Button
-                    variant="secondary"
-                    fullWidth
-                    disabled={!link}
-                    onClick={() => {
-                      if (gated() || !link) return;
-                      void nav.push('share_whatsapp_page', {
-                        message,
-                        phone: order.customerPhone ?? '',
-                        customerId: order.customerId ?? '',
-                        customerName: order.customerName ?? '',
-                      });
-                    }}
-                  >
-                    <WhatsAppIcon /> Share on WhatsApp
-                  </Button>
-
-                  <Button
-                    variant="secondary"
-                    fullWidth
-                    busy={busy === 'share'}
-                    busyLabel="Preparing"
-                    disabled={!link}
-                    onClick={async () => {
-                      if (gated() || !link) return;
-                      setBusy('share');
-                      setNote(null);
-                      try {
-                        const r = await shareLink(link, title, message);
-                        if (r === 'copied') setNote('Link copied. Paste it into a chat.');
-                      } finally {
-                        setBusy(null);
-                      }
-                    }}
-                  >
-                    <ShareIcon /> Share
-                  </Button>
-
-                  <Button
-                    variant="secondary"
-                    fullWidth
-                    busy={busy === 'pdf'}
-                    busyLabel="Preparing"
-                    onClick={async () => {
-                      setBusy('pdf');
-                      setNote(null);
-                      try {
-                        const canvas = await renderReceiptCanvas(doc, width);
-                        if (!canvas) throw new Error('Could not draw the list');
-                        const pdf = await receiptPdf(canvas, { widthMm: width });
-                        const where = await sharePdf(pdf, `${filename}.pdf`, title);
-                        if (where === 'downloaded') setNote('PDF saved to your downloads.');
-                      } catch (e) {
-                        setNote(messageOf(e, 'Could not make a PDF'));
-                      } finally {
-                        setBusy(null);
-                      }
-                    }}
-                  >
-                    Save as PDF
-                  </Button>
-
-                  <Button
-                    variant="secondary"
-                    fullWidth
-                    busy={busy === 'print'}
-                    busyLabel="Printing"
-                    onClick={async () => {
-                      setNote(null);
-                      if (printRouteOf(printer) !== 'browser') setBusy('print');
-                      try {
-                        const said = await printDocument({
-                          printer,
-                          input: doc,
-                          lines,
-                          widthMm: width,
-                          filename: `${filename}.png`,
-                          title,
-                        });
-                        if (said) setNote(said);
-                      } catch (e) {
-                        setNote(messageOf(e, 'Could not print the list'));
-                      } finally {
-                        setBusy(null);
-                      }
-                    }}
-                  >
-                    Print
-                  </Button>
+                  {/*
+                    EVERYTHING A RECEIPT CAN DO — share (with the tracking link), WhatsApp, a picture,
+                    print, PDF — through the one component every document uses. The till's gates
+                    still stand in front of anything with a price on it leaving the shop.
+                  */}
+                  {uncounted.length > 0 || unpriced.length > 0 ? (
+                    <InfoPanel tone="warning" title="Before this goes to the customer">
+                      {uncounted.length > 0
+                        ? 'Some items here have not been counted today.'
+                        : 'Some items here have no price yet.'}{' '}
+                      <Button size="small" onClick={() => void gated()}>
+                        {uncounted.length > 0 ? 'Count them' : 'Price them'}
+                      </Button>
+                    </InfoPanel>
+                  ) : (
+                    <DocumentActions
+                      storeId={store.id}
+                      doc={doc}
+                      filename={filename}
+                      title={title}
+                      message={message || `${title}: ${formatMoney(draftTotal(order))}`}
+                      whatsapp={{
+                        phone: order.customerPhone,
+                        customerId: order.customerId,
+                        customerName: order.customerName,
+                      }}
+                    />
+                  )}
 
                   {!link && (
                     <p className={styles.note}>Saving the order so it has a code to share…</p>

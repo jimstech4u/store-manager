@@ -125,11 +125,27 @@ export async function renderReceiptCanvas(
   if (input.banner) height += wrap(input.banner, titleFont, inner).length * Math.round(base * 1.9);
   if (input.header) height += wrap(input.header, bodyFont, inner).length * lineH;
   height += lineH * input.meta.length + lineH;
+  /*
+   * A LINE'S DETAIL WRAPS BESIDE ITS FIGURE, never under it.
+   *
+   * The detail and the amount share a row, and the detail was drawn at full width — a long one ran
+   * straight through the figure ("Sep 29, ₦52,250" printed over each other). It now wraps inside the
+   * room the figure leaves, and the figure sits on its first row.
+   */
+  const beside = (left: string, right: string, font: string) => {
+    probe.font = font;
+    const room = Math.max(inner * 0.35, inner - probe.measureText(right).width - scale * 3);
+    return wrap(left, font, room);
+  };
   for (const l of input.lines) {
-    height += wrap(l.name, boldFont, inner).length * lineH + lineH;
+    height += wrap(l.name, boldFont, inner).length * lineH;
+    height += Math.max(1, beside(l.qty ?? l.detail, l.amount, bodyFont).length) * lineH;
   }
   height += lineH;
-  height += input.totals.length * lineH + lineH;
+  for (const t of input.totals) {
+    height += Math.max(1, beside(t.label, t.value, t.strong ? boldFont : bodyFont).length) * lineH;
+  }
+  height += lineH;
   if (input.note) height += wrap(input.note, bodyFont, inner).length * lineH + lineH;
   if (input.transferDetails) height += input.transferDetails.split('\n').length * lineH + lineH;
   if (input.footer) height += wrap(input.footer, bodyFont, inner).length * lineH + lineH;
@@ -175,11 +191,17 @@ export async function renderReceiptCanvas(
   };
 
   const row = (left: string, right: string, bold = false) => {
-    ctx.font = bold ? boldFont : bodyFont;
-    ctx.fillText(left, pad, y);
-    const w = ctx.measureText(right).width;
-    ctx.fillText(right, width - pad - w, y);
-    y += lineH;
+    const font = bold ? boldFont : bodyFont;
+    const parts = beside(left, right, font);
+    ctx.font = font;
+    (parts.length > 0 ? parts : ['']).forEach((part, i) => {
+      ctx.fillText(part, pad, y);
+      if (i === 0) {
+        const w = ctx.measureText(right).width;
+        ctx.fillText(right, width - pad - w, y);
+      }
+      y += lineH;
+    });
   };
 
   centred(input.shopName, titleFont);

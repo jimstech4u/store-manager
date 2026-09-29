@@ -116,6 +116,7 @@ export const ROUTE_NEEDS: Readonly<Record<string, Permission>> = {
   variance_reason_page: 'stock.count',
   yard_count_page: 'deposits.manage',
   reports_page: 'reports.view',
+  export_page: 'reports.view',
   review_page: 'records.confirm',
   staff_page: 'staff.manage',
   staff_invite_page: 'staff.manage',

@@ -13,7 +13,7 @@ import { FloatingAction } from '@/components/ui/FloatingAction';
 import { usePermission } from '@/hooks/usePermission';
 import { customPeriod, resolvePeriod, usePeriod } from '@/lib/stacks/periods';
 import { salesSummary, type SalesSummary } from '@/lib/stacks/report-readers';
-import { CashIcon, ChartIcon, ChevronRightIcon, ReceiptIcon } from '@/components/ui/Icon';
+import { CashIcon, ChartIcon, ChevronRightIcon, ReceiptIcon, ShareIcon } from '@/components/ui/Icon';
 import { useAuth } from '@/providers/AuthProvider';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useListChannel } from '@/hooks/useListChannel';
@@ -243,6 +243,16 @@ export default function MoneyPage() {
                 icon: <ChartIcon />,
                 onClick: () => void nav.push('reports_page'),
                 ariaLabel: 'Reports you can print or save',
+              },
+              {
+                /*
+                 * EXPORT A REPORT — who owes, who paid and when, what was counted, what is in
+                 * stock — as CSV, PDF, a picture or on paper.
+                 */
+                key: 'export',
+                icon: <ShareIcon />,
+                onClick: () => void nav.push('export_page'),
+                ariaLabel: 'Export a report',
               },
             ]
           : []),

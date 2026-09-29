@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { Button } from '@/components/ui/Button';
-import { ShareIcon } from '@/components/ui/Icon';
+import { DocumentActions } from '@/components/ui/DocumentActions';
+import type { ReceiptImageInput } from '@/lib/share';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { useResource } from '@/lib/stacks/resource';
@@ -17,6 +17,7 @@ import styles from './payment-done-page.module.css';
 interface Done {
   customerId: string;
   customerName: string;
+  phone: string | null;
   amount: number;
   method: string;
   reference: string | null;
@@ -47,7 +48,6 @@ export default function PaymentDonePage() {
    * The balance is today's, so it is said as "now", never as though it were the balance on the day.
    */
   const fromHistory = location?.params?.from === 'history';
-  const [note, setNote] = useState<string | null>(null);
 
   const r = useResource<Done>({
     key: `payment-done:${paymentId ?? 'none'}`,
@@ -71,7 +71,11 @@ export default function PaymentDonePage() {
         store_customer_id: string;
       };
       const [{ data: who }, { data: bal, error: balErr }] = await Promise.all([
-        supabase.from('store_customers').select('display_name').eq('id', row.store_customer_id).maybeSingle(),
+        supabase
+          .from('store_customers')
+          .select('display_name, identities(phone)')
+          .eq('id', row.store_customer_id)
+          .maybeSingle(),
         /*
          * THE WHOLE ACCOUNT — `customer_balance_total`, the figure the statement heads with ("They
          * owe you"). `customer_balance` is only the unpaid receipts, and it put ₦28,800 on a receipt
@@ -82,6 +86,10 @@ export default function PaymentDonePage() {
       return {
         customerId: row.store_customer_id,
         customerName: (who as { display_name: string } | null)?.display_name ?? 'Customer',
+        phone:
+          ((who as { identities?: { phone?: string } | { phone?: string }[] } | null)?.identities as
+            | { phone?: string }
+            | undefined)?.phone ?? null,
         amount: Number(row.amount) || 0,
         method: row.method,
         reference: row.reference,
@@ -119,6 +127,43 @@ export default function PaymentDonePage() {
       `(${d.method}) on ${formatDateTime(d.at)}. ${standing(d.balance)}.`
     : '';
 
+  /*
+   * THE SAME PAYMENT AS A SLIP — for the picture, the PDF and the roll printer, exactly as a sale's
+   * receipt goes out. Built from what the shop recorded, never from what was typed.
+   */
+  const slip: ReceiptImageInput | null = d
+    ? {
+        shopName: store.name,
+        banner: gave ? 'MONEY GIVEN BACK' : 'PAYMENT RECEIPT',
+        meta: [formatDateTime(d.at), d.customerName, `#${(paymentId ?? '').slice(0, 8).toUpperCase()}`],
+        lines: [
+          {
+            name: gave ? 'Given back' : 'Payment received',
+            detail: `by ${d.method}${d.reference ? ` · ${d.reference}` : ''}`,
+            qty: `by ${d.method}`,
+            amount: formatMoney(d.amount),
+          },
+        ],
+        totals: [
+          { label: gave ? 'Given back' : 'Paid', value: formatMoney(d.amount), strong: true },
+          ...(d.balance === null
+            ? []
+            : [
+                {
+                  label:
+                    d.balance > 0.005
+                      ? `Still owes${now}`
+                      : d.balance < -0.005
+                        ? `In credit${now}`
+                        : `Balance${now}`,
+                  value: formatMoney(Math.abs(d.balance)),
+                  strong: true,
+                },
+              ]),
+        ],
+      }
+    : null;
+
   return (
     <PageScaffold
       onBack={goBack}
@@ -129,7 +174,8 @@ export default function PaymentDonePage() {
         {() =>
           d && (
             <>
-              <div className={styles.card}>
+              {/* What the browser prints, when the shop prints to a page printer. */}
+              <div className={styles.card} data-print-root>
                 <p className={styles.tick} aria-hidden="true">
                   ✓
                 </p>
@@ -149,35 +195,24 @@ export default function PaymentDonePage() {
                 </p>
               </div>
 
-              {note && (
-                <p className={styles.note} role="status">
-                  {note}
-                </p>
+              {/*
+                EVERYTHING A RECEIPT CAN DO: share, WhatsApp, a picture, print, PDF — the same five,
+                in the same order, as a sale's receipt.
+              */}
+              {slip && (
+                <DocumentActions
+                  storeId={store.id}
+                  doc={slip}
+                  filename={`payment-${d.customerName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${d.at.slice(0, 10)}`}
+                  title={gave ? 'Money given back' : 'Payment receipt'}
+                  message={words}
+                  whatsapp={{ phone: d.phone, customerId: d.customerId, customerName: d.customerName }}
+                />
               )}
 
               <div className={styles.actions}>
-                <Button fullWidth onClick={() => void nav.pop()}>
+                <Button variant="secondary" fullWidth onClick={() => void nav.pop()}>
                   {fromHistory ? 'Back' : 'Done'}
-                </Button>
-                <Button
-                  variant="secondary"
-                  fullWidth
-                  onClick={async () => {
-                    setNote(null);
-                    // Text, not a link: the phone's own share sheet, or the clipboard where there is none.
-                    try {
-                      if (typeof navigator.share === 'function') {
-                        await navigator.share({ title: gave ? 'Money given back' : 'Payment received', text: words });
-                        return;
-                      }
-                      await navigator.clipboard.writeText(words);
-                      setNote('Copied. Paste it into a chat.');
-                    } catch {
-                      // A cancelled share sheet is not a failure.
-                    }
-                  }}
-                >
-                  <ShareIcon /> Share
                 </Button>
               </div>
             </>
