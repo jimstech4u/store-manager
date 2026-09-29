@@ -1,0 +1,24 @@
+.row {
+  margin-bottom: var(--space-3);
+}
+
+.total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 0 0 var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 3px double var(--border-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The actions END the page rather than sitting at a sheet's foot — see CLAUDE.md. */
+.actions {
+  display: flex;
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+}
+
+.actions > * {
+  flex: 1;
+}

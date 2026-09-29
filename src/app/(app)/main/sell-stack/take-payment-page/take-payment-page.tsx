@@ -1,11 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNav, useObject } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { FloatingAmount } from '@/components/ui/FloatingAmount';
-import { PlusIcon } from '@/components/ui/Icon';
+import { CameraIcon, PlusIcon, ReceiptIcon } from '@/components/ui/Icon';
+import { Button } from '@/components/ui/Button';
+import { InfoPanel } from '@/components/ui/Explain';
+import { ProductPicker } from '@/components/catalog/ProductPicker';
+import { BarcodeScanner } from '@/components/catalog/BarcodeScanner';
+import { findByBarcode } from '@/lib/stacks/mid-sale';
 import { TakePayment } from '../sell-page/TakePayment';
 import { CustomerPicker } from '@/components/customers/CustomerPicker';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -50,7 +55,9 @@ export default function TakePaymentPage() {
   const location = useLocation();
   const wantedId = (location?.params?.id as string | undefined) ?? null;
 
-  const { orders, activeOrder: current, updateOrder, syncing } = useDraftOrders(store?.id ?? null);
+  const { orders, activeOrder: current, updateOrder, syncing, push } = useDraftOrders(
+    store?.id ?? null,
+  );
 
   // By id first; the active tab only when no id travelled with the push.
   const activeOrder = wantedId ? (orders.find((o) => o.id === wantedId) ?? null) : current;
@@ -67,6 +74,43 @@ export default function TakePaymentPage() {
    * typed both, tapped "Recording for", and found them gone.
    */
   const [picking, setPicking] = useState(false);
+
+  /*
+   * ADDING FROM HERE. Picking or scanning an item pushes the sale-line page with it, where the
+   * till's own row sets how many and at what price — nothing about the payment typed on this page
+   * is lost, because it is pushed over, not popped.
+   */
+  const [pickingItem, setPickingItem] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scanProblem, setScanProblem] = useState<string | null>(null);
+
+  /*
+   * A CUSTOMER CREATED FROM HERE IS ATTACHED HERE — to the order this page is paying for, by its
+   * client id, not to whichever tab the till happens to have active. Through a ref, so the callback
+   * is never a render behind the order it writes to.
+   */
+  const attachRef = useRef<((customer: { id: string; name: string; phone: string }) => void) | null>(
+    null,
+  );
+  attachRef.current = (customer) => {
+    if (!activeOrder) return;
+    updateOrder(activeOrder.clientUuid, {
+      customerId: customer.id,
+      customerName: customer.name,
+      customerPhone: customer.phone,
+    });
+  };
+  useEffect(() => {
+    const off = nav.provideObject(
+      'onCustomerForPayment',
+      () => (customer: { id: string; name: string; phone: string }) =>
+        attachRef.current?.(customer),
+      { global: true, scope: 'people' },
+    );
+    return () => {
+      off?.();
+    };
+  }, [nav]);
 
   const settled = useObject<(saleId: string) => void>('onSaleSettled', {
     global: true,
@@ -154,6 +198,36 @@ export default function TakePaymentPage() {
         storeId={store.id}
         total={draftTotal(activeOrder)}
         onNeedCustomer={() => setPicking(true)}
+        onOpenLine={(lineKey) =>
+          void nav.push('sale_line_page', { id: activeOrder.id ?? '', line: lineKey })
+        }
+        itemActions={
+          <>
+            <Button
+              variant="secondary"
+              fullWidth
+              onClick={async () => {
+                const saved = await push(activeOrder);
+                void nav.push('order_items_page', { id: saved?.id ?? activeOrder.id ?? '' });
+              }}
+            >
+              <ReceiptIcon /> All items
+            </Button>
+            <Button variant="secondary" fullWidth onClick={() => setPickingItem(true)}>
+              <PlusIcon /> Add an item
+            </Button>
+            <Button
+              variant="secondary"
+              fullWidth
+              onClick={() => {
+                setScanProblem(null);
+                setScanning(true);
+              }}
+            >
+              <CameraIcon /> Scan
+            </Button>
+          </>
+        }
         /*
          * SETTLING A DRAFT — this page's job, and not the payment screen's.
          *
@@ -324,6 +398,52 @@ export default function TakePaymentPage() {
         }}
       />
 
+      {scanProblem && (
+        <InfoPanel tone="warning" title="Not recognised">
+          {scanProblem}
+        </InfoPanel>
+      )}
+
+      <ProductPicker
+        open={pickingItem}
+        onClose={() => setPickingItem(false)}
+        storeId={store.id}
+        onPick={(p) => {
+          setPickingItem(false);
+          void nav.push('sale_line_page', { id: activeOrder.id ?? '', product: p.id });
+        }}
+        onAddNew={(typed) => {
+          setPickingItem(false);
+          void nav.push('product_form_page', {
+            required: 'minimum',
+            ...(typed?.trim() ? { name: typed.trim() } : {}),
+          });
+        }}
+      />
+
+      <BarcodeScanner
+        open={scanning}
+        onClose={() => setScanning(false)}
+        title="Scan what they are buying"
+        onRead={(code) => {
+          setScanning(false);
+          void (async () => {
+            try {
+              const found = await findByBarcode(store.id, code);
+              if (found) {
+                void nav.push('sale_line_page', { id: activeOrder.id ?? '', product: found.id });
+                return;
+              }
+              setScanProblem(
+                'Nothing in the shop has that barcode. Add it and it can be scanned next time.',
+              );
+            } catch (e) {
+              setScanProblem(messageOf(e, 'That barcode could not be looked up.'));
+            }
+          })();
+        }}
+      />
+
       <CustomerPicker
         open={picking}
         onClose={() => setPicking(false)}
@@ -349,7 +469,7 @@ export default function TakePaymentPage() {
           setPicking(false);
           void nav.push('customer_form_page', {
             ...(name.trim() ? { name } : {}),
-            then: 'attach-to-sale',
+            then: 'attach-to-payment',
                       // Mid-sale: ask for the opening position while the shop is with them.
             required: 'minimum',
           });

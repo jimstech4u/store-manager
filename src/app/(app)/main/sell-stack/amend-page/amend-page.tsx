@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
@@ -64,6 +64,26 @@ export default function AmendPage() {
   const [picking, setPicking] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [namingCustomer, setNamingCustomer] = useState(false);
+
+  /*
+   * A CUSTOMER CREATED FOR THIS CORRECTION IS NAMED ON IT.
+   *
+   * The form has always looked for `onCustomerForAmend` — and nothing ever provided it, so a walk-in
+   * named by creating somebody new came back to a correction still asking who it was for. The
+   * seller then found them in the picker and chose them again: the "second click".
+   */
+  const nameRef = useRef<((customer: { id: string; name: string }) => void) | null>(null);
+  nameRef.current = (customer) => patchOrder({ customerId: customer.id, customerName: customer.name });
+  useEffect(() => {
+    const off = nav.provideObject(
+      'onCustomerForAmend',
+      () => (customer: { id: string; name: string; phone: string }) => nameRef.current?.(customer),
+      { global: true, scope: 'people' },
+    );
+    return () => {
+      off?.();
+    };
+  }, [nav]);
   const cancelAsk = useConfirm();
   /*
    * WHETHER THE DIALOG IS ON THE PAGE IS DECIDED HERE — "mounted means asked".

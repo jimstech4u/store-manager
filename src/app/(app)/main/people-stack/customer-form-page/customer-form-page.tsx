@@ -112,6 +112,15 @@ export default function CustomerFormPage() {
    * happened to be open.
    */
   const attachToAmend = location?.params?.then === 'attach-to-amend';
+  /*
+   * And from TAKE PAYMENT, which attaches to the order it is paying for.
+   *
+   * It used to go through the till's `onCustomerCreated`, which attaches to whichever tab the
+   * till has active — the same order most of the time, and a different one after a reload or a
+   * push by id. "After I add, it still says add customer, and works at the second click" was
+   * the seller picking the customer again by hand.
+   */
+  const attachToPayment = location?.params?.then === 'attach-to-payment';
 
   const created = useObject<(customer: { id: string; name: string; phone: string }) => void>(
     'onCustomerCreated',
@@ -120,6 +129,11 @@ export default function CustomerFormPage() {
 
   const forAmend = useObject<(customer: { id: string; name: string; phone: string }) => void>(
     'onCustomerForAmend',
+    { global: true, scope: 'people' },
+  );
+
+  const forPayment = useObject<(customer: { id: string; name: string; phone: string }) => void>(
+    'onCustomerForPayment',
     { global: true, scope: 'people' },
   );
 
@@ -456,6 +470,7 @@ export default function CustomerFormPage() {
 
       if (attachToSale && created.isProvided) created.getter()?.(customer);
       if (attachToAmend && forAmend.isProvided) forAmend.getter()?.(customer);
+      if (attachToPayment && forPayment.isProvided) forPayment.getter()?.(customer);
       await nav.pop();
     } catch (e) {
       problem.show(messageOf(e, 'That customer could not be saved.'));

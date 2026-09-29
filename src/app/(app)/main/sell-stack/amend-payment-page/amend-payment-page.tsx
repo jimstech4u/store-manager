@@ -260,6 +260,7 @@ export default function AmendPaymentPage() {
                   void nav.pop();
                 }}
                 settledLabel="Say why, and finish"
+                gatePrices={false}
                 /*
                  * NOTHING IS WRITTEN HERE. The money is kept on the correction and committed with
                  * the reason on the next screen, in one `amend_sale` call — a payment recorded

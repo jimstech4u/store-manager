@@ -947,6 +947,30 @@ export function useDraftOrders(storeId: string | null) {
          *    pulling it out from under the receipt being printed would be the app tidying up over
          *    the seller's shoulder.
          */
+        /*
+         * A RESTORED LINE KEEPS ITS KEY.
+         *
+         * `makeDraftLine` mints a fresh key, so every restore gave every line a new identity — and a
+         * key is how a screen names a line. The sale-line page, pushed from Take payment with the
+         * line's key, mounted, caused a restore, and then said "that line is no longer on the sale"
+         * about the line in front of it. Matched to the line this till already held in the same
+         * order, same item and same shape, in order — the same line however often it is read.
+         */
+        for (const order of restored) {
+          const before = held.find((o) => o.id === order.id);
+          if (!before) continue;
+          const used = new Set<string>();
+          order.lines = order.lines.map((l) => {
+            const same = before.lines.find(
+              (b) =>
+                !used.has(b.key) && b.productId === l.productId && b.saleUnitId === l.saleUnitId,
+            );
+            if (!same) return l;
+            used.add(same.key);
+            return { ...l, key: same.key, priceTouched: same.priceTouched };
+          });
+        }
+
         const mine = new Set(restored.map((o) => o.id));
         const keep = held.filter((o) => (!o.id || o.settled) && !mine.has(o.id));
         const next = [...restored, ...keep];

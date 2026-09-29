@@ -56,11 +56,13 @@ export function SaleLineRow({
   total,
   belowCost,
   needsCount = false,
+  needsPrice = false,
   onPatch,
   onRemove,
   onStep,
   onReprice,
   onCountNow,
+  onPriceNow,
 }: {
   line: SaleLineView;
   /** Every shape this item can be sold in. One or none hides the chips. */
@@ -69,6 +71,7 @@ export function SaleLineRow({
   total: number;
   belowCost: boolean;
   needsCount?: boolean;
+  needsPrice?: boolean;
   onPatch: (patch: Partial<SaleLineView> & Record<string, unknown>) => void;
   onRemove: () => void;
   onStep: (direction: 1 | -1) => void;
@@ -81,6 +84,8 @@ export function SaleLineRow({
   onReprice: (qty: string, saleUnitId: string | null) => void | Promise<void>;
   /** Only called when `needsCount`; the row does not know what counting involves. */
   onCountNow?: () => void;
+  /** Only called when `needsPrice`; the row does not know who may set a price. */
+  onPriceNow?: () => void;
 }) {
   /*
    * WHETHER THIS ROW'S TOTAL IS BEING TYPED INTO, held here.
@@ -110,6 +115,16 @@ export function SaleLineRow({
               onClick={() => onCountNow?.()}
             >
               Not counted today · Count
+            </button>
+          )}
+          {/* NO PRICE YET — the shop's price for this shape, not the figure on this line. */}
+          {needsPrice && (
+            <button
+              type="button"
+              className={styles.countChip}
+              onClick={() => onPriceNow?.()}
+            >
+              No price yet · Set it
             </button>
           )}
         </p>

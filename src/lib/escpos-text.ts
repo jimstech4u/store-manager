@@ -309,6 +309,12 @@ export function receiptLines(input: ReceiptImageInput, layout: ReceiptLayout): P
 
   // ── The shop ────────────────────────────────────────────────────────────────
   one(layout.shopName, centre(input.shopName, layout.shopName));
+  if (input.banner) {
+    // As large as the shop's name, on its own rows: it is the first thing the paper says.
+    for (const l of wrap(input.banner, cols(layout.shopName))) {
+      one(layout.shopName, centre(l, layout.shopName));
+    }
+  }
   if (input.header) {
     for (const l of wrap(input.header, cols(layout.header))) {
       one(layout.header, centre(l, layout.header));

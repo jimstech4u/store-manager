@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import styles from './TakePayment.module.css';
 import { Button } from '@/components/ui/Button';
 import { useBankAccounts } from '@/lib/stacks/bank-accounts';
@@ -18,9 +18,10 @@ import {
 import { useResource } from '@/lib/stacks/resource';
 import { applySaleLocally } from '@/lib/stacks/local-effects';
 import { stockMoved } from '@/lib/stacks/catalog-stack';
-import { formatMoney, messageOf } from '@/lib/format';
+import { formatMoney, formatQtySpoken, messageOf } from '@/lib/format';
 import { useSellingUnits } from '@/lib/stacks/selling-units';
 import { useUncountedToday } from '@/lib/stacks/count-gate';
+import { unpricedOnSale } from '@/lib/stacks/price-gate';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { useNav } from '@academix-admin/navigation-stack';
 import {
@@ -73,6 +74,9 @@ export function TakePayment({
   commit,
   settledLabel = 'Mark as paid',
   onUpdateOrder,
+  gatePrices = true,
+  onOpenLine,
+  itemActions,
 }: {
   order: DraftOrder;
   /** Needed to look up the shop's bank accounts; a draft does not carry its store. */
@@ -140,6 +144,19 @@ export function TakePayment({
    * confirming a changed figure on a receipt somebody is already holding.
    */
   settledLabel?: string;
+  /**
+   * Refuse to settle while a shape on the order has no price. On for a new sale; off for a
+   * correction, whose lines were priced when they were sold and whose shape may have lost its
+   * price since — which is no reason to stop somebody putting the receipt right.
+   */
+  gatePrices?: boolean;
+  /**
+   * Open one line to change it. Given by the page settling a DRAFT; a correction leaves it out,
+   * and its lines stay plain rows.
+   */
+  onOpenLine?: (lineKey: string) => void;
+  /** Buttons under "What they are buying" — All items, Add an item, Scan. The page decides. */
+  itemActions?: ReactNode;
   /**
    * Edits the draft this screen is settling.
    *
@@ -382,7 +399,15 @@ export function TakePayment({
    * Read from the shapes the shop already has loaded store-wide, so it costs no request: a line
    * sold in a shape marked "comes back empty" is a container somebody must owe.
    */
-  const { byProduct } = useSellingUnits(storeId);
+  const { byProduct, loaded: shapesLoaded } = useSellingUnits(storeId);
+  /*
+   * NO PRICE, NOT SOLD — the count gate's twin. Worked out from the shapes already loaded above,
+   * so it costs no request; the server refuses a line at N0 as well (0221).
+   */
+  const unpriced = useMemo(
+    () => (gatePrices && shapesLoaded ? unpricedOnSale(order.lines, byProduct) : []),
+    [gatePrices, shapesLoaded, order.lines, byProduct],
+  );
 
   /*
    * NOT COUNTED TODAY, so not sold today.
@@ -586,16 +611,38 @@ export function TakePayment({
 
       <div className={styles.items}>
         <span className={styles.itemsLabel}>What they are buying</span>
-        {order.lines.map((line) => (
-          <div className={styles.item} key={line.key}>
-            <span className={styles.itemName}>{line.productName}</span>
-            <span className={styles.itemQty}>
-              {line.qty || 0}
-              {line.saleUnitName ? ` ${line.saleUnitName}` : ''} × {formatMoney(Number(line.unitPrice) || 0)}
-            </span>
-            <span className={styles.itemTotal}>{formatMoney(lineTotal(line))}</span>
-          </div>
-        ))}
+        {order.lines.map((line) => {
+          const body = (
+            <>
+              <span className={styles.itemName}>{line.productName}</span>
+              <span className={styles.itemQty}>
+                {formatQtySpoken(line.qty || '0')}
+                {line.saleUnitName ? ` ${line.saleUnitName}` : ''} ×{' '}
+                {formatMoney(Number(line.unitPrice) || 0)}
+              </span>
+              <span className={styles.itemTotal}>{formatMoney(lineTotal(line))}</span>
+            </>
+          );
+          /*
+           * A LINE OPENS, where the page allows it — the till's own row on a page of its own, so a
+           * quantity or a price is put right from here without going back to the sell screen.
+           */
+          return onOpenLine ? (
+            <button
+              type="button"
+              className={`${styles.item} ${styles.itemTap}`}
+              key={line.key}
+              onClick={() => onOpenLine(line.key)}
+              aria-label={`Change ${line.productName}`}
+            >
+              {body}
+            </button>
+          ) : (
+            <div className={styles.item} key={line.key}>
+              {body}
+            </div>
+          );
+        })}
 
         {/*
           The goods on their own, under a double rule.
@@ -678,6 +725,8 @@ export function TakePayment({
           </div>
         ))}
       </div>
+
+      {itemActions && <div className={styles.itemActions}>{itemActions}</div>}
 
       {/*
         ONE BOX THAT COMPOSES A CHARGE, and the charges themselves listed above with the items.
@@ -1118,6 +1167,23 @@ export function TakePayment({
         </>
       )}
 
+      {unpriced.length > 0 && (
+        <>
+          <InfoPanel tone="warning" title="Price these before they are sold">
+            {unpriced.map((u) => u.productName).join(', ')} {unpriced.length === 1 ? 'has' : 'have'}{' '}
+            no price yet. The sale settles once {unpriced.length === 1 ? 'it has' : 'they have'} one.
+          </InfoPanel>
+          <Button
+            variant="secondary"
+            size="large"
+            fullWidth
+            onClick={() => void nav.push('price_gate_page')}
+          >
+            Price {unpriced.length === 1 ? 'it' : 'them'} now
+          </Button>
+        </>
+      )}
+
       {!order.customerId && comingBack.length > 0 && (
         <InfoPanel tone="warning" title="Who is taking the containers?">
           {comingBack.join(', ')} {comingBack.length === 1 ? 'comes' : 'come'} back empty, so this
@@ -1169,6 +1235,8 @@ export function TakePayment({
           disabled={
             !countsChecked ||
             uncounted.length > 0 ||
+            (gatePrices && !shapesLoaded) ||
+            unpriced.length > 0 ||
             // Paid more than the sale while what they owed is still unknown: the extra might be for
             // the old debt rather than change, and nobody can say which until the balance arrives.
             (balanceUnknown && paid > total) ||

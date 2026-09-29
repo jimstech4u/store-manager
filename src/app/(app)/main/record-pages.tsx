@@ -34,6 +34,9 @@ import OrdersPage from './sell-stack/orders-page/orders-page';
 import OrderPage from './sell-stack/order-page/order-page';
 import ShareWhatsAppPage from './sell-stack/share-whatsapp-page/share-whatsapp-page';
 import CountGatePage from './sell-stack/count-gate-page/count-gate-page';
+import PriceGatePage from './sell-stack/price-gate-page/price-gate-page';
+import OrderItemsPage from './sell-stack/order-items-page/order-items-page';
+import SaleLinePage from './sell-stack/sale-line-page/sale-line-page';
 import TakePaymentPage from './sell-stack/take-payment-page/take-payment-page';
 import EmptiesPage from './sell-stack/empties-page/empties-page';
 import EmptiesCustomerPage from './sell-stack/empties-customer-page/empties-customer-page';
@@ -185,6 +188,11 @@ export const RECORD_PAGES: Record<string, ComponentType> = gateAll({
   updates_page: UpdatesPage,
   // Appended, like every one above it: a route is written into the URL as its POSITION here.
   customer_edit_page: CustomerEditPage,
+  // The count gate's twin. Appended: a route is written into the URL as its POSITION here.
+  price_gate_page: PriceGatePage,
+  // Appended, like every one above: a route is written into the URL as its POSITION here.
+  order_items_page: OrderItemsPage,
+  sale_line_page: SaleLinePage,
 });
 
 /** Handed to each stack's `additionalNavLinks` — one array, so its identity never changes. */

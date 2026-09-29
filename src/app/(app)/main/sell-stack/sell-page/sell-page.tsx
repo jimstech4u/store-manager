@@ -23,6 +23,7 @@ import { ProductPicker } from '@/components/catalog/ProductPicker';
 import { SaleLineRow } from '@/components/sell/SaleLineRow';
 import { findByBarcode } from '@/lib/stacks/mid-sale';
 import { useUncountedToday } from '@/lib/stacks/count-gate';
+import { useUnpricedOnSale } from '@/lib/stacks/price-gate';
 import { useTillShapes } from '@/lib/stacks/till-shapes';
 import { BarcodeScanner } from '@/components/catalog/BarcodeScanner';
 import type { ProductFormResult } from '@/components/catalog/ProductForm';
@@ -43,7 +44,7 @@ import {
 } from '@/lib/stacks/draft-orders';
 import { formatMoney, formatQty, messageOf } from '@/lib/format';
 import { partsFor, snapQty, startingQty } from '@/lib/quantity-rules';
-import { getSupabase } from '@/lib/supabase/client';
+import { lineRules, resolveLinePrice, startLine } from '@/lib/stacks/sale-line-ops';
 
 /**
  * The sale screen — over 90% of what this product does.
@@ -254,6 +255,13 @@ export default function SellPage() {
    * over. The server's answer on resume is the one that counts — never what this device remembered.
    */
   useLiveRefresh(nav, reloadCounts);
+
+  /*
+   * NO PRICE, NO SALE — the count gate's twin, said the same three ways: on the line, on the note,
+   * and on the button. Read from the shop's shapes, which every till re-reads when a price is set.
+   */
+  const { unpriced: needPrice } = useUnpricedOnSale(store?.id ?? null, activeOrder?.lines);
+  const unpricedProducts = new Set(needPrice.map((u) => u.productId));
 
   /*
    * THE ORDERS BADGE, KEPT HONEST WITHOUT A TIMER.
@@ -519,41 +527,11 @@ export default function SellPage() {
       return;
     }
 
-    addLine(
-      activeOrder.clientUuid,
-      makeDraftLine({
-        productId: product.id,
-        productName: product.name,
-        baseUnit: product.baseUnit,
-        packId: product.packId,
-        packName: product.packName,
-        packQty: product.packQty,
-        // Default to the first configured shape when there is one — usually the whole pack,
-        // which is what most sales are.
-        saleUnitId: first?.id ?? null,
-        saleUnitName: first?.name ?? null,
-        saleUnitBaseQty: first?.baseQty ?? null,
-        // A starting point, not a rule: the seller sets the real price on the line.
-        unitPrice: first?.price ?? product.listPrice ?? '',
-        /*
-         * One crate, or nothing at all.
-         *
-         * A thing sold only whole starts at one, because there is no question worth asking. A
-         * thing sold in halves starts at NOTHING, so the seller has to say which — half a crate
-         * recorded as a whole one is a real loss, and one is exactly the guess that gets left
-         * there when somebody is hurrying. A weighed thing starts at nothing for the plainer
-         * reason that nobody can guess what a chicken weighs.
-         */
-        qty: String(
-          startingQty({
-            wholeDigit: first?.wholeDigit ?? true,
-            allowQuarter: first?.allowQuarter ?? false,
-            allowHalf: first?.allowHalf ?? false,
-            allowThreeQuarter: first?.allowThreeQuarter ?? false,
-          }),
-        ),
-      }),
-    );
+    /*
+     * The till's new line: first shape, that shape's price, one crate or nothing — the same
+     * `startLine` the sale-line page composes with, so a line starts the same wherever it is added.
+     */
+    addLine(activeOrder.clientUuid, startLine(product, units));
     pickerOps.close();
     // The line is on the receipt, so the placeholder has done its job — cleared here rather than
     // after the count question below, which is a background enquiry the seller is not waiting on.
@@ -632,42 +610,15 @@ export default function SellPage() {
    * the client is a second answer waiting to disagree with the first.
    */
   /** The part-amount rules for whichever unit a line is being sold in. */
-  const unitRulesFor = (line: DraftLine) => {
-    const unit = saleUnits[line.productId]?.find((u) => u.id === line.saleUnitId);
-    return {
-      wholeDigit: unit?.wholeDigit ?? true,
-      allowQuarter: unit?.allowQuarter ?? false,
-      allowHalf: unit?.allowHalf ?? false,
-      allowThreeQuarter: unit?.allowThreeQuarter ?? false,
-    };
-  };
+  const unitRulesFor = (line: DraftLine) => lineRules(line, saleUnits[line.productId] ?? []);
 
   const repriceLine = async (line: DraftLine, qty: string, saleUnitId: string | null) => {
     // Never overwrite a figure the seller typed. Re-suggesting on the next quantity nudge would
     // silently undo a deliberate decision — a favour, a haggle — and nobody would see it happen.
-    if (!activeOrder || line.priceTouched) return;
-
-    const n = Number(qty);
-    if (!Number.isFinite(n) || n <= 0) return;
-
-    const { data, error } = await getSupabase().rpc('resolve_price', {
-      p_product_id: line.productId,
-      p_qty: n,
-      p_sale_unit_id: saleUnitId,
-      p_customer_id: activeOrder.customerId ?? null,
-    });
-
-    // A failure here must not break the line. The seller can always type a price, and a sale that
-    // cannot be built because a suggestion failed to load is far worse than one priced by hand.
-    if (error || !data) return;
-
-    const r = data as { suggested?: string | number | null; reason?: string | null };
-    if (r.suggested === null || r.suggested === undefined) return;
-
-    updateLine(activeOrder.clientUuid, line.key, {
-      unitPrice: String(r.suggested),
-      priceReason: r.reason ?? null,
-    });
+    if (!activeOrder) return;
+    // Shared with the sale-line page (sale-line-ops): a failure never breaks the line.
+    const r = await resolveLinePrice(line, qty, saleUnitId, activeOrder.customerId ?? null);
+    if (r) updateLine(activeOrder.clientUuid, line.key, r);
   };
 
   const step = (line: DraftLine, by: number) => {
@@ -820,7 +771,9 @@ export default function SellPage() {
               ? 'Fix the quantity'
               : needCount.length > 0
                 ? `Count ${needCount.length === 1 ? 'an item' : `${needCount.length} items`} first`
-                : 'Take payment'
+                : needPrice.length > 0
+                  ? `Price ${needPrice.length === 1 ? 'an item' : `${needPrice.length} items`} first`
+                  : 'Take payment'
           }
           amount={formatMoney(total)}
           disabled={emptyLines.length > 0}
@@ -828,7 +781,9 @@ export default function SellPage() {
           onClick={() =>
             needCount.length > 0
               ? void nav.push('count_gate_page', { why: 'pay' })
-              : payment.run(openPayment)
+              : needPrice.length > 0
+                ? void nav.push('price_gate_page', { why: 'pay' })
+                : payment.run(openPayment)
           }
         />
       )}
@@ -850,7 +805,9 @@ export default function SellPage() {
         onShare={() =>
           needCount.length > 0
             ? void nav.push('count_gate_page', { why: 'share' })
-            : setSharing(true)
+            : needPrice.length > 0
+              ? void nav.push('price_gate_page', { why: 'share' })
+              : setSharing(true)
         }
         hasCustomer={Boolean(activeOrder?.customerId)}
         orderCode={activeOrder?.code ?? null}
@@ -951,6 +908,29 @@ export default function SellPage() {
             </InfoPanel>
           )}
 
+          {/*
+            NO PRICE YET — and the sale cannot be settled until there is one. Beside the count note,
+            for the same reason: a condition to fix, with the fix on it, not a failure to dismiss.
+          */}
+          {needPrice.length > 0 && (
+            <InfoPanel
+              tone="warning"
+              title={
+                needPrice.length === 1
+                  ? `${needPrice[0].productName} has no price yet`
+                  : `${needPrice.length} items here have no price yet`
+              }
+            >
+              Set the price before selling it. The sale can be built, but not settled, until
+              {needPrice.length === 1 ? ' it has one' : ' they have one'}.
+              <div className={styles.countNote}>
+                <Button size="small" onClick={() => void nav.push('price_gate_page')}>
+                  Price {needPrice.length === 1 ? 'it' : 'them'} now
+                </Button>
+              </div>
+            </InfoPanel>
+          )}
+
           {/* ── Lines ─────────────────────────────────────────────────────────── */}
           {activeOrder.lines.length > 0 && (
             <div className={styles.lines}>
@@ -972,11 +952,13 @@ export default function SellPage() {
                   total={lineTotal(line)}
                   belowCost={belowCost(line)}
                   needsCount={needCount.includes(line.productId)}
+                  needsPrice={unpricedProducts.has(line.productId)}
                   onPatch={(patch) => updateLine(activeOrder.clientUuid, line.key, patch)}
                   onRemove={() => removeLine(activeOrder.clientUuid, line.key)}
                   onStep={(direction) => step(line, direction)}
                   onReprice={(qty, saleUnitId) => repriceLine(line, qty, saleUnitId)}
                   onCountNow={() => void nav.push('count_gate_page', { focus: line.productId })}
+                  onPriceNow={() => void nav.push('price_gate_page')}
                 />
               ))}
             </div>
@@ -1005,6 +987,24 @@ export default function SellPage() {
               <CameraIcon /> Scan a barcode
             </Button>
           </div>
+
+          {/*
+            ALL ITEMS — the order on its own, marked NOT A RECEIPT, to share, print or save before
+            anything is paid. Under the two ways onto the receipt, because it is about the same list.
+          */}
+          {activeOrder.lines.length > 0 && (
+            <Button
+              variant="secondary"
+              size="large"
+              fullWidth
+              onClick={async () => {
+                const saved = await push(activeOrder);
+                void nav.push('order_items_page', { id: saved?.id ?? activeOrder.id ?? '' });
+              }}
+            >
+              <ReceiptIcon /> All items
+            </Button>
+          )}
 
           {/*
             The running total and the extra charge have moved to the payment screen.

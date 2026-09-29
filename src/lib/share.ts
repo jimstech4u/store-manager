@@ -34,6 +34,11 @@ export interface ShareLine {
 
 export interface ReceiptImageInput {
   shopName: string;
+  /**
+   * What this paper IS, when it is not a receipt — "NOT A RECEIPT" — set large under the shop's
+   * name, on its own line. A receipt leaves it out and prints exactly as it always has.
+   */
+  banner?: string | null;
   header?: string | null;
   footer?: string | null;
   meta: string[];
@@ -117,6 +122,7 @@ export async function renderReceiptCanvas(
 
   let height = pad;
   height += Math.round(base * 1.9);                            // shop name
+  if (input.banner) height += wrap(input.banner, titleFont, inner).length * Math.round(base * 1.9);
   if (input.header) height += wrap(input.header, bodyFont, inner).length * lineH;
   height += lineH * input.meta.length + lineH;
   for (const l of input.lines) {
@@ -177,6 +183,9 @@ export async function renderReceiptCanvas(
   };
 
   centred(input.shopName, titleFont);
+  if (input.banner) {
+    for (const l of wrap(input.banner, titleFont, inner)) centred(l, titleFont);
+  }
   if (input.header) {
     ctx.font = bodyFont;
     for (const l of wrap(input.header, bodyFont, inner)) centred(l, bodyFont);

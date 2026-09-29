@@ -22,6 +22,24 @@ import styles from './ShareOrder.module.css';
  * device. WhatsApp is right when they are not — it is how a Nigerian shop actually reaches a
  * regular, and it needs their number, which is a question of its own and gets its own screen.
  */
+/**
+ * The link a customer follows an open order by — built on the TOKEN, not the code (see below).
+ *
+ * Exported so the All items page sends exactly the words this sheet sends.
+ */
+export function orderTrackLink(code: string, shareToken: string | null): string {
+  return shareToken
+    ? appUrl(`/t/${encodeURIComponent(shareToken)}`)
+    : appUrl(`/track?code=${encodeURIComponent(code)}`);
+}
+
+/** "Your order at Ashabi comes to N12,000. Follow it here: …" — one sentence, one link. */
+export function orderShareMessage(storeName: string, link: string, total?: string): string {
+  return (
+    `Your order at ${storeName}` + (total ? ` comes to ${total}.` : '.') + `\nFollow it here: ${link}`
+  );
+}
+
 export function ShareOrder({
   open,
   onClose,
@@ -60,14 +78,8 @@ export function ShareOrder({
    * The address itself comes from `appUrl`, not the browser's origin, or a shop setting up on
    * localhost would send links that open nothing.
    */
-  const link = shareToken
-    ? appUrl(`/t/${encodeURIComponent(shareToken)}`)
-    : appUrl(`/track?code=${encodeURIComponent(code)}`);
-
-  const message =
-    `Your order at ${storeName}` +
-    (total ? ` comes to ${total}.` : '.') +
-    `\nFollow it here: ${link}`;
+  const link = orderTrackLink(code, shareToken);
+  const message = orderShareMessage(storeName, link, total);
 
   const shareNatively = async () => {
     /*

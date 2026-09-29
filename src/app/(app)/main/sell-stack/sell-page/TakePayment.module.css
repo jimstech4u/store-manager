@@ -330,6 +330,35 @@
   font-weight: 700;
 }
 
+/* A line that opens: the row's own layout, with the button's chrome taken off. */
+.itemTap {
+  width: 100%;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.itemTap:active {
+  background: var(--surface-muted, rgba(0, 0, 0, 0.04));
+}
+
+/* All items, Add an item, Scan — under the list they act on. */
+.itemActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  margin: calc(-1 * var(--space-2)) 0 var(--space-4);
+}
+
+.itemActions > :first-child {
+  grid-column: 1 / -1;
+}
+
 /*
  * The quantity and unit price sit UNDER the name, spanning the row.
  *
