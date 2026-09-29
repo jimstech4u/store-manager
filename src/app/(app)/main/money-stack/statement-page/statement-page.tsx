@@ -282,8 +282,23 @@ export default function StatementPage() {
                 );
                 return (
                 <li key={`${h.ref_table}-${h.ref_id}-${i}`}>
-                  {/* A deposit or containers line opens its ledger; anything else has no page of its own. */}
-                  {ledgerPageFor(h.kind) ? (
+                  {/*
+                    A PAYMENT OPENS ITS RECEIPT — "like how a bank can send a receipt again from
+                    history". A deposit or containers line opens its ledger; anything else has no
+                    page of its own.
+                  */}
+                  {h.ref_table === 'payments' && h.ref_id ? (
+                    <button
+                      type="button"
+                      className={`${styles.row} ${styles.rowLink}`}
+                      onClick={() =>
+                        void nav.push('payment_done_page', { id: h.ref_id as string, from: 'history' })
+                      }
+                    >
+                      {said}
+                      <ChevronRightIcon />
+                    </button>
+                  ) : ledgerPageFor(h.kind) ? (
                     <button
                       type="button"
                       className={`${styles.row} ${styles.rowLink}`}

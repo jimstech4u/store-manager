@@ -42,6 +42,11 @@ export default function PaymentDonePage() {
   const location = useLocation();
   const { store } = useAuth();
   const paymentId = (location?.params?.id as string | undefined) ?? null;
+  /*
+   * OPENED FROM HISTORY, it is a receipt to send again — not a confirmation of something just done.
+   * The balance is today's, so it is said as "now", never as though it were the balance on the day.
+   */
+  const fromHistory = location?.params?.from === 'history';
   const [note, setNote] = useState<string | null>(null);
 
   const r = useResource<Done>({
@@ -94,14 +99,15 @@ export default function PaymentDonePage() {
 
   const d = r.data;
   const gave = d?.direction === 'out';
+  const now = fromHistory ? ' now' : '';
   const standing = (b: number | null) =>
     b === null
       ? 'Could not read their balance just now.'
       : b > 0.005
-        ? `Still owes ${formatMoney(b)}`
+        ? `Owes${now} ${formatMoney(b)}`
         : b < -0.005
-          ? `In credit ${formatMoney(-b)} — the shop owes them`
-          : 'Paid up — nothing owing';
+          ? `In credit${now} ${formatMoney(-b)} — the shop owes them`
+          : `Paid up${now} — nothing owing`;
 
   const words = d
     ? `${store.name}: ${gave ? 'we gave' : 'received from'} ${d.customerName} ${formatMoney(d.amount)} ` +
@@ -109,7 +115,11 @@ export default function PaymentDonePage() {
     : '';
 
   return (
-    <PageScaffold onBack={goBack} title={gave ? 'Money given back' : 'Payment recorded'} subtitle={store.name}>
+    <PageScaffold
+      onBack={goBack}
+      title={fromHistory ? (gave ? 'Money given back' : 'Payment receipt') : gave ? 'Money given back' : 'Payment recorded'}
+      subtitle={store.name}
+    >
       <PageState status={status}>
         {() =>
           d && (
@@ -142,7 +152,7 @@ export default function PaymentDonePage() {
 
               <div className={styles.actions}>
                 <Button fullWidth onClick={() => void nav.pop()}>
-                  Done
+                  {fromHistory ? 'Back' : 'Done'}
                 </Button>
                 <Button
                   variant="secondary"

@@ -19,7 +19,7 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 | Q4 | **Export the filtered list** (CSV) from every list that has filters — all matching rows, not just the loaded page | All lists | ☐ |
 | Q5 | Change handed back on **Correct payment** is recorded as money out — worked out as Take payment does (paid − still owed − old debt, capped at cash in), kept on the correction, written after it lands | Sell | ◐ |
 | Q6 | Every **edit form tells its lists** (product, supplier, bank, group, unit) — only the customer edit does | All stacks | ☐ |
-| Q7 | **Search lists on pages** (not just pickers) stop flashing "nothing found" while a term settles | Stock · Money · People · Sales | ☐ |
+| Q7 | **Search lists stop flashing "nothing found"** — lists answer before they say empty (`usePaginatedList`); search-viewer 0.3.1 reads a stale "no results" as loading while the text differs from the term searched. Frame-by-frame: loading from the instant the box changes, then the match | All searches · Library | ☑ |
 | Q8 | **Fractions set small** (`Qty`) wherever a quantity is the headline — only the empties list has it | All stacks | ☐ |
 | Q9 | **Base units still leaking** — product page, receive picker and count list already spoke in shapes (base unit only for an item with none); stock history, the low-stock page and the review queue now do too (`useSayInShapes`). Malta's history reads "+133 cans 12 pieces". The stock-value report keeps base units because its cost column is per base unit | Stock · Count | ☑ |
 | Q10 | Expiry can be **added to an undated lot** from the edit form — confirm by click-through | Stock | ☐ |
@@ -37,6 +37,7 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 | Q23 | **A receipt settles only its own empties** — `sale_empties_outstanding` (0225): what the sale sent out, less what came back against it, capped at what the customer still holds. On every receipt (dated at the sale when fresh, now otherwise); gone once settled. The account keeps the whole picture | Sell · Backend | ☑ |
 | Q24 | **Payment confirmed on its own page** — customer, amount, method, time, and where the account stands now; swapped in for the form so Back is the account; Share as text. Probe 8/8 | People | ☑ |
 | Q25 | **Back on Stock lands on Sell (PWA)** — not reproducible in Chrome or WebKit: straight, after a reload, after a relaunch on Sell with Stock restored two deep, and at the root (`probe-stock-back-ui.mjs`, both engines, 0 failed). Settings → Updates → **Record navigation** now captures the library's own trace on the phone for a report | Navigation | ◐ |
+| Q26 | **A payment opens its receipt from history** — the statement's and the account's payment lines open the payment page as a receipt ("Owes now"), with Share to send it again | People · Money | ☑ |
 | Q14 | **A line opens from Take payment** — the till's own `SaleLineRow` on `sale_line_page`; Add an item and Scan there push it with the product. Line logic shared with the till (`sale-line-ops`). Same probe, 19/19 | Sell | ☑ |
 
 **Blocked on the shop** — nothing can be done until you give the figure:
@@ -196,6 +197,6 @@ Large "over" figures usually mean an opening quantity keyed short, not stock app
 ### Frontend — found
 | # | Finding | State |
 | --- | --- | --- |
-| F1 | **iOS keyboard never rises on open** — both `search-viewer` and `selection-viewer` focus *after* the open animation, outside the tap, and remount the input first. Library fix | ☐ |
-| F2 | **Search pages flash "nothing found"** — the local filter answers before the server does for a term not yet loaded. Library fix in `search-viewer` | ☐ |
+| F1 | **iOS keyboard never rises on open** — search-viewer 0.3.1 / selection-viewer 0.5.2 focus inside the tap (layout effect; an invisible stand-in when the box is not mounted yet) and no longer remount. Proven: a text box has focus in the tap that opens both. The keyboard itself needs your iPhone to confirm | ◐ |
+| F2 | **Search pages flash "nothing found"** — see Q7 | ☑ |
 | F3 | Only four list channels exist (`customers`, `debtors`, `products`, `sales`); the other writers (groups, units, bank, shop) feed derived figures that already re-read — **Q6 narrows to renames showing on list rows** | ☐ |

@@ -486,6 +486,18 @@ export default function AccountPage() {
                   See the receipt
                 </button>
               )}
+              {/* A payment opens its receipt, to be sent again (see payment_done_page). */}
+              {h.ref_table === 'payments' && h.ref_id && (
+                <button
+                  type="button"
+                  className={styles.eventOpen}
+                  onClick={() =>
+                    void nav.push('payment_done_page', { id: h.ref_id as string, from: 'history' })
+                  }
+                >
+                  See the payment
+                </button>
+              )}
               {/* A deposit or containers line opens the ledger it moved (0156). */}
               {ledgerPageFor(h.kind) && (
                 <button

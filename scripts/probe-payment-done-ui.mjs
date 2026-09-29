@@ -69,7 +69,7 @@ try {
   const t = (await p.locator('body').innerText()).replace(/\s+/g, ' ');
   check('it names the customer', t.includes(cust.display_name));
   check('and the amount', /₦[\d,]+/.test(t));
-  check('and where the account stands', /Still owes|Paid up|In credit|Could not read/.test(t));
+  check('and where the account stands', /Owes|Paid up|In credit|Could not read/.test(t));
   check('with Done and Share', /Done/.test(t) && /Share/.test(t));
 
   await p.evaluate(() => window.__NAV_STACK__.push('sell-stack', 'updates_page'));
@@ -77,6 +77,27 @@ try {
   await p.screenshot({ path: `${SHOTS}/2-updates.png`, fullPage: true });
   const t2 = await p.locator('body').innerText();
   check('Updates offers the navigation recorder', /Record navigation|Stop recording/.test(t2));
+
+  // FROM HISTORY: the statement's "Payment received" line opens the same page, as a receipt to send.
+  await p.goto(`${BASE}/main`, { waitUntil: 'networkidle' });
+  await p.waitForTimeout(6000);
+  await p.locator('.nav-item').filter({ hasText: /^Money$/ }).first().click();
+  await p.waitForTimeout(5000);
+  const who = p.getByRole('button', { name: new RegExp(cust.display_name, 'i') }).locator('visible=true').first();
+  await who.waitFor({ state: 'visible', timeout: 60000 });
+  await who.click();
+  await p.waitForTimeout(6000);
+  const line = p.getByRole('button', { name: /Payment received/ }).locator('visible=true').first();
+  check('a payment line on the statement can be tapped', (await line.count()) > 0);
+  if (await line.count()) {
+    await line.scrollIntoViewIfNeeded();
+    await line.click();
+    await p.waitForTimeout(5000);
+    await p.screenshot({ path: `${SHOTS}/3-from-history.png` });
+    const t3 = (await p.locator('body').innerText()).replace(/\s+/g, ' ');
+    check('it opens as a payment receipt', /Payment receipt/.test(t3));
+    check('with Share, to send it again', /Share/.test(t3));
+  }
 
   check('no page errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 } finally {
