@@ -17,7 +17,7 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 | Q2 | **Add-customer needs two taps** on Take payment / Correct payment — the correction's `onCustomerForAmend` was never provided by anyone; Take payment now attaches to the order it is paying for (`onCustomerForPayment`). Not clicked through: it would create a real customer | Sell | ◐ |
 | Q3 | **Filters** on Stock, Count, Yard, Sales, Money, People, Suppliers — server-side, so they survive pagination | All lists · Backend | ☐ |
 | Q4 | **Export the filtered list** (CSV) from every list that has filters — all matching rows, not just the loaded page | All lists | ☐ |
-| Q5 | Change handed back on **Correct payment** is recorded as money out (only Take payment does it) | Sell | ☐ |
+| Q5 | Change handed back on **Correct payment** is recorded as money out — worked out as Take payment does (paid − still owed − old debt, capped at cash in), kept on the correction, written after it lands | Sell | ◐ |
 | Q6 | Every **edit form tells its lists** (product, supplier, bank, group, unit) — only the customer edit does | All stacks | ☐ |
 | Q7 | **Search lists on pages** (not just pickers) stop flashing "nothing found" while a term settles | Stock · Money · People · Sales | ☐ |
 | Q8 | **Fractions set small** (`Qty`) wherever a quantity is the headline — only the empties list has it | All stacks | ☐ |
@@ -178,8 +178,8 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 ### Backend — found
 | # | Finding | State |
 | --- | --- | --- |
-| A1 | Tables other tills still never hear: `deposit_holdings`, `variance_resolutions`, `supplier_payments`, `supplier_empties`, `empties_counts`, `store_units`, `store_settings`, `product_low_stock_levels`, `sale_charges` | ☐ |
-| A2 | **The benchmark leaks 20 stock periods a run** — it drops its shop under `session_replication_role = replica`, which suspends the cascade (78 orphan rows now) | ☐ |
+| A1 | Tables other tills never heard — published (0226) and mapped. Found worse on the way: six tables with no `store_id` were subscribed with a `store_id` filter and so never heard at all (shapes, prices, maker links, allocations). Subscribed unfiltered; a shape change proven heard | ☑ |
+| A2 | **The benchmark leaked its whole shop every run** (replica mode stands down the FK cascades too): 2,834 rows across 25 tables, none in the live shop, purged. The teardown now runs `purge-orphans.sql`; 192/192 and nothing left after a run | ☑ |
 | A3 | 58 sellable shapes have no price — the price gate (Q1) will stop each at the till | info |
 
 ### Shop data — for the shop, not a code fault

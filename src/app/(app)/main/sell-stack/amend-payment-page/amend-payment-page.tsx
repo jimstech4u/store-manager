@@ -266,7 +266,19 @@ export default function AmendPaymentPage() {
                  * the reason on the next screen, in one `amend_sale` call — a payment recorded
                  * before the correction lands would sit against a document that never existed.
                  */
-                commit={async ({ payments, depositNow, depositReason }) => {
+                commit={async ({ payments, depositNow, depositReason, paidTotal, towardsOldDebt }) => {
+                  /*
+                   * CHANGE, worked out the way Take payment works it out: what was handed over, less
+                   * what this correction still wanted and whatever went to an older debt — and never
+                   * more than came in as cash, because change comes out of the drawer.
+                   */
+                  const cashIn = payments
+                    .filter((pay) => pay.method === 'cash')
+                    .reduce((sum, pay) => sum + Number(pay.amount || 0), 0);
+                  const changeBack = Math.min(
+                    Math.max(paidTotal - stillOwed - towardsOldDebt, 0),
+                    cashIn,
+                  );
                   /*
                    * The rows are already on the correction, kept by `onEnteredChange` as they were
                    * entered. What is set here is the amount still sitting in the box — counted
@@ -281,6 +293,7 @@ export default function AmendPaymentPage() {
                     })),
                     depositNow,
                     depositReason,
+                    changeBack,
                   });
                   void nav.push('amend_reason_page', { id: saleId ?? '' });
                 }}

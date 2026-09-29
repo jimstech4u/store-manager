@@ -53,6 +53,12 @@ export interface AmendDraft {
   taking: { amount: number; method: string; reference: string | null; bankAccountId: string | null }[];
   /** A deposit taken now, for containers this correction puts out. */
   depositNow: number;
+  /**
+   * Cash handed back across the counter as change on this correction's payment — recorded as money
+   * going out once the correction lands, so it never sits on the account as a credit (see Take
+   * payment, which does the same for a new sale).
+   */
+  changeBack?: number;
   depositReason: string | null;
   /** Why, asked last — after the money and before the receipt. */
   reason: string;

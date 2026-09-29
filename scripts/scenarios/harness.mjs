@@ -147,15 +147,22 @@ export async function closeShop(storeId) {
    * halfway through being deleted. A foreign key violation caused by the delete itself.
    *
    * `session_replication_role = replica` stands every user trigger down at once, including that
-   * one, and leaves the foreign keys doing the cascade. Reset in the same script, so a run that
-   * fails cannot leave the database with its triggers off — which would be a far worse thing to
-   * leave behind than a shop.
+   * one. Reset in the same script, so a run that fails cannot leave the database with its triggers
+   * off — which would be a far worse thing to leave behind than a shop.
+   *
+   * IT DOES NOT LEAVE THE FOREIGN KEYS DOING THE CASCADE, as this used to say. Their cascades are
+   * triggers as well, and replica mode stands them down with the rest: every run left the shop's
+   * movements, periods, drafts, sales and customers behind with nothing to point at — 2,834 rows by
+   * 29 Sep. So the delete is followed by `purge-orphans.sql`, which removes every row whose parent
+   * is gone, pass after pass, and on a live database can reach nothing else.
    */
+  const purge = readFileSync(new URL('./purge-orphans.sql', import.meta.url), 'utf8').replace('__DRY__', 'false');
   const sql = `
     set session_replication_role = replica;
     delete from public.audit_log where store_id = '${storeId}';
     delete from public.stores    where id       = '${storeId}';
     reset session_replication_role;
+    ${purge}
   `;
   void appendOnly;
   try {

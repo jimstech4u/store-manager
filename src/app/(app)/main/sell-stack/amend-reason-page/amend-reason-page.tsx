@@ -1,5 +1,7 @@
 'use client';
 
+import { getSupabase } from '@/lib/supabase/client';
+import { accountsChanged } from '@/lib/stacks/customer-account';
 import { finishInto } from '@/lib/finish-flow';
 import { useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
@@ -91,6 +93,25 @@ export default function AmendReasonPage() {
         deposit: draft.depositNow > 0 ? draft.depositNow : null,
         depositReason: draft.depositReason,
       });
+      /*
+       * THE CHANGE HANDED BACK, as money going out — only Take payment did this, so change given on
+       * a corrected receipt sat on the account as a credit the shop did not owe. Not fatal: the
+       * correction is recorded, and a credit can still be given back from the account.
+       */
+      const change = Number(draft.changeBack) || 0;
+      if (change > 0.005 && order.customerId) {
+        const { error: backErr } = await getSupabase().rpc('record_money_back', {
+          p_store_id: store.id,
+          p_customer_id: order.customerId,
+          p_amount: change,
+          p_method: 'cash',
+          p_reason: 'Change given at the counter (correction)',
+          p_client_uuid: crypto.randomUUID(),
+          p_bank_account_id: null,
+        });
+        if (backErr) console.warn('change was not recorded as money back', backErr.message);
+        accountsChanged();
+      }
       setState('idle');
 
       /*
