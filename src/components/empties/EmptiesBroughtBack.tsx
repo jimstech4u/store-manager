@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useNav } from '@academix-admin/navigation-stack';
 import { Button } from '@/components/ui/Button';
+import { Qty } from '@/components/ui/Qty';
 import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/components/ui/Dialog';
 import { LoadArea, useLoadArea } from '@/components/ui/LoadArea';
 import { rollUpOwed, settleLine, type OwedLine, type OwedRow } from '@/lib/empties-rollup';
@@ -130,7 +131,8 @@ export function EmptiesBroughtBack({
                 {lines.map((l, i) => (
                   <li key={`${l.label}-${l.unit}-${i}`} className={styles.row}>
                     <span className={styles.what}>
-                      <strong>{l.said}</strong> {l.label} {l.unit.toLowerCase()}
+                      {/* The part set smaller than the whole, the way the empties list sets it. */}
+                      <strong><Qty value={l.qty} /></strong> {l.label} {l.unit.toLowerCase()}
                       {l.products.length > 1 && (
                         <span className={styles.from}>{l.products.join(' + ')}</span>
                       )}

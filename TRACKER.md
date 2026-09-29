@@ -18,11 +18,11 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 | Q3 | **Filters** on Stock, Count, Yard, Sales, Money, People, Suppliers — server-side, so they survive pagination | All lists · Backend | ☐ |
 | Q4 | **Export the filtered list** (CSV) from every list that has filters — all matching rows, not just the loaded page | All lists | ☐ |
 | Q5 | Change handed back on **Correct payment** is recorded as money out — worked out as Take payment does (paid − still owed − old debt, capped at cash in), kept on the correction, written after it lands | Sell | ◐ |
-| Q6 | Every **edit form tells its lists** (product, supplier, bank, group, unit) — only the customer edit does | All stacks | ☐ |
+| Q6 | Every **edit form tells its lists** — checked: products (list channel), customers (edit page), suppliers (scope), banks (state) already do; groups and units are create-only there. And other tills now hear all of them (0226) | All stacks | ☑ |
 | Q7 | **Search lists stop flashing "nothing found"** — lists answer before they say empty (`usePaginatedList`); search-viewer 0.3.1 reads a stale "no results" as loading while the text differs from the term searched. Frame-by-frame: loading from the instant the box changes, then the match | All searches · Library | ☑ |
-| Q8 | **Fractions set small** (`Qty`) wherever a quantity is the headline — only the empties list has it | All stacks | ☐ |
+| Q8 | **Fractions set small** — stock is whole now (0222), so a part only headlines on empties: the empties list, the empties block on receipts and accounts, and "theirs in your yard" use `Qty` | All stacks | ☑ |
 | Q9 | **Base units still leaking** — product page, receive picker and count list already spoke in shapes (base unit only for an item with none); stock history, the low-stock page and the review queue now do too (`useSayInShapes`). Malta's history reads "+133 cans 12 pieces". The stock-value report keeps base units because its cost column is per base unit | Stock · Count | ☑ |
-| Q10 | Expiry can be **added to an undated lot** from the edit form — confirm by click-through | Stock | ☐ |
+| Q10 | Expiry on stock with a history — done as Q18 (0224) | Stock | ☑ |
 | Q11 | Destiny's receipt — checked: she holds 1½ 7up crates across two receipts (1 from 28 Sep, ½ from 29 Sep), and her account and both receipts agree. If the crate is back, it is one tap now: All back on that receipt | Data | ☑ |
 | Q12 | Audit sweep findings (section 5) | All | ☐ |
 | Q13 | **All items** — the open order on its own, marked NOT A RECEIPT on screen, paper and PDF; share on WhatsApp / share with the tracking link, PDF, print. From the till (under Scan) and Take payment. `probe-all-items-and-line-ui.mjs` | Sell | ☑ |
@@ -38,6 +38,7 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 | Q24 | **Payment confirmed on its own page** — customer, amount, method, time, and where the account stands now; swapped in for the form so Back is the account; Share as text. Probe 8/8 | People | ☑ |
 | Q25 | **Back on Stock lands on Sell (PWA)** — not reproducible in Chrome or WebKit: straight, after a reload, after a relaunch on Sell with Stock restored two deep, and at the root (`probe-stock-back-ui.mjs`, both engines, 0 failed). Settings → Updates → **Record navigation** now captures the library's own trace on the phone for a report | Navigation | ◐ |
 | Q26 | **A payment opens its receipt from history** — the statement's and the account's payment lines open the payment page as a receipt ("Owes now"), with Share to send it again | People · Money | ☑ |
+| Q27 | **"Waiting for you" does its job** — customers open their edit page (it opened the empty new-customer form); stock cards read in shapes, open the item, leave the list when marked; "Wrong" asks first and says what comes off the shelf; its reversals no longer come back as new entries (0227). Probe 6/6 | Settings | ☑ |
 | Q14 | **A line opens from Take payment** — the till's own `SaleLineRow` on `sale_line_page`; Add an item and Scan there push it with the product. Line logic shared with the till (`sale-line-ops`). Same probe, 19/19 | Sell | ☑ |
 
 **Blocked on the shop** — nothing can be done until you give the figure:
@@ -158,6 +159,8 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 | 0223 | the product picker reaches every item | ☑ |
 | 0224 | date stock already on the shelf | ☑ |
 | 0225 | the empties one sale still owes | ☑ |
+| 0226 | the tables other tills never heard | ☑ |
+| 0227 | the review queue skips its own reversals | ☑ |
 
 ---
 

@@ -22,6 +22,7 @@ import { formatMoney, formatQtySpoken, messageOf } from '@/lib/format';
 import { rollUpOwed, type OwedRow } from '@/lib/empties-rollup';
 import { LoadArea, useLoadArea } from '@/components/ui/LoadArea';
 import { EmptiesBroughtBack } from '@/components/empties/EmptiesBroughtBack';
+import { Qty } from '@/components/ui/Qty';
 import { emptiesOwed, LEDGERS_SCOPE } from '@/lib/stacks/customer-ledgers';
 import { getSupabase } from '@/lib/supabase/client';
 import { useListNotifier } from '@/hooks/useListChannel';
@@ -311,7 +312,7 @@ export default function AccountPage() {
                   </p>
                   {l.products.length > 1 && <p className={styles.rowNote}>{l.products.join(' + ')}</p>}
                 </div>
-                <span className={styles.rowQty}>{l.said}</span>
+                <span className={styles.rowQty}><Qty value={l.qty} /></span>
               </li>
             ))}
           </ul>

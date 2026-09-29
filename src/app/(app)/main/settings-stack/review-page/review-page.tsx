@@ -16,7 +16,7 @@ import { useNav } from '@academix-admin/navigation-stack';
 import { useStackBack } from '@/hooks/useStackBack';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatDateTime, formatQtySpoken, pluralUnit, messageOf } from '@/lib/format';
-import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
+import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/components/ui/Dialog';
 
 interface PendingProduct {
   id: string;
@@ -35,6 +35,7 @@ interface PendingCustomer {
 
 interface PendingStock {
   id: string;
+  product_id: string;
   product: string;
   kind: string;
   qty: string;
@@ -119,6 +120,12 @@ export default function ReviewPage() {
    */
   const actionError = useProblem();
   const error = res.error;
+  /*
+   * "WRONG" ASKS FIRST. It reverses the entry — an opening count marked wrong takes that stock off
+   * the shelf — and it used to do so on one tap, with nothing to say what it would do.
+   */
+  const [rejecting, setRejecting] = useState<PendingStock | null>(null);
+  const rejectDialog = useConfirm();
 
   /**
    * Take one row out of the queue, here, without asking for the queue again.
@@ -186,6 +193,34 @@ export default function ReviewPage() {
           queue && (
             <>
       <ProblemDialog problem={actionError} title="Could not do that" />
+
+      {rejecting && (
+        <ConfirmDialog
+          controller={rejectDialog}
+          title={`Undo this ${(KIND_LABEL[rejecting.kind] ?? rejecting.kind).toLowerCase()}?`}
+          message={
+            `${rejecting.product}: ${Number(rejecting.qty) > 0 ? 'takes' : 'puts'} ` +
+            `${say(rejecting.product_id, Math.abs(Number(rejecting.qty)), 'piece')} ` +
+            `${Number(rejecting.qty) > 0 ? 'back off' : 'back on'} the shelf, as though it never happened. ` +
+            'Use this only if it did not happen. If the figure was just wrong, open the item and count it again instead.'
+          }
+          confirmText="Yes, undo it"
+          tone="danger"
+          onDismiss={() => setRejecting(null)}
+          onConfirm={() => {
+            const s = rejecting;
+            void run(s.id, async () => {
+              const { error: e } = await getSupabase().rpc('review_movement', {
+                p_movement_id: s.id,
+                p_accepted: false,
+                p_note: 'not accepted on review',
+              });
+              if (e) throw e;
+              takeOut('stock_entries', s.id);
+            });
+          }}
+        />
+      )}
 
       {error && (
         <InfoPanel tone="danger" title="Could not refresh what is waiting">
@@ -302,11 +337,15 @@ export default function ReviewPage() {
                 </div>
 
                 <div className={styles.cardActions}>
-                  {canOpen('customer_form_page') && (
+                  {/*
+                    THE EDIT PAGE, which loads them. This opened the NEW-customer form with an id it
+                    never reads, so "Check the details" showed an empty form and nothing to check.
+                  */}
+                  {canOpen('customer_edit_page') && (
                     <Button
                       size="small"
                       variant="secondary"
-                      onClick={() => void nav.push('customer_form_page', { id: c.id })}
+                      onClick={() => void nav.push('customer_edit_page', { id: c.id })}
                     >
                       Check the details
                     </Button>
@@ -354,18 +393,22 @@ export default function ReviewPage() {
                   {/* The trace, in words. A signed delta is not something a shop owner should
                       have to decode. */}
                   <div className={styles.trace}>
-                    <span className={styles.traceStep}>{formatQtySpoken(s.balance_before)}</span>
+                    <span className={styles.traceStep}>
+                      {say(s.product_id, Number(s.balance_before), 'piece')}
+                    </span>
                     <span className={styles.traceArrow} aria-hidden="true">
                       →
                     </span>
                     <span className={styles.traceDelta}>
                       {Number(s.qty) > 0 ? '+' : '−'}
-                      {formatQtySpoken(Math.abs(Number(s.qty)))}
+                      {say(s.product_id, Math.abs(Number(s.qty)), 'piece')}
                     </span>
                     <span className={styles.traceArrow} aria-hidden="true">
                       →
                     </span>
-                    <span className={styles.traceStep}>{formatQtySpoken(s.balance_after)}</span>
+                    <span className={styles.traceStep}>
+                      {say(s.product_id, Number(s.balance_after), 'piece')}
+                    </span>
                   </div>
                 </div>
 
@@ -380,6 +423,9 @@ export default function ReviewPage() {
                           p_accepted: true,
                         });
                         if (e) throw e;
+                        // Off the list at once — it stayed until the next visit, so a tap looked
+                        // like it had done nothing.
+                        takeOut('stock_entries', s.id);
                       })
                     }
                   >
@@ -389,18 +435,16 @@ export default function ReviewPage() {
                     size="small"
                     variant="secondary"
                     disabled={busy === s.id}
-                    onClick={() =>
-                      run(s.id, async () => {
-                        const { error: e } = await getSupabase().rpc('review_movement', {
-                          p_movement_id: s.id,
-                          p_accepted: false,
-                          p_note: 'not accepted on review',
-                        });
-                        if (e) throw e;
-                      })
-                    }
+                    onClick={() => setRejecting(s)}
                   >
                     <CloseIcon /> Wrong
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="secondary"
+                    onClick={() => void nav.push('product_page', { id: s.product_id })}
+                  >
+                    Open the item
                   </Button>
                 </div>
               </li>
