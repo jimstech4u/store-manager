@@ -1,8 +1,9 @@
 /**
- * SEARCH SHEETS: the box is focused once the sheet has opened, and a correction never flashes "empty".
+ * SEARCH SHEETS: the box is focused in the tap, with its sheet already in place, and a correction never flashes "empty".
  *
- *  1. Stock search: nothing is focused while the sheet slides up; the box is, once it has opened
- *     (a keyboard raised mid-slide made iOS push the header off and hide the rows).
+ *  1. Stock search: the box is focused IN THE TAP (a phone raises its keyboard for nothing later),
+ *     and never while its sheet is moving — the sheet opens in place (modal-sheet `instant`), because
+ *     a keyboard raised mid-slide made iOS push the header off and hide the rows.
  *  2. Type a term that finds nothing, then the correction of it: "nothing found" must not be on
  *     screen at any moment between the correction and its match.
  *  3. The product picker at the till: the same.
@@ -100,7 +101,7 @@ try {
   await launcher.click();
   await p.waitForTimeout(300);
   const f1 = await tapFocus();
-  check('no text box is focused in the tap that opens the search (the keyboard waits for the sheet)', f1 !== 'input', String(f1));
+  check('the search box is focused in the tap that opens it (so the phone raises its keyboard)', f1 === 'input', String(f1));
   await p.waitForTimeout(1200);
   check('and the real search box has it once the sheet is up',
     await p.evaluate(() => !!document.activeElement?.closest('[role="dialog"]') && document.activeElement.tagName === 'INPUT'));
@@ -141,7 +142,7 @@ try {
   await add.click();
   await p.waitForTimeout(300);
   const f2 = await tapFocus();
-  check('no text box is focused in the tap that opens the picker (the keyboard waits for the sheet)', f2 !== 'input', String(f2));
+  check('the picker box is focused in the tap that opens it (so the phone raises its keyboard)', f2 === 'input', String(f2));
   await p.waitForTimeout(1200);
   check('and the real picker box has it once the sheet is up',
     await p.evaluate(() => !!document.activeElement?.closest('[role="dialog"]') && document.activeElement.tagName === 'INPUT'));
