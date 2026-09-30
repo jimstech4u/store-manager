@@ -93,6 +93,17 @@ export interface DraftCharge {
 
 export interface DraftOrder {
   /**
+   * Started BY THE TILL, not by a person — and not the shop's business until something is on it.
+   *
+   * The till opens a customer by itself when it has none, so a seller can scan straight away. That
+   * tab used to be saved to the shop the instant it existed, and tabs are shared: every phone,
+   * every reload after the last tab was closed, every browser that opened the till, put another
+   * "Customer N ₦0" on every other till. The shop found thirty-seven of them one morning — "something
+   * always creates a new customer behind". A provisional tab stays on this phone until it has an
+   * item, a customer, a charge or a note; then it is saved like any other, code and all.
+   */
+  provisional?: boolean;
+  /**
    * The shop has turned this into a sale.
    *
    * Kept for the moment between settling and the tab closing, so nothing tries to save an order
@@ -165,6 +176,20 @@ const newId = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+/** A provisional tab with nothing on it yet — still this phone's alone (see `provisional`). */
+export function isUntouchedProvisional(o: DraftOrder): boolean {
+  return (
+    o.provisional === true &&
+    !o.id &&
+    o.lines.length === 0 &&
+    !o.customerId &&
+    !o.customerName.trim() &&
+    (o.charges ?? []).length === 0 &&
+    (o.deposits ?? []).length === 0 &&
+    !o.note.trim()
+  );
+}
 
 export function makeDraft(): DraftOrder {
   return {
@@ -522,10 +547,13 @@ export function useDraftOrders(storeId: string | null) {
   );
   pushRef.current = push;
 
-  const startOrder = useCallback(() => {
-    const order = makeDraft();
+  const startOrder = useCallback((opts?: { provisional?: boolean }) => {
+    const order: DraftOrder = { ...makeDraft(), ...(opts?.provisional ? { provisional: true } : {}) };
     setOrders((prev) => [...prev, order]);
     setActiveId(order.clientUuid);
+
+    // The till's own tab waits until somebody puts something on it (see `provisional`).
+    if (order.provisional) return order.clientUuid;
 
     /*
      * Straight to the shop, before it has anything on it.
@@ -1109,7 +1137,8 @@ export function useDraftOrders(storeId: string | null) {
      * No `lines.length > 0` condition: an empty tab is a real order in the shop, and the whole
      * point of creating it server-side is that it exists before anything is on it.
      */
-    const unsynced = orders.filter((o) => !o.synced && !o.settled);
+    // …except the till's own tab while nothing is on it: that one is not the shop's yet.
+    const unsynced = orders.filter((o) => !o.synced && !o.settled && !isUntouchedProvisional(o));
     if (unsynced.length === 0) return;
     const t = setTimeout(() => {
       unsynced.forEach((o) => void push(o));

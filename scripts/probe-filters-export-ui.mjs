@@ -6,6 +6,8 @@
  */
 import { chromium } from '@playwright/test';
 import { readFileSync, mkdirSync } from 'node:fs';
+import { createClient } from '@supabase/supabase-js';
+import { trackDrafts, sweepDrafts } from './probe-drafts.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3100';
 const OUT = 'C:/Users/ajibe/AppData/Local/Temp/claude/c--Users-ajibe-StudioProjects-academix-project/e777c9cb-0458-4485-8d5b-33a59e6c79c6/scratchpad/filters';
@@ -19,6 +21,14 @@ const browser = await chromium.launch();
 // A desktop-shaped context, so the export downloads rather than opening a share sheet.
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, acceptDownloads: true });
 const p = await ctx.newPage();
+/*
+ * The till starts a customer by itself when it opens with none, so even a probe that never
+ * touches Sell can leave an empty tab on the shop's till. Only what THIS browser saved is closed.
+ */
+const PROBE_DRAFTS = trackDrafts(p);
+const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+  auth: { persistSession: false },
+});
 await p.addInitScript({ content: 'window.__NAV_STACK_DEVTOOLS__ = true;' });
 const errors = [];
 p.on('pageerror', (e) => errors.push(String(e).split('\n')[0]));
@@ -82,6 +92,7 @@ try {
   check('no page errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 } finally {
   await browser.close();
+  await sweepDrafts(admin, PROBE_DRAFTS);
 }
 console.log(`\n${failed} failed`);
 process.exit(failed ? 1 : 0);

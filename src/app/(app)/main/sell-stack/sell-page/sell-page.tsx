@@ -380,7 +380,12 @@ export default function SellPage() {
     if (!store || !hydrated || orders.length > 0) return;
     if (autoStarted.current === store.id) return;
     autoStarted.current = store.id;
-    startOrder();
+    /*
+     * PROVISIONAL: on this phone only, until something is put on it. Saved at once, this tab
+     * appeared on every other till too — each reload, each phone — and they piled up as empty
+     * "Customer N ₦0" tabs nobody had asked for.
+     */
+    startOrder({ provisional: true });
   }, [store, hydrated, orders.length, startOrder]);
 
   const total = activeOrder ? draftTotal(activeOrder) : 0;

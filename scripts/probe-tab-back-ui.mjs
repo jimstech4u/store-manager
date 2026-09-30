@@ -15,6 +15,8 @@
 
 import { chromium, webkit } from '@playwright/test';
 import { readFileSync } from 'node:fs';
+import { createClient } from '@supabase/supabase-js';
+import { trackDrafts, sweepDrafts } from './probe-drafts.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3100';
 const env = Object.fromEntries(
@@ -35,6 +37,14 @@ const check = (what, ok, detail = '') => {
 
 const browser = await (process.env.ENGINE === 'webkit' ? webkit : chromium).launch();
 const p = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+/*
+ * The till starts a customer by itself when it opens with none, so even a probe that never
+ * touches Sell can leave an empty tab on the shop's till. Only what THIS browser saved is closed.
+ */
+const PROBE_DRAFTS = trackDrafts(p);
+const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+  auth: { persistSession: false },
+});
 const errors = [];
 p.on('pageerror', (e) => errors.push(String(e).split('\n')[0]));
 
@@ -133,6 +143,7 @@ try {
   failed += 1;
 } finally {
   await browser.close();
+  await sweepDrafts(admin, PROBE_DRAFTS);
 }
 
 console.log(failed === 0 ? '\nall passed' : `\n${failed} failed`);

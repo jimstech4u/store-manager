@@ -45,6 +45,7 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 | Q31 | **A picker's arrow leaves search** — with the keyboard up, the selection viewer's arrow did nothing (the box it returned to grabbed focus and re-entered search). selection-viewer 0.5.3; library test fails on 0.5.2. `probe-viewer-back-ui.mjs` 12/12 on Chromium and WebKit: Stock search (arrow, phone Back) and the Sell product picker (arrow stays out of search, close, phone Back) | Shared · Library | ☑ |
 | Q32 | **Search, filters and export stay pinned as a list scrolls** — the till's pattern (header travels, a bar sticks) on every list page with a search: `PinnedTools` + `headerScrolls`. Clicked through on People, Stock, Sales, Money, Empties and Count (`probe-pinned-tools-ui.mjs`: search at the top, title gone, search still opens). Orders' Show/When filter rows moved into the bar too | All lists | ☑ |
 | Q32b | Pinned bar on **Orders, Deposits, Suppliers** — same component, renders correctly, but the shop's lists there are too short to scroll, so the pinning itself has not been seen yet | Sell · Stock | ◐ |
+| Q33 | **"Something always creates a new customer behind"** — the till opens a customer by itself when it has none, and saved that EMPTY tab to the shop at once; tabs are shared, so every phone, reload and probe browser put another "Customer N ₦0" on every till (the shop cleared 37 on 30 Sep). The till's own tab is now `provisional`: on that phone only until it has an item, a customer, a charge or a note, then saved with its code. "+" and Start a customer still save at once (a code to hand over). `probe-auto-tab-stays-local-ui.mjs` 6/6. Probes used this session now close the tab their browser starts | Sell | ☑ |
 | Q14 | **A line opens from Take payment** — the till's own `SaleLineRow` on `sale_line_page`; Add an item and Scan there push it with the product. Line logic shared with the till (`sale-line-ops`). Same probe, 19/19 | Sell | ☑ |
 
 **Blocked on the shop** — nothing can be done until you give the figure:
@@ -119,12 +120,12 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 | Sell | empties | fractions set small | ☑ |
 | Sell | receipt-history | account printed only on transfer | ☑ |
 | Stock | product form | dated stock one section; shelf in shapes & prefilled; whole numbers only; dating stock with a history | ☑ |
-| Stock | shape-price | cheaper prices on the page | ◐ |
-| Stock | receive | compose-and-list, supplier required | ◐ |
+| Stock | shape-price | cheaper prices on the page (`probe-open-items-ui.mjs`, read-only) | ☑ |
+| Stock | receive | compose-and-list, supplier required — refused before anything is sent (`probe-open-items-ui.mjs`, 0 writes) | ☑ |
 | Stock | supplier-account / supplier-payment | collect a credit | ◐ |
 | Stock | stock list | cost "not recorded yet" | ☑ |
 | Count | count list | pagination | ☑ |
-| Count | count entry | everything in shapes | ◐ |
+| Count | count entry | everything in shapes — Malta asks Cans and Pieces (`probe-open-items-ui.mjs`) | ☑ |
 | People | customer-edit (new) | name, phone, business, opening figures | ☑ |
 | People | account | Edit button, Give back button, empties settled from the line, payment receipts | ☑ |
 | Money | — | receives list patches from edits | ◐ |

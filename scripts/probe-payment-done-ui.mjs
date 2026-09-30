@@ -10,6 +10,7 @@
 import { chromium } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync, mkdirSync } from 'node:fs';
+import { trackDrafts, sweepDrafts } from './probe-drafts.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3100';
 const SID = '7138327c-c81c-4486-a97c-92207b48b64e';
@@ -50,6 +51,11 @@ console.log(`  the latest payment: ${cust.display_name}, ${pay.amount}`);
 
 const browser = await chromium.launch();
 const p = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+/*
+ * The till starts a customer by itself when it opens with none, so even a probe that never
+ * touches Sell can leave an empty tab on the shop's till. Only what THIS browser saved is closed.
+ */
+const PROBE_DRAFTS = trackDrafts(p);
 await p.addInitScript({ content: 'window.__NAV_STACK_DEVTOOLS__ = true;' });
 const errors = [];
 p.on('pageerror', (e) => errors.push(String(e).split('\n')[0]));
@@ -102,6 +108,7 @@ try {
   check('no page errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 } finally {
   await browser.close();
+  await sweepDrafts(admin, PROBE_DRAFTS);
   console.log(`\n  shots in ${SHOTS}`);
 }
 
