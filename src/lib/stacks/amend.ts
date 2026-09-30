@@ -50,6 +50,13 @@ export interface SaleDocument {
   charges?: { label: string; amount: number }[];
   depositTotal?: number;
   /**
+   * The deposit put down WITH this sale (0247/0248) — the deposit ledger, not the old per-line
+   * figure, which is nought since deposits moved onto the order. Less any cancelled in a correction.
+   */
+  depositTaken?: number;
+  /** How much of that is still unpaid: a correction asks for it beside the goods. */
+  depositUnpaid?: number;
+  /**
    * What the receipt has already taken.
    *
    * `paymentId` is what lets a correction screen act on one rather than only print it. Without it
@@ -86,6 +93,8 @@ function toDocument(d: Record<string, unknown>): SaleDocument {
         }))
       : undefined,
     depositTotal: d.deposit_total == null ? undefined : Number(d.deposit_total) || 0,
+    depositTaken: Number(d.deposit_taken) || 0,
+    depositUnpaid: Number(d.deposit_unpaid) || 0,
     payments: d.payments
       ? ((d.payments ?? []) as Record<string, unknown>[]).map((p) => ({
           paymentId: (p.payment_id as string | null) ?? null,

@@ -288,6 +288,28 @@ export default function AmendPage() {
                     <strong>It should say</strong>
                     <strong>{formatMoney(total)}</strong>
                   </div>
+                  {/*
+                    AND WHAT SITS BESIDE IT: the deposit put down with the sale, and what has been
+                    paid. "The correct receipt page should also load the breakdown." Changed on the
+                    next step, where each has its own cancel.
+                  */}
+                  {(was.depositTaken ?? 0) > 0.005 && (
+                    <div className={styles.totalRow}>
+                      <span>
+                        Deposit put down with it
+                        {(was.depositUnpaid ?? 0) > 0.005
+                          ? ` (${formatMoney(was.depositUnpaid ?? 0)} not paid)`
+                          : ''}
+                      </span>
+                      <span>{formatMoney(was.depositTaken ?? 0)}</span>
+                    </div>
+                  )}
+                  {(was.payments ?? []).map((pay, i) => (
+                    <div className={styles.totalRow} key={pay.paymentId ?? `paid-${i}`}>
+                      <span>Paid ({pay.method})</span>
+                      <span>{formatMoney(pay.amount)}</span>
+                    </div>
+                  ))}
                 </div>
               )}
             </>

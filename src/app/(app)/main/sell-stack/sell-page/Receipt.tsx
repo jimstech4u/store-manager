@@ -73,6 +73,8 @@ interface SaleDetail {
    * sale's total: it is paid alongside it, so it is said beside it.
    */
   deposit_taken?: string | number | null;
+  /** Of that deposit, what is still to pay (0247). */
+  deposit_unpaid?: string | number | null;
   /** The change (0246): what was owed at this sale, and each time some was given back, and how. */
   change?: { owed: number | string; given: { amount: number | string; method: string | null }[] } | null;
   /** What the customer still holds of the shop's, per pool, after this sale. */
@@ -422,6 +424,9 @@ export function Receipt({
        */
       ...(depositTaken > 0.005
         ? [{ label: 'Deposit, held for you', value: formatMoney(depositTaken) }]
+        : []),
+      ...(Number(detail.deposit_unpaid ?? 0) > 0.005
+        ? [{ label: 'Deposit still to pay', value: formatMoney(Number(detail.deposit_unpaid)) }]
         : []),
       /*
        * EVERY PAYMENT, with its reference where there is one.

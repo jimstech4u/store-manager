@@ -62,6 +62,37 @@ export default function AmendPaymentPage() {
    * THE REASON IS ASKED FOR, not defaulted. This is the only account of why the books moved, and
    * "corrected" with nothing beside it is what makes a statement unreadable weeks later.
    */
+  /*
+   * THE DEPOSIT PUT DOWN WITH THIS SALE, cancelled here when it was keyed by mistake.
+   *
+   * "The correction screen should load back the whole breakdown — deposit, charge and payment — so
+   * we can press cancel to remove one and add the corrected one." Charges are on the order below,
+   * each with its cross; payments are listed with "take it back"; this is the deposit's. Cancelling
+   * gives it back on their deposit ledger, marked as a cancellation, with the reason (0247).
+   */
+  const [cancellingDeposit, setCancellingDeposit] = useState(false);
+  const [depositWhy, setDepositWhy] = useState('');
+  const [busyDeposit, setBusyDeposit] = useState(false);
+  const cancelDeposit = async () => {
+    if (!saleId) return;
+    setBusyDeposit(true);
+    try {
+      const { error } = await getSupabase().rpc('cancel_sale_deposit', {
+        p_sale_id: saleId,
+        p_reason: depositWhy.trim(),
+      });
+      if (error) throw error;
+      setCancellingDeposit(false);
+      setDepositWhy('');
+      accountsChanged();
+      await refreshTaken();
+    } catch (e) {
+      problem.show(messageOf(e, 'That deposit could not be cancelled.'));
+    } finally {
+      setBusyDeposit(false);
+    }
+  };
+
   const [voiding, setVoiding] = useState<string | null>(null);
   const [why, setWhy] = useState('');
   const [busyVoid, setBusyVoid] = useState(false);
@@ -108,7 +139,15 @@ export default function AmendPaymentPage() {
    * taken the money twice. Never below zero: a correction DOWNWARD leaves the shop owing them, and
    * that is a refund rather than a negative payment.
    */
-  const stillOwed = Math.max(0, total - draft.alreadyPaid);
+  /*
+   * AND THE DEPOSIT PUT DOWN WITH IT, WHILE UNPAID (0247). It sits beside the receipt's total, not in
+   * it, so "the total less what it holds" never asked for it: Mrs Adeola's correction asked for
+   * N32,150 of the N38,150 she handed over. The server says what is unpaid; money over the goods
+   * pays it.
+   */
+  const depositPutDown = draft.was?.depositTaken ?? 0;
+  const depositUnpaid = draft.was?.depositUnpaid ?? 0;
+  const stillOwed = Math.max(0, total - draft.alreadyPaid) + depositUnpaid;
 
   const status: PageStatus = !saleId
     ? { state: 'empty', title: 'No correction in progress', body: 'Start from a receipt.' }
@@ -161,6 +200,66 @@ export default function AmendPaymentPage() {
                 a form for adding more — so the only correction it could express was "and another
                 payment", whatever the seller actually meant.
               */}
+              {depositPutDown > 0.005 && (
+                <>
+                  <h2 className={styles.section}>Deposit put down with this sale</h2>
+                  <ul className={styles.paid}>
+                    <li className={styles.paidRow}>
+                      <span className={styles.paidWhat}>
+                        <strong>{formatMoney(depositPutDown)}</strong>
+                        <span className={styles.paidHow}>
+                          {depositUnpaid > 0.005
+                            ? `${formatMoney(depositUnpaid)} of it not paid yet, asked for below`
+                            : 'paid'}
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        className={styles.paidRemove}
+                        aria-label={`Cancel the ${formatMoney(depositPutDown)} deposit`}
+                        onClick={() => {
+                          setCancellingDeposit(true);
+                          setDepositWhy('');
+                        }}
+                      >
+                        <TrashIcon />
+                      </button>
+                    </li>
+                  </ul>
+                  {cancellingDeposit && (
+                    <div className={styles.voidBox}>
+                      <Field
+                        label="Why is this deposit being cancelled?"
+                        required
+                        value={depositWhy}
+                        onChange={(e) => setDepositWhy(e.target.value)}
+                        placeholder="For example: keyed by mistake, they brought their own crates"
+                        hint="It is given back on their deposit record and stays there — never rubbed out."
+                        autoFocus
+                      />
+                      <div className={styles.voidActions}>
+                        <Button
+                          variant="secondary"
+                          disabled={busyDeposit}
+                          onClick={() => setCancellingDeposit(false)}
+                        >
+                          Keep it
+                        </Button>
+                        <Button
+                          variant="danger"
+                          busy={busyDeposit}
+                          busyLabel="Cancelling"
+                          disabled={depositWhy.trim() === ''}
+                          onClick={() => void cancelDeposit()}
+                        >
+                          Cancel the deposit
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
               {(draft.was?.payments?.length ?? 0) > 0 && (
                 <>
                   <h2 className={styles.section}>Already paid on this receipt</h2>
