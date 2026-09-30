@@ -6,6 +6,7 @@ import {
   GroupNavigationStack,
   popStackToRoot,
   scrollBroadcaster,
+  useRevealTappedInRows,
 } from '@academix-admin/navigation-stack';
 import NavigationBar from '@academix-admin/navigation-bar';
 import { useTheme } from '@/context/ThemeContext';
@@ -90,6 +91,16 @@ export default function MainShell() {
   );
 
   const isDark = theme === 'dark';
+
+  /*
+   * A CARD TAPPED IN A SIDEWAYS ROW ENDS UP FULLY ON SCREEN — every row, on every page.
+   *
+   * "Any card clicked in a row list is scrolled into view … so we do not have a half-hanging
+   * selected card." Filter chips, period chips, report pickers, the orders' Show and When rows: one
+   * listener here rather than a copy in each. The Sell customer row keeps its own rule (it centres
+   * the active tab) and opts out with `data-no-reveal`.
+   */
+  useRevealTappedInRows();
 
   // Their screen, not the shop's. Returned before the group mounts: five stacks a shopper can
   // reach nothing in is five stacks' worth of work for a screen they will never see.

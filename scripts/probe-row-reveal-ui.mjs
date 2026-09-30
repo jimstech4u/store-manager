@@ -121,40 +121,57 @@ try {
   await p.screenshot({ path: `${SHOTS}/t2-closed-middle.png` });
   check('closing a tab scrolled out of sight brings the new active one fully in', shown >= 0.99, `shown ${shown}`);
 
-  console.log('F  filter chips');
-  for (const [where, open, rowSel] of [
-    ['Stock', () => tab('Stock'), '[class*="chips"]'],
-    ['Money period', () => tab('Money'), '[class*="FilterBar"], [class*="filterBar"], [class*="periods"], [class*="chips"]'],
-  ]) {
-    await open();
-    const row = p.locator(rowSel).locator('visible=true').first();
-    if ((await row.count()) === 0) { console.log(`  (${where}: no chip row found)`); continue; }
-    const scrolls = await row.evaluate((el) => el.scrollWidth > el.clientWidth + 1);
-    if (!scrolls) { console.log(`  (${where}: the row fits the screen — nothing to reveal)`); continue; }
-    await row.evaluate((el) => { el.scrollLeft = 0; });
-    // The last chip that hangs off the right edge.
-    const chip = await row.evaluateHandle((el) => {
-      const r = el.getBoundingClientRect();
-      return [...el.querySelectorAll('button')].find((b) => b.getBoundingClientRect().right > r.right + 1) ?? null;
+  console.log('F  every sideways row on the list pages');
+  /** Tap, in every visible sideways row of the page on screen, a card hanging off its right edge. */
+  const tapHangingCards = async (where) => {
+    const rows = await p.evaluate(() => {
+      const active = document.querySelector('.group-stack-container[data-active="true"]');
+      const pages = [...(active?.querySelectorAll('.navstack-page') ?? [])];
+      const page = pages[pages.length - 1] ?? active;
+      const found = [];
+      for (const el of page?.querySelectorAll('*') ?? []) {
+        const cs = getComputedStyle(el);
+        if (!/(auto|scroll)/.test(cs.overflowX) || el.scrollWidth <= el.clientWidth + 1) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0 || r.bottom < 0 || r.top > innerHeight) continue;
+        if (el.closest('[data-no-reveal]')) continue;
+        el.scrollLeft = 0;
+        el.setAttribute('data-probe-row', String(found.length));
+        found.push(el.getAttribute('aria-label') || el.className.split(' ')[0] || el.tagName);
+      }
+      return found;
     });
-    const el = chip.asElement();
-    if (!el) { console.log(`  (${where}: no chip off the edge)`); continue; }
-    const pageTop = await p.evaluate(() => {
-      const b = [...document.querySelectorAll('.navstack-column-body')].filter((x) => x.getBoundingClientRect().width > 0).pop();
-      return b?.scrollTop ?? 0;
-    });
-    const hanging = await shownInRow(el);
-    await el.click();
-    await p.waitForTimeout(1200);
-    const after = await shownInRow(el);
-    const pageTopAfter = await p.evaluate(() => {
-      const b = [...document.querySelectorAll('.navstack-column-body')].filter((x) => x.getBoundingClientRect().width > 0).pop();
-      return b?.scrollTop ?? 0;
-    });
-    await p.screenshot({ path: `${SHOTS}/f-${where.replace(/\W+/g, '-')}.png` });
-    check(`${where}: a half-hidden chip, tapped, is fully in the row`, after >= 0.99, `before ${hanging} → after ${after}`);
-    check(`${where}: … without moving the page up or down`, Math.abs(pageTopAfter - pageTop) < 2, `${pageTop} → ${pageTopAfter}`);
-  }
+    if (rows.length === 0) { console.log(`  (${where}: no sideways row to try)`); return; }
+    for (let i = 0; i < rows.length; i++) {
+      const row = p.locator(`[data-probe-row="${i}"]`);
+      const card = await row.evaluateHandle((el) => {
+        const r = el.getBoundingClientRect();
+        return [...el.querySelectorAll('button, [role="tab"], a[href], label')].find((b) => {
+          const c = b.getBoundingClientRect();
+          return c.left < r.right - 1 && c.right > r.right + 1;   // partly on, partly off
+        }) ?? null;
+      });
+      const el = card.asElement();
+      if (!el) { console.log(`  (${where} ${rows[i]}: nothing hanging off the edge)`); continue; }
+      const topBefore = await p.evaluate(() => [...document.querySelectorAll('.navstack-column-body')].filter((x) => x.getBoundingClientRect().width > 0).pop()?.scrollTop ?? 0);
+      const before = await shownInRow(el);
+      await el.click();
+      await p.waitForTimeout(1200);
+      const after = await shownInRow(el);
+      const topAfter = await p.evaluate(() => [...document.querySelectorAll('.navstack-column-body')].filter((x) => x.getBoundingClientRect().width > 0).pop()?.scrollTop ?? 0);
+      check(`${where} · ${rows[i]}: a half-hidden card, tapped, is fully in the row`, after >= 0.99, `${before} → ${after}`);
+      check(`${where} · ${rows[i]}: … and the page did not move up or down`, Math.abs(topAfter - topBefore) < 2, `${topBefore} → ${topAfter}`);
+      await p.screenshot({ path: `${SHOTS}/f-${where.replace(/\W+/g, '-')}-${i}.png` });
+    }
+  };
+
+  await tab('Stock');
+  await tapHangingCards('Stock');
+  await tab('Money');
+  await tapHangingCards('Money');
+  await p.locator('button[aria-label="Export a report"]').locator('visible=true').first().click();
+  await p.waitForTimeout(3000);
+  await tapHangingCards('Export');
 
   check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 } catch (e) {

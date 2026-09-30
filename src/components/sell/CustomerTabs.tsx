@@ -243,7 +243,8 @@ export function CustomerTabs({
       </div>
 
       <div className={styles.tabsRow}>
-      <div ref={rowRef} className={styles.tabs} role="tablist" aria-label="Customers being served">
+      {/* `data-no-reveal`: this row centres its active tab itself (see `showActiveTab`). */}
+      <div ref={rowRef} className={styles.tabs} role="tablist" aria-label="Customers being served" data-no-reveal>
         {tabs.map((tab) => (
           <button
             key={tab.id}
