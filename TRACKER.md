@@ -57,7 +57,7 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 | --- | --- | --- |
 | Four Piece-only sachets (Action Bitters, Eaglejie, Elder's, Striker) | sachets per pack | ⛔ |
 | Best London Dry Gin carton | packs per carton | ⛔ |
-| Supa Komando Bottle (25cl) — returnable with no maker | who makes it | ⛔ |
+| ~~Supa Komando Bottle (25cl) — returnable with no maker~~ | resolved: merged into the Pepsi / 7up / Mirinda / Teem / Komando Bottle (35cl), Seven-Up (SBC) (0236) | ☑ |
 | ~~Malta Guinness Can priced N13,000 per can with 133.5 on the shelf~~ | resolved: the Can is 24 pieces (0222) | ☑ |
 
 ---
@@ -180,6 +180,7 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 | 0233 | items sold together merged, history rewritten into one: Bigi 350mL (Cola+Apple+Tropical), Pepsi\|7up PET 60cl, Coke\|Fanta\|Sprite Big PET 60cl and Small PET 50cl; three Coke bottles renamed; Bigi 500mL created empty. Totals = sum of members, balances recomputed, absorbed items deleted | ☑ |
 | 0234 | Kadijat's Goldberg sale (28 Sep) made a plain sale again — its "Teg" correction only attached her | ☑ |
 | 0235 | product search finds every word typed, in any order ("bigi apple" finds the merged Bigi) | ☑ |
+| 0236 | Bigi 600mL (the empty 500mL renamed, Bitter Lemon merged in: 12 pieces); 7up Bottle 35cl + Supa Komando Bottle 25cl -> Pepsi / 7up / Mirinda / Teem / Komando Bottle (35cl), 507 bottles; Pepsi Bottle 50cl renamed to match. The two Bigi Water sales of 28 Sep are real and stay | ☑ |
 
 ---
 
