@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { usePermission } from '@/hooks/usePermission';
 import { PageScaffold } from '@/components/ui/PageScaffold';
@@ -9,12 +9,21 @@ import { InfoPanel } from '@/components/ui/Explain';
 import { PeopleIcon, PlusIcon } from '@/components/ui/Icon';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { RecordLink } from '@/components/ui/RecordLink';
-import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
+import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/components/ui/Dialog';
 import { LoadArea, useLoadArea } from '@/components/ui/LoadArea';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
-import { emptiesLedger, emptiesOwed, type EmptiesMove, LEDGERS_SCOPE } from '@/lib/stacks/customer-ledgers';
-import { rollUpOwed, saidAsPart, type OwedRow } from '@/lib/empties-rollup';
+import {
+  emptiesLedger,
+  emptiesOwed,
+  returnOwedRow,
+  type EmptiesMove,
+  LEDGERS_SCOPE,
+} from '@/lib/stacks/customer-ledgers';
+import { accountsChanged } from '@/lib/stacks/customer-account';
+import { useAuth } from '@/providers/AuthProvider';
+import { messageOf } from '@/lib/format';
+import { rollUpOwed, saidAsPart, settleLine, type OwedLine, type OwedRow } from '@/lib/empties-rollup';
 
 import styles from './empties-customer-page.module.css';
 
@@ -40,6 +49,7 @@ export default function EmptiesCustomerPage() {
   const location = useLocation();
   const problem = useProblem();
   const showProblem = problem.show;
+  const { store } = useAuth();
 
   const customerId = (location?.params?.id as string | undefined) ?? null;
 
@@ -94,6 +104,41 @@ export default function EmptiesCustomerPage() {
     () => outstanding.filter((r) => (r.side ?? 'they_hold') === 'they_hold'),
     [outstanding],
   );
+
+  /*
+   * GIVING THEIRS BACK.
+   *
+   * "I have returned Arewa's Nigerian Breweries crate but I could not clear it." Their containers in
+   * our yard could only be read here, never settled. Each line now has "Given back" — asked first,
+   * because it clears the line — and it is recorded on THEIR side, as a maker's crate when that is
+   * what was entered.
+   */
+  const giveDialog = useConfirm();
+  const [giving, setGiving] = useState<OwedLine | null>(null);
+  const [givingBusy, setGivingBusy] = useState(false);
+  const giveBack = async (line: OwedLine) => {
+    if (!store || !customerId) return;
+    setGivingBusy(true);
+    try {
+      for (const part of settleLine(line, outstanding)) {
+        await returnOwedRow({
+          storeId: store.id,
+          customerId,
+          row: part.row,
+          direction: 'returned',
+          qty: part.qty,
+          reason: 'Given back to them',
+        });
+      }
+      accountsChanged();
+      owedArea.reload();
+      ledgerArea.reload();
+    } catch (e) {
+      showProblem(messageOf(e, 'That could not be recorded.'));
+    } finally {
+      setGivingBusy(false);
+    }
+  };
 
   /*
    * ONE HEADER, and the body waits for both reads. The two record buttons used to be drawn
@@ -191,7 +236,7 @@ export default function EmptiesCustomerPage() {
 
         It used to be added into the line above, so a screen that should have read "they hold 55,
         we hold 65" said "120 still with them". Nothing here settles it: it comes back to them when
-        they collect, or against what they take next.
+        they collect, or against what they take next — and "Given back" records that.
       */}
       {oursWithUs.length > 0 && (
         <>
@@ -209,10 +254,31 @@ export default function EmptiesCustomerPage() {
                 {l.products.length > 1 && (
                   <span className={styles.saidFrom}>{l.products.join(' + ')}</span>
                 )}
+                {canOpen('empties_record_page') && (
+                  <Button
+                    size="small"
+                    disabled={givingBusy}
+                    onClick={() => setGiving(l)}
+                  >
+                    Given back
+                  </Button>
+                )}
               </li>
             ))}
           </ul>
         </>
+      )}
+
+      {giving && (
+        <ConfirmDialog
+          controller={giveDialog}
+          tone="primary"
+          title={`Gave back ${giving.said} ${giving.label} ${giving.unit.toLowerCase()}?`}
+          message="They come off what you are holding of theirs."
+          confirmText="Yes, given back"
+          onDismiss={() => setGiving(null)}
+          onConfirm={() => void giveBack(giving)}
+        />
       )}
 
       {/*
@@ -231,6 +297,25 @@ export default function EmptiesCustomerPage() {
             }
           >
             <PlusIcon /> They brought some back
+          </Button>
+        )}
+        {/*
+          SOME OF THEIRS GOES BACK — part of a line, or several lines, counted on the page that
+          counts empties, recorded on their side.
+        */}
+        {canOpen('empties_record_page') && oursWithUs.length > 0 && (
+          <Button
+            variant="secondary"
+            fullWidth
+            onClick={() =>
+              void nav.push('empties_record_page', {
+                id: customerId,
+                direction: 'returned',
+                side: 'we_hold',
+              })
+            }
+          >
+            Give some of theirs back
           </Button>
         )}
         {/*

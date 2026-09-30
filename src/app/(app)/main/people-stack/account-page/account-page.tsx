@@ -451,18 +451,21 @@ export default function AccountPage() {
           <span className={styles.tileNote}>Money held against containers</span>
         </button>
         {/*
-          THE MONEY SIDE, as a statement: every receipt and what is still open on each — the record
-          this balance is made of.
+          RETURN MONEY — change owed, an overpayment, a load brought back: money handed back to
+          them, by whatever it went back in. It took the Statement's place here; the statement is
+          still on the Money tab.
         */}
-        <button
-          type="button"
-          className={styles.tile}
-          onClick={() => void nav.push('statement_page', { id: customerId })}
-        >
-          <span className={styles.tileIcon}><ReceiptIcon /></span>
-          <span className={styles.tileLabel}>Statement</span>
-          <span className={styles.tileNote}>Every receipt, and what is open</span>
-        </button>
+        {can('payments.record') && (
+          <button
+            type="button"
+            className={styles.tile}
+            onClick={() => void nav.push('account_action_page', { id: customerId, kind: 'refund' })}
+          >
+            <span className={styles.tileIcon}><CashIcon /></span>
+            <span className={styles.tileLabel}>Return money</span>
+            <span className={styles.tileNote}>Money you owe them, handed back</span>
+          </button>
+        )}
         {can('payments.record') && (
           <button
             type="button"

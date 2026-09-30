@@ -205,9 +205,9 @@ export async function emptiesOwed(customerId: string): Promise<OwedRow[]> {
   });
   if (error) throw error;
   return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
-    productId: String(r.product_id),
+    productId: r.product_id ? String(r.product_id) : '',
     productName: String(r.product_name ?? ''),
-    productUnitId: String(r.product_unit_id),
+    productUnitId: r.product_unit_id ? String(r.product_unit_id) : '', // a maker's own row has none
     unitName: String(r.unit_name ?? ''),
     unitPlural: String(r.unit_plural ?? ''),
     baseQty: Number(r.base_qty) || 1,
@@ -228,9 +228,9 @@ export async function saleEmptiesOwed(saleId: string): Promise<OwedRow[]> {
   const { data, error } = await getSupabase().rpc('sale_empties_outstanding', { p_sale_id: saleId });
   if (error) throw error;
   return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
-    productId: String(r.product_id),
+    productId: r.product_id ? String(r.product_id) : '',
     productName: String(r.product_name ?? ''),
-    productUnitId: String(r.product_unit_id),
+    productUnitId: r.product_unit_id ? String(r.product_unit_id) : '',
     unitName: String(r.unit_name ?? ''),
     unitPlural: String(r.unit_plural ?? ''),
     baseQty: Number(r.base_qty) || 1,

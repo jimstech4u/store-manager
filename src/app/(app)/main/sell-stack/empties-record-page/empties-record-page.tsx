@@ -71,6 +71,12 @@ export default function EmptiesRecordPage() {
     (location?.params?.direction as 'returned' | 'damaged' | undefined) ?? 'returned';
   const damaged = direction === 'damaged';
   /*
+   * WHOSE CONTAINERS: theirs coming back to us (the default), or — "give some back" from the
+   * empties page — theirs in our yard going back to them. Same page, same shapes, the other side.
+   */
+  const side: 'they_hold' | 'we_hold' = location?.params?.side === 'we_hold' ? 'we_hold' : 'they_hold';
+  const givingBack = side === 'we_hold';
+  /*
    * FROM A RECEIPT AT THE COUNTER: which sale they came in with, and which line was tapped.
    *
    * The sale's id travels, never its time — read here, so what is recorded is dated at the sale's
@@ -146,7 +152,7 @@ export default function EmptiesRecordPage() {
    * crates; a part line settles the one product it names.
    */
   const owedRows = useMemo(
-    () => (area.data ?? []).filter((r) => r.owed > 0 && (r.side ?? 'they_hold') === 'they_hold'),
+    () => (area.data ?? []).filter((r) => r.owed > 0 && (r.side ?? 'they_hold') === side),
     [area.data],
   );
 
@@ -379,8 +385,14 @@ export default function EmptiesRecordPage() {
   return (
     <PageScaffold
       onBack={goBack}
-      title={damaged ? 'Broken or lost' : 'Empties brought back'}
-      subtitle={damaged ? 'Closing it without the containers' : 'Counted in the shape they left in'}
+      title={damaged ? 'Broken or lost' : givingBack ? 'Given back to them' : 'Empties brought back'}
+      subtitle={
+        damaged
+          ? 'Closing it without the containers'
+          : givingBack
+            ? 'Theirs, from your yard'
+            : 'Counted in the shape they left in'
+      }
     >
       <ProblemDialog problem={problem} title="Not recorded" />
 
