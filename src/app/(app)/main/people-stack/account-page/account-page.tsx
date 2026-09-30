@@ -19,9 +19,7 @@ import {
 } from '@/lib/stacks/customer-account';
 import { formatMoney, formatQtySpoken, messageOf } from '@/lib/format';
 import { rollUpOwed, type OwedRow } from '@/lib/empties-rollup';
-import { LoadArea, useLoadArea } from '@/components/ui/LoadArea';
-import { EmptiesBroughtBack } from '@/components/empties/EmptiesBroughtBack';
-import { Qty } from '@/components/ui/Qty';
+import { useLoadArea } from '@/components/ui/LoadArea';
 import { emptiesOwed, LEDGERS_SCOPE } from '@/lib/stacks/customer-ledgers';
 import { getSupabase } from '@/lib/supabase/client';
 import { useListNotifier } from '@/hooks/useListChannel';
@@ -68,7 +66,6 @@ export default function AccountPage() {
     () => rollUpOwed((owedArea.data ?? []).filter((r) => r.owed > 0)),
     [owedArea.data],
   );
-  const theyHold = useMemo(() => rolled.filter((l) => l.side === 'they_hold'), [rolled]);
   const weHold = useMemo(() => rolled.filter((l) => l.side === 'we_hold'), [rolled]);
 
   const nav = useNav();
@@ -274,49 +271,10 @@ export default function AccountPage() {
       </div>
 
       {/*
-        EMPTIES, IN THE SHAPES THEY LEFT IN.
-
-        This listed pools and split each into "out on trust" and "covered by a deposit" — the old
-        model's confusion made visible. A deposit was a quantity of containers at a rate, so crates
-        could be sorted into paid-for and not. They cannot: a deposit is a round sum against the
-        customer, and a crate is a crate whether or not money sits against it. That is the whole
-        reason the two are separate ledgers now.
+        EMPTIES LIVE ON THEIR OWN PAGE. "These two pages can be one": the account listed every line
+        with All back / Part, and so did the Empties page. They are settled there now — the Empties
+        card below, and "Their empties" when the shop is holding some of theirs — beside the history.
       */}
-      {/*
-        WHICH WAY EACH OBLIGATION RUNS.
-
-        `customer_account` reports a quantity per shape and not whose containers they are, so a
-        customer holding 55 of our crates while we held 65 of theirs produced two rows that looked
-        identical — same product, same shape — and React drew one of them. Read here from the same
-        ledger the empties screen uses (`customer_empties_owed`), which carries the side.
-      */}
-      {/*
-        EACH LINE SETTLES WHERE IT IS READ — all of it back after a confirm, or part of it on the
-        empties page. "the account page could have the settle click in the line so we know that one
-        is settled."
-      */}
-      {customerId && store && (
-        <EmptiesBroughtBack storeId={store.id} customerId={customerId} title="Empties still out" />
-      )}
-
-      {weHold.length > 0 && (
-        <>
-          <h2 className={styles.section}>Theirs, in your yard</h2>
-          <ul className={styles.list}>
-            {weHold.map((l, i) => (
-              <li key={`we-${l.label}-${l.unit}-${i}`} className={styles.row}>
-                <div className={styles.rowMain}>
-                  <p className={styles.rowName}>
-                    {l.label} {l.unit.toLowerCase()}
-                  </p>
-                  {l.products.length > 1 && <p className={styles.rowNote}>{l.products.join(' + ')}</p>}
-                </div>
-                <span className={styles.rowQty}><Qty value={l.qty} /></span>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
 
       {/* ── Actions ─────────────────────────────────────────────────────────── */}
 

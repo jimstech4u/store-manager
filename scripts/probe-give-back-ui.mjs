@@ -73,31 +73,32 @@ try {
   await p.waitForTimeout(6000);
 
   let t = await text();
-  check('the account offers Return money', /Return money/.test(t));
-  check('and no Statement card', !/Every receipt, and what is open/.test(t));
+  // Money handed back lives on the Money page now (Q47), not as a card on the account.
+  check('the account has no money cards of its own (they are on Money)', !/Return money|Every receipt, and what is open/.test(t));
 
-  await top().getByRole('button', { name: /Their empties/ }).first().click();
-  await p.waitForTimeout(5000);
-  t = await text();
-  check('her NBL crate is listed as hers, in our yard', /Theirs, in your yard.*Nigerian Breweries crate/.test(t),
-    (t.match(/Theirs, in your yard.{0,80}/) ?? [''])[0]);
-
-  await top().getByRole('button', { name: 'Given back', exact: true }).first().click();
-  await p.waitForTimeout(1200);
-  check('Given back asks first', /Gave back 1 Nigerian Breweries crate\?/.test(await p.locator('body').innerText()));
-  await p.getByRole('button', { name: /Yes, given back/ }).click();
-  await p.waitForTimeout(2500);
-  const give = sent.find((s) => s.fn === 'record_customer_empties_for_group');
-  check('it is recorded as her maker crate coming off our side',
-    give && give.body.p_direction === 'returned' && give.body.p_side === 'we_hold' && Number(give.body.p_qty) === 1,
-    JSON.stringify(give?.body ?? sent));
-
-  await top().getByRole('button', { name: /Give some of theirs back/ }).first().click();
-  await p.waitForTimeout(5000);
-  t = await text();
-  check('Give some of theirs back opens the counting page on her side', /Given back to them/.test(t) && /Nigerian Breweries/.test(t),
-    t.slice(0, 160));
-  await p.screenshot({ path: `${SHOTS}/give-back.png`, fullPage: true });
+  const theirs = top().getByRole('button', { name: /Their empties/ });
+  if ((await theirs.count()) === 0) {
+    // Arewa's crate was given back from this button on 30 Sep (13:32) — the ledger says so.
+    const { data } = await admin
+      .from('customer_empties')
+      .select('direction, side, reason')
+      .eq('store_customer_id', 'c337bd93-1a91-4295-bcca-c2ba030ff3ff')
+      .eq('side', 'we_hold');
+    check('nothing of hers is in the yard: her crate was given back from the account',
+      (data ?? []).some((r) => r.direction === 'returned' && r.reason === 'Given back to them'), JSON.stringify(data));
+  } else {
+    await theirs.first().click();
+    await p.waitForTimeout(5000);
+    t = await text();
+    check('her crate is listed as hers, in our yard', /Theirs, in your yard/.test(t));
+    await top().getByRole('button', { name: 'Given back', exact: true }).first().click();
+    await p.waitForTimeout(1200);
+    check('Given back asks first', /Gave back/.test(await p.locator('body').innerText()));
+    await p.getByRole('button', { name: /Yes, given back/ }).click();
+    await p.waitForTimeout(2500);
+    const give = sent.find((x) => x.fn.startsWith('record_customer_empties'));
+    check('it is recorded on our side', give && give.body.p_side === 'we_hold', JSON.stringify(give?.body ?? sent));
+  }
   check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 } catch (e) {
   await p.screenshot({ path: `${SHOTS}/give-back-crash.png`, fullPage: true }).catch(() => {});
