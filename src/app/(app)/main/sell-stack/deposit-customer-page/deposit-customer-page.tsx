@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/Button';
 import { InfoPanel } from '@/components/ui/Explain';
 import { PeopleIcon } from '@/components/ui/Icon';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
-import { LoadArea, useLoadArea } from '@/components/ui/LoadArea';
+import { useLoadArea } from '@/components/ui/LoadArea';
+import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { depositLedger, type DepositMove, LEDGERS_SCOPE } from '@/lib/stacks/customer-ledgers';
@@ -59,6 +60,18 @@ export default function DepositCustomerPage() {
    */
   useLiveRefresh(nav, () => area.reload());
 
+  /*
+   * ONE HEADER, AND THE BODY SAYS WHERE IT IS — the account's and Money's pattern. It was a bare
+   * LoadArea, which could draw nothing under the header ("the deposit page does not load").
+   */
+  const status: PageStatus = !customerId
+    ? { state: 'empty', title: 'Open a customer to see their deposit' }
+    : area.data
+      ? { state: 'ready' }
+      : area.error
+        ? { state: 'error', what: 'their deposit', error: area.error, onRetry: area.reload }
+        : { state: 'loading', what: 'their deposit' };
+
   return (
     <PageScaffold
       onBack={goBack}
@@ -88,7 +101,7 @@ export default function DepositCustomerPage() {
     >
       <ProblemDialog problem={problem} title="Not recorded" />
 
-      <LoadArea area={area} what="their deposit">
+      <PageState status={status}>
         {() => (
           <>
             <div className={styles.headline}>
@@ -175,7 +188,7 @@ export default function DepositCustomerPage() {
             )}
           </>
         )}
-      </LoadArea>
+      </PageState>
 
     </PageScaffold>
   );

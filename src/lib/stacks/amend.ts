@@ -269,8 +269,15 @@ export async function amendSale(args: {
   /** A deposit taken now, for containers this correction puts out. */
   deposit?: number | null;
   depositReason?: string | null;
+  /** Payments on the receipt taken back with this correction (0249). */
+  takeBack?: string[];
+  /** The deposit put down with the sale, cancelled with this correction (0249). */
+  cancelDeposit?: boolean;
 }): Promise<AmendResult> {
-  const { data, error } = await getSupabase().rpc('amend_sale', {
+  // ONE CALL (0249): what comes off, what is added and why are written together or not at all.
+  const { data, error } = await getSupabase().rpc('correct_sale', {
+    p_take_back: args.takeBack && args.takeBack.length > 0 ? args.takeBack : null,
+    p_cancel_deposit: Boolean(args.cancelDeposit),
     p_sale_id: args.saleId,
     p_reason: args.reason,
     p_lines: args.lines.map((l) => ({

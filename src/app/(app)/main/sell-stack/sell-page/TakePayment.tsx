@@ -68,6 +68,7 @@ export function TakePayment({
   order,
   storeId,
   total,
+  due,
   onNeedCustomer,
   entered,
   onEnteredChange,
@@ -83,6 +84,14 @@ export function TakePayment({
   /** Needed to look up the shop's bank accounts; a draft does not carry its store. */
   storeId: string;
   total: number;
+  /**
+   * WHAT IS LEFT TO PAY NOW, when that is not the whole bill — a correction of a receipt already
+   * paid. `total` is the BILL (items, charges, deposit, "Total for this sale"); `due` is what the
+   * payments, "Pay all", the change and "goes on account" count against. A correction handed its
+   * left-to-pay as `total`, and the bill read "Items N0 · Total for this sale N0" over four lines
+   * of goods. Left out, it is the total — the till's case.
+   */
+  due?: number;
   /** Asked for only when part of the money is going on account. */
   onNeedCustomer: () => void;
   /**
@@ -176,13 +185,22 @@ export function TakePayment({
    * or cancelling a deposit needs a reason, which the correction asks for. The till leaves it out.
    */
   already?: {
-    deposit?: { amount: number; unpaid: number; onRemove: () => void } | null;
+    deposit?: {
+      amount: number;
+      unpaid: number;
+      onRemove: () => void;
+      /** Marked to come off with the correction: drawn struck through, with a way to put it back. */
+      removed?: boolean;
+      onRestore?: () => void;
+    } | null;
     payments?: {
       key: string;
       amount: number;
       method: string;
       reference: string | null;
       onRemove?: () => void;
+      removed?: boolean;
+      onRestore?: () => void;
     }[];
   };
   /**
@@ -371,6 +389,8 @@ export function TakePayment({
   }, 0);
   const charges = chargesTotal(order);
   const itemsTotal = Math.max(0, total - charges - held);
+  // What the money on this screen is measured against: the bill, or what is left of it (`due`).
+  const owed = due ?? total;
 
   /*
    * ONE PLACE A PAYMENT IS ADDED, because there are two ways to ask for one: composing an amount
@@ -394,7 +414,7 @@ export function TakePayment({
     setDraftReference('');
   };
 
-  const remaining = Math.max(total - paid, 0);
+  const remaining = Math.max(owed - paid, 0);
 
   /*
    * WHAT IS OVER, AND WHERE IT GOES.
@@ -408,7 +428,7 @@ export function TakePayment({
    * what is left after that is money to give back. Handing back cash that was meant for a debt is
    * the more expensive mistake of the two.
    */
-  const over = Math.max(paid - total, 0);
+  const over = Math.max(paid - owed, 0);
   const owedBefore = outstanding ?? 0;
   /*
    * THE BOX: "before we mark as paid, a checkbox if there is an overpayment — whether it clears the
@@ -504,7 +524,7 @@ export function TakePayment({
 
       // Credit needs someone to owe it. Without a customer there is no account to carry the
       // remainder, and the money would simply be unaccounted for.
-      if (!order.customerId && paid < total) {
+      if (!order.customerId && paid < owed) {
         throw new Error(
           'Add a customer before selling on credit, so the balance has somewhere to go.',
         );
@@ -709,21 +729,29 @@ export function TakePayment({
           charges, and lives in its own ledger.
         */}
         {already?.deposit && already.deposit.amount > 0.005 && (
-          <div className={styles.charge}>
-            <button
-              type="button"
-              className={styles.chargeRemove}
-              onClick={already.deposit.onRemove}
-              aria-label="Cancel the deposit put down with this sale"
-            >
-              <CloseIcon />
-            </button>
+          <div className={`${styles.charge} ${already.deposit.removed ? styles.lineGone : ''}`}>
+            {already.deposit.removed ? (
+              <button type="button" className={styles.putBack} onClick={already.deposit.onRestore}>
+                Put back
+              </button>
+            ) : (
+              <button
+                type="button"
+                className={styles.chargeRemove}
+                onClick={already.deposit.onRemove}
+                aria-label="Cancel the deposit put down with this sale"
+              >
+                <CloseIcon />
+              </button>
+            )}
             <span className={styles.chargeBody}>
               <span className={styles.chargeName}>Deposit held</span>
               <span className={styles.chargeNote}>
-                {already.deposit.unpaid > 0.005
-                  ? `Put down with this sale — ${formatMoney(already.deposit.unpaid)} not paid yet`
-                  : 'Put down with this sale — paid'}
+                {already.deposit.removed
+                  ? 'Cancelled with this correction'
+                  : already.deposit.unpaid > 0.005
+                    ? `Put down with this sale — ${formatMoney(already.deposit.unpaid)} not paid yet`
+                    : 'Put down with this sale — paid'}
               </span>
             </span>
             <span className={styles.chargeAmount}>{formatMoney(already.deposit.amount)}</span>
@@ -892,8 +920,12 @@ export function TakePayment({
         <div className={styles.payList}>
           <span className={styles.payListLabel}>Already paid on this receipt</span>
           {(already?.payments ?? []).map((pay) => (
-            <div className={styles.payRow} key={pay.key}>
-              {pay.onRemove ? (
+            <div className={`${styles.payRow} ${pay.removed ? styles.lineGone : ''}`} key={pay.key}>
+              {pay.removed ? (
+                <button type="button" className={styles.putBack} onClick={pay.onRestore}>
+                  Put back
+                </button>
+              ) : pay.onRemove ? (
                 <button
                   type="button"
                   className={styles.payRemove}
@@ -1035,7 +1067,7 @@ export function TakePayment({
             className={styles.quick}
             onClick={() => addPayment(String(remaining))}
           >
-            {paid > 0 ? `The rest (${formatMoney(remaining)})` : `Pay all (${formatMoney(total)})`}
+            {paid > 0 ? `The rest (${formatMoney(remaining)})` : `Pay all (${formatMoney(owed)})`}
           </button>
         )}
       </section>
@@ -1045,8 +1077,8 @@ export function TakePayment({
       {/* ── Summary ─────────────────────────────────────────────────────────────── */}
       <div className={styles.summary}>
         <div className={styles.row}>
-          <span>Total</span>
-          <span className={styles.value}>{formatMoney(total)}</span>
+          <span>{due !== undefined ? 'Left to pay' : 'Total'}</span>
+          <span className={styles.value}>{formatMoney(owed)}</span>
         </div>
         <div className={styles.row}>
           <span>Paying now</span>
@@ -1292,13 +1324,13 @@ export function TakePayment({
             unpriced.length > 0 ||
             // Paid more than the sale while what they owed is still unknown: the extra might be for
             // the old debt rather than change, and nobody can say which until the balance arrives.
-            (balanceUnknown && paid > total) ||
+            (balanceUnknown && paid > owed) ||
             (!order.customerId &&
-              (paid < total || comingBack.length > 0 || depositTaken > 0))
+              (paid < owed || comingBack.length > 0 || depositTaken > 0))
           }
           onClick={settle}
         >
-          {paid >= total
+          {paid >= owed
             ? settledLabel
             : paid > 0
               ? `Take ${formatMoney(paid)}, rest on account`

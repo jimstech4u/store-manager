@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
+import { searchLook } from '@/components/ui/searchLook';
 import { SearchViewer } from '@academix-admin/search-viewer';
 import { LoadingView } from './LoadingView';
 import { NoResultsView } from './NoResultsView';
@@ -94,11 +95,9 @@ export function SearchSheet<T>({
       queryData={queryData}
       onRemoveDuplicateBy={keyOf}
       searchProp={{
+        ...searchLook(dark),
         text: placeholder,
         autoFocus: true,
-        textColor: dark ? '#f2f5f4' : '#12201d',
-        background: dark ? '#1b2322' : '#eef2f1',
-        padding: { l: '4px', r: '4px', t: '0px', b: '0px' },
       }}
       // The same three views every search surface shows, so results, emptiness and failure look
       // identical wherever someone searches.

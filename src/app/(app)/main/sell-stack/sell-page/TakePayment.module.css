@@ -614,3 +614,27 @@
   font-size: var(--text-sm);
   color: var(--text-muted);
 }
+
+/* A line on the receipt marked to come off with a correction: still readable, plainly going. */
+.lineGone {
+  opacity: 0.55;
+}
+
+.lineGone .payAmount,
+.lineGone .chargeAmount {
+  text-decoration: line-through;
+}
+
+.putBack {
+  flex: none;
+  min-height: 32px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { searchLook } from '@/components/ui/searchLook';
 import { SelectionViewer, useSelectionController } from '@academix-admin/selection-viewer';
 import { useTheme } from '@/context/ThemeContext';
 import { ViewerLoading, ViewerNoResult } from '@/components/ui/ViewerState';
@@ -69,10 +70,9 @@ export function UnitPicker({
       ariaLabel={title}
       cancelButton={{ position: 'right', onClick: onClose, view: <CloseIcon /> }}
       searchProp={{
+        ...searchLook(dark),
         text: 'Crate, Bag, Litre…',
         onChange: (value: string) => setQuery(value),
-        background: dark ? '#1b2422' : '#eef2f1',
-        textColor: dark ? '#f2f5f4' : '#12201d',
         /*
          * THE KEYBOARD COMES UP WITH THE SHEET.
          *

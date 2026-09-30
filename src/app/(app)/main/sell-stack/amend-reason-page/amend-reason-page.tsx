@@ -43,7 +43,7 @@ export default function AmendReasonPage() {
   const { store } = useAuth();
 
   const saleId = (location?.params?.id as string | undefined) ?? null;
-  const { draft, loaded, patch } = useAmendDraft(saleId);
+  const { draft, loaded, patch, clear } = useAmendDraft(saleId);
 
   const [state, setState] = useState<AsyncState>('idle');
   const [failure, setFailure] = useState<string | null>(null);
@@ -66,6 +66,8 @@ export default function AmendReasonPage() {
     setFailure(null);
     try {
       const result = await amendSale({
+        takeBack: draft.takeBack ?? [],
+        cancelDeposit: Boolean(draft.cancelDeposit),
         saleId,
         reason: draft.reason.trim(),
         lines: order.lines.map((l) => ({
@@ -113,6 +115,8 @@ export default function AmendReasonPage() {
         accountsChanged();
       }
       setState('idle');
+      // Made: the next correction on this receipt starts from the receipt, not from this draft.
+      clear();
 
       /*
        * BACK TO THE RECEIPT THE CORRECTION STARTED FROM — the flow unwound, not replaced.

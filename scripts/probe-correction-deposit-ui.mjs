@@ -50,6 +50,16 @@ for (const fn of ['amend_sale', 'cancel_sale_deposit', 'void_payment']) {
     return route.fulfill({ status: 200, contentType: 'application/json', body: 'null' });
   });
 }
+// The correction's one save (0249): answered here, and what it carried is kept.
+let saved = null;
+await p.route('**/rest/v1/rpc/correct_sale*', (route) => {
+  saved = JSON.parse(route.request().postData() ?? '{}');
+  return route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ sale_id: 'c74e799f-19ac-4d16-9afb-4442b260b144', revision: 3, total: 32150, paid: 32150, owing: 0, voided: false }),
+  });
+});
 const top = () => p.locator('.group-stack-container[data-active="true"] .navstack-page').last();
 const text = async () => ((await top().innerText()) ?? '').replace(/\s+/g, ' ');
 
@@ -90,6 +100,46 @@ try {
   check('no separate deposit section any more', !/Deposit put down with this sale/.test(t));
   check('and nothing more is asked for', !/Pay all|The rest \(/.test(t) || /Pay all \(₦0\)/.test(t), (t.match(/Pay all.{0,20}|The rest.{0,20}/) ?? ['none'])[0]);
   await p.screenshot({ path: `${SHOTS}/correction-deposit.png`, fullPage: true });
+  // ── The bill is the bill: items and total for this sale, and what is left to pay ───────
+  check('the correction shows the items, not N0', /Items\s*₦32,150/.test(t), (t.match(/Items\s*\S+/) ?? [''])[0]);
+  check('and the total for this sale', /Total for this sale\s*₦32,150/.test(t), (t.match(/Total for this sale\s*\S+/) ?? [''])[0]);
+  check('with what is left to pay beside it', /Left to pay\s*₦0/.test(t), (t.match(/Left to pay\s*\S+/) ?? [''])[0]);
+
+  // ── Like Take payment: a cross takes a line off, no reason asked here ──────────────────
+  await top().getByRole('button', { name: /Take back the ₦32,150 transfer/ }).click();
+  await p.waitForTimeout(800);
+  t = await text();
+  check('a cross takes the payment off with no reason box', !/Why is this payment being taken back/.test(t) &&
+    (await top().getByRole('button', { name: 'Put back' }).count()) === 1);
+  check('and the screen now asks for that money again', /Pay all \(₦32,150\)|The rest \(₦32,150\)/.test(t),
+    (t.match(/Pay all.{0,20}|The rest.{0,20}/) ?? ['none'])[0]);
+  await top().getByRole('button', { name: /Cancel the deposit put down with this sale/ }).click();
+  await p.waitForTimeout(800);
+  t = await text();
+  check('the deposit comes off the same way', /Cancelled with this correction/.test(t) && !/Why is this deposit being cancelled/.test(t));
+
+  const payBox = top().locator('section').filter({ hasText: 'How are they paying?' }).first();
+  await payBox.getByRole('button', { name: /^Cash$/ }).first().click();
+  await payBox.getByLabel('Amount').first().fill('32150');
+  await p.waitForTimeout(600);
+  await top().getByRole('button', { name: /Say why, and finish/ }).last().click();
+  await p.waitForTimeout(4000);
+  await top().getByLabel(/Why is it being corrected/).fill('Keyed as transfer, it was cash; no deposit');
+  await top().getByRole('button', { name: /^Correct it$/ }).click();
+  await p.waitForTimeout(4000);
+  check('the one save carries what comes off, what is added and why',
+    saved && Array.isArray(saved.p_take_back) && saved.p_take_back.length === 1 && saved.p_cancel_deposit === true &&
+      (saved.p_payments ?? []).some((x) => Number(x.amount) === 32150 && x.method === 'cash') && /Keyed as transfer/.test(saved.p_reason ?? ''),
+    JSON.stringify(saved && { take_back: saved.p_take_back, cancel: saved.p_cancel_deposit, pays: saved.p_payments, reason: saved.p_reason }));
+  // ── A correction made is over: the next one starts from the receipt, not from this draft ─
+  await p.waitForTimeout(3000);
+  await top().getByRole('button', { name: /Something on this is wrong/ }).first().click();
+  await p.waitForTimeout(6000);
+  await p.getByRole('button', { name: /Correct payment/ }).last().click();
+  await p.waitForTimeout(6000);
+  t = await text();
+  check('the next correction starts fresh: nothing marked to come off',
+    (await top().getByRole('button', { name: 'Put back' }).count()) === 0 && !/Cancelled with this correction/.test(t));
   check('nothing was written', written.length === 0, written.join(','));
   check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 } catch (e) {

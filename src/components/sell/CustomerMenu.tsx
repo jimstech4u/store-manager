@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { searchLook } from '@/components/ui/searchLook';
 import { SelectionViewer, useSelectionController } from '@academix-admin/selection-viewer';
 import { useTheme } from '@/context/ThemeContext';
 import { ViewerEmpty, ViewerNoResult } from '@/components/ui/ViewerState';
@@ -69,10 +70,9 @@ export function CustomerMenu({
         ariaLabel="Customers being served"
         cancelButton={{ position: 'right', onClick: close, view: <CloseIcon /> }}
         searchProp={{
+          ...searchLook(dark),
           text: 'Search the open tabs',
           onChange: (value: string) => setQuery(value),
-          background: dark ? '#1b2422' : '#eef2f1',
-          textColor: dark ? '#f2f5f4' : '#12201d',
           /*
          * THE KEYBOARD COMES UP WITH THE SHEET.
          *

@@ -120,7 +120,13 @@ export function LoadArea<T>({
     );
   }
 
-  if (area.loading) {
+  /*
+   * NOTHING YET IS "READING", NEVER A BLANK. With no answer, no read in flight and no failure — the
+   * frame before a read starts, or one that has not been told to start — this drew nothing at all,
+   * and a page whose body is one of these showed its header over an empty screen: "the deposit page
+   * does not load". It says it is reading until there is something to show.
+   */
+  if (area.loading || !area.error) {
     return (
       <div className={compact ? styles.frameCompact : styles.frame}>
         <span className={styles.spinner} aria-hidden="true" />

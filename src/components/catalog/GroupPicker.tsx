@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { searchLook } from '@/components/ui/searchLook';
 import { SelectionViewer } from '@academix-admin/selection-viewer';
 import { useOverlayRoute } from '@academix-admin/navigation-stack';
 import { CheckIcon, CloseIcon, PlusIcon } from '@/components/ui/Icon';
@@ -85,6 +86,7 @@ export function GroupPicker({
       ariaLabel="Choose the groups this product belongs to"
       cancelButton={{ position: 'right', onClick: close, view: <CloseIcon size="1.3em" /> }}
       searchProp={{
+        ...searchLook(dark),
         text: 'Nigerian Breweries, Guinness, Cway…',
         onChange: setQuery,
         /*
@@ -95,9 +97,6 @@ export function GroupPicker({
          * why, so every search cost an extra tap on the one control the sheet exists for.
          */
         autoFocus: true,
-        textColor: dark ? '#f2f5f4' : '#12201d',
-        background: dark ? '#1b2322' : '#eef2f1',
-        padding: { l: '4px', r: '4px', t: '0px', b: '0px' },
       }}
       noResultProp={{
         view: (

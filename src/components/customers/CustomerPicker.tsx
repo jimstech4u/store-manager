@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { searchLook } from '@/components/ui/searchLook';
 import { usePermission } from '@/hooks/usePermission';
 import styles from './CustomerPicker.module.css';
 import { SelectionViewer, useSelectionController } from '@academix-admin/selection-viewer';
@@ -151,10 +152,9 @@ export function CustomerPicker({
        * opened with two search boxes stacked on top of each other, both searching the same list.
        */
       searchProp={{
+        ...searchLook(dark),
         text: 'Search by name or phone',
         onChange: (value: string) => setQuery(value),
-        background: dark ? '#1b2422' : '#eef2f1',
-        textColor: dark ? '#f2f5f4' : '#12201d',
         /*
          * THE KEYBOARD COMES UP WITH THE SHEET.
          *

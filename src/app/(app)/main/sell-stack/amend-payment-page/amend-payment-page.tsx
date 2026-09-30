@@ -1,22 +1,17 @@
 'use client';
 
-import { useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { FloatingAmount } from '@/components/ui/FloatingAmount';
 import { PlusIcon } from '@/components/ui/Icon';
 import { InfoPanel } from '@/components/ui/Explain';
-import { Field } from '@/components/ui/Field';
-import { Button } from '@/components/ui/Button';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 import { TakePayment } from '../sell-page/TakePayment';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { amendTotal, useAmendDraft } from '@/lib/stacks/amend-draft';
-import { getSupabase } from '@/lib/supabase/client';
-import { accountsChanged } from '@/lib/stacks/customer-account';
-import { formatMoney, messageOf } from '@/lib/format';
+import { formatMoney } from '@/lib/format';
 import styles from './amend-payment-page.module.css';
 
 /**
@@ -44,78 +39,21 @@ export default function AmendPaymentPage() {
   const { store } = useAuth();
 
   const saleId = (location?.params?.id as string | undefined) ?? null;
-  const { draft, loaded, patch, patchOrder, refreshTaken } = useAmendDraft(saleId);
+  const { draft, loaded, patch, patchOrder } = useAmendDraft(saleId);
   const problem = useProblem();
 
   /*
-   * ── TAKING BACK A PAYMENT THAT WAS KEYED WRONG ────────────────────────────────
+   * WHAT COMES OFF, MARKED — NOT WRITTEN HERE.
    *
-   * This screen could only ever ADD money. A seller who keyed N1,600 as cash when it was a
-   * transfer had no way to say the cash never came, so they added the transfer — and the receipt
-   * held N3,200 against a N1,600 total, with the customer's account showing the shop owing them
-   * N1,600 it never took. That is what happened to Destiny's receipt on the 28th.
-   *
-   * `void_payment` writes the opposite entry rather than deleting anything, so the cash book shows
-   * N1,600 in and N1,600 out — a till that took nothing in cash, which is what happened — and the
-   * reason stays on the record.
-   *
-   * THE REASON IS ASKED FOR, not defaulted. This is the only account of why the books moved, and
-   * "corrected" with nothing beside it is what makes a statement unreadable weeks later.
+   * "Correct payment is just like Take payment, no block, because the reason is already done after
+   * it." A cross on a payment the receipt already holds, or on its deposit, marks it to come off;
+   * nothing is written until the correction is, under its one reason (0249). Put back undoes it.
    */
-  /*
-   * THE DEPOSIT PUT DOWN WITH THIS SALE, cancelled here when it was keyed by mistake.
-   *
-   * "The correction screen should load back the whole breakdown — deposit, charge and payment — so
-   * we can press cancel to remove one and add the corrected one." Charges are on the order below,
-   * each with its cross; payments are listed with "take it back"; this is the deposit's. Cancelling
-   * gives it back on their deposit ledger, marked as a cancellation, with the reason (0247).
-   */
-  const [cancellingDeposit, setCancellingDeposit] = useState(false);
-  const [depositWhy, setDepositWhy] = useState('');
-  const [busyDeposit, setBusyDeposit] = useState(false);
-  const cancelDeposit = async () => {
-    if (!saleId) return;
-    setBusyDeposit(true);
-    try {
-      const { error } = await getSupabase().rpc('cancel_sale_deposit', {
-        p_sale_id: saleId,
-        p_reason: depositWhy.trim(),
-      });
-      if (error) throw error;
-      setCancellingDeposit(false);
-      setDepositWhy('');
-      accountsChanged();
-      await refreshTaken();
-    } catch (e) {
-      problem.show(messageOf(e, 'That deposit could not be cancelled.'));
-    } finally {
-      setBusyDeposit(false);
-    }
-  };
-
-  const [voiding, setVoiding] = useState<string | null>(null);
-  const [why, setWhy] = useState('');
-  const [busyVoid, setBusyVoid] = useState(false);
-
-  const takeItBack = async (paymentId: string) => {
-    setBusyVoid(true);
-    try {
-      const { error } = await getSupabase().rpc('void_payment', {
-        p_payment_id: paymentId,
-        p_reason: why.trim(),
-      });
-      if (error) throw error;
-      setVoiding(null);
-      setWhy('');
-      // The receipt and the customer's account both change, so both are re-read.
-      accountsChanged();
-      await refreshTaken();
-    } catch (e) {
-      problem.show(messageOf(e, 'That payment could not be taken back.'));
-    } finally {
-      setBusyVoid(false);
-    }
-  };
+  const takeBack = draft.takeBack ?? [];
+  const cancelDeposit = Boolean(draft.cancelDeposit);
+  const comingOff = (draft.was?.payments ?? [])
+    .filter((pay) => pay.paymentId && takeBack.includes(pay.paymentId))
+    .reduce((sum, pay) => sum + pay.amount, 0);
 
   if (!store) return null;
 
@@ -147,7 +85,8 @@ export default function AmendPaymentPage() {
    */
   const depositPutDown = draft.was?.depositTaken ?? 0;
   const depositUnpaid = draft.was?.depositUnpaid ?? 0;
-  const stillOwed = Math.max(0, total - draft.alreadyPaid) + depositUnpaid;
+  const paidAfter = draft.alreadyPaid - comingOff;
+  const stillOwed = Math.max(0, total - paidAfter) + (cancelDeposit ? 0 : depositUnpaid);
 
   const status: PageStatus = !saleId
     ? { state: 'empty', title: 'No correction in progress', body: 'Start from a receipt.' }
@@ -185,11 +124,11 @@ export default function AmendPaymentPage() {
                 }
               >
                 It said {formatMoney(owedBefore)} and should say {formatMoney(total)}.{' '}
-                {draft.alreadyPaid > 0 && <>It has already taken {formatMoney(draft.alreadyPaid)}. </>}
+                {paidAfter > 0 && <>It has already taken {formatMoney(paidAfter)}. </>}
                 {stillOwed > 0
                   ? `That leaves ${formatMoney(stillOwed)} to pay.`
-                  : total < draft.alreadyPaid
-                    ? `You owe them ${formatMoney(draft.alreadyPaid - total)} back.`
+                  : total < paidAfter
+                    ? `You owe them ${formatMoney(paidAfter - total)} back.`
                     : 'Nothing is left to pay.'}
               </InfoPanel>
 
@@ -200,83 +139,17 @@ export default function AmendPaymentPage() {
                 a form for adding more — so the only correction it could express was "and another
                 payment", whatever the seller actually meant.
               */}
-              {/*
-                THE REASON, WHEN A LINE BELOW IS TAKEN OFF. The deposit and the payments this receipt
-                already holds are drawn by Take payment with its own lines — the ones the till uses —
-                and their crosses land here, because taking one back is on the record and says why.
-              */}
-                  {cancellingDeposit && (
-                    <div className={styles.voidBox}>
-                      <Field
-                        label="Why is this deposit being cancelled?"
-                        required
-                        value={depositWhy}
-                        onChange={(e) => setDepositWhy(e.target.value)}
-                        placeholder="For example: keyed by mistake, they brought their own crates"
-                        hint="It is given back on their deposit record and stays there — never rubbed out."
-                        autoFocus
-                      />
-                      <div className={styles.voidActions}>
-                        <Button
-                          variant="secondary"
-                          disabled={busyDeposit}
-                          onClick={() => setCancellingDeposit(false)}
-                        >
-                          Keep it
-                        </Button>
-                        <Button
-                          variant="danger"
-                          busy={busyDeposit}
-                          busyLabel="Cancelling"
-                          disabled={depositWhy.trim() === ''}
-                          onClick={() => void cancelDeposit()}
-                        >
-                          Cancel the deposit
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                  {voiding && (
-                    <div className={styles.voidBox}>
-                      <Field
-                        label="Why is this payment being taken back?"
-                        required
-                        value={why}
-                        onChange={(e) => setWhy(e.target.value)}
-                        placeholder="For example: keyed as cash, it was a transfer"
-                        hint="It stays on the record — the money is reversed, never rubbed out."
-                        autoFocus
-                      />
-                      <div className={styles.voidActions}>
-                        <Button
-                          variant="secondary"
-                          disabled={busyVoid}
-                          onClick={() => {
-                            setVoiding(null);
-                            setWhy('');
-                          }}
-                        >
-                          Keep it
-                        </Button>
-                        <Button
-                          variant="danger"
-                          busy={busyVoid}
-                          busyLabel="Taking it back"
-                          disabled={why.trim() === ''}
-                          onClick={() => void takeItBack(voiding)}
-                        >
-                          Take it back
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
               <h2 className={styles.section}>What they are paying now</h2>
 
               <TakePayment
                 order={order}
                 storeId={store.id}
-                total={stillOwed}
+                /*
+                 * THE BILL, AND WHAT IS LEFT OF IT — two figures, not one. Handed only the left-to-pay,
+                 * the corrected receipt read "Items N0 · Total for this sale N0".
+                 */
+                total={total}
+                due={stillOwed}
                 /*
                  * WHAT WAS ALREADY TYPED HERE, restored.
                  *
@@ -291,10 +164,9 @@ export default function AmendPaymentPage() {
                       ? {
                           amount: depositPutDown,
                           unpaid: depositUnpaid,
-                          onRemove: () => {
-                            setCancellingDeposit(true);
-                            setDepositWhy('');
-                          },
+                          onRemove: () => patch({ cancelDeposit: true }),
+                          removed: cancelDeposit,
+                          onRestore: () => patch({ cancelDeposit: false }),
                         }
                       : null,
                   payments: (draft.was?.payments ?? []).map((pay, i) => ({
@@ -303,11 +175,11 @@ export default function AmendPaymentPage() {
                     method: pay.method,
                     reference: pay.reference,
                     onRemove: pay.paymentId
-                      ? () => {
-                          setVoiding(pay.paymentId);
-                          setWhy('');
-                        }
+                      ? () => patch({ takeBack: [...takeBack, pay.paymentId as string] })
                       : undefined,
+                    removed: Boolean(pay.paymentId && takeBack.includes(pay.paymentId)),
+                    onRestore: () =>
+                      patch({ takeBack: takeBack.filter((id) => id !== pay.paymentId) }),
                   })),
                 }}
                 entered={draft.taking}

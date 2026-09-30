@@ -1,6 +1,7 @@
 'use client';
 
 import { type ReactNode, useEffect, useState } from 'react';
+import { searchLook } from '@/components/ui/searchLook';
 import { SelectionViewer, useSelectionController } from '@academix-admin/selection-viewer';
 import { ViewerLoading } from '@/components/ui/ViewerState';
 import { InfoPanel } from '@/components/ui/Explain';
@@ -135,6 +136,7 @@ export function ProductPicker({
       ariaLabel={title}
       cancelButton={{ position: 'right', onClick: close, view: <CloseIcon size="1.3em" /> }}
       searchProp={{
+        ...searchLook(dark),
         text: 'Search products or a category',
         onChange: setQuery,
         /*
@@ -145,9 +147,6 @@ export function ProductPicker({
          * why, so every search cost an extra tap on the one control the sheet exists for.
          */
         autoFocus: true,
-        textColor: dark ? '#f2f5f4' : '#12201d',
-        background: dark ? '#1b2322' : '#eef2f1',
-        padding: { l: '4px', r: '4px', t: '0px', b: '0px' },
       }}
       loadingProp={{ view: <ViewerLoading text="Searching" /> }}
       noResultProp={{

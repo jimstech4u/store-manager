@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useDemandState } from '@academix-admin/state-stack';
 import {
   saleCharges,
@@ -62,6 +62,13 @@ export interface AmendDraft {
   depositReason: string | null;
   /** Why, asked last — after the money and before the receipt. */
   reason: string;
+  /**
+   * WHAT COMES OFF WITH THIS CORRECTION (0249): payments on the receipt taken back, and whether the
+   * deposit put down with it is cancelled. Marked on Correct payment with a cross, like the till's
+   * own lines, and written with the correction under its one reason — never on their own.
+   */
+  takeBack?: string[];
+  cancelDeposit?: boolean;
 }
 
 const empty = (saleId: string): AmendDraft => ({
@@ -73,6 +80,8 @@ const empty = (saleId: string): AmendDraft => ({
   depositNow: 0,
   depositReason: null,
   reason: '',
+  takeBack: [],
+  cancelDeposit: false,
 });
 
 /** The receipt's lines, in the shape the till's own row component edits. */
@@ -153,7 +162,7 @@ function toOrder(
  * sale, so a genuinely different receipt does seed.
  */
 export function useAmendDraft(saleId: string | null) {
-  const [state, demand, setState] = useDemandState<AmendDraft>(empty(saleId ?? 'none'), {
+  const [state, , setState] = useDemandState<AmendDraft>(empty(saleId ?? 'none'), {
     key: `amend-draft:${saleId ?? 'none'}`,
     scope: AMEND_DRAFT_SCOPE,
     persist: true,
@@ -161,21 +170,88 @@ export function useAmendDraft(saleId: string | null) {
     revalidateOnMount: false,
   });
 
-  useEffect(() => {
-    if (!saleId || state.order) return;
-    void demand(async ({ set }) => {
+  /*
+   * SEEDED FROM THE RECEIPT whenever there is no correction in progress — the first time, and again
+   * after one has been made and cleared. Direct reads and `setState`: a `demand` is spent once it
+   * has answered, so a seed through it would not run a second time and the next correction on the
+   * same receipt would sit on "loading" for ever.
+   */
+  const checkedFor = useRef<string | null>(null);
+  const seeding = useRef(false);
+  const seed = useCallback(async () => {
+    if (!saleId || seeding.current) return;
+    seeding.current = true;
+    try {
       const [doc, paid, charges, deposits] = await Promise.all([
         saleDocument(saleId),
         salePaid(saleId),
         saleCharges(saleId),
         saleDeposits(saleId),
       ]);
-      if (!doc) return;
-      set({ ...empty(saleId), was: doc, order: toOrder(doc, charges, deposits), alreadyPaid: paid }, {
-        override: true,
-      });
-    });
-  }, [saleId, state.order, demand]);
+      setState(() =>
+        doc
+          ? { ...empty(saleId), was: doc, order: toOrder(doc, charges, deposits), alreadyPaid: paid }
+          : empty(saleId),
+      );
+      checkedFor.current = saleId; // freshly read: nothing to check
+    } finally {
+      seeding.current = false;
+    }
+  }, [saleId, setState]);
+
+  useEffect(() => {
+    if (!saleId || state.order) return;
+    void seed();
+  }, [saleId, state.order, seed]);
+
+  /*
+   * A RESUMED CORRECTION IS CHECKED AGAINST THE RECEIPT FIRST.
+   *
+   * The draft is saved on the phone so a correction survives pushing and popping — and it outlived
+   * the correction itself: nothing cleared it, so the next "something on this is wrong" on that
+   * receipt resumed a correction already made, with the "already paid", deposit and payments of
+   * before it, and payments marked to come off that had already come off. Its figures were wrong on
+   * screen and on the paper, and saving could fail outright.
+   *
+   * So once per visit, a resumed draft is compared with the receipt as it stands: corrected since it
+   * was started (another revision) → start again from the receipt; otherwise keep what was typed and
+   * re-read what the receipt holds — paid, payments, deposit — dropping marks on payments no longer
+   * on it. Direct reads and `setState`, never `demand`: a spent demand does nothing (see below).
+   */
+  useEffect(() => {
+    if (!saleId || !state.order || checkedFor.current === saleId) return;
+    checkedFor.current = saleId;
+    const startedAt = state.was?.revision ?? null;
+    void (async () => {
+      try {
+        const [doc, paid] = await Promise.all([saleDocument(saleId), salePaid(saleId)]);
+        if (!doc) return;
+        if (startedAt === null || doc.revision !== startedAt) {
+          const [charges, deposits] = await Promise.all([saleCharges(saleId), saleDeposits(saleId)]);
+          setState(() => ({ ...empty(saleId), was: doc, order: toOrder(doc, charges, deposits), alreadyPaid: paid }));
+          return;
+        }
+        const onReceipt = new Set((doc.payments ?? []).map((pay) => pay.paymentId).filter(Boolean));
+        setState((prev) => ({
+          ...prev,
+          was: doc,
+          alreadyPaid: paid,
+          takeBack: (prev.takeBack ?? []).filter((id) => onReceipt.has(id)),
+          cancelDeposit: Boolean(prev.cancelDeposit) && (doc.depositTaken ?? 0) > 0.005,
+        }));
+      } catch {
+        // Kept as it was; the reason step's save is refused by the server if the receipt disagrees.
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saleId, state.order]);
+
+  /** A correction that has been made is over: the next one on this receipt starts from it. */
+  const clear = useCallback(() => {
+    if (!saleId) return;
+    checkedFor.current = null;
+    setState(() => empty(saleId));
+  }, [saleId, setState]);
 
   /*
    * EDITS GO THROUGH `setState`, NOT `demand`.
@@ -247,22 +323,8 @@ export function useAmendDraft(saleId: string | null) {
 
   /** Start again from what the receipt actually says. */
   const reset = useCallback(() => {
-    if (!saleId) return;
-    void demand(async ({ set }) => {
-      const [doc, paid, charges, deposits] = await Promise.all([
-        saleDocument(saleId),
-        salePaid(saleId),
-        saleCharges(saleId),
-        saleDeposits(saleId),
-      ]);
-      set(
-        doc
-          ? { ...empty(saleId), was: doc, order: toOrder(doc, charges, deposits), alreadyPaid: paid }
-          : empty(saleId),
-        { override: true },
-      );
-    });
-  }, [saleId, demand]);
+    void seed();
+  }, [seed]);
 
   /**
    * Re-read only WHAT THE RECEIPT HAS ALREADY TAKEN, keeping everything the seller has typed.
@@ -275,13 +337,11 @@ export function useAmendDraft(saleId: string | null) {
    */
   const refreshTaken = useCallback(async () => {
     if (!saleId) return;
-    await demand(async ({ set, get }) => {
-      const [doc, paid] = await Promise.all([saleDocument(saleId), salePaid(saleId)]);
-      if (!doc) return;
-      const current = get() ?? empty(saleId);
-      set({ ...current, was: doc, alreadyPaid: paid }, { override: true });
-    });
-  }, [saleId, demand]);
+    // Direct reads and `setState` (a spent demand would do nothing).
+    const [doc, paid] = await Promise.all([saleDocument(saleId), salePaid(saleId)]);
+    if (!doc) return;
+    setState((prev) => ({ ...prev, was: doc, alreadyPaid: paid }));
+  }, [saleId, setState]);
 
   return {
     draft: state,
@@ -293,6 +353,7 @@ export function useAmendDraft(saleId: string | null) {
     addLine,
     reset,
     refreshTaken,
+    clear,
   };
 }
 
