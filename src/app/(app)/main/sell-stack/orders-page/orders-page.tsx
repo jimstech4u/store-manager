@@ -113,36 +113,35 @@ export default function OrdersPage() {
           placeholder="Search a code, a shopper or a product"
           onOpen={searchOps.open}
         />
+        {/* What the shop said, which is the first thing anybody is filtering by. */}
+        <div className={styles.tabs} role="group" aria-label="Show">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              className={answer === t.id ? styles.tabOn : styles.tab}
+              aria-pressed={answer === t.id}
+              onClick={() => setAnswer(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        <div className={styles.when} role="group" aria-label="When">
+          {WHEN.map((w) => (
+            <button
+              key={w.id}
+              type="button"
+              className={when === w.id ? styles.whenOn : styles.whenChip}
+              aria-pressed={when === w.id}
+              onClick={() => setWhen(w.id)}
+            >
+              {w.label}
+            </button>
+          ))}
+        </div>
       </PinnedTools>
-
-      {/* What the shop said, which is the first thing anybody is filtering by. */}
-      <div className={styles.tabs} role="group" aria-label="Show">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            className={answer === t.id ? styles.tabOn : styles.tab}
-            aria-pressed={answer === t.id}
-            onClick={() => setAnswer(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      <div className={styles.when} role="group" aria-label="When">
-        {WHEN.map((w) => (
-          <button
-            key={w.id}
-            type="button"
-            className={when === w.id ? styles.whenOn : styles.whenChip}
-            aria-pressed={when === w.id}
-            onClick={() => setWhen(w.id)}
-          >
-            {w.label}
-          </button>
-        ))}
-      </div>
 
       <PageState status={status}>
         {() => (

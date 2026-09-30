@@ -131,6 +131,43 @@ try {
   // Back from Sales is Money. (The tab bar hides while a list scrolls, so it is not tapped here.)
   await page('Money', async () => { await p.goBack(); await p.waitForTimeout(1500); }, 'Search customers', 'Money');
 
+  /*
+   * The rest are reached from a header action or a floating button. The tab bar hides while a list
+   * scrolls, so every page starts from its tab's first page scrolled to the top.
+   */
+  const fromTab = async (label, open) => {
+    await p.evaluate(() => {
+      for (const b of document.querySelectorAll('.navstack-column-body')) b.scrollTop = 0;
+      window.dispatchEvent(new Event('scroll'));
+    });
+    await p.waitForTimeout(1200);
+    await tab(label);
+    await open();
+  };
+  const action = (name) => () =>
+    p.locator(`button[aria-label="${name}"]`).locator('visible=true').first().click();
+  const back = async () => {
+    await p.goBack({ waitUntil: 'commit' }).catch(() => {});
+    await p.waitForTimeout(1500);
+  };
+
+  // (No Back here: the step before already closed its search, and Money is a tab's first page —
+  // one more Back would leave the app.)
+  await page('Orders', () => fromTab('Sell', action('Orders from the marketplace')), 'Search marketplace orders', 'Orders');
+  await back();
+  await page('Deposits', () => fromTab('Sell', action('Deposits you are holding')), 'Search who you are holding money for', 'Deposits');
+  await back();
+  await page('Empties', () => fromTab('Sell', action('Containers still to come back')), 'Search who is holding your containers', 'Empties');
+  await back();
+  await page('Suppliers', () => fromTab('Stock', action('Suppliers and what you owe them')), 'Search suppliers', 'Suppliers');
+  await back();
+  await page(
+    'Count',
+    () => fromTab('Stock', () => p.getByRole('button', { name: /^Count$/ }).locator('visible=true').first().click()),
+    'Find a product to count',
+    'Count',
+  );
+
   check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 } catch (e) {
   await p.screenshot({ path: `${SHOTS}/crash.png` }).catch(() => {});
