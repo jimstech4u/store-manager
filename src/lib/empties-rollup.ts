@@ -41,6 +41,25 @@ export interface OwedRow {
    */
   side?: 'they_hold' | 'we_hold';
   owed: number;
+  /**
+   * The unit it is counted in. Only a MAKER's own row needs it (no product shape to name it by):
+   * that is how such a row is handed back (0243).
+   */
+  storeUnitId?: string | null;
+}
+
+/**
+ * WHAT A ROW IS CALLED ON A LINE (0242): its maker for a container that holds many — a crate is
+ * anybody's crate from that maker — and its own beer for anything else, because a loose bottle is
+ * one beer's bottle. The roll-up, "All back" and the Part page all ask this, so they cannot disagree.
+ */
+export function lineLabelOf(r: OwedRow): string {
+  return r.groupId && r.groupName && r.baseQty > 1 ? r.groupName : r.productName;
+}
+
+/** Rows that are the same thing, added before anything is split. */
+function sameThingKey(r: OwedRow): string {
+  return `${r.productId}|${r.productUnitId}|${r.groupId ?? ''}|${r.unitPlural.toLowerCase()}|${r.side ?? 'they_hold'}`;
 }
 
 /** A line as it should be read out or printed. */
@@ -127,7 +146,7 @@ export function rollUpOwed(input: OwedRow[]): OwedLine[] {
   for (const r of input) {
     // A maker's own row (an opening balance by maker) has no product or shape id, so the maker and
     // the unit are part of the key — two makers' crates must never be one row.
-    const k = `${r.productId}|${r.productUnitId}|${r.groupId ?? ''}|${r.unitPlural.toLowerCase()}|${r.side ?? 'they_hold'}`;
+    const k = sameThingKey(r);
     const had = combined.get(k);
     combined.set(k, had ? { ...had, owed: had.owed + r.owed } : { ...r });
   }
@@ -152,7 +171,7 @@ export function rollUpOwed(input: OwedRow[]): OwedLine[] {
      * crate; a loose bottle is one beer's bottle. Adding bottles across a maker printed
      * "International Breweries bottles 2" — a thing nobody can hand back.
      */
-    const byMaker = Boolean(r.groupId) && r.baseQty > 1;
+    const byMaker = lineLabelOf(r) !== r.productName || (Boolean(r.groupId) && r.baseQty > 1);
     const key = `${side}|${byMaker ? r.groupId : `product:${r.productId || r.productName}`}|${r.baseQty}|${r.unitPlural.toLowerCase()}`;
 
     if (whole > 0) {
@@ -224,11 +243,11 @@ export function rollUpOwed(input: OwedRow[]): OwedLine[] {
 export function settleLine(
   line: OwedLine,
   input: OwedRow[],
-): { productUnitId: string; qty: number }[] {
+): { productUnitId: string; qty: number; row: OwedRow }[] {
   const combined = new Map<string, OwedRow>();
   for (const r of input) {
     if ((r.side ?? 'they_hold') !== line.side) continue;
-    const k = `${r.productId}|${r.productUnitId}`;
+    const k = sameThingKey(r);
     const had = combined.get(k);
     combined.set(k, had ? { ...had, owed: had.owed + r.owed } : { ...r });
   }
@@ -237,17 +256,17 @@ export function settleLine(
     r.unitName.toLowerCase() === line.unit.toLowerCase() ||
     r.unitPlural.toLowerCase() === line.unit.toLowerCase();
 
-  const out: { productUnitId: string; qty: number }[] = [];
+  const out: { productUnitId: string; qty: number; row: OwedRow }[] = [];
   for (const r of combined.values()) {
     if (!(r.owed > 0) || !sameShape(r)) continue;
     const whole = Math.floor(r.owed + 1e-9);
     if (line.isPart) {
       const rest = r.owed - whole;
       if (r.productName === line.label && rest > 1e-9) {
-        out.push({ productUnitId: r.productUnitId, qty: Number(rest.toFixed(4)) });
+        out.push({ productUnitId: r.productUnitId, qty: Number(rest.toFixed(4)), row: r });
       }
-    } else if ((r.groupName ?? r.productName) === line.label && whole > 0) {
-      out.push({ productUnitId: r.productUnitId, qty: whole });
+    } else if (lineLabelOf(r) === line.label && whole > 0) {
+      out.push({ productUnitId: r.productUnitId, qty: whole, row: r });
     }
   }
   return out;

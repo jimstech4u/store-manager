@@ -215,6 +215,7 @@ export async function emptiesOwed(customerId: string): Promise<OwedRow[]> {
     groupName: (r.group_name as string | null) ?? null,
     side: (r.side as 'they_hold' | 'we_hold') ?? 'they_hold',
     owed: Number(r.owed) || 0,
+    storeUnitId: (r.store_unit_id as string | null) ?? null,
   }));
 }
 
@@ -421,17 +422,69 @@ export async function recordGroupEmpties(args: {
   reason?: string;
   /** Whose they are: ours with them (the default), or theirs with us (0242). */
   side?: 'they_hold' | 'we_hold';
+  /** Out by default; a maker's crates brought back, or written off, go the other way. */
+  direction?: 'out' | 'returned' | 'damaged';
+  occurredAt?: string | null;
 }) {
   const { error } = await getSupabase().rpc('record_customer_empties_for_group', {
     p_store_id: args.storeId,
     p_customer_id: args.customerId,
     p_category_id: args.categoryId,
     p_store_unit_id: args.storeUnitId,
-    p_direction: 'out',
+    p_direction: args.direction ?? 'out',
+    p_occurred_at: args.occurredAt ?? null,
     p_qty: args.qty,
     p_reason: args.reason?.trim() || null,
     p_side: args.side ?? 'they_hold',
   });
   if (error) throw error;
   ledgersChanged();
+}
+
+/**
+ * HAND BACK ONE ROW of what a customer holds, whichever kind it is: a beer's own shape through
+ * `record_customer_empties`, a maker's own row (entered by maker, no shape) through the maker writer
+ * — which is the only way such a line can ever be settled (0243).
+ */
+export async function returnOwedRow(args: {
+  storeId: string;
+  customerId: string;
+  row: OwedRow;
+  qty: number;
+  direction: 'returned' | 'damaged';
+  reason?: string;
+  occurredAt?: string | null;
+  refTable?: string | null;
+  refId?: string | null;
+}) {
+  const side = args.row.side ?? 'they_hold';
+  if (args.row.productUnitId) {
+    await recordEmpties({
+      storeId: args.storeId,
+      customerId: args.customerId,
+      productUnitId: args.row.productUnitId,
+      direction: args.direction,
+      qty: args.qty,
+      reason: args.reason,
+      side,
+      occurredAt: args.occurredAt ?? null,
+      refTable: args.refTable ?? null,
+      refId: args.refId ?? null,
+    });
+    return;
+  }
+  if (!args.row.groupId || !args.row.storeUnitId) {
+    throw new Error(`${args.row.productName} cannot be handed back: it names no maker and no unit.`);
+  }
+  await recordGroupEmpties({
+    storeId: args.storeId,
+    customerId: args.customerId,
+    categoryId: args.row.groupId,
+    storeUnitId: args.row.storeUnitId,
+    qty: args.qty,
+    reason: args.reason,
+    side,
+    direction: args.direction,
+    occurredAt: args.occurredAt ?? null,
+  });
 }

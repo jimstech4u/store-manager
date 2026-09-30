@@ -15,14 +15,14 @@ import {
   depositLedger,
   emptiesOwed,
   saleEmptiesOwed,
-  recordEmpties,
+  returnOwedRow,
   writeOffEmpties,
   type DepositMove,
   LEDGERS_SCOPE,
 } from '@/lib/stacks/customer-ledgers';
 import { accountsChanged } from '@/lib/stacks/customer-account';
 import { useSellingUnits, type SellingUnit } from '@/lib/stacks/selling-units';
-import { rollUpOwed, saidAsPart, type OwedRow } from '@/lib/empties-rollup';
+import { lineLabelOf, rollUpOwed, saidAsPart, type OwedRow } from '@/lib/empties-rollup';
 import { formatMoney, formatQtySpoken, messageOf } from '@/lib/format';
 import styles from './empties-record-page.module.css';
 
@@ -77,6 +77,9 @@ export default function EmptiesRecordPage() {
    * own moment and the receipt, which reads containers as at the sale, prints the true figure.
    */
   const saleId = (location?.params?.sale as string | undefined) ?? null;
+  // From a receipt with "include what they had from before" ticked: every line they hold, still
+  // recorded against the sale.
+  const withOlder = location?.params?.all === '1';
   const lineParam = (location?.params?.line as string | undefined) ?? '';
   const [saleAt, setSaleAt] = useState<string | null>(null);
   // Dated at the sale only when asked at the counter; from an older receipt, dated now.
@@ -102,10 +105,10 @@ export default function EmptiesRecordPage() {
    * From a receipt, only what THAT SALE still owes (0225); otherwise everything they hold.
    */
   const area = useLoadArea<OwedRow[]>(
-    () => (saleId ? saleEmptiesOwed(saleId) : emptiesOwed(customerId!)),
-    [customerId, saleId],
+    () => (saleId && !withOlder ? saleEmptiesOwed(saleId) : emptiesOwed(customerId!)),
+    [customerId, saleId, withOlder],
     {
-    key: saleId ? `sale-empties-owed:${saleId}` : `empties-owed:${customerId ?? 'none'}`,
+    key: saleId && !withOlder ? `sale-empties-owed:${saleId}` : `empties-owed:${customerId ?? 'none'}`,
     scope: LEDGERS_SCOPE,
     onFail: showProblem,
     whenNot: !customerId,
@@ -170,7 +173,7 @@ export default function EmptiesRecordPage() {
         if (!sameShape) return false;
         return line.isPart
           ? line.products.includes(r.productName)
-          : (r.groupName ?? r.productName) === line.label;
+          : lineLabelOf(r) === line.label;
       })
         .sort((a, b) => b.owed - a.owed),
     [owedRows],
@@ -326,22 +329,36 @@ export default function EmptiesRecordPage() {
     setBusy(true);
     try {
       if (damaged) {
-        await writeOffEmpties({
-          storeId: store.id,
-          customerId,
-          parts: parts.map((p) => ({ productUnitId: p.row.productUnitId, qty: p.qty })),
-          reason: why,
-          said,
-          fee: takeFee ? feeAmount : null,
-        });
+        // A maker's own row has no shape for the write-off to name; it is closed by the maker writer.
+        for (const p of parts.filter((x) => !x.row.productUnitId)) {
+          await returnOwedRow({
+            storeId: store.id,
+            customerId,
+            row: p.row,
+            direction: 'damaged',
+            qty: p.qty,
+            reason: why,
+          });
+        }
+        const shaped = parts.filter((p) => p.row.productUnitId);
+        if (shaped.length > 0 || takeFee) {
+          await writeOffEmpties({
+            storeId: store.id,
+            customerId,
+            parts: shaped.map((p) => ({ productUnitId: p.row.productUnitId, qty: p.qty })),
+            reason: why,
+            said,
+            fee: takeFee ? feeAmount : null,
+          });
+        }
         // A fee moves their deposit, and can add to what they owe.
         if (takeFee) accountsChanged();
       } else {
         for (const p of parts) {
-          await recordEmpties({
+          await returnOwedRow({
             storeId: store.id,
             customerId,
-            productUnitId: p.row.productUnitId,
+            row: p.row,
             direction,
             qty: p.qty,
             reason: why,

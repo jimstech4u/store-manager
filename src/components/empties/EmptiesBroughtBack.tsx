@@ -10,7 +10,7 @@ import { rollUpOwed, settleLine, type OwedLine, type OwedRow } from '@/lib/empti
 import {
   emptiesOwed,
   LEDGERS_SCOPE,
-  recordEmpties,
+  returnOwedRow,
   saleEmptiesOwed,
 } from '@/lib/stacks/customer-ledgers';
 import { accountsChanged } from '@/lib/stacks/customer-account';
@@ -64,19 +64,48 @@ export function EmptiesBroughtBack({
   const nav = useNav();
   const problem = useProblem();
 
+  /*
+   * AND WHAT THEY HAD FROM BEFORE, when they bring that too.
+   *
+   * "When settling empties we only see buttons for that particular sale, with no outstanding. Maybe a
+   * checkbox that loads the old ones if they brought them." On a receipt the block starts with this
+   * sale's own containers; ticked, it lists everything they hold — what this sale sent out and what
+   * was already out — and settles any of it here, at the sale's moment, so the paper is true.
+   */
+  const [withOlder, setWithOlder] = useState(false);
+  const bySale = Boolean(forSale) && !withOlder;
+
   const area = useLoadArea<OwedRow[]>(
-    () => (forSale ? saleEmptiesOwed(forSale.id) : emptiesOwed(customerId)),
-    [customerId, forSale?.id],
+    () => (bySale ? saleEmptiesOwed(forSale!.id) : emptiesOwed(customerId)),
+    [customerId, forSale?.id, bySale],
     {
-      key: forSale ? `sale-empties-owed:${forSale.id}` : `empties-owed:${customerId}`,
+      key: bySale ? `sale-empties-owed:${forSale!.id}` : `empties-owed:${customerId}`,
       scope: LEDGERS_SCOPE,
       onFail: problem.show,
     },
   );
+  // Everything they hold, to know whether there is anything older to offer.
+  const all = useLoadArea<OwedRow[]>(() => emptiesOwed(customerId), [customerId], {
+    key: `empties-owed:${customerId}`,
+    scope: LEDGERS_SCOPE,
+    whenNot: !forSale,
+  });
   const rows = useMemo(
     () => (area.data ?? []).filter((r) => r.owed > 0 && (r.side ?? 'they_hold') === 'they_hold'),
     [area.data],
   );
+  const heldInAll = useMemo(
+    () =>
+      (all.data ?? [])
+        .filter((r) => r.owed > 0 && (r.side ?? 'they_hold') === 'they_hold')
+        .reduce((sum, r) => sum + r.owed * r.baseQty, 0),
+    [all.data],
+  );
+  const heldBySale = useMemo(
+    () => (bySale ? rows.reduce((sum, r) => sum + r.owed * r.baseQty, 0) : 0),
+    [bySale, rows],
+  );
+  const hasOlder = Boolean(forSale) && (withOlder || heldInAll - heldBySale > 1e-6);
   const lines = useMemo(() => rollUpOwed(rows), [rows]);
 
   /* Mounted means asked — see ConfirmDialog. Which question: one line, or everything. */
@@ -89,10 +118,10 @@ export function EmptiesBroughtBack({
     try {
       for (const line of which) {
         for (const part of settleLine(line, rows)) {
-          await recordEmpties({
+          await returnOwedRow({
             storeId,
             customerId,
-            productUnitId: part.productUnitId,
+            row: part.row,
             direction: 'returned',
             qty: part.qty,
             reason: forSale ? 'Brought back against this receipt' : 'Brought back',
@@ -104,6 +133,7 @@ export function EmptiesBroughtBack({
       }
       accountsChanged();
       area.reload();
+      all.reload();
       onRecorded?.();
     } catch (e) {
       problem.show(messageOf(e, 'That could not be recorded.'));
@@ -114,13 +144,23 @@ export function EmptiesBroughtBack({
 
   const words = (l: OwedLine) => `${l.said} ${l.label} ${l.unit.toLowerCase()}`;
 
-  // On a receipt, a sale whose containers are all back has nothing to ask.
-  if (forSale && area.data !== null && lines.length === 0) return null;
+  // On a receipt, a sale whose containers are all back — and nothing older out — has nothing to ask.
+  if (forSale && area.data !== null && lines.length === 0 && !hasOlder) return null;
 
   return (
     <section className={styles.block} aria-label={title}>
       <ProblemDialog problem={problem} title="Not recorded" />
       <h2 className={styles.head}>{title}</h2>
+      {hasOlder && (
+        <label className={styles.older}>
+          <input
+            type="checkbox"
+            checked={withOlder}
+            onChange={(e) => setWithOlder(e.target.checked)}
+          />
+          <span>Include what they had from before</span>
+        </label>
+      )}
       <LoadArea area={area} what="what they are holding" compact>
         {() =>
           lines.length === 0 ? (
@@ -155,6 +195,7 @@ export function EmptiesBroughtBack({
                             line: String(i),
                             ...(forSale ? { sale: forSale.id } : {}),
                             ...(forSale?.occurredAt ? { at: 'sale' } : {}),
+                            ...(forSale && withOlder ? { all: '1' } : {}),
                           })
                         }
                       >

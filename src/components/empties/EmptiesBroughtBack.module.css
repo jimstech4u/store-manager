@@ -50,3 +50,19 @@
   flex: none;
   gap: var(--space-2);
 }
+
+/* On a receipt: also settle what they had from before this sale. */
+.older {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--touch-min, 44px);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.older input {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--primary);
+}
