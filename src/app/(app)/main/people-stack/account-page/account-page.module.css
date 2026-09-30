@@ -99,6 +99,70 @@
   margin-bottom: var(--space-6);
 }
 
+/*
+ * The account's actions, as cards two to a row — a column of full-width buttons pushed the history
+ * off the screen, and a card can carry its figure and a word on what it is for.
+ */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 96px;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tile:hover {
+  background: var(--surface-sunken, var(--surface));
+}
+
+/* The one most taken: taking their money. */
+.tilePrimary {
+  border-color: var(--primary);
+  background: var(--primary-soft, var(--surface));
+}
+
+/* Something the shop owes them — the side that needs acting on. */
+.tileOwe {
+  border-inline-start: 4px solid var(--warning, var(--primary));
+}
+
+.tileIcon {
+  display: inline-flex;
+  color: var(--primary);
+  margin-bottom: var(--space-1);
+}
+
+.tileLabel {
+  font-weight: 700;
+}
+
+.tileValue {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-lg, 18px);
+  font-weight: 700;
+}
+
+.tileNote {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
 /* ── Timeline ─────────────────────────────────────────────────────────────────────── */
 
 .timeline {

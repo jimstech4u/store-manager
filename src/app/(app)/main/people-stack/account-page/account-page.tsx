@@ -5,7 +5,6 @@ import { useMemo, useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
-import { Button } from '@/components/ui/Button';
 import { Explain } from '@/components/ui/Explain';
 import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/components/ui/Dialog';
 import { CashIcon, EditIcon, HistoryIcon, RefreshIcon, ReceiptIcon, ReturnIcon, TrashIcon } from '@/components/ui/Icon';
@@ -340,96 +339,141 @@ export default function AccountPage() {
         The last two are deep screens rather than a single action, because both are ledgers with a
         history somebody needs to read before deciding anything.
       */}
-      <div className={styles.actions}>
+      {/*
+        WHAT YOU OWE THEM — only when there is some, and settled from where it is read.
+
+        "UI visible to settle what we owe the customer in empties or money or deposit, maybe only
+        visible when any exist ... instead of single-line buttons, a grid of cards." Each card is one
+        thing the shop owes this customer, with its figure, and opens the screen that settles it.
+      */}
+      {(owed < 0 || heldTotal > 0 || weHold.length > 0) && (
+        <>
+          <h2 className={styles.section}>What you owe them</h2>
+          <div className={styles.tiles}>
+            {owed < 0 && can('payments.record') && (
+              <button
+                type="button"
+                className={`${styles.tile} ${styles.tileOwe}`}
+                onClick={() => void nav.push('account_action_page', { id: customerId, kind: 'refund' })}
+              >
+                <span className={styles.tileIcon}><CashIcon /></span>
+                <span className={styles.tileLabel}>Money</span>
+                <span className={styles.tileValue}>{formatMoney(Math.abs(owed))}</span>
+                <span className={styles.tileNote}>Give it back</span>
+              </button>
+            )}
+            {heldTotal > 0 && (
+              <button
+                type="button"
+                className={`${styles.tile} ${styles.tileOwe}`}
+                onClick={() => void nav.push('deposit_customer_page', { id: customerId })}
+              >
+                <span className={styles.tileIcon}><CashIcon /></span>
+                <span className={styles.tileLabel}>Their deposit</span>
+                <span className={styles.tileValue}>{formatMoney(heldTotal)}</span>
+                <span className={styles.tileNote}>Give back, or keep some</span>
+              </button>
+            )}
+            {weHold.length > 0 && (
+              <button
+                type="button"
+                className={`${styles.tile} ${styles.tileOwe}`}
+                onClick={() => void nav.push('empties_customer_page', { id: customerId })}
+              >
+                <span className={styles.tileIcon}><ReturnIcon /></span>
+                <span className={styles.tileLabel}>Their empties</span>
+                <span className={styles.tileValue}>
+                  {weHold
+                    .slice(0, 2)
+                    .map((l) => `${formatQtySpoken(String(l.qty))} ${l.unit.toLowerCase()}`)
+                    .join(', ')}
+                  {weHold.length > 2 ? '…' : ''}
+                </span>
+                <span className={styles.tileNote}>In your yard — give them back</span>
+              </button>
+            )}
+          </div>
+        </>
+      )}
+
+      {/*
+        FIVE THINGS A SHOP DOES ON AN ACCOUNT, and each is one kind of record — as a grid of cards
+        rather than a column of full-width buttons, which pushed the history off the screen.
+
+          MONEY THEY OWE     a payment reduces it, a charge adds to it.
+          MONEY WE OWE       an excess — an overpayment, a load brought back.
+          MONEY WE HOLD      a deposit. Not theirs to spend and not ours to count as takings.
+          CONTAINERS         counted in the product's own shape, settled on their own screen.
+
+        Empties and Deposit push onto a ledger screen rather than a one-shot form: both are running
+        accounts, and what matters first is what is there and how it got that way.
+      */}
+      <h2 className={styles.section}>On this account</h2>
+      <div className={styles.tiles}>
         {can('payments.record') && (
-          <Button
-            size="large"
-            fullWidth
-            onClick={() =>
-              void nav.push('account_action_page', { id: customerId, kind: 'payment' })
-            }
+          <button
+            type="button"
+            className={`${styles.tile} ${styles.tilePrimary}`}
+            onClick={() => void nav.push('account_action_page', { id: customerId, kind: 'payment' })}
           >
-            <CashIcon /> Record a payment
-          </Button>
+            <span className={styles.tileIcon}><CashIcon /></span>
+            <span className={styles.tileLabel}>Record a payment</span>
+            <span className={styles.tileNote}>Money they gave you</span>
+          </button>
         )}
-
         {can('payments.record') && (
-          <Button
-            variant="secondary"
-            fullWidth
-            onClick={() =>
-              void nav.push('account_action_page', { id: customerId, kind: 'charge' })
-            }
+          <button
+            type="button"
+            className={styles.tile}
+            onClick={() => void nav.push('account_action_page', { id: customerId, kind: 'charge' })}
           >
-            Record a charge
-          </Button>
+            <span className={styles.tileIcon}><ReceiptIcon /></span>
+            <span className={styles.tileLabel}>Record a charge</span>
+            <span className={styles.tileNote}>Something they owe for</span>
+          </button>
         )}
-
-        {can('payments.record') && (
-          <Button
-            variant="secondary"
-            fullWidth
-            onClick={() =>
-              void nav.push('account_action_page', { id: customerId, kind: 'excess' })
-            }
-          >
-            Record what you owe them
-          </Button>
-        )}
-
-        {/*
-          AND CLEARING IT.
-
-          "we need a way to reconcile money i owe them as well after i have given back." Recording
-          that the shop owes somebody has always been possible; paying it never was, so a credit
-          could only ever accumulate. Offered when there IS one, because a button to hand back
-          nothing is a button that invents a refund.
-        */}
-        {can('payments.record') && Number(account.balance) < 0 && (
-          <Button
-            variant="secondary"
-            fullWidth
-            onClick={() =>
-              void nav.push('account_action_page', { id: customerId, kind: 'refund' })
-            }
-          >
-            <CashIcon /> Give back {formatMoney(Math.abs(Number(account.balance)))}
-          </Button>
-        )}
-
-        {/*
-          Both of these PUSH ONTO A LEDGER SCREEN rather than opening a one-shot form. A deposit and
-          a pile of crates are running accounts: what matters first is what is there and how it got
-          that way, and only then what to do about it.
-        */}
-        <Button
-          variant="secondary"
-          fullWidth
+        <button
+          type="button"
+          className={styles.tile}
           onClick={() => void nav.push('empties_customer_page', { id: customerId })}
         >
-          <ReturnIcon /> Empties
-        </Button>
-
-        <Button
-          variant="secondary"
-          fullWidth
+          <span className={styles.tileIcon}><ReturnIcon /></span>
+          <span className={styles.tileLabel}>Empties</span>
+          <span className={styles.tileNote}>Out with them, or theirs with you</span>
+        </button>
+        <button
+          type="button"
+          className={styles.tile}
           onClick={() => void nav.push('deposit_customer_page', { id: customerId })}
         >
-          Deposit
-        </Button>
-
+          <span className={styles.tileIcon}><CashIcon /></span>
+          <span className={styles.tileLabel}>Deposit</span>
+          <span className={styles.tileNote}>Money held against containers</span>
+        </button>
         {/*
           THE MONEY SIDE, as a statement: every receipt and what is still open on each — the record
-          this balance is made of. It lived only under Money, so from the customer it was a trip
-          back out and in through another tab.
+          this balance is made of.
         */}
-        <Button
-          variant="secondary"
-          fullWidth
+        <button
+          type="button"
+          className={styles.tile}
           onClick={() => void nav.push('statement_page', { id: customerId })}
         >
-          <ReceiptIcon /> Statement
-        </Button>
+          <span className={styles.tileIcon}><ReceiptIcon /></span>
+          <span className={styles.tileLabel}>Statement</span>
+          <span className={styles.tileNote}>Every receipt, and what is open</span>
+        </button>
+        {can('payments.record') && (
+          <button
+            type="button"
+            className={styles.tile}
+            onClick={() => void nav.push('account_action_page', { id: customerId, kind: 'excess' })}
+          >
+            <span className={styles.tileIcon}><RefreshIcon /></span>
+            <span className={styles.tileLabel}>You owe them</span>
+            <span className={styles.tileNote}>An overpayment, a load brought back</span>
+          </button>
+        )}
       </div>
 
       {/* ── History ─────────────────────────────────────────────────────────── */}
