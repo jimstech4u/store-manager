@@ -67,6 +67,11 @@ interface SaleDetail {
    * print nothing to account for the difference.
    */
   deposit_total?: string | number | null;
+  /**
+   * Put down as a deposit AT this sale (0244) — the customer's money, held for them. Not in the
+   * sale's total: it is paid alongside it, so it is said beside it.
+   */
+  deposit_taken?: string | number | null;
   /** What the customer still holds of the shop's, per pool, after this sale. */
   /** What this receipt sent out, one row per product shape (0140). Rolled up for printing. */
   empties: unknown;
@@ -286,6 +291,23 @@ export function Receipt({
    */
   const itemsTotal = lines.reduce((sum, l) => sum + Number(l.line_total), 0);
   const deposit = Number(detail.deposit_total ?? 0) || 0;
+  const depositTaken = Number(detail.deposit_taken ?? 0) || 0;
+  /*
+   * ONE LINE PER WAY OF PAYING. "Paid (cash) N30,000, Paid (cash) N1,150" read as two lots of cash
+   * and made the cash look like more than it was; the drawer counts cash once. References are kept
+   * together on the line so a transfer can still be matched to the bank.
+   */
+  const paidBy = payments.reduce<{ method: string; amount: number; refs: string[] }[]>((acc, p) => {
+    const hit = acc.find((x) => x.method === p.method);
+    const ref = p.reference ? String(p.reference) : null;
+    if (hit) {
+      hit.amount += Number(p.amount);
+      if (ref) hit.refs.push(ref);
+    } else {
+      acc.push({ method: p.method, amount: Number(p.amount), refs: ref ? [ref] : [] });
+    }
+    return acc;
+  }, []);
   const extras = Number(sale.total) - itemsTotal;
   /*
    * THE ACCOUNT, AS AT THIS SALE: what they owed before it, what it left, and where that puts them.
@@ -387,17 +409,24 @@ export function Receipt({
         : []),
       { label: 'Total', value: formatMoney(sale.total), strong: true },
       /*
+       * A DEPOSIT PUT DOWN WITH THIS SALE (0244) — handed over with the payment, held for them,
+       * and back to them when the containers are. Said here, beside the total it was paid with.
+       */
+      ...(depositTaken > 0.005
+        ? [{ label: 'Deposit, held for you', value: formatMoney(depositTaken) }]
+        : []),
+      /*
        * EVERY PAYMENT, with its reference where there is one.
        *
        * A transfer without its reference is unmatchable against a bank statement — which is the
        * one thing a customer holding the receipt and a shop holding the statement both need.
        */
-      ...payments.map((p) => ({
-        label: `Paid (${p.method})${p.reference ? ` ${p.reference}` : ''}`,
+      ...paidBy.map((p) => ({
+        label: `Paid (${p.method})${p.refs.length ? ` ${p.refs.join(', ')}` : ''}`,
         value: formatMoney(p.amount),
       })),
       // What it adds up to, once there is more than one of them to add up.
-      ...(payments.length > 1
+      ...(paidBy.length > 1
         ? [{ label: 'Paid in all', value: formatMoney(paid) }]
         : []),
       ...(owing > 0 ? [{ label: 'Left on this sale', value: formatMoney(owing) }] : []),

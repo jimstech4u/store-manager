@@ -49,6 +49,8 @@ interface SharedReceipt {
   charges: { label: string; amount: string; note: string | null }[];
   /** Money held against containers. Not payment for anything: it comes back when they do. */
   deposit_total: string;
+  /** Put down as a deposit at this sale (0244): held for them, not part of the total. */
+  deposit_taken?: string | number | null;
   /** What is still out, grouped the way a shop counts it — by category, not by brand. */
   /** Everything still with the customer as at this sale — earlier receipts and this one (0149). */
   empties: unknown;
@@ -304,6 +306,14 @@ export default function SharedReceiptPage({
             <span>Total</span>
             <span className={styles.value}>{formatMoney(sale.total)}</span>
           </div>
+
+          {/* A deposit put down with this sale (0244): theirs, held for them. */}
+          {Number(receipt.deposit_taken ?? 0) > 0.005 && (
+            <div className={styles.row}>
+              <span>Deposit, held for you</span>
+              <span className={styles.value}>{formatMoney(Number(receipt.deposit_taken))}</span>
+            </div>
+          )}
 
           {/* Grouped by method by the reader: "Cash ₦20,000, Transfer ₦9,950" is what somebody
               checks against their own record, rather than nine rows of the same word. */}
