@@ -95,6 +95,9 @@ export interface ProductFormResult {
   created: boolean;
 }
 
+/** The note a date change carries into the audit trail — a date is not stock, so nobody is asked. */
+const EXPIRY_NOTE = 'Date changed on the item';
+
 export function ProductForm({
   onSaved,
   onCancel,
@@ -936,6 +939,18 @@ export function ProductForm({
       }
 
       /*
+       * DATES CHANGED ON LOTS ALREADY ON THE SHELF are saved with the form, not only by their own
+       * "Save this date" button — a person changes the date and presses Save, and it used to be
+       * quietly left behind.
+       */
+      for (const lot of recordedLots) {
+        const next = (expiryDates[lot.layerId] ?? lot.expiresOn ?? '').trim() || null;
+        if (next !== lot.expiresOn) {
+          await setProductExpiry({ layerId: lot.layerId, expiresOn: next, reason: EXPIRY_NOTE });
+        }
+      }
+
+      /*
        * STOCK MOVED, so every screen showing it re-reads — the lists, the item's page, stock in
        * shapes, and whatever asks "was this counted today". A quantity is never taken on this
        * device's word alone: another till may be selling the same shelf.
@@ -1088,11 +1103,12 @@ export function ProductForm({
      * button that calls this is disabled until there is one, so this is the backstop rather than
      * the message anybody should ever see.
      */
-    const why = (expiryReason[layerId] ?? '').trim() || stockReason.trim();
-    if (!why) {
-      problem.show('Say why this expiry date is being corrected.');
-      return;
-    }
+    /*
+     * A DATE IS NOT STOCK, so nobody is asked why. "Expiry date should still be editable in the edit
+     * product form; only the initial qty cannot be, after stock history exists." The server still
+     * writes the old and new date to the audit trail, with this as its note.
+     */
+    const why = (expiryReason[layerId] ?? '').trim() || EXPIRY_NOTE;
     setExpiryUpdating(layerId);
     try {
       await setProductExpiry({ layerId, expiresOn: next, reason: why });
@@ -1529,8 +1545,7 @@ export function ProductForm({
               {recordedLots.map((layer) => {
                 const value = expiryDates[layer.layerId] ?? layer.expiresOn ?? '';
                 const changed = (value || null) !== layer.expiresOn;
-                const why = expiryReason[layer.layerId] ?? '';
-                const ready = changed && (why.trim() !== '' || stockReason.trim() !== '');
+                const ready = changed;
                 return (
                   <div key={layer.layerId} className={styles.expiryLot}>
                     {/*
@@ -1562,28 +1577,6 @@ export function ProductForm({
                         }))
                       }
                     />
-                    {/*
-                      ASKED ONLY ONCE THE DATE HAS MOVED, and asked here rather than anywhere else.
-                      A box demanding a reason for a correction nobody has made yet is a box that
-                      reads as required before there is anything to explain.
-                    */}
-                    {changed && stockReason.trim() === '' && (
-                      <div className={styles.expiryLotWhy}>
-                        <Field
-                          label="Why is this date being corrected?"
-                          required
-                          value={why}
-                          onChange={(e) =>
-                            setExpiryReason((current) => ({
-                              ...current,
-                              [layer.layerId]: e.target.value,
-                            }))
-                          }
-                          placeholder="For example: keyed from the wrong carton"
-                        />
-                      </div>
-                    )}
-
                     {/* Last, because it is the one control that commits the change. */}
                     {changed && (
                       <Button
