@@ -123,8 +123,16 @@ try {
 
   console.log('F  every sideways row on the list pages');
   /** Tap, in every visible sideways row of the page on screen, a card hanging off its right edge. */
-  const tapHangingCards = async (where) => {
-    const rows = await p.evaluate(() => {
+  /**
+   * Tap, in every visible sideways row of the page on screen, a card hanging off its right edge.
+   *
+   * The rows are found AGAIN before each try: tapping a card can re-render the page (choosing a
+   * report redraws the period row under it), and a row found before that tap is not the row on
+   * screen after it.
+   */
+  const scanRows = () =>
+    p.evaluate(() => {
+      for (const old of document.querySelectorAll('[data-probe-row]')) old.removeAttribute('data-probe-row');
       const active = document.querySelector('.group-stack-container[data-active="true"]');
       const pages = [...(active?.querySelectorAll('.navstack-page') ?? [])];
       const page = pages[pages.length - 1] ?? active;
@@ -135,15 +143,22 @@ try {
         const r = el.getBoundingClientRect();
         if (r.width <= 0 || r.height <= 0 || r.bottom < 0 || r.top > innerHeight) continue;
         if (el.closest('[data-no-reveal]')) continue;
-        el.scrollLeft = 0;
         el.setAttribute('data-probe-row', String(found.length));
         found.push(el.getAttribute('aria-label') || el.className.split(' ')[0] || el.tagName);
       }
       return found;
     });
-    if (rows.length === 0) { console.log(`  (${where}: no sideways row to try)`); return; }
-    for (let i = 0; i < rows.length; i++) {
+
+  const tapHangingCards = async (where) => {
+    const tried = new Set();
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const rows = await scanRows();
+      const i = rows.findIndex((name) => !tried.has(name));
+      if (i < 0) break;
+      tried.add(rows[i]);
       const row = p.locator(`[data-probe-row="${i}"]`);
+      await row.evaluate((el) => { el.scrollLeft = 0; });
+      await p.waitForTimeout(300);
       const card = await row.evaluateHandle((el) => {
         const r = el.getBoundingClientRect();
         return [...el.querySelectorAll('button, [role="tab"], a[href], label')].find((b) => {
@@ -157,21 +172,52 @@ try {
       const before = await shownInRow(el);
       await el.click();
       await p.waitForTimeout(1200);
-      const after = await shownInRow(el);
+      const after = el ? await shownInRow(el).catch(() => -1) : -1;
       const topAfter = await p.evaluate(() => [...document.querySelectorAll('.navstack-column-body')].filter((x) => x.getBoundingClientRect().width > 0).pop()?.scrollTop ?? 0);
       check(`${where} · ${rows[i]}: a half-hidden card, tapped, is fully in the row`, after >= 0.99, `${before} → ${after}`);
       check(`${where} · ${rows[i]}: … and the page did not move up or down`, Math.abs(topAfter - topBefore) < 2, `${topBefore} → ${topAfter}`);
       await p.screenshot({ path: `${SHOTS}/f-${where.replace(/\W+/g, '-')}-${i}.png` });
     }
+    if (tried.size === 0) console.log(`  (${where}: no sideways row to try)`);
+  };
+
+  const action = async (label) => {
+    await p.locator(`button[aria-label="${label}"]`).locator('visible=true').first().click();
+    await p.waitForTimeout(3500);
+  };
+  const back = async () => {
+    await p.goBack({ waitUntil: 'commit' }).catch(() => {});
+    await p.waitForTimeout(1800);
   };
 
   await tab('Stock');
   await tapHangingCards('Stock');
+  await action('Suppliers and what you owe them');
+  await tapHangingCards('Suppliers');
+  await back();
+
   await tab('Money');
   await tapHangingCards('Money');
-  await p.locator('button[aria-label="Export a report"]').locator('visible=true').first().click();
-  await p.waitForTimeout(3000);
+  await action('All sales and receipts');
+  await tapHangingCards('Sales');
+  await back();
+  await action('Reports you can print or save');
+  await tapHangingCards('Reports');
+  await back();
+  await action('Export a report');
   await tapHangingCards('Export');
+  await back();
+
+  await tab('Sell');
+  await action('Orders from the marketplace');
+  await tapHangingCards('Orders');
+  await back();
+
+  await tab('More');
+  await p.getByRole('button', { name: /Everyone you sell to/ }).locator('visible=true').first().click();
+  await p.waitForTimeout(3500);
+  await tapHangingCards('People');
+  await back();
 
   check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 } catch (e) {

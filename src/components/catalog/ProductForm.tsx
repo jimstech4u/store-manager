@@ -27,7 +27,8 @@ import {
   type StoreUnit,
 } from '@/lib/stacks/product-units';
 import { getSupabase } from '@/lib/supabase/client';
-import { hasStockHistory, setProductLowStock, type Product } from '@/lib/stacks/catalog-stack';
+import { hasStockHistory, setProductLowStock, stockMoved, type Product } from '@/lib/stacks/catalog-stack';
+import { countsChanged } from '@/lib/stacks/count-gate';
 import styles from './ProductForm.module.css';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 import { useLoadArea } from '@/components/ui/LoadArea';
@@ -470,7 +471,7 @@ export function ProductForm({
   });
 
   /** The lots already on this shelf. Empty on a new item, which has none by definition. */
-  const recordedLots = editing ? (expirySeed.data ?? []) : [];
+  const lotsOnShelf = editing ? (expirySeed.data ?? []) : [];
 
   /*
    * DATING STOCK THAT IS ALREADY THERE (0224).
@@ -485,6 +486,49 @@ export function ProductForm({
    * lot, or makes one for stock that has none.
    */
   const datingExisting = editing && hadStock === true;
+  /*
+   * Lots shown as RECORDED — date correctable, quantity fixed — only once the item has a history.
+   * Before that they are still the opening's own lines, and they are loaded into the editable list
+   * below instead: the latest ones given are the ones kept (`set_opening_stock`).
+   */
+  const recordedLots = datingExisting ? lotsOnShelf : [];
+
+  /*
+   * BEFORE STOCK HISTORY, THE DATED LOTS ARE THE OPENING'S LINES, editable like the shelf.
+   *
+   * Loaded once per item into the list the shop edits, each in the largest shape it fills exactly
+   * (2 Cans rather than 48 pieces), and remembered so a save that changed nothing writes nothing.
+   */
+  const batchesSeeded = useRef<string | null>(null);
+  const [seededBatches, setSeededBatches] = useState<string | null>(null);
+  useEffect(() => {
+    if (!editing || hadStock !== false || !editingId) return;
+    if (batchesSeeded.current === editingId) return;
+    if (!existingUnitsLoaded || countedShapes.length === 0 || expirySeed.data == null) return;
+    batchesSeeded.current = editingId;
+    const bySize = [...countedShapes].sort(
+      (a, b) => (baseOf[b.storeUnitId] ?? 1) - (baseOf[a.storeUnitId] ?? 1),
+    );
+    const lines = (expirySeed.data ?? [])
+      .filter((l) => l.expiresOn && Number(l.remaining) > 0)
+      .map((l, i) => {
+        const left = Number(l.remaining);
+        const shape =
+          bySize.find((u) => left % (baseOf[u.storeUnitId] ?? 1) === 0) ?? bySize[bySize.length - 1];
+        const per = baseOf[shape.storeUnitId] ?? 1;
+        return {
+          key: `seed-${l.layerId ?? i}`,
+          storeUnitId: shape.storeUnitId,
+          qty: String(left / per),
+          expiresOn: l.expiresOn as string,
+        };
+      });
+    setBatches(lines);
+    setSeededBatches(JSON.stringify(lines.map(({ storeUnitId, qty, expiresOn }) => [storeUnitId, qty, expiresOn])));
+  }, [editing, editingId, hadStock, existingUnitsLoaded, countedShapes, baseOf, expirySeed.data]);
+  const batchesEdited =
+    JSON.stringify(batches.map(({ storeUnitId, qty, expiresOn }) => [storeUnitId, qty, expiresOn])) !==
+    (seededBatches ?? '[]');
   const datedOnShelf = recordedLots
     .filter((l) => l.expiresOn)
     .reduce((sum, l) => sum + l.remaining, 0);
@@ -801,7 +845,21 @@ export function ProductForm({
        * what the shop actually said — twelve bottles to a crate — which is the only figure here
        * that is not a guess.
        */
-      if (anyShelfSaid && (!editing || hadStock === false)) {
+      /*
+       * WHAT THE SHELF NOW HOLDS, when this save wrote it — handed back on the row so every list
+       * shows it at once. The row used to keep the figure the form was opened with, and each list
+       * was patched with that: Chivita set to 3 Cans went on reading 3 pieces everywhere.
+       */
+      let shelfWritten: number | null = null;
+      const batchLines = batches
+        .filter((b) => Number(b.qty) > 0)
+        .map((b) => ({
+          qty: Number(b.qty) * (baseOf[b.storeUnitId] ?? 1),
+          expires_on: b.expiresOn || null,
+        }));
+
+      if (!editing && anyShelfSaid) {
+        shelfWritten = shelfBase;
         const { error } = await supabase.rpc('open_stock_by_count', {
           p_store_id: storeId,
           p_product_id: id,
@@ -843,26 +901,24 @@ export function ProductForm({
             : null,
         });
         if (error) throw error;
-      } else if (editing && shelfEdited) {
+      } else if (editing && hadStock === false && (shelfEdited || batchesEdited) && anyShelfSaid) {
         /*
-         * An existing item is not "opened" again. This is a fresh physical count: the database
-         * retains the opening count, records what this one replaces, and makes the reason part of
-         * the audit trail. A blank shelf section remains a no-op, so changing a price cannot
-         * accidentally count the product as zero.
+         * BEFORE STOCK HISTORY, THE SHELF FIGURE IS THE OPENING — and setting it is not a
+         * correction. No reason, no count difference, nothing waiting for approval: the opening is
+         * set to what is typed, and the dated lots to the latest ones given (0231).
+         *
+         * It used to go through a correction count, which recorded the new figure beside a ledger
+         * that never moved — the shop set Chivita to 3 Cans and every screen went on saying 3
+         * pieces. Once anything sells, is delivered or is damaged, this section is read-only and
+         * the shelf changes by a count.
          */
-        if (!stockReason.trim()) {
-          throw new Error('Say why this shelf count is being corrected.');
-        }
-        const { data: periodId, error: periodError } = await supabase.rpc('ensure_open_period', {
+        const { error } = await supabase.rpc('set_opening_stock', {
           p_product_id: id,
+          p_qty: shelfBase,
+          p_batches: batchLines.length > 0 ? batchLines : null,
         });
-        if (periodError) throw periodError;
-        const { error: countError } = await supabase.rpc('enter_stock_count', {
-          p_period_id: periodId,
-          p_counted: shelfBase,
-          p_reason: stockReason.trim(),
-        });
-        if (countError) throw countError;
+        if (error) throw error;
+        shelfWritten = shelfBase;
       }
 
       if (datingExisting && anyBatch) {
@@ -877,6 +933,16 @@ export function ProductForm({
           p_reason: stockReason.trim() || 'Dated on the shelf, from the item',
         });
         if (dateError) throw dateError;
+      }
+
+      /*
+       * STOCK MOVED, so every screen showing it re-reads — the lists, the item's page, stock in
+       * shapes, and whatever asks "was this counted today". A quantity is never taken on this
+       * device's word alone: another till may be selling the same shelf.
+       */
+      if (shelfWritten !== null || (datingExisting && anyBatch)) {
+        stockMoved();
+        countsChanged();
       }
 
       /*
@@ -1003,6 +1069,7 @@ export function ProductForm({
         name: trimmed,
         sku: sku.trim() || null,
         barcode: barcode.trim() || null,
+        ...(shelfWritten !== null ? { onHand: String(shelfWritten) } : {}),
       };
 
       onSaved({ id, name: trimmed, row, created: !editing });
@@ -1357,9 +1424,13 @@ export function ProductForm({
         <>
           <h2 className={styles.section}>What you have now</h2>
           <p className={styles.sectionNote}>
-            {editing
-              ? 'Enter a fresh physical shelf count only when correcting stock. It keeps the earlier count and records why this one replaced it.'
-              : 'Counted on the shelf, not worked out from deliveries. Most shops starting here have stock and no delivery history, and an invented delivery invents a cost.'}
+            {!editing
+              ? 'Counted on the shelf, not worked out from deliveries. Most shops starting here have stock and no delivery history, and an invented delivery invents a cost.'
+              : hadStock === false
+                ? 'Still the opening: nothing has sold, been delivered or damaged since. Set it here as often as you need — once it moves, it changes by a count.'
+                : hadStock === true
+                  ? 'What is on the shelf now. It has moved since it was opened, so it changes by a count, not here.'
+                  : 'Checking whether anything has moved it since it was opened…'}
           </p>
           {/*
             A BOX PER COUNTED SHAPE. "Crates on the shelf" and "Bottles on the shelf", not one
@@ -1388,6 +1459,8 @@ export function ProductForm({
                   label={u.plural}
                   numeric
                   required={minimum}
+                  // After stock history the shelf changes by a count, not here.
+                  readOnly={editing && hadStock !== false}
                   value={said}
                   onChange={(e) =>
                     setShelfByShape((prev) => ({ ...prev, [u.storeUnitId]: e.target.value }))
@@ -1423,15 +1496,6 @@ export function ProductForm({
               : 'Leave them blank if you would rather count later.'}
           </p>
 
-          {editing && shelfEdited && (
-            <Field
-              label="Why is this count being corrected?"
-              required
-              value={stockReason}
-              onChange={(e) => setStockReason(e.target.value)}
-              placeholder="For example: corrected the opening count"
-            />
-          )}
 
           {/* ── When it goes off ──────────────────────────────────────────────── */}
           {(canAddBatches || recordedLots.length > 0 || (editing && expirySeed.error)) && (

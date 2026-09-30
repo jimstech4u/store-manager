@@ -502,11 +502,20 @@ export async function setProductLowStock(productId: string, level: number | null
  *
  * `head: true` with an exact count: the rows are not wanted, only whether there are any.
  */
+/**
+ * Has anything PHYSICALLY MOVED this item's amount since it was opened — a sale, a delivery,
+ * damage, an adjustment?
+ *
+ * The opening itself is not history: until something else moves the shelf, the figure on the edit
+ * form IS the opening and can be set again (`set_opening_stock`). A count that matched moves
+ * nothing, so it is not history either — it stays on the record as a count.
+ */
 export async function hasStockHistory(productId: string): Promise<boolean> {
   const { count, error } = await getSupabase()
     .from('stock_movements')
     .select('id', { count: 'exact', head: true })
-    .eq('product_id', productId);
+    .eq('product_id', productId)
+    .neq('kind', 'opening');
   if (error) throw error;
   return (count ?? 0) > 0;
 }

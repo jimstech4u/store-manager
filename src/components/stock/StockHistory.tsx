@@ -66,6 +66,13 @@ const FILTERS: { label: string; kinds: string[] | null }[] = [
   { label: 'Losses', kinds: ['damage', 'repack_loss', 'transfer_out'] },
   { label: 'Corrections', kinds: ['adjustment'] },
   { label: 'Opening', kinds: ['opening'] },
+  // A count that matched moves nothing, and still belongs on the record (0232).
+  { label: 'Counts', kinds: ['count'] },
+];
+
+/** Every kind that MOVES stock — what "when did this last change" is asked of. A count is not one. */
+const MOVEMENT_KINDS = [
+  'opening', 'receive', 'sale', 'return_in', 'damage', 'repack_loss', 'adjustment', 'transfer_in', 'transfer_out',
 ];
 
 /** What each kind of movement is called in the shop, rather than in the schema. */
@@ -79,7 +86,13 @@ const WHAT_HAPPENED: Record<string, string> = {
   adjustment: 'Count adjustment',
   transfer_in: 'Transferred in',
   transfer_out: 'Transferred out',
+  count: 'Counted',
 };
+
+/** Who did it. A member with no name is known by their email; the part before the @ is enough. */
+function person(name: string | null | undefined): string {
+  return (name ?? 'Someone').split('@')[0];
+}
 
 function when(iso: string) {
   const at = new Date(iso);
@@ -121,6 +134,8 @@ function useLastMovement(productId: string) {
     read: async () => {
       const { data, error } = await getSupabase().rpc('product_history_page', {
         p_product_id: productId,
+        // When the stock last CHANGED: a count that matched changed nothing.
+        p_kinds: MOVEMENT_KINDS,
         p_limit: 1,
       });
       if (error) throw error;
@@ -244,53 +259,82 @@ export function StockHistory({
       <ol className={styles.list}>
         {history.map((row, index) => {
           const up = row.qty_delta > 0;
+          /*
+           * A COUNT moves nothing: its figure is what was on the shelf, and `qty_delta` is the
+           * difference it found against the records — 0 when it matched.
+           */
+          const isCount = row.kind === 'count';
+          const gap = Number(row.qty_delta);
 
           /*
-           * Only where there is something to open, and somebody to open it.
-           *
-           * A count or an adjustment has no other record behind it, and a row that looks tappable
-           * and does nothing is worse than one that plainly is not.
+           * Only where there is something to OPEN — a sale's receipt. An opening, a count or an
+           * adjustment has no screen behind it, and "See the record" leading nowhere is worse than
+           * no link at all.
            */
-          const opens = onOpenRecord && row.ref_id ? () => onOpenRecord(row.ref_table, row.ref_id!) : null;
+          const opens =
+            onOpenRecord && row.ref_id && row.ref_table === 'sales'
+              ? () => onOpenRecord(row.ref_table, row.ref_id!)
+              : null;
 
+          /*
+           * ONE ENTRY, STACKED — it was four columns side by side on a phone: the change, what
+           * happened, the shelf after, and the link. The middle column was left a few characters
+           * wide, so the date broke one word to a line and "Opening balance" was drawn on top of the
+           * shelf figure. Now: what happened and the change on one line, when and who under it, and
+           * what was left on the shelf with the way into the receipt at the foot.
+           */
           return (
             <li className={styles.row} key={row.id ?? `${row.at}-${index}`}>
-              <span className={`${styles.delta} ${up ? styles.up : styles.down}`}>
-                {up ? '+' : ''}
-                {say(productId, Number(row.qty_delta), unit)}
-              </span>
-
-              <span className={styles.body}>
+              <div className={styles.head}>
                 <span className={styles.what}>
                   {WHAT_HAPPENED[row.kind] ?? row.kind}
                   {/* A reversal is not a separate event — it is this one being undone. */}
                   {row.reverses_id && <span className={styles.correction}>correction</span>}
                 </span>
-                <span className={styles.who}>
-                  {when(row.at)} · {row.actor_name ?? 'Someone'}
-                </span>
-                {/* A delivery belongs to a supplier: their name opens their account. */}
-                {row.supplier_id && (
-                  <span className={styles.who}>
-                    from{' '}
-                    <RecordLink route="supplier_account_page" id={row.supplier_id}>
-                      {row.supplier_name ?? 'the supplier'}
-                    </RecordLink>
+                {isCount ? (
+                  <span className={`${styles.delta} ${gap === 0 ? styles.same : gap > 0 ? styles.up : styles.down}`}>
+                    {gap === 0 ? 'Matched' : `${gap > 0 ? '+' : ''}${say(productId, gap, unit)}`}
+                  </span>
+                ) : (
+                  <span className={`${styles.delta} ${up ? styles.up : styles.down}`}>
+                    {up ? '+' : ''}
+                    {say(productId, Number(row.qty_delta), unit)}
                   </span>
                 )}
-                {row.note && <span className={styles.note}>{row.note}</span>}
+              </div>
+
+              <span className={styles.who}>
+                {when(row.at)} · {person(row.actor_name)}
               </span>
 
-              {/* What was on the shelf after this — the number being checked against. */}
-              <span className={styles.balance}>
-                {say(productId, Number(row.balance), unit)}
-              </span>
-
-              {opens && (
-                <button type="button" className={styles.open} onClick={opens}>
-                  {row.ref_table === 'sales' ? 'See the receipt' : 'See the record'}
-                </button>
+              {/* A delivery belongs to a supplier: their name opens their account. */}
+              {row.supplier_id && (
+                <span className={styles.who}>
+                  from{' '}
+                  <RecordLink route="supplier_account_page" id={row.supplier_id}>
+                    {row.supplier_name ?? 'the supplier'}
+                  </RecordLink>
+                </span>
               )}
+              {isCount && gap !== 0 && (
+                <span className={styles.note}>
+                  {say(productId, Math.abs(gap), unit)} {gap < 0 ? 'short of' : 'more than'} the records.
+                </span>
+              )}
+              {row.note && <span className={styles.note}>{row.note}</span>}
+
+              <div className={styles.foot}>
+                {/* What was on the shelf after this — the number being checked against. */}
+                <span className={styles.balance}>
+                  {isCount ? 'Counted' : 'On the shelf after'}:{' '}
+                  <strong>{say(productId, Number(row.balance), unit)}</strong>
+                </span>
+                {opens && (
+                  <button type="button" className={styles.open} onClick={opens}>
+                    See the receipt
+                  </button>
+                )}
+              </div>
             </li>
           );
         })}

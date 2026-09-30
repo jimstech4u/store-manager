@@ -23,12 +23,34 @@
   list-style: none;
 }
 
+/*
+ * One entry, stacked: it was four columns side by side, which on a phone left the middle one a few
+ * characters wide — the date broke a word to a line and the title was drawn over the shelf figure.
+ */
 .row {
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
+  flex-direction: column;
+  gap: 2px;
   padding: var(--space-3) 0;
   border-top: 1px solid var(--border);
+}
+
+/* What happened, and the change, on one line. */
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+/* What was left on the shelf, and the way into the receipt. */
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  margin-top: 2px;
 }
 
 /*
@@ -39,10 +61,15 @@
  */
 .delta {
   flex: none;
-  min-width: 3.5em;
   text-align: right;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* A count that matched moved nothing: neither up nor down. */
+.same {
+  color: var(--text-muted);
 }
 
 .up {
@@ -64,7 +91,9 @@
 .what {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-2);
+  min-width: 0;
   font-weight: 700;
 }
 
@@ -93,12 +122,14 @@
 
 /* What was left afterwards — the figure being checked against the shelf. */
 .balance {
-  flex: none;
   font-size: var(--text-sm);
-  font-weight: 700;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+}
+
+.balance strong {
+  color: var(--text);
+  font-weight: 700;
 }
 
 /* ── The card on the product screen ─────────────────────────────────────────────────── */
@@ -159,8 +190,6 @@
 /* The way into whatever a movement came from. "Sold, 3" and then nothing was a dead end: the
    receipt is one join away, and "sold to whom?" is the next question every time. */
 .open {
-  grid-column: 1 / -1;
-  justify-self: start;
   min-height: var(--touch-min, 44px);
   padding: 0;
   border: none;
