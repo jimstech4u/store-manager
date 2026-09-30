@@ -1,11 +1,11 @@
 /**
- * SEARCH SHEETS: the keyboard's box is focused in the tap, and a correction never flashes "empty".
+ * SEARCH SHEETS: the box is focused once the sheet has opened, and a correction never flashes "empty".
  *
- *  1. Stock search: open it, and the search box is the focused element at once — not after the
- *     animation (what iOS needs for its keyboard).
+ *  1. Stock search: nothing is focused while the sheet slides up; the box is, once it has opened
+ *     (a keyboard raised mid-slide made iOS push the header off and hide the rows).
  *  2. Type a term that finds nothing, then the correction of it: "nothing found" must not be on
  *     screen at any moment between the correction and its match.
- *  3. The product picker at the till: its box is focused at once too.
+ *  3. The product picker at the till: the same.
  *
  *     node scripts/probe-search-viewers-ui.mjs [http://localhost:3100]
  */
@@ -100,7 +100,7 @@ try {
   await launcher.click();
   await p.waitForTimeout(300);
   const f1 = await tapFocus();
-  check('a text box has focus in the tap that opens the search', f1 === 'input', String(f1));
+  check('no text box is focused in the tap that opens the search (the keyboard waits for the sheet)', f1 !== 'input', String(f1));
   await p.waitForTimeout(1200);
   check('and the real search box has it once the sheet is up',
     await p.evaluate(() => !!document.activeElement?.closest('[role="dialog"]') && document.activeElement.tagName === 'INPUT'));
@@ -141,7 +141,7 @@ try {
   await add.click();
   await p.waitForTimeout(300);
   const f2 = await tapFocus();
-  check('a text box has focus in the tap that opens the picker', f2 === 'input', String(f2));
+  check('no text box is focused in the tap that opens the picker (the keyboard waits for the sheet)', f2 !== 'input', String(f2));
   await p.waitForTimeout(1200);
   check('and the real picker box has it once the sheet is up',
     await p.evaluate(() => !!document.activeElement?.closest('[role="dialog"]') && document.activeElement.tagName === 'INPUT'));
