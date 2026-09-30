@@ -494,7 +494,13 @@ export function ProductForm({
    * Before that they are still the opening's own lines, and they are loaded into the editable list
    * below instead: the latest ones given are the ones kept (`set_opening_stock`).
    */
-  const recordedLots = datingExisting ? lotsOnShelf : [];
+  /*
+   * NO PER-LOT DATE BOXES ANY MORE. "I thought editing American Cola's expiry would be like the
+   * multi-line edit on 33 Bottle." Before and after stock history alike, the shelf's dates are the
+   * editable lines below — loaded from what is dated now, saved as a whole (0231 before history,
+   * `set_shelf_dates` after it). Only the shelf FIGURE locks once the item has a history.
+   */
+  const recordedLots: typeof lotsOnShelf = [];
 
   /*
    * BEFORE STOCK HISTORY, THE DATED LOTS ARE THE OPENING'S LINES, editable like the shelf.
@@ -505,7 +511,7 @@ export function ProductForm({
   const batchesSeeded = useRef<string | null>(null);
   const [seededBatches, setSeededBatches] = useState<string | null>(null);
   useEffect(() => {
-    if (!editing || hadStock !== false || !editingId) return;
+    if (!editing || hadStock === null || !editingId) return;
     if (batchesSeeded.current === editingId) return;
     if (!existingUnitsLoaded || countedShapes.length === 0 || expirySeed.data == null) return;
     batchesSeeded.current = editingId;
@@ -924,16 +930,14 @@ export function ProductForm({
         shelfWritten = shelfBase;
       }
 
-      if (datingExisting && anyBatch) {
-        const { error: dateError } = await supabase.rpc('date_shelf_stock', {
+      /*
+       * AFTER STOCK HISTORY, THE DATES ARE STILL THE SHOP'S TO SET — as lines, like before it. The
+       * shelf keeps exactly what it has; the lines say which of it goes off when (0237).
+       */
+      if (datingExisting && batchesEdited) {
+        const { error: dateError } = await supabase.rpc('set_shelf_dates', {
           p_product_id: id,
-          p_batches: batches
-            .filter((b) => Number(b.qty) > 0)
-            .map((b) => ({
-              qty: Number(b.qty) * (baseOf[b.storeUnitId] ?? 1),
-              expires_on: b.expiresOn || null,
-            })),
-          p_reason: stockReason.trim() || 'Dated on the shelf, from the item',
+          p_batches: batchLines,
         });
         if (dateError) throw dateError;
       }
@@ -955,7 +959,7 @@ export function ProductForm({
        * shapes, and whatever asks "was this counted today". A quantity is never taken on this
        * device's word alone: another till may be selling the same shelf.
        */
-      if (shelfWritten !== null || (datingExisting && anyBatch)) {
+      if (shelfWritten !== null || (datingExisting && batchesEdited)) {
         stockMoved();
         countsChanged();
       }
@@ -1520,7 +1524,7 @@ export function ProductForm({
               <p className={styles.sectionNote}>
                 {canAddBatches
                   ? datingExisting
-                    ? 'Date what is on the shelf without one. It moves no stock — it only says which of it goes off when, and that sells first.'
+                    ? 'Which of what is on the shelf goes off when. The lines move no stock — they can cover the shelf or part of it, never more — and what goes off first sells first.'
                     : 'Only if it has a date on it. A shelf two deliveries deep has two lines, and they are not always the same shape.'
                   : 'Correct the date on a lot still on the shelf. It never changes its quantity, cost, or the order stock is sold in.'}
               </p>
@@ -1776,7 +1780,7 @@ export function ProductForm({
                       onHandBase: batchBase,
                     })),
                   )}{' '}
-                  {datingExisting ? ' but only ' : ' but you counted '}
+                  {datingExisting ? ' but ' : ' but you counted '}
                   {stockInShapes(
                     countedShapes.map((u) => ({
                       name: u.name,
@@ -1786,7 +1790,7 @@ export function ProductForm({
                     })),
                   )}
                   {datingExisting
-                    ? ' is on the shelf without a date.'
+                    ? ' is on the shelf.'
                     : '. They describe the same shelf, so they have to agree.'}
                 </p>
               )}
