@@ -7,7 +7,7 @@ import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { Explain } from '@/components/ui/Explain';
 import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/components/ui/Dialog';
-import { CashIcon, EditIcon, HistoryIcon, RefreshIcon, ReceiptIcon, ReturnIcon, TrashIcon } from '@/components/ui/Icon';
+import { CashIcon, EditIcon, HistoryIcon, RefreshIcon, ReturnIcon, TrashIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { usePermission } from '@/hooks/usePermission';
@@ -410,28 +410,27 @@ export default function AccountPage() {
       */}
       <h2 className={styles.section}>On this account</h2>
       <div className={styles.tiles}>
-        {can('payments.record') && (
-          <button
-            type="button"
-            className={`${styles.tile} ${styles.tilePrimary}`}
-            onClick={() => void nav.push('account_action_page', { id: customerId, kind: 'payment' })}
-          >
-            <span className={styles.tileIcon}><CashIcon /></span>
-            <span className={styles.tileLabel}>Record a payment</span>
-            <span className={styles.tileNote}>Money they gave you</span>
-          </button>
-        )}
-        {can('payments.record') && (
-          <button
-            type="button"
-            className={styles.tile}
-            onClick={() => void nav.push('account_action_page', { id: customerId, kind: 'charge' })}
-          >
-            <span className={styles.tileIcon}><ReceiptIcon /></span>
-            <span className={styles.tileLabel}>Record a charge</span>
-            <span className={styles.tileNote}>Something they owe for</span>
-          </button>
-        )}
+        {/*
+          MONEY, EMPTIES, DEPOSIT — three running accounts, each a ledger with its own records.
+
+          "Too many buttons here: adopt payment and charge as a ledger, just like empties and
+          deposit." A payment, a charge, money you owe them and money handed back were four cards
+          (and the statement a fifth); they are the buttons on the Money page now, above the
+          history they add to.
+        */}
+        <button
+          type="button"
+          className={`${styles.tile} ${styles.tilePrimary}`}
+          onClick={() => void nav.push('money_customer_page', { id: customerId })}
+        >
+          <span className={styles.tileIcon}><CashIcon /></span>
+          <span className={styles.tileLabel}>Money</span>
+          <span className={styles.tileValue}>{formatMoney(Math.abs(owed))}</span>
+          <span className={styles.tileNote}>
+            {owed > 0.005 ? 'They owe you' : owed < -0.005 ? 'You owe them' : 'Nothing owed'} ·
+            payments, charges
+          </span>
+        </button>
         <button
           type="button"
           className={styles.tile}
@@ -450,33 +449,6 @@ export default function AccountPage() {
           <span className={styles.tileLabel}>Deposit</span>
           <span className={styles.tileNote}>Money held against containers</span>
         </button>
-        {/*
-          RETURN MONEY — change owed, an overpayment, a load brought back: money handed back to
-          them, by whatever it went back in. It took the Statement's place here; the statement is
-          still on the Money tab.
-        */}
-        {can('payments.record') && (
-          <button
-            type="button"
-            className={styles.tile}
-            onClick={() => void nav.push('account_action_page', { id: customerId, kind: 'refund' })}
-          >
-            <span className={styles.tileIcon}><CashIcon /></span>
-            <span className={styles.tileLabel}>Return money</span>
-            <span className={styles.tileNote}>Money you owe them, handed back</span>
-          </button>
-        )}
-        {can('payments.record') && (
-          <button
-            type="button"
-            className={styles.tile}
-            onClick={() => void nav.push('account_action_page', { id: customerId, kind: 'excess' })}
-          >
-            <span className={styles.tileIcon}><RefreshIcon /></span>
-            <span className={styles.tileLabel}>You owe them</span>
-            <span className={styles.tileNote}>An overpayment, a load brought back</span>
-          </button>
-        )}
       </div>
 
       {/* ── History ─────────────────────────────────────────────────────────── */}

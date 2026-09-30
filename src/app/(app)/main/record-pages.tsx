@@ -56,6 +56,7 @@ import PeriodPage from './money-stack/period-page/period-page';
 import PeoplePage from './people-stack/people-page/people-page';
 import AccountPage from './people-stack/account-page/account-page';
 import AccountActionPage from './people-stack/account-action-page/account-action-page';
+import MoneyCustomerPage from './people-stack/money-customer-page/money-customer-page';
 import CustomerFormPage from './people-stack/customer-form-page/customer-form-page';
 import CustomerEditPage from './people-stack/customer-edit-page/customer-edit-page';
 import ShopPage from './settings-stack/shop-page/shop-page';
@@ -202,6 +203,8 @@ export const RECORD_PAGES: Record<string, ComponentType> = gateAll({
   export_page: ExportPage,
   // Appended: a route is written into the URL as its POSITION here.
   count_history_page: CountHistoryPage,
+  // Appended: a route is written into the URL as its POSITION here.
+  money_customer_page: MoneyCustomerPage,
 });
 
 /** Handed to each stack's `additionalNavLinks` — one array, so its identity never changes. */

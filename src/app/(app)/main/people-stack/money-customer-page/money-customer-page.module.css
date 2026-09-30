@@ -1,0 +1,119 @@
+.headline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.headlineLabel {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.headlineValue {
+  font-size: var(--text-2xl, 1.75rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The shop owes them: said in the colour the account uses for what you owe them. */
+.weOwe {
+  color: var(--warning, #b45309);
+}
+
+.actions {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-4) 0 var(--space-2);
+}
+
+.section {
+  margin: var(--space-6) 0 var(--space-2);
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+
+.ledger {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.move {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Which way it moved what they owe. Colour is the second signal; the words carry it too. */
+.dot {
+  flex: none;
+  width: 0.6rem;
+  height: 0.6rem;
+  margin-top: 0.45rem;
+  border-radius: 50%;
+}
+
+.lowers {
+  background: var(--primary);
+}
+
+.raises {
+  background: var(--danger, #c0392b);
+}
+
+.back {
+  background: var(--warning, #c47d1a);
+}
+
+.moveBody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.moveWhat {
+  font-weight: 600;
+}
+
+.moveWhy {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.moveAmount {
+  flex: none;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.in {
+  color: var(--success, #1a7f5a);
+}
+
+.out {
+  color: var(--danger, #c0392b);
+}
+
+.open {
+  align-self: flex-start;
+  margin-top: var(--space-1);
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
