@@ -104,6 +104,13 @@ export default function MainShell() {
           navStack={navStack}
           onCurrentChange={setActive}
           persist
+          /*
+           * The phone's Back pops the page of the tab on screen, as a native tab bar does. Tabs share
+           * one browser history, and the entry behind a deep page is often one another tab stamped —
+           * without this, Back on Stock's second page could arrive on Sell ("I pop on one page, I am
+           * on another tab"). At a tab's first page Back still goes where the browser goes.
+           */
+          backStaysInTab
         />
       </div>
 

@@ -110,12 +110,22 @@ try {
   check('and so does the paper', /NOT A RECEIPT/.test(t));
   check('with the item on it', t.includes(FIRST.name));
   check('with the order code', /Order [A-Z0-9]{4,}/.test(t), (t.match(/Order [A-Z0-9]{4,}/) ?? [''])[0]);
-  for (const b of ['Share on WhatsApp', 'Share', 'Save as PDF', 'Print']) {
-    check(`offers ${b}`, (await p.getByRole('button', { name: new RegExp(`^\\s*${b}\\s*$`) }).count()) > 0);
+  /*
+   * Sharing sends the customer a price, so the till's gates stand in front of it: an item not
+   * counted today (every item, just after midnight) shows "Count them" in place of the share set.
+   */
+  if (/Before this goes to the customer/.test(t)) {
+    check('the count/price gate stands in front of sharing', (await p.getByRole('button', { name: /Count them|Price them/ }).count()) > 0);
+  } else {
+    for (const b of ['Send on WhatsApp', 'Share', 'Send as picture', 'Save as PDF', 'Print']) {
+      check(`offers ${b}`, (await p.getByRole('button', { name: new RegExp(b) }).count()) > 0);
+    }
   }
 
   await p.goBack();
   await p.waitForTimeout(4000);
+  await p.screenshot({ path: `${SHOTS}/1b-after-back.png`, fullPage: true });
+  console.log('  after Back:', await p.evaluate(() => document.querySelector('.group-stack-container[data-active="true"]')?.getAttribute('data-stack-id') + ' ' + document.querySelectorAll('.group-stack-container[data-active="true"] .navstack-page').length + ' pages'));
 
   console.log('\n— Take payment: open the line, change it —');
   const pay = p.getByRole('button', { name: /Take payment/ }).first();
