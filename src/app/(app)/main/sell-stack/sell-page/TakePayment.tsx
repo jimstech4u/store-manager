@@ -31,6 +31,7 @@ import {
   type DraftOrder,
 } from '@/lib/stacks/draft-orders';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
+import { ChargesEditor, DepositEditor } from '@/components/sell/OrderExtras';
 
 type Method = 'cash' | 'transfer' | 'pos';
 
@@ -62,7 +63,6 @@ const newKey = () => Math.random().toString(36).slice(2);
  * customer's account. That is how these businesses actually trade.
  */
 /** A charge line's key, generated where one is added. */
-const newChargeKey = () => Math.random().toString(36).slice(2, 10);
 
 export function TakePayment({
   order,
@@ -220,15 +220,8 @@ export function TakePayment({
   const [busy, setBusy] = useState(false);
   const error = useProblem();
 
-  // The charge being composed. Held here rather than as a blank row on the order, so an
-  // abandoned half-typed charge never reaches the shop.
-  const [chargeLabel, setChargeLabel] = useState('');
-  const [chargeAmount, setChargeAmount] = useState('');
-  const [chargeNote, setChargeNote] = useState('');
-  // The deposit being composed, held here for the same reason a charge is: an abandoned half-typed
-  // figure must never reach the shop.
-  const [depositAmount, setDepositAmount] = useState('');
-  const [depositNote, setDepositNote] = useState('');
+  // A charge or deposit being typed is held inside its editor (OrderExtras), not as a blank row on
+  // the order, so an abandoned half-typed figure never reaches the shop.
 
   /*
    * WHAT IS ALREADY HELD FOR THIS CUSTOMER, read from the deposit ledger.
@@ -729,129 +722,27 @@ export function TakePayment({
       {itemActions && <div className={styles.itemActions}>{itemActions}</div>}
 
       {/*
-        ONE BOX THAT COMPOSES A CHARGE, and the charges themselves listed above with the items.
-
-        The old shape gave every charge its own stack of fields, so three charges meant nine inputs
-        on screen and the thing being described — a short list of amounts — was buried in the
-        machinery for describing it. A charge is entered once and then read many times, so entering
-        it gets one box and reading it gets one line.
+        ONE BOX THAT COMPOSES A CHARGE, and the charges themselves listed above with the items. The
+        same form All items uses (`OrderExtras`), so a charge added while the customer reads the
+        list back is the charge settled here.
       */}
-      <section className={styles.charges}>
-        <span className={styles.chargesLabel}>Add a charge</span>
-
-        <div className={styles.chargeForm}>
-          <Field
-            label="What for"
-            value={chargeLabel}
-            onChange={(e) => setChargeLabel(e.target.value)}
-            placeholder="Transport"
-          />
-          <Field
-            label="Amount"
-            numeric
-            prefix="₦"
-            value={chargeAmount}
-            onChange={(e) => setChargeAmount(e.target.value)}
-            placeholder="0"
-          />
-        </div>
-
-        <Field
-          label="Note"
-          optional
-          value={chargeNote}
-          onChange={(e) => setChargeNote(e.target.value)}
-          placeholder="Anything to remember about this charge"
+      <div className={styles.charges}>
+        <ChargesEditor
+          charges={order.charges ?? []}
+          onChange={(charges) => onUpdateOrder({ charges })}
         />
-
-        <Button
-         
-          fullWidth
-          disabled={!chargeLabel.trim() || !(Number(chargeAmount) > 0)}
-          onClick={() => {
-            onUpdateOrder({
-              charges: [
-                ...(order.charges ?? []),
-                {
-                  key: newChargeKey(),
-                  label: chargeLabel.trim(),
-                  amount: chargeAmount,
-                  note: chargeNote.trim(),
-                },
-              ],
-            });
-            // Cleared so the box is ready for the next one, which is what a seller adding two
-            // charges in a row expects.
-            setChargeLabel('');
-            setChargeAmount('');
-            setChargeNote('');
-          }}
-        >
-          <PlusIcon /> Add charge
-        </Button>
-      </section>
+      </div>
 
       {/*
-        THE DEPOSIT, COMPOSED THE SAME WAY AND KEPT PLAINLY APART.
-
-        Beside the charges because it is entered in the same breath, and separated because it is
-        the opposite kind of money: a charge is the shop's, a deposit is the customer's and the
-        shop is only holding it. Netting them into one figure is how a shop ends up unable to say
-        what it actually earned.
-
-        The old deposit and this one add up rather than replace each other — they are rows in one
-        ledger — which is why what is already held is said here rather than assumed to be nothing.
+        THE DEPOSIT, COMPOSED THE SAME WAY AND KEPT PLAINLY APART: a charge is the shop's money, a
+        deposit is the customer's and the shop is only holding it. What is already held is said,
+        because the two add up.
       */}
-      <section className={styles.deposits}>
-        <span className={styles.chargesLabel}>Take a deposit</span>
-        <p className={styles.depositWhy}>
-          Money of theirs you will be holding. Not a payment — it comes back, or you keep it and
-          say why.
-          {alreadyHeld > 0 && (
-            <> You are already holding {formatMoney(alreadyHeld)} for them.</>
-          )}
-        </p>
-
-        <div className={styles.chargeForm}>
-          <Field
-            label="Amount"
-            numeric
-            prefix="₦"
-            value={depositAmount}
-            onChange={(e) => setDepositAmount(e.target.value)}
-            placeholder="0"
-          />
-          <Field
-            label="What for"
-            optional
-            value={depositNote}
-            onChange={(e) => setDepositNote(e.target.value)}
-            placeholder="Crates and bottles"
-          />
-        </div>
-
-        <Button
-          fullWidth
-          disabled={!(Number(depositAmount) > 0)}
-          onClick={() => {
-            onUpdateOrder({
-              deposits: [
-                ...(order.deposits ?? []),
-                {
-                  key: newChargeKey(),
-                  amount: depositAmount,
-                  note: depositNote.trim(),
-                },
-              ],
-            });
-            setDepositAmount('');
-            setDepositNote('');
-          }}
-        >
-          <PlusIcon /> Add deposit
-        </Button>
-
-      </section>
+      <DepositEditor
+        deposits={order.deposits ?? []}
+        onChange={(deposits) => onUpdateOrder({ deposits })}
+        alreadyHeld={alreadyHeld}
+      />
 
 
 

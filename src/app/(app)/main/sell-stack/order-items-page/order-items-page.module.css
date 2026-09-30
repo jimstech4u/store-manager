@@ -52,3 +52,30 @@
   gap: var(--space-3);
   margin: var(--space-4) 0;
 }
+
+/* What else goes on the list: their balance, charges, a deposit, what is still with them. */
+.extras {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--touch-min, 44px);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.check input {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--primary);
+}
+
+.checkNote {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}

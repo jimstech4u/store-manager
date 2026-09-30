@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
@@ -29,6 +29,10 @@ import { swapTo } from '@/lib/finish-flow';
 import { DocumentActions } from '@/components/ui/DocumentActions';
 import { CashIcon } from '@/components/ui/Icon';
 import { getSupabase } from '@/lib/supabase/client';
+import { ChargesEditor, DepositEditor } from '@/components/sell/OrderExtras';
+import { ACCOUNT_DERIVED_SCOPE } from '@/lib/stacks/customer-account';
+import { LEDGERS_SCOPE, depositLedger, type DepositMove } from '@/lib/stacks/customer-ledgers';
+import { owedRowsFromReceipt, rollUpOwed } from '@/lib/empties-rollup';
 import { formatDateTime, formatMoney, formatQtySpoken } from '@/lib/format';
 import styles from './order-items-page.module.css';
 
@@ -55,7 +59,9 @@ export default function OrderItemsPage() {
   const { store } = useAuth();
   const wantedId = (location?.params?.id as string | undefined) ?? null;
 
-  const { orders, activeOrder: current, push, syncing } = useDraftOrders(store?.id ?? null);
+  const { orders, activeOrder: current, push, syncing, updateOrder } = useDraftOrders(
+    store?.id ?? null,
+  );
   // By id first; the active tab only when no id travelled with the push.
   const order = wantedId ? orderById(orders, wantedId) : current;
 
@@ -103,6 +109,78 @@ export default function OrderItemsPage() {
 
   const [busy, setBusy] = useState<'pay' | null>(null);
 
+  /*
+   * WHAT ELSE GOES ON THE LIST — the customer sees the bill as it will be, and changes it now rather
+   * than having the receipt corrected afterwards.
+   *
+   * Balance and "still with you" are what the paper SHOWS (the order is untouched). Charges and a
+   * deposit are what the order CARRIES: the same forms Take payment uses, writing the same rows it
+   * settles, so ticking one off here takes it off the bill. Each is on the screen, the paper, the
+   * PDF and every share, because they all draw `input()` below.
+   */
+  const [showBalance, setShowBalance] = useState(false);
+  const [showEmpties, setShowEmpties] = useState(false);
+  const [chargesOpen, setChargesOpen] = useState(false);
+  const [depositOpen, setDepositOpen] = useState(false);
+  const customerId = order?.customerId ?? null;
+
+  /* What they owe already — the same cached read Take payment makes. */
+  const balance = useResource<number>({
+    key: `balance:${customerId ?? 'none'}`,
+    scope: ACCOUNT_DERIVED_SCOPE,
+    enabled: Boolean(customerId) && showBalance,
+    read: async () => {
+      const { data, error } = await getSupabase().rpc('customer_balance_total', {
+        p_store_customer_id: customerId,
+      });
+      if (error) throw error;
+      return Number(data ?? 0);
+    },
+  });
+
+  /* What the shop already holds of theirs, said beside a new deposit because the two add up. */
+  const heldLedger = useResource<DepositMove[]>({
+    key: `area:deposit-ledger:${customerId ?? 'none'}`,
+    scope: LEDGERS_SCOPE,
+    enabled: Boolean(customerId) && (depositOpen || (order?.deposits ?? []).length > 0),
+    read: () => depositLedger(customerId!),
+  });
+  const alreadyHeld =
+    heldLedger.data && heldLedger.data.length > 0 ? heldLedger.data[0].running : 0;
+
+  /*
+   * STILL WITH YOU, as the receipt will say it: what they hold now plus what this order sends out
+   * (0241 — the server's own rule for both), rolled up by the receipt's own `rollUpOwed`.
+   */
+  const emptyLines = useMemo(
+    () =>
+      (order?.lines ?? [])
+        .filter((l) => l.saleUnitId && Number(l.qty) > 0)
+        .map((l) => ({ product_id: l.productId, sale_unit_id: l.saleUnitId, qty: Number(l.qty) })),
+    [order?.lines],
+  );
+  const empties = useResource<unknown[]>({
+    key: `order-empties:${order?.clientUuid ?? 'none'}:${customerId ?? 'none'}:${JSON.stringify(emptyLines)}`,
+    scope: LEDGERS_SCOPE,
+    enabled: Boolean(store && order) && showEmpties,
+    read: async () => {
+      const { data, error } = await getSupabase().rpc('order_empties_preview', {
+        p_store_id: store?.id,
+        p_customer_id: customerId,
+        p_lines: emptyLines,
+      });
+      if (error) throw error;
+      return (data ?? []) as unknown[];
+    },
+  });
+  const stillWithYou = useMemo(
+    () =>
+      showEmpties && empties.data
+        ? rollUpOwed(owedRowsFromReceipt(empties.data)).filter((l) => l.side === 'they_hold')
+        : [],
+    [showEmpties, empties.data],
+  );
+
   if (!store) return null;
 
   const status: PageStatus = order
@@ -114,6 +192,30 @@ export default function OrderItemsPage() {
           title: 'This order is no longer open',
           body: 'It was settled or closed. Its receipt is under Sales.',
         };
+
+  /*
+   * THEIR ACCOUNT BESIDE THE BILL, when asked for. Nothing is paid on this list, so "owed in all" is what
+   * clears everything if they pay today: what they owed plus what this comes to — or, when the shop
+   * owes THEM, what is left after their credit.
+   */
+  const balanceRows = (): { label: string; value: string; strong?: boolean }[] => {
+    if (!order || !showBalance || !customerId || balance.data == null) return [];
+    const owed = balance.data;
+    const comes = draftTotal(order);
+    if (owed > 0.005) {
+      return [
+        { label: 'Owed before', value: formatMoney(owed) },
+        { label: 'Owed in all', value: formatMoney(owed + comes), strong: true },
+      ];
+    }
+    if (owed < -0.005) {
+      return [
+        { label: 'Your credit', value: formatMoney(-owed) },
+        { label: 'After your credit', value: formatMoney(Math.max(0, comes + owed)), strong: true },
+      ];
+    }
+    return [{ label: 'Owed before', value: 'Nothing' }];
+  };
 
   /** The document, once — the screen, the paper and the PDF all draw these lines. */
   const input = (): ReceiptImageInput | null => {
@@ -151,6 +253,18 @@ export default function OrderItemsPage() {
         ...(fee > 0 ? [{ label: order.feeLabel || 'Extra charge', value: formatMoney(fee) }] : []),
         ...(held > 0.005 ? [{ label: 'Deposit on containers', value: formatMoney(held) }] : []),
         { label: 'Comes to', value: formatMoney(draftTotal(order)), strong: true },
+        ...balanceRows(),
+        ...(showEmpties && empties.data
+          ? stillWithYou.length > 0
+            ? [
+                { label: 'Still with you', value: '', strong: true },
+                ...stillWithYou.map((e) => ({
+                  label: `${e.label} ${e.unit.toLowerCase()}`,
+                  value: e.said,
+                })),
+              ]
+            : [{ label: 'Still with you', value: 'None' }]
+          : []),
       ],
       note: order.note || null,
     };
@@ -191,6 +305,107 @@ export default function OrderItemsPage() {
                   {order.code ?? '…'} · comes to {formatMoney(draftTotal(order))} · nothing paid yet
                 </span>
               </div>
+
+              <section
+                className={styles.extras}
+                data-print-no-print
+                aria-label="What goes on this list"
+              >
+                {customerId && (
+                  <label className={styles.check}>
+                    <input
+                      type="checkbox"
+                      checked={showBalance}
+                      onChange={(e) => setShowBalance(e.target.checked)}
+                    />
+                    <span>
+                      Their balance
+                      {showBalance && balance.data == null && (
+                        <span className={styles.checkNote}>
+                          {balance.error ? ' (could not be read)' : ' (checking)'}
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                )}
+
+                <label className={styles.check}>
+                  <input
+                    type="checkbox"
+                    checked={chargesOpen || (order.charges ?? []).length > 0}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setChargesOpen(true);
+                      } else {
+                        // Off the list is off the bill.
+                        updateOrder(order.clientUuid, { charges: [] });
+                        setChargesOpen(false);
+                      }
+                    }}
+                  />
+                  <span>Charges</span>
+                </label>
+                {(chargesOpen || (order.charges ?? []).length > 0) && (
+                  <ChargesEditor
+                    charges={order.charges ?? []}
+                    onChange={(charges) => updateOrder(order.clientUuid, { charges })}
+                    listed
+                    collapsed={!chargesOpen}
+                    onExpand={() => setChargesOpen(true)}
+                    onCancel={() => setChargesOpen(false)}
+                  />
+                )}
+
+                <label className={styles.check}>
+                  <input
+                    type="checkbox"
+                    checked={depositOpen || (order.deposits ?? []).length > 0}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setDepositOpen(true);
+                      } else {
+                        updateOrder(order.clientUuid, { deposits: [] });
+                        setDepositOpen(false);
+                      }
+                    }}
+                  />
+                  <span>Deposit</span>
+                </label>
+                {(depositOpen || (order.deposits ?? []).length > 0) && (
+                  <>
+                    <DepositEditor
+                      deposits={order.deposits ?? []}
+                      onChange={(deposits) => updateOrder(order.clientUuid, { deposits })}
+                      alreadyHeld={alreadyHeld}
+                      listed
+                      collapsed={!depositOpen}
+                      onExpand={() => setDepositOpen(true)}
+                      onCancel={() => setDepositOpen(false)}
+                    />
+                    {!customerId && (
+                      <p className={styles.checkNote}>
+                        A deposit is held for somebody: add a customer before it is paid.
+                      </p>
+                    )}
+                  </>
+                )}
+
+                <label className={styles.check}>
+                  <input
+                    type="checkbox"
+                    checked={showEmpties}
+                    onChange={(e) => setShowEmpties(e.target.checked)}
+                  />
+                  <span>
+                    Still with you (empties)
+                    {showEmpties && empties.data == null && (
+                      <span className={styles.checkNote}>
+                        {empties.error ? ' (could not be read)' : ' (checking)'}
+                      </span>
+                    )}
+                  </span>
+                </label>
+              </section>
 
               {order.lines.length === 0 ? (
                 <p className={styles.empty}>Nothing is on this order yet.</p>
