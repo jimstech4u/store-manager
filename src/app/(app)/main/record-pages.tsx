@@ -12,6 +12,7 @@ import ReceiptHistoryPage from './sell-stack/receipt-history-page/receipt-histor
 import UpdatesPage from './settings-stack/updates-page/updates-page';
 import ReceivePage from './stock-stack/receive-page/receive-page';
 import StockHistoryPage from './stock-stack/stock-history-page/stock-history-page';
+import CountHistoryPage from './count-stack/count-history-page/count-history-page';
 import UnitsPage from './stock-stack/units-page/units-page';
 import UnitFormPage from './stock-stack/unit-form-page/unit-form-page';
 import ShapePricePage from './stock-stack/shape-price-page/shape-price-page';
@@ -199,6 +200,8 @@ export const RECORD_PAGES: Record<string, ComponentType> = gateAll({
   payment_done_page: PaymentDonePage,
   // Appended: a route is written into the URL as its POSITION here.
   export_page: ExportPage,
+  // Appended: a route is written into the URL as its POSITION here.
+  count_history_page: CountHistoryPage,
 });
 
 /** Handed to each stack's `additionalNavLinks` — one array, so its identity never changes. */

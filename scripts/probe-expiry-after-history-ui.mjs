@@ -97,9 +97,24 @@ try {
   check('no per-lot "Save this date" boxes', (await p.getByRole('button', { name: 'Save this date' }).count()) === 0);
   check('no reason asked', !/Why is this date being corrected/.test(await activeText()));
 
+  // The whole shelf is dated: nothing is left to date, so there is nothing to add.
+  let t = await activeText();
+  check('with the whole shelf dated, there is no box to add a line', (await p.getByRole('button', { name: /Add this date/ }).count()) === 0);
+  check('… and it says every one is dated', /Every one is dated/.test(t));
+  check('the line is said in shapes, not pieces', /1065 packs 7 pieces/.test(t) && !/12,?787 pieces/.test(t));
+
   // Take the line off and put two new ones on: 50 packs to Jan, 100 packs to June.
   await removers.first().click();
   await p.waitForTimeout(500);
+  t = await activeText();
+  check('with it off, the box says how much is left to date', /Up to 1065 packs 7 pieces still to date/.test(t));
+  const qty = p.locator('.group-stack-container[data-active="true"]').getByText('How many', { exact: true }).first().locator('xpath=following::input[1]');
+  await qty.fill('2000');
+  await p.locator('.group-stack-container[data-active="true"] input[type="date"]').last().fill('2027-01-10');
+  await p.waitForTimeout(400);
+  check('more than is left is refused', /Only 1065 packs 7 pieces is left to date/.test(await activeText()));
+  check('… and "Add this date" stays off', await p.getByRole('button', { name: /Add this date/ }).first().isDisabled());
+  await qty.fill('');
   const addLine = async (packs, date) => {
     // Packs is the shape the line starts in (the item's largest).
     await p.locator('.group-stack-container[data-active="true"]').getByText('How many', { exact: true }).first().locator('xpath=following::input[1]').fill(String(packs));

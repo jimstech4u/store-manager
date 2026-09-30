@@ -1,0 +1,90 @@
+.list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0;
+  margin: 0;
+}
+
+/* The whole row opens the item's stock history. */
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--touch-comfortable);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.row:hover {
+  background: var(--surface-sunken);
+}
+
+.rowMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+/* The item, and what its count found, on one line. */
+.rowHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.rowName {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.rowMeta {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.rowMeta strong {
+  color: var(--text);
+}
+
+.found {
+  flex: none;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.same {
+  color: var(--text-muted);
+}
+
+.short {
+  color: var(--danger, #c0392b);
+}
+
+.over {
+  color: var(--success, #1a7f5a);
+}
+
+.chevron {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.sentinel {
+  padding: var(--space-4);
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}

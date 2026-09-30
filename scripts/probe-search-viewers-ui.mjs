@@ -9,7 +9,7 @@
  *
  *     node scripts/probe-search-viewers-ui.mjs [http://localhost:3100]
  */
-import { chromium } from '@playwright/test';
+import { chromium, webkit } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'node:fs';
 import { trackDrafts, sweepDrafts } from './probe-drafts.mjs';
@@ -21,7 +21,7 @@ let failed = 0;
 const check = (what, ok, detail = '') => { console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${what}${detail ? ` — ${detail}` : ''}`); if (!ok) failed += 1; };
 const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
-const browser = await chromium.launch();
+const browser = await (process.env.ENGINE === 'webkit' ? webkit : chromium).launch();
 const p = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 const PROBE_DRAFTS = trackDrafts(p);
 const errors = [];
@@ -48,6 +48,40 @@ const armTapWatch = () =>
   });
 const tapFocus = () => p.evaluate(() => window.__tapFocus);
 
+/*
+ * WHERE THE REAL BOX WAS WHEN IT TOOK FOCUS. Focused while the sheet was still sliding up — low on
+ * the screen, where the keyboard goes — is what makes iOS pan the page (header gone, rows under the
+ * keyboard). So every focus of an input inside the sheet records how far its sheet still had to go.
+ */
+const armSlideWatch = () =>
+  p.evaluate(() => {
+    window.__slideFocus = [];
+    document.addEventListener(
+      'focusin',
+      (e) => {
+        const dialog = e.target.closest?.('[role="dialog"]');
+        if (!dialog || e.target.tagName !== 'INPUT') return;
+        window.__slideFocus.push(getComputedStyle(dialog).transform);
+      },
+      { capture: true },
+    );
+  });
+const settled = async (what) => {
+  const r = await p.evaluate(() => {
+    const d = document.querySelector('[role="dialog"]');
+    const t = getComputedStyle(d).transform;
+    const heading = d?.querySelector('h1, h2, h3, input');
+    return {
+      moving: (window.__slideFocus ?? []).filter((m) => m !== 'none' && !/matrix\(1, 0, 0, 1, 0, 0\)/.test(m) && m !== t),
+      scrollY: window.scrollY,
+      headTop: heading ? Math.round(heading.getBoundingClientRect().top) : -1,
+    };
+  });
+  check(`the ${what} box was never focused mid-slide`, r.moving.length === 0, JSON.stringify(r.moving));
+  check(`… the page is not panned`, r.scrollY === 0, `scrollY ${r.scrollY}`);
+  check(`… and the sheet's header is on screen`, r.headTop >= 0, `top ${r.headTop}`);
+};
+
 try {
   await p.goto(`${BASE}/login`, { waitUntil: 'networkidle' });
   await p.waitForTimeout(1500);
@@ -62,6 +96,7 @@ try {
   const launcher = p.getByRole('button', { name: /Search your stock/i }).first();
   await launcher.waitFor({ state: 'visible', timeout: 60000 });
   await armTapWatch();
+  await armSlideWatch();
   await launcher.click();
   await p.waitForTimeout(300);
   const f1 = await tapFocus();
@@ -69,6 +104,7 @@ try {
   await p.waitForTimeout(1200);
   check('and the real search box has it once the sheet is up',
     await p.evaluate(() => !!document.activeElement?.closest('[role="dialog"]') && document.activeElement.tagName === 'INPUT'));
+  await settled('search');
 
   const box = p.locator('[role="dialog"] input').first();
   await box.fill('zzqqxx');
@@ -101,6 +137,7 @@ try {
   const add = p.getByRole('button', { name: /Add an item/i }).first();
   await add.waitFor({ state: 'visible', timeout: 60000 });
   await armTapWatch();
+  await armSlideWatch();
   await add.click();
   await p.waitForTimeout(300);
   const f2 = await tapFocus();
@@ -108,6 +145,7 @@ try {
   await p.waitForTimeout(1200);
   check('and the real picker box has it once the sheet is up',
     await p.evaluate(() => !!document.activeElement?.closest('[role="dialog"]') && document.activeElement.tagName === 'INPUT'));
+  await settled('picker');
 
   check('no page errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 } finally {

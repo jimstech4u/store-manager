@@ -11,7 +11,7 @@ import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
 import { useNav } from '@academix-admin/navigation-stack';
 import { InfoPanel } from '@/components/ui/Explain';
-import { CheckIcon, ClipboardCheckIcon } from '@/components/ui/Icon';
+import { CheckIcon, ClipboardCheckIcon, HistoryIcon } from '@/components/ui/Icon';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -156,7 +156,13 @@ export default function CountPage() {
         list, and it puts the gesture where a shop has already learnt it.
       */
       actions={[
-        
+        /* EVERY COUNT THE SHOP HAS MADE, and what each found — one tap from where counting happens. */
+        {
+          key: 'history',
+          icon: <HistoryIcon />,
+          onClick: () => void nav.push('count_history_page'),
+          ariaLabel: 'Count history',
+        },
       ]}
     >
       <PageState status={status}>

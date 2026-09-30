@@ -112,6 +112,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
 export const ROUTE_NEEDS: Readonly<Record<string, Permission>> = {
   count_page: 'stock.count',
   count_entry_page: 'stock.count',
+  count_history_page: 'stock.count',
   count_again_page: 'counts.correct',
   variance_reason_page: 'stock.count',
   yard_count_page: 'deposits.manage',

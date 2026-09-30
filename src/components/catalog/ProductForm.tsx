@@ -1600,8 +1600,7 @@ export function ProductForm({
               {batches.length > 0 && (
                 <ul className={styles.batchList}>
                   {batches.map((b) => {
-                    const shape = countedShapes.find((u) => u.storeUnitId === b.storeUnitId);
-                    const many = Number(b.qty) || 0;
+                    const lineBase = (Number(b.qty) || 0) * (baseOf[b.storeUnitId] ?? 1);
                     return (
                       <li key={b.key} className={styles.batchLine}>
                         <button
@@ -1613,8 +1612,14 @@ export function ProductForm({
                           <CloseIcon />
                         </button>
                         <span className={styles.batchWhat}>
-                          {formatQtySpoken(many)}{' '}
-                          {shape ? (many === 1 ? shape.name : shape.plural).toLowerCase() : ''}
+                          {stockInShapes(
+                            countedShapes.map((u) => ({
+                              name: u.name,
+                              plural: u.plural,
+                              baseQty: baseOf[u.storeUnitId] ?? 1,
+                              onHandBase: lineBase,
+                            })),
+                          )}
                         </span>
                         <span className={styles.batchWhen}>
                           {b.expiresOn ? new Date(b.expiresOn).toLocaleDateString() : ''}
@@ -1638,7 +1643,12 @@ export function ProductForm({
                 could not say the third thing at all. Composing above and listing below is also
                 how every other repeated thing in this app works: a charge, a deposit, a payment.
               */}
-              {canAddBatches && (
+              {/*
+                NOTHING LEFT TO DATE, NOTHING TO ADD. "This should not even be allowed — block Add
+                this date, and figure out what remains to the total." The box to add a line is only
+                there while some of the shelf is undated; taking a line off brings it back.
+              */}
+              {canAddBatches && dateRoom - batchBase > 0 && (
               <div className={styles.batchCompose}>
                 {countedShapes.length > 1 && (
                   <label className={styles.batchShape}>
@@ -1673,6 +1683,17 @@ export function ProductForm({
                     batchQty.trim() !== '' &&
                     Number.isFinite(asNumber) &&
                     !isAllowedQty(asNumber, rules);
+                  const leftBase = Math.max(dateRoom - batchBase, 0);
+                  const leftSaid = stockInShapes(
+                    countedShapes.map((u) => ({
+                      name: u.name,
+                      plural: u.plural,
+                      baseQty: baseOf[u.storeUnitId] ?? 1,
+                      onHandBase: leftBase,
+                    })),
+                  );
+                  const tooMany =
+                    Number.isFinite(asNumber) && asNumber * (baseOf[chosenShape.storeUnitId] ?? 1) > leftBase;
                   return (
                     <Field
                       label="How many"
@@ -1686,11 +1707,14 @@ export function ProductForm({
                         if (snapped !== asNumber) setBatchQty(String(snapped));
                       }}
                       placeholder="0"
+                      hint={`Up to ${leftSaid} still to date`}
                       error={
                         offGrid
                           ? `${chosenShape.plural} do not come in ${batchQty} — ` +
                             `${formatQtySpoken(snapQty(asNumber, rules))}?`
-                          : null
+                          : tooMany
+                            ? `Only ${leftSaid} is left to date.`
+                            : null
                       }
                     />
                   );
@@ -1705,7 +1729,13 @@ export function ProductForm({
                 <Button
                   variant="secondary"
                   fullWidth
-                  disabled={!(Number(batchQty) > 0) || batchDate === ''}
+                  disabled={
+                    !(Number(batchQty) > 0) ||
+                    batchDate === '' ||
+                    // Never more than is still undated on the shelf.
+                    Number(batchQty) * (baseOf[batchUnit || countedShapes[0].storeUnitId] ?? 1) >
+                      Math.max(dateRoom - batchBase, 0)
+                  }
                   onClick={() => {
                     const unit = batchUnit || countedShapes[0].storeUnitId;
                     setBatches((prev) => [
