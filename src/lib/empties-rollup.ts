@@ -125,7 +125,9 @@ export function rollUpOwed(input: OwedRow[]): OwedLine[] {
 
   const combined = new Map<string, OwedRow>();
   for (const r of input) {
-    const k = `${r.productId}|${r.productUnitId}|${r.side ?? 'they_hold'}`;
+    // A maker's own row (an opening balance by maker) has no product or shape id, so the maker and
+    // the unit are part of the key — two makers' crates must never be one row.
+    const k = `${r.productId}|${r.productUnitId}|${r.groupId ?? ''}|${r.unitPlural.toLowerCase()}|${r.side ?? 'they_hold'}`;
     const had = combined.get(k);
     combined.set(k, had ? { ...had, owed: had.owed + r.owed } : { ...r });
   }
@@ -145,13 +147,19 @@ export function rollUpOwed(input: OwedRow[]): OwedLine[] {
      * "the thing everyone at this counter means", which is what may be added up.
      */
     const side = r.side ?? 'they_hold';
-    const key = `${side}|${r.groupId ?? `product:${r.productId}`}|${r.baseQty}|${r.unitPlural.toLowerCase()}`;
+    /*
+     * ONLY A CONTAINER THAT HOLDS MANY IS THE MAKER'S (0242). A crate from NBL is anybody's NBL
+     * crate; a loose bottle is one beer's bottle. Adding bottles across a maker printed
+     * "International Breweries bottles 2" — a thing nobody can hand back.
+     */
+    const byMaker = Boolean(r.groupId) && r.baseQty > 1;
+    const key = `${side}|${byMaker ? r.groupId : `product:${r.productId || r.productName}`}|${r.baseQty}|${r.unitPlural.toLowerCase()}`;
 
     if (whole > 0) {
       const b = buckets.get(key) ?? {
         unit: r.unitPlural,
         unitOne: r.unitName,
-        group: r.groupName,
+        group: byMaker ? r.groupName : null,
         whole: 0,
         products: new Set<string>(),
         side,

@@ -419,6 +419,8 @@ export async function recordGroupEmpties(args: {
   storeUnitId: string;
   qty: number;
   reason?: string;
+  /** Whose they are: ours with them (the default), or theirs with us (0242). */
+  side?: 'they_hold' | 'we_hold';
 }) {
   const { error } = await getSupabase().rpc('record_customer_empties_for_group', {
     p_store_id: args.storeId,
@@ -428,6 +430,7 @@ export async function recordGroupEmpties(args: {
     p_direction: 'out',
     p_qty: args.qty,
     p_reason: args.reason?.trim() || null,
+    p_side: args.side ?? 'they_hold',
   });
   if (error) throw error;
   ledgersChanged();

@@ -93,29 +93,42 @@ export default function YardCountPage() {
    * than asked, because the shop is not choosing between crates and bottles when it says "120 NBL".
    */
   const makers = useMemo<Maker[]>(() => {
-    const byGroup = new Map<string, { name: string; units: Map<string, Set<string>> }>();
+    const byGroup = new Map<
+      string,
+      { name: string; units: Map<string, Set<string>>; size: Map<string, number> }
+    >();
     for (const c of area.data ?? []) {
       if (!c.groupId) continue;
-      const g = byGroup.get(c.groupId) ?? { name: c.groupName ?? '', units: new Map() };
+      const g = byGroup.get(c.groupId) ?? { name: c.groupName ?? '', units: new Map(), size: new Map() };
       const products = g.units.get(c.storeUnitId) ?? new Set<string>();
       products.add(c.productId);
       g.units.set(c.storeUnitId, products);
+      g.size.set(c.storeUnitId, Math.max(g.size.get(c.storeUnitId) ?? 0, c.baseQty));
       byGroup.set(c.groupId, g);
     }
     return [...byGroup.entries()]
       .map(([groupId, g]) => {
-        const [storeUnitId] = [...g.units.entries()].sort((a, b) => b[1].size - a[1].size)[0];
+        /*
+         * THE CRATE, NOT THE BOTTLE (0242). Every beer comes back in both, so "the one most items
+         * use" tied — and the tie fell to whichever was listed first, which was the bottle. A maker
+         * is counted in the container that holds most; a loose bottle is counted item by item.
+         */
+        const [storeUnitId] = [...g.units.entries()].sort(
+          (a, b) => (g.size.get(b[0]) ?? 0) - (g.size.get(a[0]) ?? 0) || b[1].size - a[1].size,
+        )[0];
         const items = new Set([...g.units.values()].flatMap((set) => [...set])).size;
         return { groupId, groupName: g.name, storeUnitId, items };
       })
       .sort((a, b) => a.groupName.localeCompare(b.groupName));
   }, [area.data]);
 
-  /* ITEMS WITH NO MAKER — the only ones "Item by item" offers. */
+  /* ITEM BY ITEM: items with no maker, and the loose bottles of a maker counted in crates. */
   const looseItems = useMemo<LooseItem[]>(() => {
     const byProduct = new Map<string, LooseItem>();
+    // A maker's beers are counted by maker in its crate; their loose bottles are counted here.
+    const makerUnit = new Map(makers.map((m) => [m.groupId, m.storeUnitId]));
     for (const c of area.data ?? []) {
-      if (c.groupId) continue;
+      if (c.groupId && makerUnit.get(c.groupId) === c.storeUnitId) continue;
       const it = byProduct.get(c.productId) ?? {
         productId: c.productId,
         productName: c.productName,
@@ -125,7 +138,7 @@ export default function YardCountPage() {
       byProduct.set(c.productId, it);
     }
     return [...byProduct.values()].sort((a, b) => a.productName.localeCompare(b.productName));
-  }, [area.data]);
+  }, [area.data, makers]);
 
   if (!store) return null;
 

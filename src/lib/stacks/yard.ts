@@ -37,6 +37,8 @@ export interface CountableShape {
   unitPlural: string;
   groupId: string | null;
   groupName: string | null;
+  /** How many one of these holds — a maker is counted in the one that holds most (0242). */
+  baseQty: number;
 }
 
 /**
@@ -167,6 +169,7 @@ export async function countableEmpties(storeId: string): Promise<CountableShape[
     unitPlural: String(r.unit_plural ?? ''),
     groupId: (r.group_id as string | null) ?? null,
     groupName: (r.group_name as string | null) ?? null,
+    baseQty: Number(r.base_qty) || 1,
   }));
 }
 

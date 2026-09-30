@@ -306,29 +306,28 @@ export default function OrderItemsPage() {
                 </span>
               </div>
 
+              {order.lines.length === 0 ? (
+                <p className={styles.empty}>Nothing is on this order yet.</p>
+              ) : (
+                <div
+                  className={styles.paper}
+                  data-print-root
+                  style={{ ['--receipt-width' as string]: `${width}mm` }}
+                >
+                  <PrintPreview lines={lines} layout={printer.layout} />
+                </div>
+              )}
+
+              {/*
+                UNDER THE PAPER, ABOVE TAKE PAYMENT: read the list, then decide what else goes on it,
+                then take the money. Charges and a deposit are written to the ORDER (saved to the
+                shop with it), so Take payment on any phone shows the same bill.
+              */}
               <section
                 className={styles.extras}
                 data-print-no-print
                 aria-label="What goes on this list"
               >
-                {customerId && (
-                  <label className={styles.check}>
-                    <input
-                      type="checkbox"
-                      checked={showBalance}
-                      onChange={(e) => setShowBalance(e.target.checked)}
-                    />
-                    <span>
-                      Their balance
-                      {showBalance && balance.data == null && (
-                        <span className={styles.checkNote}>
-                          {balance.error ? ' (could not be read)' : ' (checking)'}
-                        </span>
-                      )}
-                    </span>
-                  </label>
-                )}
-
                 <label className={styles.check}>
                   <input
                     type="checkbox"
@@ -343,7 +342,7 @@ export default function OrderItemsPage() {
                       }
                     }}
                   />
-                  <span>Charges</span>
+                  <span>Charges (added to this sale)</span>
                 </label>
                 {(chargesOpen || (order.charges ?? []).length > 0) && (
                   <ChargesEditor
@@ -369,7 +368,7 @@ export default function OrderItemsPage() {
                       }
                     }}
                   />
-                  <span>Deposit</span>
+                  <span>Deposit (taken with this sale)</span>
                 </label>
                 {(depositOpen || (order.deposits ?? []).length > 0) && (
                   <>
@@ -390,6 +389,24 @@ export default function OrderItemsPage() {
                   </>
                 )}
 
+                {customerId && (
+                  <label className={styles.check}>
+                    <input
+                      type="checkbox"
+                      checked={showBalance}
+                      onChange={(e) => setShowBalance(e.target.checked)}
+                    />
+                    <span>
+                      Their balance
+                      {showBalance && balance.data == null && (
+                        <span className={styles.checkNote}>
+                          {balance.error ? ' (could not be read)' : ' (checking)'}
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                )}
+
                 <label className={styles.check}>
                   <input
                     type="checkbox"
@@ -406,18 +423,6 @@ export default function OrderItemsPage() {
                   </span>
                 </label>
               </section>
-
-              {order.lines.length === 0 ? (
-                <p className={styles.empty}>Nothing is on this order yet.</p>
-              ) : (
-                <div
-                  className={styles.paper}
-                  data-print-root
-                  style={{ ['--receipt-width' as string]: `${width}mm` }}
-                >
-                  <PrintPreview lines={lines} layout={printer.layout} />
-                </div>
-              )}
 
               {order.lines.length > 0 && (
                 <div className={styles.actions} data-print-no-print>

@@ -102,6 +102,22 @@ try {
   check('All items opens on the paper', /NOT A RECEIPT/.test(t) && /Goldberg/.test(t), t.slice(0, 80));
   check('none of the four boxes is ticked to start', !/Owed before|Still with you/.test(t));
 
+  // Under the paper, above Take payment, in the order: charges, deposit, their balance, still with you.
+  const layout = await top().evaluate((page) => {
+    const y = (el) => (el ? el.getBoundingClientRect().top + window.scrollY : -1);
+    const paperEl = page.querySelector('[data-print-root]');
+    const pay = [...page.querySelectorAll('button')].find((b) => /Take payment/.test(b.textContent ?? ''));
+    const boxes = [...page.querySelectorAll('label')]
+      .filter((l) => l.querySelector('input[type="checkbox"]'))
+      .map((l) => ({ text: (l.textContent ?? '').trim(), y: y(l) }));
+    return { paperBottom: paperEl ? y(paperEl) + paperEl.getBoundingClientRect().height : -1, pay: y(pay), boxes };
+  });
+  const order = layout.boxes.map((b) => b.text.split(' ')[0]).join(',');
+  check('the boxes sit under the paper and above Take payment',
+    layout.boxes.length === 4 && layout.boxes.every((b) => b.y >= layout.paperBottom && b.y < layout.pay),
+    JSON.stringify({ paperBottom: Math.round(layout.paperBottom), pay: Math.round(layout.pay), ys: layout.boxes.map((b) => Math.round(b.y)) }));
+  check('in the order: charges, deposit, their balance, still with you', order === 'Charges,Deposit,Their,Still', order);
+
   // ── Their balance ───────────────────────────────────────────────────────────────
   await box(/Their balance/).check();
   await p.waitForTimeout(3500);
@@ -117,7 +133,7 @@ try {
     (t.match(/Still with you.{0,120}/) ?? [''])[0]);
 
   // ── Charges: two lines, Cancel keeps them ───────────────────────────────────────
-  await box(/^Charges$/).check();
+  await box(/^Charges/).check();
   await p.waitForTimeout(800);
   const addCharge = async (what, amount) => {
     await top().getByLabel('What for').first().fill(what);
@@ -135,7 +151,7 @@ try {
     (await top().getByRole('button', { name: /Add another charge/ }).count()) === 1 && /Transport/.test(await paper()));
 
   // ── Deposit ─────────────────────────────────────────────────────────────────────
-  await box(/^Deposit$/).check();
+  await box(/^Deposit/).check();
   await p.waitForTimeout(800);
   const dep = top().locator('section').filter({ hasText: 'Take a deposit' }).first();
   await dep.getByLabel('Amount').fill('1000');
@@ -143,6 +159,16 @@ try {
   await p.waitForTimeout(800);
   t = await paper();
   check('a deposit goes on the paper', /Deposit on containers\s*N1,000/.test(t));
+  await p.waitForTimeout(4000);
+  {
+    const { data: drafts } = await admin.from('draft_orders').select('id').in('client_uuid', [...PROBE_DRAFTS]);
+    const ids = (drafts ?? []).map((d) => d.id);
+    const { data: deps } = await admin.from('draft_order_deposits').select('amount').in('draft_order_id', ids);
+    const { data: chs } = await admin.from('draft_order_charges').select('label, amount').in('draft_order_id', ids);
+    check('the shop has the deposit and both charges on the order (any phone sees them)',
+      (deps ?? []).some((d) => Number(d.amount) === 1000) && (chs ?? []).length === 2,
+      JSON.stringify({ deps, chs }));
+  }
   await p.screenshot({ path: `${SHOTS}/all-items-extras.png`, fullPage: true });
 
   // ── The same bill in Take payment ──────────────────────────────────────────────
@@ -150,7 +176,7 @@ try {
   check('the banner total includes them', /comes to N[\d,]+/.test(onBill.replace(/₦/g, 'N')));
 
   // ── Unticking takes a charge off the bill ───────────────────────────────────────
-  await box(/^Charges$/).uncheck();
+  await box(/^Charges/).uncheck();
   await p.waitForTimeout(1200);
   t = await paper();
   check('unticking charges takes them off', !/Transport|Loading/.test(t));

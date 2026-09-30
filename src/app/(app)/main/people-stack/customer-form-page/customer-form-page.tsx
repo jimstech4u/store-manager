@@ -414,7 +414,13 @@ export default function CustomerFormPage() {
             categoryId: line.categoryId,
             storeUnitId: line.storeUnitId,
             qty: Number(line.qty),
-            reason: 'What they already had when the account opened',
+            // The side the seller chose. It was dropped here, so "we hold one of hers" was
+            // recorded as "she holds one of ours" (Arewa, 30 Sep).
+            reason:
+              line.side === 'we_hold'
+                ? 'Theirs, already here when the account opened'
+                : 'What they already had when the account opened',
+            side: line.side,
           });
         }
       }
