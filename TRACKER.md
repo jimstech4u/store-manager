@@ -171,6 +171,7 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 | 0227 | the review queue skips its own reversals | ☑ |
 | 0228 | lists filter on the server | ☑ |
 | 0229 | reports to export (counts, balances in a range, payments, empties holders; in-stock filter) | ☑ |
+| 0230 | the 13 other cans take Malta Guinness's shape: Can of 24 Pieces (shapes only; stock untouched, reads in pieces until recounted) | ☑ |
 
 ---
 
