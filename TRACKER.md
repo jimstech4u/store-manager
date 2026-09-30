@@ -176,6 +176,10 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 | 0230 | the 13 other cans take Malta Guinness's shape: Can of 24 Pieces (shapes only; stock untouched, reads in pieces until recounted) | ☑ |
 | 0231 | `set_opening_stock`: before stock history the shelf figure is the opening — set again with no reason, the ledger appended (never edited), lots rebuilt from the latest dates, counts moved with it (a matched count stays matched) | ☑ |
 | 0232 | an item's history shows its counts, including ones that matched | ☑ |
+| — | 29 Sep's 33 counts removed at the shop's request (several were wrong; none had moved stock — every figure unchanged) | ☑ |
+| 0233 | items sold together merged, history rewritten into one: Bigi 350mL (Cola+Apple+Tropical), Pepsi\|7up PET 60cl, Coke\|Fanta\|Sprite Big PET 60cl and Small PET 50cl; three Coke bottles renamed; Bigi 500mL created empty. Totals = sum of members, balances recomputed, absorbed items deleted | ☑ |
+| 0234 | Kadijat's Goldberg sale (28 Sep) made a plain sale again — its "Teg" correction only attached her | ☑ |
+| 0235 | product search finds every word typed, in any order ("bigi apple" finds the merged Bigi) | ☑ |
 
 ---
 
