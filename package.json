@@ -19,7 +19,7 @@
     "@academix-admin/search-viewer": "^0.3.1",
     "@academix-admin/selection-viewer": "^0.5.3",
     "@academix-admin/sidebar": "^0.1.1",
-    "@academix-admin/state-stack": "^0.6.2",
+    "@academix-admin/state-stack": "^0.6.3",
     "@supabase/supabase-js": "^2.112.3",
     "@zxing/browser": "^0.2.1",
     "@zxing/library": "^0.23.0",
