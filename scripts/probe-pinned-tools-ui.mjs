@@ -102,6 +102,22 @@ try {
   await p.waitForURL(/\/main/, { timeout: 60000 });
   await p.waitForTimeout(8000);
 
+  // People first, while the tab bar is showing (it hides once a list has been scrolled).
+  await page(
+    'People',
+    async () => {
+      await tab('More');
+      await p.getByRole('button', { name: /Everyone you sell to/ }).locator('visible=true').first().click();
+    },
+    'Search customers',
+    'People',
+  );
+  await p.goBack({ waitUntil: 'commit' }).catch(() => {});
+  await p.waitForTimeout(1500);
+  await p.evaluate(() => {
+    for (const b of document.querySelectorAll('.navstack-column-body')) b.scrollTop = 0;
+  });
+  await p.waitForTimeout(1200);
   await page('Stock', () => tab('Stock'), 'Search your stock', 'Stock');
   await page(
     'Sales',
