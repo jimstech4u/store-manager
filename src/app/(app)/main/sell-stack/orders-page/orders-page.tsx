@@ -6,6 +6,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
+import { PinnedTools } from '@/components/ui/PinnedTools';
 import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
 import { ChevronRightIcon } from '@/components/ui/Icon';
@@ -100,15 +101,19 @@ export default function OrdersPage() {
 
   return (
     <PageScaffold
+      headerScrolls
       title="Orders"
       subtitle="Asked for from the marketplace"
       onBack={() => void nav.pop()}
     >
-      <SearchLauncher
-        label="Search marketplace orders"
-        placeholder="Search a code, a shopper or a product"
-        onOpen={searchOps.open}
-      />
+      {/* Search, filters and export stay in reach as the list scrolls — see PinnedTools. */}
+      <PinnedTools>
+        <SearchLauncher
+          label="Search marketplace orders"
+          placeholder="Search a code, a shopper or a product"
+          onOpen={searchOps.open}
+        />
+      </PinnedTools>
 
       {/* What the shop said, which is the first thing anybody is filtering by. */}
       <div className={styles.tabs} role="group" aria-label="Show">

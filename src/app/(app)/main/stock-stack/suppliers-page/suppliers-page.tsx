@@ -5,6 +5,7 @@ import { useSearchController } from '@academix-admin/search-viewer';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
+import { PinnedTools } from '@/components/ui/PinnedTools';
 import { SearchSheet } from '@/components/ui/SearchSheet';
 import { PlusIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -132,6 +133,7 @@ export default function SuppliersPage() {
 
   return (
     <PageScaffold
+      headerScrolls
       onBack={goBack}
       title="Suppliers"
       subtitle="Who you buy from, and where you stand"
@@ -153,11 +155,14 @@ export default function SuppliersPage() {
           : undefined
       }
     >
-      <SearchLauncher
-        label="Search suppliers"
-        placeholder="Search by name or phone"
-        onOpen={searchOps.open}
-      />
+      {/* Search, filters and export stay in reach as the list scrolls — see PinnedTools. */}
+      <PinnedTools>
+        <SearchLauncher
+          label="Search suppliers"
+          placeholder="Search by name or phone"
+          onOpen={searchOps.open}
+        />
+      </PinnedTools>
 
       {/*
         SEARCHED ON THE DEVICE. `suppliers_with_accounts` returns the whole list — a shop buys from

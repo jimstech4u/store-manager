@@ -8,6 +8,7 @@ import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
+import { PinnedTools } from '@/components/ui/PinnedTools';
 import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
 import { InfoPanel } from '@/components/ui/Explain';
@@ -120,15 +121,43 @@ export default function SalesPage() {
           : { state: 'ready' };
 
   return (
-    <PageScaffold onBack={goBack} title="Sales" subtitle="Every receipt you have issued">
+    <PageScaffold headerScrolls onBack={goBack} title="Sales" subtitle="Every receipt you have issued">
       <PageState status={status}>
         {() => (
           <>
-      <SearchLauncher
-        label="Search sales"
-        placeholder="Search by customer or note"
-        onOpen={searchOps.open}
-      />
+      {/* Search, filters and export stay in reach as the list scrolls — see PinnedTools. */}
+      <PinnedTools>
+        <SearchLauncher
+          label="Search sales"
+          placeholder="Search by customer or note"
+          onOpen={searchOps.open}
+        />
+        <ListFilters<SalesFilter>
+          options={[
+            { value: 'all', label: 'All' },
+            { value: 'today', label: 'Today' },
+            { value: 'unpaid', label: 'Unpaid' },
+            { value: 'paid', label: 'Paid' },
+          ]}
+          value={filter}
+          onChange={setFilter}
+          onExport={async () => {
+            const rows = await fetchAllPages(fetchPage);
+            const csv = toCsv(rows, [
+              { head: 'Date', value: (s) => new Date(s.occurred_at).toLocaleString() },
+              { head: 'Receipt', value: (s) => `#${s.id.slice(0, 8).toUpperCase()}` },
+              { head: 'Customer', value: (s) => s.customer_name ?? 'Walk-in' },
+              { head: 'Items', value: (s) => s.line_count },
+              { head: 'Total', value: (s) => Number(s.total) || 0 },
+              { head: 'Paid', value: (s) => Number(s.paid) || 0 },
+              { head: 'Outstanding', value: (s) => Number(s.outstanding) || 0 },
+              { head: 'Note', value: (s) => s.note ?? '' },
+            ]);
+            const how = await shareCsv(csvName('sales', filter), csv);
+            return how === 'downloaded' ? `${rows.length} sales saved to your downloads.` : how === 'shared' ? `${rows.length} sales shared.` : null;
+          }}
+        />
+      </PinnedTools>
 
       <SearchSheet<SaleRow>
         id={searchId}
@@ -181,32 +210,6 @@ export default function SalesPage() {
             </span>
           </button>
         )}
-      />
-
-      <ListFilters<SalesFilter>
-        options={[
-          { value: 'all', label: 'All' },
-          { value: 'today', label: 'Today' },
-          { value: 'unpaid', label: 'Unpaid' },
-          { value: 'paid', label: 'Paid' },
-        ]}
-        value={filter}
-        onChange={setFilter}
-        onExport={async () => {
-          const rows = await fetchAllPages(fetchPage);
-          const csv = toCsv(rows, [
-            { head: 'Date', value: (s) => new Date(s.occurred_at).toLocaleString() },
-            { head: 'Receipt', value: (s) => `#${s.id.slice(0, 8).toUpperCase()}` },
-            { head: 'Customer', value: (s) => s.customer_name ?? 'Walk-in' },
-            { head: 'Items', value: (s) => s.line_count },
-            { head: 'Total', value: (s) => Number(s.total) || 0 },
-            { head: 'Paid', value: (s) => Number(s.paid) || 0 },
-            { head: 'Outstanding', value: (s) => Number(s.outstanding) || 0 },
-            { head: 'Note', value: (s) => s.note ?? '' },
-          ]);
-          const how = await shareCsv(csvName('sales', filter), csv);
-          return how === 'downloaded' ? `${rows.length} sales saved to your downloads.` : how === 'shared' ? `${rows.length} sales shared.` : null;
-        }}
       />
 
       {list.items.length === 0 ? (

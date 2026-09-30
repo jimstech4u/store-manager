@@ -5,6 +5,7 @@ import styles from './money-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
+import { PinnedTools } from '@/components/ui/PinnedTools';
 import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
 import { InfoPanel } from '@/components/ui/Explain';
@@ -231,6 +232,7 @@ export default function MoneyPage() {
 
   return (
     <PageScaffold
+      headerScrolls
       onBack={goBack}
       title="Money"
       subtitle="Who owes you, and what has been paid"
@@ -380,11 +382,14 @@ export default function MoneyPage() {
         </>
       )}
 
-      <SearchLauncher
-        label="Search customers"
-        placeholder="Search by name or phone"
-        onOpen={searchOps.open}
-      />
+      {/* Search, filters and export stay in reach as the list scrolls — see PinnedTools. */}
+      <PinnedTools>
+        <SearchLauncher
+          label="Search customers"
+          placeholder="Search by name or phone"
+          onOpen={searchOps.open}
+        />
+      </PinnedTools>
 
       <SearchSheet<CustomerRow>
         id={searchId}

@@ -12,6 +12,7 @@ import { useStackBack } from '@/hooks/useStackBack';
 import { useListChannel } from '@/hooks/useListChannel';
 import { useNav } from '@academix-admin/navigation-stack';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
+import { PinnedTools } from '@/components/ui/PinnedTools';
 import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
 import { InfoPanel } from '@/components/ui/Explain';
@@ -155,6 +156,7 @@ export default function PeoplePage() {
 
   return (
     <PageScaffold
+      headerScrolls
       onBack={goBack}
       title="People"
       subtitle="Your customers"
@@ -182,11 +184,35 @@ export default function PeoplePage() {
       <PageState status={status}>
         {() => (
           <>
-      <SearchLauncher
-        label="Search customers"
-        placeholder="Search by name or phone"
-        onOpen={searchOps.open}
-      />
+      {/* Search, filters and export stay in reach as the list scrolls — see PinnedTools. */}
+      <PinnedTools>
+        <SearchLauncher
+          label="Search customers"
+          placeholder="Search by name or phone"
+          onOpen={searchOps.open}
+        />
+        <ListFilters<PeopleFilter>
+          options={[
+            { value: 'all', label: 'Everyone' },
+            { value: 'owes', label: 'Owes you' },
+            { value: 'credit', label: 'You owe them' },
+            { value: 'empties', label: 'Has your empties' },
+          ]}
+          value={filter}
+          onChange={setFilter}
+          onExport={async () => {
+            const rows = await fetchAllPages(fetchPage);
+            const csv = toCsv(rows, [
+              { head: 'Name', value: (c) => c.display_name },
+              { head: 'Business', value: (c) => c.business_name ?? '' },
+              { head: 'Phone', value: (c) => c.phone },
+              { head: 'Balance (owes you is positive)', value: (c) => Number(c.balance) || 0 },
+            ]);
+            const how = await shareCsv(csvName('people', filter), csv);
+            return how === 'downloaded' ? `${rows.length} people saved to your downloads.` : how === 'shared' ? `${rows.length} people shared.` : null;
+          }}
+        />
+      </PinnedTools>
 
       <SearchSheet<CustomerRow>
         id={searchId}
@@ -244,28 +270,6 @@ export default function PeoplePage() {
             <ChevronRightIcon />
           </button>
         )}
-      />
-
-      <ListFilters<PeopleFilter>
-        options={[
-          { value: 'all', label: 'Everyone' },
-          { value: 'owes', label: 'Owes you' },
-          { value: 'credit', label: 'You owe them' },
-          { value: 'empties', label: 'Has your empties' },
-        ]}
-        value={filter}
-        onChange={setFilter}
-        onExport={async () => {
-          const rows = await fetchAllPages(fetchPage);
-          const csv = toCsv(rows, [
-            { head: 'Name', value: (c) => c.display_name },
-            { head: 'Business', value: (c) => c.business_name ?? '' },
-            { head: 'Phone', value: (c) => c.phone },
-            { head: 'Balance (owes you is positive)', value: (c) => Number(c.balance) || 0 },
-          ]);
-          const how = await shareCsv(csvName('people', filter), csv);
-          return how === 'downloaded' ? `${rows.length} people saved to your downloads.` : how === 'shared' ? `${rows.length} people shared.` : null;
-        }}
       />
 
       {list.items.length === 0 ? (

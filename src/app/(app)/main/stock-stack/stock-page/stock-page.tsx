@@ -6,6 +6,7 @@ import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { InfoPanel } from '@/components/ui/Explain';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
+import { PinnedTools } from '@/components/ui/PinnedTools';
 import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
 import { FloatingAction } from '@/components/ui/FloatingAction';
@@ -160,6 +161,7 @@ export default function StockPage() {
 
   return (
     <PageScaffold
+      headerScrolls
       onBack={goBack}
       title="Stock"
       subtitle={store.name}
@@ -273,11 +275,38 @@ export default function StockPage() {
         </InfoPanel>
       )}
 
-      <SearchLauncher
-        label="Search your stock"
-        placeholder="Search products or a category"
-        onOpen={searchOps.open}
-      />
+      {/* Search, filters and export stay in reach as the list scrolls — see PinnedTools. */}
+      <PinnedTools>
+        <SearchLauncher
+          label="Search your stock"
+          placeholder="Search products or a category"
+          onOpen={searchOps.open}
+        />
+        <ListFilters<StockFilter>
+          options={[
+            { value: 'all', label: 'Everything' },
+            { value: 'low', label: 'Running low' },
+            { value: 'out', label: 'None left' },
+            { value: 'no_price', label: 'No price' },
+          ]}
+          value={filter}
+          onChange={setFilter}
+          onExport={async () => {
+            const rows = await fetchAllPages(productsPager(store.id, filter));
+            const csv = toCsv(rows, [
+              { head: 'Item', value: (p) => p.name },
+              { head: 'Group', value: (p) => p.categoryName ?? '' },
+              { head: 'On hand', value: (p) => say(p.id, Number(p.onHand), p.baseUnit) },
+              { head: `On hand (${'base units'})`, value: (p) => Number(p.onHand) },
+              { head: 'Cost per base unit', value: (p) => Number(p.avgUnitCost) || 0 },
+              { head: 'Worth', value: (p) => Math.round(Number(p.onHand) * (Number(p.avgUnitCost) || 0) * 100) / 100 },
+              { head: 'Warns at (base units)', value: (p) => p.lowStockLevel ?? '' },
+            ]);
+            const how = await shareCsv(csvName('stock', filter), csv);
+            return how === 'downloaded' ? `${rows.length} items saved to your downloads.` : how === 'shared' ? `${rows.length} items shared.` : null;
+          }}
+        />
+      </PinnedTools>
 
       <SearchSheet<Product>
         id={searchId}
@@ -339,31 +368,6 @@ export default function StockPage() {
             </div>
           </button>
         )}
-      />
-
-      <ListFilters<StockFilter>
-        options={[
-          { value: 'all', label: 'Everything' },
-          { value: 'low', label: 'Running low' },
-          { value: 'out', label: 'None left' },
-          { value: 'no_price', label: 'No price' },
-        ]}
-        value={filter}
-        onChange={setFilter}
-        onExport={async () => {
-          const rows = await fetchAllPages(productsPager(store.id, filter));
-          const csv = toCsv(rows, [
-            { head: 'Item', value: (p) => p.name },
-            { head: 'Group', value: (p) => p.categoryName ?? '' },
-            { head: 'On hand', value: (p) => say(p.id, Number(p.onHand), p.baseUnit) },
-            { head: `On hand (${'base units'})`, value: (p) => Number(p.onHand) },
-            { head: 'Cost per base unit', value: (p) => Number(p.avgUnitCost) || 0 },
-            { head: 'Worth', value: (p) => Math.round(Number(p.onHand) * (Number(p.avgUnitCost) || 0) * 100) / 100 },
-            { head: 'Warns at (base units)', value: (p) => p.lowStockLevel ?? '' },
-          ]);
-          const how = await shareCsv(csvName('stock', filter), csv);
-          return how === 'downloaded' ? `${rows.length} items saved to your downloads.` : how === 'shared' ? `${rows.length} items shared.` : null;
-        }}
       />
 
       {products.length === 0 ? (

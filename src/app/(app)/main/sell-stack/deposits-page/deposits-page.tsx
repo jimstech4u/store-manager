@@ -5,6 +5,7 @@ import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { InfoPanel } from '@/components/ui/Explain';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
+import { PinnedTools } from '@/components/ui/PinnedTools';
 import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -71,7 +72,7 @@ export default function DepositsPage() {
       : { state: 'loading', what: 'the deposits you are holding' };
 
   return (
-    <PageScaffold onBack={goBack} title="Deposits" subtitle="Money you are holding">
+    <PageScaffold headerScrolls onBack={goBack} title="Deposits" subtitle="Money you are holding">
       <PageState status={status}>
         {() => (
           <>
@@ -88,7 +89,10 @@ export default function DepositsPage() {
         is recorded as such — giving it back is not.
       </InfoPanel>
 
-      <SearchLauncher label="Search who you are holding money for" placeholder="Search a name or a number" onOpen={searchOps.open} />
+      {/* Search, filters and export stay in reach as the list scrolls — see PinnedTools. */}
+      <PinnedTools>
+        <SearchLauncher label="Search who you are holding money for" placeholder="Search a name or a number" onOpen={searchOps.open} />
+      </PinnedTools>
 
       <SearchSheet<DepositCustomer>
         id={searchId}

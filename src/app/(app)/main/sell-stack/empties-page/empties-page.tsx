@@ -6,6 +6,7 @@ import { Qty } from '@/components/ui/Qty';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { InfoPanel } from '@/components/ui/Explain';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
+import { PinnedTools } from '@/components/ui/PinnedTools';
 import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -70,7 +71,7 @@ export default function EmptiesPage() {
       : { state: 'loading', what: 'who is holding your containers' };
 
   return (
-    <PageScaffold onBack={goBack} title="Empties" subtitle="Who is holding your containers">
+    <PageScaffold headerScrolls onBack={goBack} title="Empties" subtitle="Who is holding your containers">
       <PageState status={status}>
         {() => (
           <>
@@ -87,7 +88,10 @@ export default function EmptiesPage() {
         record what came back, or to write off what will not.
       </InfoPanel>
 
-      <SearchLauncher label="Search who is holding your containers" placeholder="Search a name or a number" onOpen={searchOps.open} />
+      {/* Search, filters and export stay in reach as the list scrolls — see PinnedTools. */}
+      <PinnedTools>
+        <SearchLauncher label="Search who is holding your containers" placeholder="Search a name or a number" onOpen={searchOps.open} />
+      </PinnedTools>
 
       {/*
         The whole list browses; searching happens in the viewer's own sheet, which owns the empty

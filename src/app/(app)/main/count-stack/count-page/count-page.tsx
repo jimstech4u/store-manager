@@ -6,6 +6,7 @@ import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { FloatingAction } from '@/components/ui/FloatingAction';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
+import { PinnedTools } from '@/components/ui/PinnedTools';
 import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
 import { useNav } from '@academix-admin/navigation-stack';
@@ -134,6 +135,7 @@ export default function CountPage() {
 
   return (
     <PageScaffold
+      headerScrolls
       /*
         A SECONDARY PAGE NOW, so it carries a back arrow like every other.
 
@@ -166,11 +168,14 @@ export default function CountPage() {
       </InfoPanel>
 
 
-      <SearchLauncher
-        label="Find a product to count"
-        placeholder="Search products or a category"
-        onOpen={searchOps.open}
-      />
+      {/* Search, filters and export stay in reach as the list scrolls — see PinnedTools. */}
+      <PinnedTools>
+        <SearchLauncher
+          label="Find a product to count"
+          placeholder="Search products or a category"
+          onOpen={searchOps.open}
+        />
+      </PinnedTools>
 
 
       <SearchSheet<Product>
