@@ -254,6 +254,11 @@ export default function TakePaymentPage() {
           depositReason,
           paidTotal,
           towardsOldDebt,
+          toOldDebt,
+          changeGiven,
+          changeOwed,
+          changeMethod,
+          changeBankAccountId,
           previousBalance,
           stockOut,
           containersOut,
@@ -341,27 +346,25 @@ export default function TakePaymentPage() {
            * hands cash back for it, and the customer's next purchase draws it down. Change is
            * what came out of the drawer, so it is capped at what went into the drawer.
            */
-          const cashIn = payments
-            .filter((pay) => pay.method === 'cash')
-            .reduce((sum, pay) => sum + Number(pay.amount || 0), 0);
-          const change = Math.min(Math.max(paidTotal - total - towardsOldDebt, 0), cashIn);
-
-          if (change > 0.005 && activeOrder.customerId) {
-            const { error: backErr } = await getSupabase().rpc('record_money_back', {
-              p_store_id: store.id,
-              p_customer_id: activeOrder.customerId,
-              p_amount: change,
-              p_method: 'cash',
-              p_reason: 'Change given at the counter',
-              p_client_uuid: crypto.randomUUID(),
-              p_bank_account_id: null,
+          /*
+           * THE CHANGE, SETTLED BY THE SHOP (0246).
+           *
+           * This recorded cash-only "money back" worked out on the phone. The server now works out
+           * the overpayment from the money given at the sale, takes it off their old receipts when
+           * the box was unticked, and records the change given (by the way it went back) or owed on
+           * the receipt. Not fatal: the sale is recorded; a failure leaves the extra as their credit,
+           * which the account can give back.
+           */
+          if (paidTotal - total > 0.005) {
+            const { error: changeErr } = await getSupabase().rpc('settle_sale_change', {
+              p_sale_id: saleId,
+              p_to_old_debt: toOldDebt ?? true,
+              p_change_given: changeGiven ?? 0,
+              p_change_method: changeMethod ?? 'cash',
+              p_bank_account_id: changeBankAccountId ?? null,
+              p_change_owed: changeOwed ?? 0,
             });
-            /*
-             * Not fatal. The sale is recorded and the customer has their goods and their change;
-             * a failure here leaves a credit on the account, which the shop can give back from
-             * the account screen. Losing the sale over it would be the worse trade.
-             */
-            if (backErr) console.warn('change was not recorded as money back', backErr.message);
+            if (changeErr) console.warn('the change was not settled', changeErr.message);
           }
 
           /*

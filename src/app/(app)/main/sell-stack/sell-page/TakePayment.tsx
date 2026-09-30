@@ -105,6 +105,17 @@ export function TakePayment({
     /** Of any overpayment, how much the seller said was for an older debt. */
     towardsOldDebt: number;
     /**
+     * WHAT HAPPENS TO THE CHANGE (0246). `toOldDebt` is the box: ticked, an overpayment clears their
+     * old balance first; unticked, all of it is change. The change is given now (`changeGiven`, by
+     * `changeMethod`) or owed on the receipt (`changeOwed`, a named customer only). A correction
+     * leaves these out.
+     */
+    toOldDebt?: boolean;
+    changeGiven?: number;
+    changeOwed?: number;
+    changeMethod?: Method;
+    changeBankAccountId?: string | null;
+    /**
      * What the customer owed BEFORE this, as this screen read it — null when it never arrived.
      *
      * Passed on rather than re-read: it is the figure the seller was looking at while deciding
@@ -382,8 +393,21 @@ export function TakePayment({
    */
   const over = Math.max(paid - total, 0);
   const owedBefore = outstanding ?? 0;
-  const towardsOldDebt = Math.min(over, owedBefore);
+  /*
+   * THE BOX: "before we mark as paid, a checkbox if there is an overpayment — whether it clears the
+   * old balance; unticked, it is change." Ticked by default, because money handed over by somebody
+   * who owes is most often meant for the debt.
+   */
+  const [clearOld, setClearOld] = useState(true);
+  const towardsOldDebt = clearOld ? Math.min(over, owedBefore) : 0;
   const change = Math.max(over - towardsOldDebt, 0);
+  /*
+   * THE CHANGE: given now, by whatever it went back in, or owed on the receipt so they bring it back
+   * for it. Owing needs a name — there has to be somebody to give it to.
+   */
+  const [changeHow, setChangeHow] = useState<'now' | 'owe'>('now');
+  const [changeMethod, setChangeMethod] = useState<Method>('cash');
+  const owingChange = changeHow === 'owe' && Boolean(order.customerId);
 
 
   /*
@@ -556,6 +580,12 @@ export function TakePayment({
          * recomputing it would be reading a figure the seller never saw.
          */
         towardsOldDebt: outstanding !== null ? towardsOldDebt : 0,
+        toOldDebt: clearOld,
+        changeGiven: change > 0.005 && !owingChange ? change : 0,
+        changeOwed: change > 0.005 && owingChange ? change : 0,
+        changeMethod,
+        changeBankAccountId:
+          changeMethod === 'transfer' ? (accounts.find((a) => a.is_default)?.id ?? null) : null,
         previousBalance: outstanding,
       });
     } catch (e: unknown) {
@@ -964,10 +994,74 @@ export function TakePayment({
 
         {change > 0 && (
           <div className={styles.row}>
-            <span>Change to give</span>
+            <span>{owingChange ? 'Change you owe them' : 'Change to give'}</span>
             <span className={`${styles.value} ${styles.big} ${styles.change}`}>
               {formatMoney(change)}
             </span>
+          </div>
+        )}
+
+        {/* THE OLD BALANCE, OR CHANGE — only when they are paying over and owe from before. */}
+        {over > 0.005 && owedBefore > 0.005 && (
+          <label className={styles.changeCheck}>
+            <input
+              type="checkbox"
+              checked={clearOld}
+              onChange={(e) => setClearOld(e.target.checked)}
+            />
+            <span>
+              Use the extra to clear their old balance ({formatMoney(Math.min(over, owedBefore))})
+            </span>
+          </label>
+        )}
+
+        {change > 0.005 && (
+          <div className={styles.changeBox} role="group" aria-label="The change">
+            <div className={styles.methods}>
+              <button
+                type="button"
+                className={`${styles.method} ${changeHow === 'now' ? styles.methodActive : ''}`}
+                aria-pressed={changeHow === 'now'}
+                onClick={() => setChangeHow('now')}
+              >
+                Give it now
+              </button>
+              <button
+                type="button"
+                className={`${styles.method} ${changeHow === 'owe' ? styles.methodActive : ''}`}
+                aria-pressed={changeHow === 'owe'}
+                disabled={!order.customerId}
+                onClick={() => setChangeHow('owe')}
+              >
+                Owe it to them
+              </button>
+            </div>
+            {!order.customerId && (
+              <p className={styles.changeNote}>Add the customer to owe them change.</p>
+            )}
+            {owingChange ? (
+              <p className={styles.changeNote}>
+                It goes on the receipt as change owed to them. Give it before printing if you find
+                it, or when they bring the receipt back.
+              </p>
+            ) : (
+              <>
+                <span className={styles.changeNote}>Given back by</span>
+                <div className={styles.methods} role="group" aria-label="Change given by">
+                  {(['cash', 'transfer', 'pos'] as Method[]).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      className={`${styles.method} ${changeMethod === m ? styles.methodActive : ''}`}
+                      aria-pressed={changeMethod === m}
+                      onClick={() => setChangeMethod(m)}
+                    >
+                      {m === 'cash' ? 'Cash' : m === 'transfer' ? 'Transfer' : 'POS'}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         )}
 

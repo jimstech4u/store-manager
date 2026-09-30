@@ -51,6 +51,8 @@ interface SharedReceipt {
   deposit_total: string;
   /** Put down as a deposit at this sale (0244): held for them, not part of the total. */
   deposit_taken?: string | number | null;
+  /** The change (0246): owed at this sale, and what has been given back. */
+  change?: { owed: number | string; given: { amount: number | string; method: string | null }[] } | null;
   /** What is still out, grouped the way a shop counts it — by category, not by brand. */
   /** Everything still with the customer as at this sale — earlier receipts and this one (0149). */
   empties: unknown;
@@ -323,6 +325,25 @@ export default function SharedReceiptPage({
               <span className={styles.value}>{formatMoney(p.amount)}</span>
             </div>
           ))}
+
+          {/* THE CHANGE (0246): given back, and what is still owed to them — this paper is the claim. */}
+          {(receipt.change?.given ?? []).map((g, i) => (
+            <div className={styles.row} key={`change-${i}`}>
+              <span>Change given ({g.method ?? 'cash'})</span>
+              <span className={styles.value}>{formatMoney(Number(g.amount) || 0)}</span>
+            </div>
+          ))}
+          {(() => {
+            const left =
+              (Number(receipt.change?.owed ?? 0) || 0) -
+              (receipt.change?.given ?? []).reduce((sum, g) => sum + (Number(g.amount) || 0), 0);
+            return left > 0.005 ? (
+              <div className={`${styles.row} ${styles.owing}`}>
+                <span>Change owed to you</span>
+                <span className={styles.value}>{formatMoney(left)}</span>
+              </div>
+            ) : null;
+          })()}
 
           {owing > 0 && sale.status !== 'voided' && (
             <div className={`${styles.row} ${owedAfter === null ? styles.owing : ''}`}>

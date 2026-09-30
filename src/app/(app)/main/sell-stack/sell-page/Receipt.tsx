@@ -34,6 +34,7 @@ import { asInstruction, receiptLines } from '@/lib/escpos-text';
 import { PrintPreview } from '@/components/settings/PrintPreview';
 import { appUrl } from '@/lib/app-url';
 import { EmptiesBroughtBack } from '@/components/empties/EmptiesBroughtBack';
+import { ChangeOwed } from '@/components/sell/ChangeOwed';
 
 interface SaleDetail {
   sale: {
@@ -72,6 +73,8 @@ interface SaleDetail {
    * sale's total: it is paid alongside it, so it is said beside it.
    */
   deposit_taken?: string | number | null;
+  /** The change (0246): what was owed at this sale, and each time some was given back, and how. */
+  change?: { owed: number | string; given: { amount: number | string; method: string | null }[] } | null;
   /** What the customer still holds of the shop's, per pool, after this sale. */
   /** What this receipt sent out, one row per product shape (0140). Rolled up for printing. */
   empties: unknown;
@@ -292,6 +295,11 @@ export function Receipt({
   const itemsTotal = lines.reduce((sum, l) => sum + Number(l.line_total), 0);
   const deposit = Number(detail.deposit_total ?? 0) || 0;
   const depositTaken = Number(detail.deposit_taken ?? 0) || 0;
+  const changeGiven = (detail.change?.given ?? []).map((g) => ({ amount: Number(g.amount) || 0, method: g.method ?? 'cash' }));
+  const changeOwed = Math.max(
+    (Number(detail.change?.owed ?? 0) || 0) - changeGiven.reduce((sum, g) => sum + g.amount, 0),
+    0,
+  );
   /*
    * ONE LINE PER WAY OF PAYING. "Paid (cash) N30,000, Paid (cash) N1,150" read as two lots of cash
    * and made the cash look like more than it was; the drawer counts cash once. References are kept
@@ -430,6 +438,11 @@ export function Receipt({
         ? [{ label: 'Paid in all', value: formatMoney(paid) }]
         : []),
       ...(owing > 0 ? [{ label: 'Left on this sale', value: formatMoney(owing) }] : []),
+      // THE CHANGE (0246): what went back, and how; and what is still owed to them on this paper.
+      ...changeGiven.map((g) => ({ label: `Change given (${g.method})`, value: formatMoney(g.amount) })),
+      ...(changeOwed > 0.005
+        ? [{ label: 'Change owed to you', value: formatMoney(changeOwed), strong: true }]
+        : []),
       ...(owedBefore !== null && owedBefore > 0.005
         ? [{ label: 'Owed before', value: formatMoney(owedBefore) }]
         : []),
@@ -515,6 +528,19 @@ export function Receipt({
         sale's moment and against the sale, so the receipt — which reads its containers as at the
         sale — re-reads and prints the true figure, or none at all.
       */}
+      {/* CHANGE OWED, given where it is read — before the paper goes out, or when they come back. */}
+      {sale.status !== 'voided' && changeOwed > 0.005 && (
+        <div data-print-no-print>
+          <ChangeOwed
+            storeId={storeId}
+            saleId={sale.id}
+            owed={changeOwed}
+            atSale={emptiesAtCounter}
+            onGiven={() => void res.reload()}
+          />
+        </div>
+      )}
+
       {customer && sale.status !== 'voided' && (
         <div data-print-no-print>
           <EmptiesBroughtBack
