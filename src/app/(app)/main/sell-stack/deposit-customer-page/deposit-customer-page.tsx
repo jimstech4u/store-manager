@@ -86,8 +86,12 @@ export default function DepositCustomerPage() {
        */
       subtitle="Money you are holding against their containers"
       // UP TO THE RECORD THIS BELONGS TO: the customer, with their statement and empties.
+      /*
+        UP TO THEIR ACCOUNT — only when this was not opened from it. From the account, Back is the way
+        there; a second way made a loop (account, deposit, account, deposit...).
+      */
       actions={
-        customerId
+        customerId && location?.params?.from !== 'account'
           ? [
               {
                 key: 'account',

@@ -20,6 +20,8 @@ import {
 import { formatMoney, formatQtySpoken, messageOf } from '@/lib/format';
 import { rollUpOwed, type OwedRow } from '@/lib/empties-rollup';
 import { useLoadArea } from '@/components/ui/LoadArea';
+import { useResource } from '@/lib/stacks/resource';
+import { ACCOUNT_DERIVED_SCOPE } from '@/lib/stacks/customer-account';
 import { emptiesOwed, LEDGERS_SCOPE } from '@/lib/stacks/customer-ledgers';
 import { getSupabase } from '@/lib/supabase/client';
 import { useListNotifier } from '@/hooks/useListChannel';
@@ -69,6 +71,29 @@ export default function AccountPage() {
   const weHold = useMemo(() => rolled.filter((l) => l.side === 'we_hold'), [rolled]);
 
   const nav = useNav();
+
+  /*
+   * EVERY RECEIPT, AND WHAT IS OPEN ON EACH — what the Statement page showed, here.
+   *
+   * "Drop the statement entirely and make the account page very detailed." The statement was this
+   * page again with one thing more: the receipts, each with its total, what it has been paid and what
+   * is still open on it. That one thing is here now, read from the same `customer_statement`, under a
+   * key of its own (one key, one hook, one shape).
+   */
+  const receipts = useResource<
+    { sale_id: string; occurred_at: string; total: string; paid: string; outstanding: string; line_count: number }[]
+  >({
+    key: `account-receipts:${customerId ?? 'none'}`,
+    scope: ACCOUNT_DERIVED_SCOPE,
+    enabled: Boolean(customerId),
+    read: async () => {
+      const { data, error } = await getSupabase().rpc('customer_statement', { p_store_customer_id: customerId });
+      if (error) throw error;
+      return (data ?? []) as {
+        sale_id: string; occurred_at: string; total: string; paid: string; outstanding: string; line_count: number;
+      }[];
+    },
+  });
 
   /*
    * Taking somebody off the list.
@@ -324,7 +349,7 @@ export default function AccountPage() {
               <button
                 type="button"
                 className={`${styles.tile} ${styles.tileOwe}`}
-                onClick={() => void nav.push('deposit_customer_page', { id: customerId })}
+                onClick={() => void nav.push('deposit_customer_page', { id: customerId, from: 'account' })}
               >
                 <span className={styles.tileIcon}><CashIcon /></span>
                 <span className={styles.tileLabel}>Their deposit</span>
@@ -336,7 +361,7 @@ export default function AccountPage() {
               <button
                 type="button"
                 className={`${styles.tile} ${styles.tileOwe}`}
-                onClick={() => void nav.push('empties_customer_page', { id: customerId })}
+                onClick={() => void nav.push('empties_customer_page', { id: customerId, from: 'account' })}
               >
                 <span className={styles.tileIcon}><ReturnIcon /></span>
                 <span className={styles.tileLabel}>Their empties</span>
@@ -379,7 +404,7 @@ export default function AccountPage() {
         <button
           type="button"
           className={`${styles.tile} ${styles.tilePrimary}`}
-          onClick={() => void nav.push('money_customer_page', { id: customerId })}
+          onClick={() => void nav.push('money_customer_page', { id: customerId, from: 'account' })}
         >
           <span className={styles.tileIcon}><CashIcon /></span>
           <span className={styles.tileLabel}>Money</span>
@@ -392,7 +417,7 @@ export default function AccountPage() {
         <button
           type="button"
           className={styles.tile}
-          onClick={() => void nav.push('empties_customer_page', { id: customerId })}
+          onClick={() => void nav.push('empties_customer_page', { id: customerId, from: 'account' })}
         >
           <span className={styles.tileIcon}><ReturnIcon /></span>
           <span className={styles.tileLabel}>Empties</span>
@@ -401,13 +426,42 @@ export default function AccountPage() {
         <button
           type="button"
           className={styles.tile}
-          onClick={() => void nav.push('deposit_customer_page', { id: customerId })}
+          onClick={() => void nav.push('deposit_customer_page', { id: customerId, from: 'account' })}
         >
           <span className={styles.tileIcon}><CashIcon /></span>
           <span className={styles.tileLabel}>Deposit</span>
           <span className={styles.tileNote}>Money held against containers</span>
         </button>
       </div>
+
+      {/* ── Receipts ─────────────────────────────────────────────────────────── */}
+      {(receipts.data ?? []).length > 0 && (
+        <>
+          <h2 className={styles.section}>Receipts</h2>
+          <ul className={styles.receipts}>
+            {(receipts.data ?? []).map((r) => (
+              <li key={r.sale_id}>
+                <button
+                  type="button"
+                  className={styles.receipt}
+                  onClick={() => void nav.push('receipt_page', { id: r.sale_id })}
+                >
+                  <span className={styles.receiptMain}>
+                    <span className={styles.receiptWhen}>{new Date(r.occurred_at).toLocaleDateString()}</span>
+                    <span className={styles.receiptMeta}>
+                      {r.line_count} {r.line_count === 1 ? 'item' : 'items'} · {formatMoney(Number(r.total))} ·{' '}
+                      {formatMoney(Number(r.paid))} paid
+                    </span>
+                  </span>
+                  <span className={Number(r.outstanding) > 0.005 ? styles.receiptOpen : styles.receiptPaid}>
+                    {Number(r.outstanding) > 0.005 ? `${formatMoney(Number(r.outstanding))} open` : 'Paid'}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
 
       {/* ── History ─────────────────────────────────────────────────────────── */}
 
@@ -481,7 +535,7 @@ export default function AccountPage() {
                 <button
                   type="button"
                   className={styles.eventOpen}
-                  onClick={() => void nav.push(ledgerPageFor(h.kind)!, { id: customerId })}
+                  onClick={() => void nav.push(ledgerPageFor(h.kind)!, { id: customerId, from: 'account' })}
                 >
                   {ledgerPageFor(h.kind) === 'deposit_customer_page' ? 'See the deposit' : 'See the empties'}
                 </button>

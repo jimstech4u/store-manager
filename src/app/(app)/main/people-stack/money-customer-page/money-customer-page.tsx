@@ -6,7 +6,6 @@ import { usePermission } from '@/hooks/usePermission';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { Button } from '@/components/ui/Button';
 import { InfoPanel } from '@/components/ui/Explain';
-import { PeopleIcon } from '@/components/ui/Icon';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
@@ -55,18 +54,6 @@ export default function MoneyCustomerPage() {
       onBack={goBack}
       title="Money"
       subtitle="What they owe you, what you owe them, and every move of it"
-      actions={
-        customerId
-          ? [
-              {
-                key: 'account',
-                icon: <PeopleIcon />,
-                onClick: () => void nav.push('account_page', { id: customerId }),
-                ariaLabel: 'Their account',
-              },
-            ]
-          : undefined
-      }
     >
       <PageState status={status}>
         {() => (
@@ -102,14 +89,6 @@ export default function MoneyCustomerPage() {
               </div>
             )}
 
-            {/* The statement — every receipt and what is still open on each — has its home here. */}
-            <Button
-              fullWidth
-              variant="ghost"
-              onClick={() => void nav.push('statement_page', { id: customerId })}
-            >
-              Every receipt, and what is open
-            </Button>
 
             <h2 className={styles.section}>Every move of it</h2>
             {moves.length === 0 ? (

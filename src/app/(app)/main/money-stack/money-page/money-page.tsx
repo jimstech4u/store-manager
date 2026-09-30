@@ -425,7 +425,7 @@ export default function MoneyPage() {
               // Navigate FIRST, then close. The overlay's history entry is removed on close,
               // and doing that before the push has landed queues a step back that discards the
               // page just pushed — tapping a result dismissed the search and went nowhere.
-              await nav.push('statement_page', { id: c.id });
+              await nav.push('account_page', { id: c.id });
               searchOps.close();
             }}
           >
@@ -459,7 +459,7 @@ export default function MoneyPage() {
                     type="button"
                     className={`${styles.row} ${styles.rowLink}`}
                     onClick={() =>
-                      void nav.push('statement_page', { id: c.id })
+                      void nav.push('account_page', { id: c.id })
                     }
                   >
                     <span className={styles.rowMain}>

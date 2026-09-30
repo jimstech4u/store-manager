@@ -165,8 +165,12 @@ export default function EmptiesCustomerPage() {
       title="Empties"
       subtitle="What they are holding, and every move of it"
       // UP TO THE RECORD THIS BELONGS TO: the customer, with their statement and deposit.
+      /*
+        UP TO THEIR ACCOUNT — only when this was not opened from it. From the account, Back is the way
+        there; a second way made a loop (account, deposit, account, deposit...).
+      */
       actions={
-        customerId
+        customerId && location?.params?.from !== 'account'
           ? [
               {
                 key: 'account',

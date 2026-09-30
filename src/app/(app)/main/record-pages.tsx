@@ -48,7 +48,6 @@ import DepositsPage from './sell-stack/deposits-page/deposits-page';
 import DepositCustomerPage from './sell-stack/deposit-customer-page/deposit-customer-page';
 import DepositMovePage from './sell-stack/deposit-move-page/deposit-move-page';
 import SalesPage from './money-stack/sales-page/sales-page';
-import StatementPage from './money-stack/statement-page/statement-page';
 import ReportsPage from './money-stack/reports-page/reports-page';
 import ExpensesPage from './money-stack/expenses-page/expenses-page';
 import ExpensePage from './money-stack/expense-page/expense-page';
@@ -150,7 +149,9 @@ export const RECORD_PAGES: Record<string, ComponentType> = gateAll({
   deposit_move_page: DepositMovePage,
   // Money
   sales_page: SalesPage,
-  statement_page: StatementPage,
+  // The statement is the account now (every receipt is on it). The key stays — a route is its
+  // POSITION here — and an old link to it opens the account.
+  statement_page: AccountPage,
   reports_page: ReportsPage,
   expenses_page: ExpensesPage,
   expense_page: ExpensePage,

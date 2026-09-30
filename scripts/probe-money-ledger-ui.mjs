@@ -65,6 +65,16 @@ try {
   await p.waitForTimeout(6000);
 
   let t = await text();
+  // Every receipt and what is open on it — what the Statement page showed (Q55).
+  check('the account lists her receipts, with what is open on each', /Receipts/.test(t) && /(open|Paid)/.test((t.split('Receipts')[1] ?? '').slice(0, 200)),
+    (t.split('Receipts')[1] ?? '').slice(0, 120));
+  // From the account, the Deposit page has no shortcut back up to it.
+  await top().getByRole('button', { name: /^Deposit/ }).first().evaluate((el) => el.click());
+  await p.waitForTimeout(4000);
+  check('Deposit opened from the account has no shortcut back to it', (await top().getByRole('button', { name: 'Their account' }).count()) === 0);
+  await p.goBack();
+  await p.waitForTimeout(3000);
+  t = await text();
   const cards = (t.match(/On this account(.*?)Everything that has happened/) ?? ['', ''])[1];
   check('the account has Money, Empties and Deposit', /Money/.test(cards) && /Empties/.test(cards) && /Deposit/.test(cards), cards.slice(0, 160));
   check('and none of the old money cards',
@@ -74,9 +84,12 @@ try {
   await p.waitForTimeout(4000);
   t = await text();
   check('Money opens its own page', /Money/.test(t) && /(They owe you|You owe them|Nothing owed either way)/.test(t), t.slice(0, 120));
-  for (const b of ['Record a payment', 'Record a charge', 'Return money to them', 'Record what you owe them', 'Every receipt, and what is open']) {
+  for (const b of ['Record a payment', 'Record a charge', 'Return money to them', 'Record what you owe them']) {
     check(`it offers ${b}`, (await top().getByRole('button', { name: new RegExp(b.replace(/[()]/g, '.')) }).count()) > 0);
   }
+  // The statement is the account now (Q55): no link to it, and no shortcut back up — Back is the way.
+  check('no statement link and no shortcut to the account', !/Every receipt, and what is open/.test(t) &&
+    (await top().getByRole('button', { name: 'Their account' }).count()) === 0);
   check('with the money history under it', /Every move of it/.test(t) && /Sale|Payment|Receipt/i.test(t.split('Every move of it')[1] ?? ''),
     (t.split('Every move of it')[1] ?? '').slice(0, 120));
   await p.screenshot({ path: `${SHOTS}/money-ledger.png`, fullPage: true });
