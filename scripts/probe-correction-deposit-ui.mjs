@@ -80,9 +80,14 @@ try {
   await p.getByRole('button', { name: /Correct payment/ }).last().click();
   await p.waitForTimeout(6000);
   t = await text();
-  check('the payment step lists the deposit, paid', /Deposit put down with this sale\s*₦6,000\s*paid/i.test(t), (t.match(/Deposit put down.{0,80}/) ?? [''])[0]);
-  check('with a cancel for it', (await top().getByRole('button', { name: /Cancel the ₦6,000 deposit/ }).count()) === 1);
-  check('the charges and payments are loaded too', /Already paid on this receipt/.test(t));
+  // In Take payment's OWN lines — the till's "Deposit held" line and its payment rows — each with its cross.
+  check('the deposit is Take payment’s own deposit line, paid', /Deposit held\s*Put down with this sale — paid\s*₦6,000/.test(t),
+    (t.match(/Deposit held.{0,60}/) ?? [''])[0]);
+  check('with its cross', (await top().getByRole('button', { name: /Cancel the deposit put down with this sale/ }).count()) === 1);
+  check('the payments are Take payment’s own rows, each with its cross',
+    /Already paid on this receipt\s*Transfer\s*₦32,150/.test(t) && (await top().getByRole('button', { name: /Take back the ₦32,150 transfer/ }).count()) === 1,
+    (t.match(/Already paid on this receipt.{0,60}/) ?? [''])[0]);
+  check('no separate deposit section any more', !/Deposit put down with this sale/.test(t));
   check('and nothing more is asked for', !/Pay all|The rest \(/.test(t) || /Pay all \(₦0\)/.test(t), (t.match(/Pay all.{0,20}|The rest.{0,20}/) ?? ['none'])[0]);
   await p.screenshot({ path: `${SHOTS}/correction-deposit.png`, fullPage: true });
   check('nothing was written', written.length === 0, written.join(','));

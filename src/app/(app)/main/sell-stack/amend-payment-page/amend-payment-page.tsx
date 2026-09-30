@@ -5,7 +5,7 @@ import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { FloatingAmount } from '@/components/ui/FloatingAmount';
-import { PlusIcon, TrashIcon } from '@/components/ui/Icon';
+import { PlusIcon } from '@/components/ui/Icon';
 import { InfoPanel } from '@/components/ui/Explain';
 import { Field } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
@@ -200,32 +200,11 @@ export default function AmendPaymentPage() {
                 a form for adding more — so the only correction it could express was "and another
                 payment", whatever the seller actually meant.
               */}
-              {depositPutDown > 0.005 && (
-                <>
-                  <h2 className={styles.section}>Deposit put down with this sale</h2>
-                  <ul className={styles.paid}>
-                    <li className={styles.paidRow}>
-                      <span className={styles.paidWhat}>
-                        <strong>{formatMoney(depositPutDown)}</strong>
-                        <span className={styles.paidHow}>
-                          {depositUnpaid > 0.005
-                            ? `${formatMoney(depositUnpaid)} of it not paid yet, asked for below`
-                            : 'paid'}
-                        </span>
-                      </span>
-                      <button
-                        type="button"
-                        className={styles.paidRemove}
-                        aria-label={`Cancel the ${formatMoney(depositPutDown)} deposit`}
-                        onClick={() => {
-                          setCancellingDeposit(true);
-                          setDepositWhy('');
-                        }}
-                      >
-                        <TrashIcon />
-                      </button>
-                    </li>
-                  </ul>
+              {/*
+                THE REASON, WHEN A LINE BELOW IS TAKEN OFF. The deposit and the payments this receipt
+                already holds are drawn by Take payment with its own lines — the ones the till uses —
+                and their crosses land here, because taking one back is on the record and says why.
+              */}
                   {cancellingDeposit && (
                     <div className={styles.voidBox}>
                       <Field
@@ -257,45 +236,6 @@ export default function AmendPaymentPage() {
                       </div>
                     </div>
                   )}
-                </>
-              )}
-
-              {(draft.was?.payments?.length ?? 0) > 0 && (
-                <>
-                  <h2 className={styles.section}>Already paid on this receipt</h2>
-                  <ul className={styles.paid}>
-                    {(draft.was?.payments ?? []).map((pay, i) => (
-                      <li key={pay.paymentId ?? `p-${i}`} className={styles.paidRow}>
-                        <span className={styles.paidWhat}>
-                          <strong>{formatMoney(pay.amount)}</strong>
-                          <span className={styles.paidHow}>
-                            {pay.method}
-                            {pay.reference ? ` · ${pay.reference}` : ''}
-                          </span>
-                        </span>
-                        {pay.paymentId ? (
-                          <button
-                            type="button"
-                            className={styles.paidRemove}
-                            aria-label={`Take back the ${formatMoney(pay.amount)} ${pay.method}`}
-                            onClick={() => {
-                              setVoiding(pay.paymentId);
-                              setWhy('');
-                            }}
-                          >
-                            <TrashIcon />
-                          </button>
-                        ) : (
-                          /*
-                           * An older stored version carries no id, so this one cannot be acted on
-                           * from here. Said plainly rather than shown as a button that fails.
-                           */
-                          <span className={styles.paidOld}>recorded before this was possible</span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-
                   {voiding && (
                     <div className={styles.voidBox}>
                       <Field
@@ -330,8 +270,6 @@ export default function AmendPaymentPage() {
                       </div>
                     </div>
                   )}
-                </>
-              )}
 
               <h2 className={styles.section}>What they are paying now</h2>
 
@@ -347,6 +285,31 @@ export default function AmendPaymentPage() {
                  * reported exactly that way, and the next screen then committed a correction with
                  * no money on it.
                  */
+                already={{
+                  deposit:
+                    depositPutDown > 0.005
+                      ? {
+                          amount: depositPutDown,
+                          unpaid: depositUnpaid,
+                          onRemove: () => {
+                            setCancellingDeposit(true);
+                            setDepositWhy('');
+                          },
+                        }
+                      : null,
+                  payments: (draft.was?.payments ?? []).map((pay, i) => ({
+                    key: pay.paymentId ?? `paid-${i}`,
+                    amount: pay.amount,
+                    method: pay.method,
+                    reference: pay.reference,
+                    onRemove: pay.paymentId
+                      ? () => {
+                          setVoiding(pay.paymentId);
+                          setWhy('');
+                        }
+                      : undefined,
+                  })),
+                }}
                 entered={draft.taking}
                 onEnteredChange={(next) => patch({ taking: next })}
                 onUpdateOrder={(next) => patchOrder(next)}

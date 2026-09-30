@@ -77,6 +77,7 @@ export function TakePayment({
   gatePrices = true,
   onOpenLine,
   itemActions,
+  already,
 }: {
   order: DraftOrder;
   /** Needed to look up the shop's bank accounts; a draft does not carry its store. */
@@ -168,6 +169,22 @@ export function TakePayment({
   onOpenLine?: (lineKey: string) => void;
   /** Buttons under "What they are buying" — All items, Add an item, Scan. The page decides. */
   itemActions?: ReactNode;
+  /**
+   * WHAT THE RECEIPT ALREADY HOLDS — a correction's deposit and payments, drawn with the same lines
+   * this screen draws its own with ("reuse the same payment line and deposit line and charges line
+   * Take payment already uses, not a new one again"). Each cross calls back: taking a payment back
+   * or cancelling a deposit needs a reason, which the correction asks for. The till leaves it out.
+   */
+  already?: {
+    deposit?: { amount: number; unpaid: number; onRemove: () => void } | null;
+    payments?: {
+      key: string;
+      amount: number;
+      method: string;
+      reference: string | null;
+      onRemove?: () => void;
+    }[];
+  };
   /**
    * Edits the draft this screen is settling.
    *
@@ -691,6 +708,28 @@ export function TakePayment({
           comes back or is kept whatever happens to the crates. It is composed below, beside the
           charges, and lives in its own ledger.
         */}
+        {already?.deposit && already.deposit.amount > 0.005 && (
+          <div className={styles.charge}>
+            <button
+              type="button"
+              className={styles.chargeRemove}
+              onClick={already.deposit.onRemove}
+              aria-label="Cancel the deposit put down with this sale"
+            >
+              <CloseIcon />
+            </button>
+            <span className={styles.chargeBody}>
+              <span className={styles.chargeName}>Deposit held</span>
+              <span className={styles.chargeNote}>
+                {already.deposit.unpaid > 0.005
+                  ? `Put down with this sale — ${formatMoney(already.deposit.unpaid)} not paid yet`
+                  : 'Put down with this sale — paid'}
+              </span>
+            </span>
+            <span className={styles.chargeAmount}>{formatMoney(already.deposit.amount)}</span>
+          </div>
+        )}
+
         {held > 0 && (
           /*
             REMOVABLE FROM HERE, where it is read.
@@ -849,6 +888,35 @@ export function TakePayment({
         but counting towards a total and being listed as a decision somebody made are different
         things. The total below says what is covered; this list says what was entered.
       */}
+      {(already?.payments?.length ?? 0) > 0 && (
+        <div className={styles.payList}>
+          <span className={styles.payListLabel}>Already paid on this receipt</span>
+          {(already?.payments ?? []).map((pay) => (
+            <div className={styles.payRow} key={pay.key}>
+              {pay.onRemove ? (
+                <button
+                  type="button"
+                  className={styles.payRemove}
+                  onClick={pay.onRemove}
+                  aria-label={`Take back the ${formatMoney(pay.amount)} ${pay.method}`}
+                >
+                  <CloseIcon />
+                </button>
+              ) : (
+                <span className={styles.payRemove} aria-hidden="true" />
+              )}
+              <span className={styles.payBody}>
+                <span className={styles.payMethod}>
+                  {pay.method === 'cash' ? 'Cash' : pay.method === 'transfer' ? 'Transfer' : pay.method === 'pos' ? 'POS' : pay.method}
+                </span>
+                {pay.reference ? <span className={styles.payRef}>{pay.reference}</span> : null}
+              </span>
+              <span className={styles.payAmount}>{formatMoney(pay.amount)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {rows.length > 0 && (
         <div className={styles.payList}>
           <span className={styles.payListLabel}>Paying with</span>
