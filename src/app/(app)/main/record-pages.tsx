@@ -56,6 +56,8 @@ import PeoplePage from './people-stack/people-page/people-page';
 import AccountPage from './people-stack/account-page/account-page';
 import AccountActionPage from './people-stack/account-action-page/account-action-page';
 import MoneyCustomerPage from './people-stack/money-customer-page/money-customer-page';
+import CountGateSettingsPage from './settings-stack/count-gate-settings-page/count-gate-settings-page';
+import CountDaysPage from './settings-stack/count-gate-settings-page/count-days-page';
 import CustomerFormPage from './people-stack/customer-form-page/customer-form-page';
 import CustomerEditPage from './people-stack/customer-edit-page/customer-edit-page';
 import ShopPage from './settings-stack/shop-page/shop-page';
@@ -206,6 +208,9 @@ export const RECORD_PAGES: Record<string, ComponentType> = gateAll({
   count_history_page: CountHistoryPage,
   // Appended: a route is written into the URL as its POSITION here.
   money_customer_page: MoneyCustomerPage,
+  // Appended: a route is written into the URL as its POSITION here.
+  count_gate_settings_page: CountGateSettingsPage,
+  count_days_page: CountDaysPage,
 });
 
 /** Handed to each stack's `additionalNavLinks` — one array, so its identity never changes. */

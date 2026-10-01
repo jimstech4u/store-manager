@@ -264,6 +264,15 @@ export default function SettingsPage() {
             One level for everything you sell, and the items you want treated differently.
           </p>
 
+          <h2 className={styles.section}>Counting</h2>
+          <Button variant="secondary" fullWidth onClick={() => void nav.push('count_gate_settings_page')}>
+            Count gate
+          </Button>
+          <p className={styles.sectionNote}>
+            Count every day before anything sells (Aggressive), or only on the days you pick
+            (Relaxed).
+          </p>
+
           <h2 className={styles.section}>Money</h2>
           <button
             type="button"

@@ -7,6 +7,7 @@ import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
+import { setCountWhenLow, useCountGateSettings } from '@/lib/stacks/count-gate-settings';
 import { Explain, InfoPanel } from '@/components/ui/Explain';
 import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
@@ -51,6 +52,12 @@ export default function LowStockPage() {
 
   const rule = useLowStockRule(store?.id ?? null);
   const own = useOwnLevels(store?.id ?? null);
+  /*
+   * COUNT WHEN LOW (0250) — the shop's say. An item that has run low is counted before it sells, any
+   * day, whatever the count gate says. Each item follows this, or says its own on its page.
+   */
+  const gate = useCountGateSettings(store?.id ?? null);
+  const [savingCountLow, setSavingCountLow] = useState(false);
 
   /*
    * The general level as it is being typed.
@@ -153,6 +160,34 @@ export default function LowStockPage() {
                 {note}
               </p>
             )}
+
+            <label className={styles.countLow}>
+              <input
+                type="checkbox"
+                checked={gate.data?.countWhenLow ?? false}
+                disabled={!gate.data || savingCountLow}
+                onChange={async (e) => {
+                  const on = e.target.checked;
+                  setSavingCountLow(true);
+                  try {
+                    await setCountWhenLow(store.id, on);
+                    gate.reload();
+                    setNote(on ? 'Items are counted when they run low.' : 'Running low no longer asks for a count.');
+                  } catch (err: unknown) {
+                    problem.show(messageOf(err, 'Could not save that'));
+                  } finally {
+                    setSavingCountLow(false);
+                  }
+                }}
+              />
+              <span className={styles.countLowBody}>
+                <span>Count an item when it runs low</span>
+                <span className={styles.countLowNote}>
+                  It must be counted before it sells, on any day — even when the count gate is
+                  Relaxed. Each item follows this unless it is set differently on its own page.
+                </span>
+              </span>
+            </label>
 
             {rule.data?.level == null && (
               <InfoPanel tone="info" title="No warnings at the moment">

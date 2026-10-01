@@ -330,3 +330,43 @@ li + li .emptiesRow { border-top: 1px solid var(--border); }
   font-size: var(--text-sm);
   color: var(--text-muted);
 }
+
+/* "Count when it runs low" (0250): a tick, with what it means under it. */
+.countLow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: var(--space-3) 0;
+  cursor: pointer;
+}
+
+.countLow input {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-top: 2px;
+  accent-color: var(--primary);
+}
+
+.countLowBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.countLowNote {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.countLowFollow {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}

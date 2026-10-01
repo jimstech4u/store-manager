@@ -1,6 +1,7 @@
 'use client';
 
 import { LEDGERS_SCOPE } from '@/lib/stacks/customer-ledgers';
+import { setProductCountWhenLow, useProductCountWhenLow } from '@/lib/stacks/count-gate-settings';
 import { useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
@@ -140,6 +141,12 @@ export default function ProductPage() {
     read: () => shapeLowLevels(productId as string),
     enabled: Boolean(productId),
   });
+  /*
+   * COUNT WHEN LOW, this item's say (0250): follows the shop until ticked or unticked here, and
+   * "Follow the shop" puts it back.
+   */
+  const countLow = useProductCountWhenLow(productId ?? null);
+  const [savingCountLow, setSavingCountLow] = useState(false);
   const taken = new Set((lowLevels.data ?? []).map((l) => l.productUnitId));
   const freeShapes = shapes.filter((u) => !taken.has(u.productUnitId));
   const shopSaidGeneral = rule.data?.level == null ? null : formatQtySpoken(rule.data.level);
@@ -487,6 +494,57 @@ export default function ProductPage() {
               Add this level
             </Button>
           </div>
+        )}
+
+        {countLow.data && (
+          <label className={styles.countLow}>
+            <input
+              type="checkbox"
+              checked={countLow.data.own ?? countLow.data.shop}
+              disabled={savingCountLow}
+              onChange={async (e) => {
+                setSavingCountLow(true);
+                setLowNote(null);
+                try {
+                  await setProductCountWhenLow(product.id, e.target.checked);
+                  countLow.reload();
+                } catch (err: unknown) {
+                  setLowNote(messageOf(err, 'Could not save that'));
+                } finally {
+                  setSavingCountLow(false);
+                }
+              }}
+            />
+            <span className={styles.countLowBody}>
+              <span>Count it when it runs low</span>
+              <span className={styles.countLowNote}>
+                {countLow.data.own === null
+                  ? `Following the shop (${countLow.data.shop ? 'on' : 'off'}).`
+                  : `Set for this item — the shop is ${countLow.data.shop ? 'on' : 'off'}.`}
+              </span>
+              {countLow.data.own !== null && (
+                <button
+                  type="button"
+                  className={styles.countLowFollow}
+                  disabled={savingCountLow}
+                  onClick={async (e) => {
+                    e.preventDefault();
+                    setSavingCountLow(true);
+                    try {
+                      await setProductCountWhenLow(product.id, null);
+                      countLow.reload();
+                    } catch (err: unknown) {
+                      setLowNote(messageOf(err, 'Could not save that'));
+                    } finally {
+                      setSavingCountLow(false);
+                    }
+                  }}
+                >
+                  Follow the shop
+                </button>
+              )}
+            </span>
+          </label>
         )}
 
         {lowNote && <p className={styles.lowNote}>{lowNote}</p>}

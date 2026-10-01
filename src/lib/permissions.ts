@@ -124,6 +124,8 @@ export const ROUTE_NEEDS: Readonly<Record<string, Permission>> = {
   staff_charges_page: 'staff.charge',
   words_page: 'products.manage',
   shop_page: 'store.settings',
+  count_gate_settings_page: 'store.settings',
+  count_days_page: 'store.settings',
   bank_form_page: 'store.settings',
   receive_page: 'stock.receive',
   suppliers_page: 'stock.receive',
