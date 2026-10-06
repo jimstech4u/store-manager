@@ -89,6 +89,18 @@ const WHAT_HAPPENED: Record<string, string> = {
   count: 'Counted',
 };
 
+/*
+ * AN ADJUSTMENT SAYS WHERE IT CAME FROM. Two things write one: a receipt being corrected (its old
+ * lines put back, `ref_table` 'sales') and a count's difference being explained ('variance_
+ * resolutions'). Both read "Count adjustment", so a receipt corrected today put three crates on the
+ * shelf under a name that sent the shop looking at its counts.
+ */
+function whatHappened(row: Pick<Movement, 'kind' | 'ref_table'>): string {
+  if (row.kind === 'adjustment' && row.ref_table === 'sales') return 'Receipt corrected';
+  if (row.kind === 'adjustment' && row.ref_table === 'variance_resolutions') return 'Count explained';
+  return WHAT_HAPPENED[row.kind] ?? row.kind;
+}
+
 /** Who did it. A member with no name is known by their email; the part before the @ is enough. */
 function person(name: string | null | undefined): string {
   return (name ?? 'Someone').split('@')[0];
@@ -287,7 +299,7 @@ export function StockHistory({
             <li className={styles.row} key={row.id ?? `${row.at}-${index}`}>
               <div className={styles.head}>
                 <span className={styles.what}>
-                  {WHAT_HAPPENED[row.kind] ?? row.kind}
+                  {whatHappened(row)}
                   {/* A reversal is not a separate event — it is this one being undone. */}
                   {row.reverses_id && <span className={styles.correction}>correction</span>}
                 </span>
@@ -388,7 +400,7 @@ export function StockHistoryCard({
         </span>
         {last && (
           <span className={styles.cardDetail}>
-            {WHAT_HAPPENED[last.kind] ?? last.kind} · {last.actor_name ?? 'Someone'}
+            {whatHappened(last)} · {last.actor_name ?? 'Someone'}
           </span>
         )}
       </span>
