@@ -272,7 +272,7 @@ export default function OrderItemsPage() {
   const emptiesRows = (): { label: string; value: string; strong?: boolean }[] => {
     if (!showEmpties || !empties.data) return [];
     const said = (l: (typeof stillWithYou)[number]) => ({
-      label: `  ${l.label} ${l.unit.toLowerCase()}`,
+      label: `${l.label} ${l.unit.toLowerCase()}`,
       value: l.said,
     });
     if (stillWithYou.length === 0) return [{ label: 'Still with you', value: 'None' }];

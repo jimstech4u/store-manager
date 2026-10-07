@@ -10,6 +10,9 @@ import { formatDateTime, formatMoney, formatQtySpoken, pluralUnit, shapeWord } f
 import { owedRowsFromReceipt, rollUpOwed } from '@/lib/empties-rollup';
 
 interface SharedReceipt {
+  /** Combined receipts (0253): the ones this copy holds, oldest first, and the one whose link was opened. */
+  combined_parts?: { id: string; occurred_at: string; total: string }[] | null;
+  opened_as?: string | null;
   shop: {
     name: string;
     header: string | null;
@@ -219,6 +222,26 @@ export default function SharedReceiptPage({
               The shop corrected it on {formatDateTime(sale.corrected.replaced_at)}. It previously
               said {formatMoney(sale.corrected.was_total)}. If you are holding that one, it is out
               of date.
+            </span>
+          </div>
+        )}
+
+        {/*
+          COMBINED (0253): this copy holds several receipts — and if the link was an older one's, that
+          receipt is now part of this. Said above the lines so two bills are never read as two debts.
+        */}
+        {(receipt.combined_parts?.length ?? 0) > 1 && (
+          <div className={styles.corrected} role="status">
+            <strong>
+              {receipt.opened_as && receipt.opened_as !== sale.id
+                ? `Receipt #${receipt.opened_as.slice(0, 8).toUpperCase()} is now part of this one`
+                : `This receipt combines ${receipt.combined_parts!.length}`}
+            </strong>
+            <span className={styles.correctedNote}>
+              {receipt.combined_parts!
+                .map((p) => `#${p.id.slice(0, 8).toUpperCase()} (${formatDateTime(p.occurred_at)})`)
+                .join(', ')}
+              . What you owe and what is still with you is said once, below.
             </span>
           </div>
         )}

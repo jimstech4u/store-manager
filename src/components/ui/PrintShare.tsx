@@ -40,7 +40,8 @@ export function usePrintShare() {
   const spec = useRef<PrintSpec | null>(null);
 
   useEffect(
-    () => nav.provideObject(channel, () => spec.current, { global: true, scope: PRINT_SCOPE }),
+    // A READER of the document, not the document: the page asks it when it opens, after `open` set it.
+    () => nav.provideObject(channel, () => () => spec.current, { global: true, scope: PRINT_SCOPE }),
     [nav, channel],
   );
 

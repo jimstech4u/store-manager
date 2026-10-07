@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react';
 import styles from './Receipt.module.css';
 import { useNav } from '@academix-admin/navigation-stack';
 import { Button } from '@/components/ui/Button';
+import { InfoPanel } from '@/components/ui/Explain';
 import { Field } from '@/components/ui/Field';
 import { WhatsAppIcon } from '@/components/ui/Icon';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
@@ -11,6 +12,7 @@ import { useResource } from '@/lib/stacks/resource';
 import { ACCOUNT_DERIVED_SCOPE } from '@/lib/stacks/customer-account';
 import { getSupabase } from '@/lib/supabase/client';
 import {
+  formatDate,
   formatDateTime,
   formatMoney,
   formatQty,
@@ -103,6 +105,15 @@ interface SaleDetail {
     line_total: string;
   }[];
   payments: { id: string; amount: string; method: string; reference: string | null }[];
+  /*
+   * COMBINED RECEIPTS (0253). Heading a group: the PAPER that prints for all of them — every part's
+   * lines, charges, payments and change, the account and what is still with them said once. Part of
+   * one: the receipt it now prints under. Neither changes this sale's own figures, which every
+   * action on this screen still works from.
+   */
+  combined?: { paper: SaleDetail } | null;
+  combined_into?: { id: string; occurred_at: string; total: string } | null;
+  combined_parts?: { id: string; occurred_at: string; total: string }[] | null;
 }
 
 /**
@@ -155,13 +166,14 @@ export function Receipt({
     shopName: string;
     settings: { width: number; header: string | null; footer: string | null };
   }>({
-    key: `receipt:v2:${saleId}`,
+    key: `receipt:v3:${saleId}`,
     scope: ACCOUNT_DERIVED_SCOPE,
     deps: [storeId],
     read: async () => {
       const supabase = getSupabase();
       const [{ data: d, error: dErr }, { data: s }, { data: store }] = await Promise.all([
-        supabase.rpc('sale_detail', { p_sale_id: saleId }),
+        // `sale_detail`, and the combined paper when this heads a group (0253).
+        supabase.rpc('receipt_detail', { p_sale_id: saleId }),
         supabase.rpc('ensure_store_settings', { p_store_id: storeId }),
         supabase.from('stores').select('name').eq('id', storeId).maybeSingle(),
       ]);
@@ -274,7 +286,15 @@ export function Receipt({
     return <FullPageMessage title="Preparing the receipt" tone="loading" inPage />;
   }
 
-  const { sale, customer, lines, payments, charges, corrected } = detail;
+  /*
+   * WHAT PRINTS: this receipt, or — when it heads combined receipts — all of them as one. Every
+   * figure on the paper below reads `paper`; the actions under it keep this sale's own (`detail`),
+   * so change is given, and empties settled, against the receipt they belong to.
+   */
+  const paper: SaleDetail = detail.combined?.paper ?? detail;
+  const parts = paper.combined_parts ?? [];
+  const partOf = detail.combined_into ?? null;
+  const { sale, customer, lines, payments, charges, corrected } = paper;
   /*
    * STILL WITH YOU, said the way the counter says it — and ALL of it, not just today's.
    *
@@ -283,7 +303,7 @@ export function Receipt({
    * Goldberg and 2½ Gulder is "5 NBL crates, ½ Goldberg crate, ½ Gulder crate". Applied by the same
    * function the empties pages use — so paper and screen cannot disagree.
    */
-  const stillWithYou = rollUpOwed(owedRowsFromReceipt(detail.empties));
+  const stillWithYou = rollUpOwed(owedRowsFromReceipt(paper.empties));
   const paid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
   const owing = Number(sale.total) - paid;
   /*
@@ -295,11 +315,11 @@ export function Receipt({
    * arithmetic that fails to reach its own bottom line.
    */
   const itemsTotal = lines.reduce((sum, l) => sum + Number(l.line_total), 0);
-  const deposit = Number(detail.deposit_total ?? 0) || 0;
-  const depositTaken = Number(detail.deposit_taken ?? 0) || 0;
-  const changeGiven = (detail.change?.given ?? []).map((g) => ({ amount: Number(g.amount) || 0, method: g.method ?? 'cash' }));
+  const deposit = Number(paper.deposit_total ?? 0) || 0;
+  const depositTaken = Number(paper.deposit_taken ?? 0) || 0;
+  const changeGiven = (paper.change?.given ?? []).map((g) => ({ amount: Number(g.amount) || 0, method: g.method ?? 'cash' }));
   const changeOwed = Math.max(
-    (Number(detail.change?.owed ?? 0) || 0) - changeGiven.reduce((sum, g) => sum + g.amount, 0),
+    (Number(paper.change?.owed ?? 0) || 0) - changeGiven.reduce((sum, g) => sum + g.amount, 0),
     0,
   );
   /*
@@ -325,7 +345,7 @@ export function Receipt({
    * «16,500 (old) + 1,000 (new) = 17,500». Read as at the sale rather than today, so a receipt
    * reprinted next month still says what it said when it was handed over.
    */
-  const owedAfter = detail.account ? Number(detail.account.owed_after) || 0 : null;
+  const owedAfter = paper.account ? Number(paper.account.owed_after) || 0 : null;
   const owedBefore = owedAfter === null ? null : owedAfter - owing;
   const width = settings?.width ?? 80;
 
@@ -362,6 +382,14 @@ export function Receipt({
     formatDateTime(sale.occurred_at),
     `#${sale.id.slice(0, 8).toUpperCase()}`,
     ...(customer ? [customer.name] : []),
+    // COMBINED (0253): which receipts this one paper holds, oldest first.
+    ...(parts.length > 1
+      ? [
+          `Combines ${parts.length} receipts: ${parts
+            .map((p) => `#${p.id.slice(0, 8).toUpperCase()} ${formatDate(p.occurred_at)}`)
+            .join(', ')}`,
+        ]
+      : []),
     /*
      * A CORRECTED RECEIPT SAYS SO, ON THE PAPER.
      *
@@ -426,8 +454,8 @@ export function Receipt({
       ...(depositTaken > 0.005
         ? [{ label: 'Deposit, held for you', value: formatMoney(depositTaken) }]
         : []),
-      ...(Number(detail.deposit_unpaid ?? 0) > 0.005
-        ? [{ label: 'Deposit still to pay', value: formatMoney(Number(detail.deposit_unpaid)) }]
+      ...(Number(paper.deposit_unpaid ?? 0) > 0.005
+        ? [{ label: 'Deposit still to pay', value: formatMoney(Number(paper.deposit_unpaid)) }]
         : []),
       /*
        * EVERY PAYMENT, with its reference where there is one.
@@ -443,7 +471,7 @@ export function Receipt({
       ...(paidBy.length > 1
         ? [{ label: 'Paid in all', value: formatMoney(paid) }]
         : []),
-      ...(owing > 0 ? [{ label: 'Left on this sale', value: formatMoney(owing) }] : []),
+      ...(owing > 0 ? [{ label: parts.length > 1 ? 'Left on these sales' : 'Left on this sale', value: formatMoney(owing) }] : []),
       // THE CHANGE (0246): what went back, and how; and what is still owed to them on this paper.
       ...changeGiven.map((g) => ({ label: `Change given (${g.method})`, value: formatMoney(g.amount) })),
       ...(changeOwed > 0.005
@@ -493,6 +521,11 @@ export function Receipt({
    * the single source of how they are set out.
    */
   const printedLines = receiptLines(receiptPayload(), printer.layout);
+  const ownChangeOwed = Math.max(
+    (Number(detail.change?.owed ?? 0) || 0) -
+      (detail.change?.given ?? []).reduce((sum, g) => sum + (Number(g.amount) || 0), 0),
+    0,
+  );
 
 
   return (
@@ -535,12 +568,12 @@ export function Receipt({
         sale — re-reads and prints the true figure, or none at all.
       */}
       {/* CHANGE OWED, given where it is read — before the paper goes out, or when they come back. */}
-      {sale.status !== 'voided' && changeOwed > 0.005 && (
+      {sale.status !== 'voided' && ownChangeOwed > 0.005 && (
         <div data-print-no-print>
           <ChangeOwed
             storeId={storeId}
             saleId={sale.id}
-            owed={changeOwed}
+            owed={ownChangeOwed}
             atSale={emptiesAtCounter}
             onGiven={() => void res.reload()}
           />
@@ -618,6 +651,37 @@ export function Receipt({
         the roll — a receipt is 32 characters across at this size. Here there is room for it, and
         this is where somebody goes when they are trying to work out what happened to a sale.
       */}
+      {/*
+        COMBINED (0253). Part of a group: it prints and shares under the newest receipt, and its own
+        link opens that one — said here, with the way to it and the way back out. Heading one: which
+        receipts this paper holds.
+      */}
+      {partOf && (
+        <div data-print-no-print>
+          <InfoPanel tone="info" title={`Combined into #${partOf.id.slice(0, 8).toUpperCase()}`}>
+            This receipt prints and is shared as part of #{partOf.id.slice(0, 8).toUpperCase()} (
+            {formatDate(partOf.occurred_at)}), with the customer&rsquo;s balance and empties said once.
+            Its own sale is unchanged.
+            <Button
+              variant="secondary"
+              fullWidth
+              onClick={() => void nav.push('receipt_page', { id: partOf.id })}
+            >
+              Open the combined receipt
+            </Button>
+          </InfoPanel>
+        </div>
+      )}
+      {!partOf && parts.length > 1 && (
+        <div data-print-no-print>
+          <InfoPanel tone="info" title={`This receipt combines ${parts.length}`}>
+            {parts.map((p) => `#${p.id.slice(0, 8).toUpperCase()} (${formatDate(p.occurred_at)})`).join(', ')} —
+            printed and shared as one, with the balance and empties said once. Each sale is still
+            recorded as it was.
+          </InfoPanel>
+        </div>
+      )}
+
       {corrected && sale.status !== 'voided' && (
         <div className={styles.corrected} data-print-no-print>
           <p className={styles.correctedHead}>

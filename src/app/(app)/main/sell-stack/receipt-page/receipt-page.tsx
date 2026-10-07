@@ -100,6 +100,17 @@ export default function ReceiptPage() {
               >
                 What this receipt has said
               </Button>
+              {/*
+                COMBINE (0253): this customer's receipts sent and printed as one, so two bills do not
+                each carry the balance and the empties.
+              */}
+              <Button
+                variant="secondary"
+                fullWidth
+                onClick={() => void nav.push('combine_page', { id: saleId })}
+              >
+                Combine with other receipts
+              </Button>
             </div>
           )
         }

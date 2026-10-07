@@ -26,7 +26,7 @@ import { trackDrafts, sweepDrafts } from './probe-drafts.mjs';
 const BASE = process.argv[2] ?? 'http://localhost:3100';
 const SHOTS =
   'C:/Users/ajibe/AppData/Local/Temp/claude/c--Users-ajibe-StudioProjects-academix-project/e777c9cb-0458-4485-8d5b-33a59e6c79c6/scratchpad';
-const GOLDBERG = 'e6002418-4e77-4e0f-bce4-afd27594f10d';
+const GOLDBERG = '2c38cae5-08a5-427d-8da0-226109c4f3b3';
 const env = Object.fromEntries(
   readFileSync('.env.local', 'utf8')
     .split(/\r?\n/)
