@@ -16,7 +16,6 @@ import { CameraIcon, CloseIcon, MinusIcon, PlusIcon, ReceiptIcon, CashIcon,
 import { onlineOrdersChanged, usePendingOrderCount } from '@/lib/stacks/online-orders';
 import { CustomerPicker } from '@/components/customers/CustomerPicker';
 import { CustomerTabs } from '@/components/sell/CustomerTabs';
-import { ShareOrder } from '@/components/sell/ShareOrder';
 import { ConfirmDialog, useConfirm } from '@/components/ui/Dialog';
 import { useAsyncAction } from '@/components/ui/AsyncAction';
 import { ProductPicker } from '@/components/catalog/ProductPicker';
@@ -46,6 +45,7 @@ import { formatMoney, formatQty, messageOf } from '@/lib/format';
 import { partsFor, snapQty, startingQty } from '@/lib/quantity-rules';
 import { lineRules, resolveLinePrice, startLine } from '@/lib/stacks/sale-line-ops';
 import { finishInto } from '@/lib/finish-flow';
+import { useFinishedGuard } from '@/components/sell/FinishedItem';
 
 /**
  * The sale screen — over 90% of what this product does.
@@ -216,7 +216,6 @@ export default function SellPage() {
    * the screen loaded — and its overlay swallows every tap behind it, which on a till means the
    * screen simply stops working. `unmountOnClose` did not help. A flag of our own is unambiguous.
    */
-  const [sharing, setSharing] = useState(false);
   const [askClearCustomer, setAskClearCustomer] = useState(false);
   /*
    * The two things that used to stop a sale.
@@ -477,11 +476,19 @@ export default function SellPage() {
    * wrong thing wants to know that before it lands.
    */
   const [adding, setAdding] = useState<string | null>(null);
+  /* Nothing the records say is finished goes on without somebody looking (FinishedItem). */
+  const finishedGuard = useFinishedGuard();
 
   const addProduct = async (product: Product) => {
     if (!activeOrder) return;
     const productId = product.id;
     setAdding(product.name);
+    // The picker, a barcode and a new item all come through here, so all of them are checked.
+    if (!(await finishedGuard.allow(product))) {
+      pickerOps.close();
+      setAdding(null);
+      return;
+    }
     // Keep it for as long as the receipt does — the line will need its cost and unit long after
     // whatever search found it has been typed over.
     rememberProduct(product);
@@ -804,13 +811,18 @@ export default function SellPage() {
         onClearCustomer={() => setAskClearCustomer(true)}
         onCloseTab={() => setAskCloseTab(true)}
         onClaim={() => void nav.push('claim_page')}
-        onShare={() =>
-          needCount.length > 0
-            ? void nav.push('count_gate_page', { why: 'share' })
-            : needPrice.length > 0
-              ? void nav.push('price_gate_page', { why: 'share' })
-              : setSharing(true)
-        }
+        /*
+         * THE CODE OPENS ALL ITEMS — "since All items has more in it, and WhatsApp too". The sheet
+         * it opened could only send the link; All items sends the list itself (WhatsApp, picture,
+         * PDF, print) and holds the count and price gates in front of anything with a price on it.
+         */
+        onShare={() => {
+          if (!activeOrder) return;
+          void (async () => {
+            const saved = await push(activeOrder);
+            void nav.push('order_items_page', { id: saved?.id ?? activeOrder.id ?? '' });
+          })();
+        }}
         hasCustomer={Boolean(activeOrder?.customerId)}
         orderCode={activeOrder?.code ?? null}
         /*
@@ -1031,6 +1043,7 @@ export default function SellPage() {
         zIndex 1000: the tab bar is 50 and a sibling of the page, so anything lower is a sheet the
         tabs punch through.
       */}
+      {finishedGuard.dialog}
       {activeOrder && (
         <ProductPicker
           open={isPickerOpen}
@@ -1216,19 +1229,6 @@ export default function SellPage() {
       )}
 
 
-      {activeOrder && (
-        <ShareOrder
-          open={sharing}
-          onClose={() => setSharing(false)}
-          code={activeOrder.code}
-          shareToken={activeOrder.shareToken ?? null}
-          storeName={store.name}
-          customerName={activeOrder.customerName}
-          customerId={activeOrder.customerId}
-          customerPhone={activeOrder.customerPhone}
-          total={formatMoney(total)}
-        />
-      )}
     </PageScaffold>
   );
 }

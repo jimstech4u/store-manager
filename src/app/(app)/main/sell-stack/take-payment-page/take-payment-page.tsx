@@ -9,6 +9,7 @@ import { CameraIcon, PlusIcon, ReceiptIcon } from '@/components/ui/Icon';
 import { Button } from '@/components/ui/Button';
 import { InfoPanel } from '@/components/ui/Explain';
 import { ProductPicker } from '@/components/catalog/ProductPicker';
+import { useFinishedGuard } from '@/components/sell/FinishedItem';
 import { BarcodeScanner } from '@/components/catalog/BarcodeScanner';
 import { findByBarcode } from '@/lib/stacks/mid-sale';
 import { finishInto } from '@/lib/finish-flow';
@@ -82,6 +83,7 @@ export default function TakePaymentPage() {
    * is lost, because it is pushed over, not popped.
    */
   const [pickingItem, setPickingItem] = useState(false);
+  const finishedGuard = useFinishedGuard();
   const [scanning, setScanning] = useState(false);
   const [scanProblem, setScanProblem] = useState<string | null>(null);
 
@@ -460,13 +462,17 @@ export default function TakePaymentPage() {
         </InfoPanel>
       )}
 
+      {finishedGuard.dialog}
       <ProductPicker
         open={pickingItem}
         onClose={() => setPickingItem(false)}
         storeId={store.id}
         onPick={(p) => {
           setPickingItem(false);
-          void nav.push('sale_line_page', { id: activeOrder.id ?? '', product: p.id });
+          void (async () => {
+            if (!(await finishedGuard.allow(p))) return;
+            void nav.push('sale_line_page', { id: activeOrder.id ?? '', product: p.id });
+          })();
         }}
         onAddNew={(typed) => {
           setPickingItem(false);
@@ -487,6 +493,7 @@ export default function TakePaymentPage() {
             try {
               const found = await findByBarcode(store.id, code);
               if (found) {
+                if (!(await finishedGuard.allow(found))) return;
                 void nav.push('sale_line_page', { id: activeOrder.id ?? '', product: found.id });
                 return;
               }

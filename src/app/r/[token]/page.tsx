@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { useDemandState } from '@academix-admin/state-stack';
 import { getSupabase } from '@/lib/supabase/client';
-import { formatDateTime, formatMoney, formatQtySpoken, pluralUnit } from '@/lib/format';
+import { formatDateTime, formatMoney, formatQtySpoken, pluralUnit, shapeWord } from '@/lib/format';
 import { owedRowsFromReceipt, rollUpOwed } from '@/lib/empties-rollup';
 
 interface SharedReceipt {
@@ -40,6 +40,7 @@ interface SharedReceipt {
     entered_qty: string;
     /** The shape it was sold in, already pluralised by the shop's own word for it. */
     unit_name: string | null;
+    unit_plural?: string | null;
     unit_price: string;
     line_total: string;
     containers_out: string;
@@ -251,7 +252,10 @@ export default function SharedReceiptPage({
                 */}
                 <span>
                   {formatQtySpoken(l.entered_qty)}{' '}
-                  {l.unit_name ?? pluralUnit(l.base_unit, Number(l.entered_qty))} ×{' '}
+                  {l.unit_name
+                    ? shapeWord(l.entered_qty, l.unit_name, l.unit_plural)
+                    : pluralUnit(l.base_unit, Number(l.entered_qty))}{' '}
+                  ×{' '}
                   {formatMoney(l.unit_price)}
                 </span>
                 <span className={styles.lineTotal}>{formatMoney(l.line_total)}</span>

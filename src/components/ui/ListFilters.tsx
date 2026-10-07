@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
+import { PrinterIcon } from '@/components/ui/Icon';
 import styles from './ListFilters.module.css';
 
 /**
@@ -17,6 +18,7 @@ export function ListFilters<V extends string>({
   onChange,
   onExport,
   exportLabel = 'Export',
+  onPrint,
 }: {
   options: { value: V; label: string }[];
   value: V;
@@ -24,6 +26,11 @@ export function ListFilters<V extends string>({
   /** Builds and hands over the file; returns a sentence to show, or null. */
   onExport?: () => Promise<string | null>;
   exportLabel?: string;
+  /**
+   * The same list on paper, or shared — every matching row, as the export takes them (PrintShare).
+   * "Print histories, statements, reports to the printer just like a receipt, not only PDF or CSV."
+   */
+  onPrint?: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -66,6 +73,11 @@ export function ListFilters<V extends string>({
           }}
         >
           {exportLabel}
+        </Button>
+      )}
+      {onPrint && (
+        <Button variant="secondary" size="small" onClick={onPrint}>
+          <PrinterIcon /> Print
         </Button>
       )}
       {note && (

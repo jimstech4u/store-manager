@@ -1,0 +1,11 @@
+/* The roll as it will come out — the same paper All items and the receipt show. */
+.paper {
+  font-family: var(--font-numeric);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+}

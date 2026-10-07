@@ -18,7 +18,7 @@ import {
 import { useResource } from '@/lib/stacks/resource';
 import { applySaleLocally } from '@/lib/stacks/local-effects';
 import { stockMoved } from '@/lib/stacks/catalog-stack';
-import { formatMoney, formatQtySpoken, messageOf } from '@/lib/format';
+import { formatMoney, formatQtySpoken, messageOf, shapeWord } from '@/lib/format';
 import { useSellingUnits } from '@/lib/stacks/selling-units';
 import { useUncountedToday } from '@/lib/stacks/count-gate';
 import { unpricedOnSale } from '@/lib/stacks/price-gate';
@@ -677,7 +677,7 @@ export function TakePayment({
               <span className={styles.itemName}>{line.productName}</span>
               <span className={styles.itemQty}>
                 {formatQtySpoken(line.qty || '0')}
-                {line.saleUnitName ? ` ${line.saleUnitName}` : ''} ×{' '}
+                {line.saleUnitName ? ` ${shapeWord(line.qty, line.saleUnitName)}` : ''} ×{' '}
                 {formatMoney(Number(line.unitPrice) || 0)}
               </span>
               <span className={styles.itemTotal}>{formatMoney(lineTotal(line))}</span>

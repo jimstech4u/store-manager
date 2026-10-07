@@ -348,7 +348,8 @@ export function Receipt({
    * is how a receipt stops matching the goods.
    */
   const unitWord = (l: SaleDetail['lines'][number]) => {
-    const many = Number(l.entered_qty) !== 1;
+    // Up to one is one: "½ crate", not "½ crates" (format.ts `shapeWord`).
+    const many = Number(l.entered_qty) > 1;
     const shape = many ? (l.unit_plural ?? l.unit_name) : l.unit_name;
     return shape ?? l.pack_name ?? pluralUnit(l.base_unit, Number(l.entered_qty));
   };

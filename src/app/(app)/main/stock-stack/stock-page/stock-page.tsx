@@ -26,6 +26,7 @@ import {
 } from '@/lib/stacks/catalog-stack';
 import { ListFilters } from '@/components/ui/ListFilters';
 import { csvName, fetchAllPages, shareCsv, toCsv } from '@/lib/export-csv';
+import { listDocument, usePrintShare } from '@/components/ui/PrintShare';
 import { useSayInShapes } from '@/lib/stacks/selling-units';
 import { useExpirySummary } from '@/lib/stacks/expiry';
 import {
@@ -90,6 +91,7 @@ export default function StockPage() {
   const [filter, setFilter] = useState<StockFilter>('all');
   const browse = useProductList(store?.id ?? null, filter);
   const say = useSayInShapes(store?.id ?? null);
+  const printList = usePrintShare();
 
   /*
    * What is going off, as a single figure rather than a list.
@@ -291,6 +293,36 @@ export default function StockPage() {
           ]}
           value={filter}
           onChange={setFilter}
+          /*
+           * ON PAPER, WITH PRICES — "share as well, even with prices": what is left of each item and
+           * what each shape it sells in costs, the list a customer or a rep can be sent.
+           */
+          onPrint={() =>
+            printList({
+              title: 'Stock and prices',
+              filename: csvName('stock', filter).replace(/\.csv$/, ''),
+              build: async () => {
+                const rows = await fetchAllPages(productsPager(store.id, filter));
+                return listDocument({
+                  shopName: store.name,
+                  title: 'Stock and prices',
+                  meta: [`${rows.length} ${rows.length === 1 ? 'item' : 'items'} · ${filter}`, new Date().toLocaleString()],
+                  rows: rows.map((p) => {
+                    const prices = (byProduct.get(p.id) ?? [])
+                      .filter((u) => u.isSold && u.price != null)
+                      .sort((a, b) => b.baseQty - a.baseQty)
+                      .map((u) => `${u.name} ${formatMoney(u.price ?? 0)}`);
+                    return {
+                      name: p.name,
+                      detail: `${say(p.id, Number(p.onHand), p.baseUnit)} left${
+                        prices.length > 0 ? ` · ${prices.join(', ')}` : p.listPrice ? ` · ${formatMoney(Number(p.listPrice))}` : ''
+                      }`,
+                    };
+                  }),
+                });
+              },
+            })
+          }
           onExport={async () => {
             const rows = await fetchAllPages(productsPager(store.id, filter));
             const csv = toCsv(rows, [

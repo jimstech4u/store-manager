@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ListFilters } from '@/components/ui/ListFilters';
 import { csvName, fetchAllPages, shareCsv, toCsv } from '@/lib/export-csv';
+import { listDocument, usePrintShare } from '@/components/ui/PrintShare';
 import { useCallback } from 'react';
 import styles from '../../money-stack/money-page/money-page.module.css';
 import { usePermission } from '@/hooks/usePermission';
@@ -44,6 +45,7 @@ export default function PeoplePage() {
   const goBack = useStackBack();
   const nav = useNav();
   const { store } = useAuth();
+  const printList = usePrintShare();
 
   /*
    * The list browses; searching happens in the SearchViewer sheet.
@@ -200,6 +202,36 @@ export default function PeoplePage() {
           ]}
           value={filter}
           onChange={setFilter}
+          onPrint={() =>
+            printList({
+              title: 'Customers',
+              filename: csvName('people', filter).replace(/\.csv$/, ''),
+              build: async () => {
+                const rows = await fetchAllPages(fetchPage);
+                const owed = rows.reduce((t, c) => t + Math.max(0, Number(c.balance) || 0), 0);
+                const credit = rows.reduce((t, c) => t + Math.max(0, -(Number(c.balance) || 0)), 0);
+                return listDocument({
+                  shopName: store?.name ?? '',
+                  title: 'Customers',
+                  meta: [`${rows.length} ${rows.length === 1 ? 'person' : 'people'} · ${filter}`, new Date().toLocaleString()],
+                  rows: rows.map((c) => {
+                    const b = Number(c.balance) || 0;
+                    return {
+                      name: c.display_name,
+                      detail: [c.phone, b > 0.005 ? 'owes you' : b < -0.005 ? 'you owe them' : 'settled']
+                        .filter(Boolean)
+                        .join(' · '),
+                      amount: Math.abs(b) > 0.005 ? formatMoney(Math.abs(b)) : '',
+                    };
+                  }),
+                  totals: [
+                    { label: 'Owed to you', value: formatMoney(owed), strong: true },
+                    { label: 'You owe them', value: formatMoney(credit) },
+                  ],
+                });
+              },
+            })
+          }
           onExport={async () => {
             const rows = await fetchAllPages(fetchPage);
             const csv = toCsv(rows, [

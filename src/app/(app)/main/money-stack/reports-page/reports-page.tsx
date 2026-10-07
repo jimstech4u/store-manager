@@ -37,6 +37,7 @@ import { stockReport, type StockReport } from '@/lib/stacks/reports';
 import { formatDateTime, formatMoney, formatQtySpoken } from '@/lib/format';
 import { QrCode } from '@/components/ui/QrCode';
 import { appUrl } from '@/lib/app-url';
+import { listDocument, usePrintShare } from '@/components/ui/PrintShare';
 import styles from './reports-page.module.css';
 
 /**
@@ -155,6 +156,90 @@ export default function ReportsPage() {
   });
 
   const active = REPORTS.find((r) => r.id === which)!;
+  const printShare = usePrintShare();
+
+  /*
+   * THE REPORT ON THE RECEIPT PRINTER, OR SHARED — "print reports to the printer just like a
+   * receipt, not only PDF or CSV, and share as well, even with prices". The A4 print stays; this is
+   * the same figures as a roll: one line per row, the totals under them.
+   */
+  const rollOf = (data: Loaded) => {
+    const m = formatMoney;
+    const base = { shopName: store?.name ?? '', title: active.name, meta: [active.windowed && period ? period.label : 'As it stands', printedAt] };
+    switch (which) {
+      case 'sales':
+      case 'days':
+        return listDocument({
+          ...base,
+          rows: data.days.map((d) => ({ name: d.day, detail: `${d.receipts} receipts · paid ${m(d.paid)}`, amount: m(d.billed) })),
+          totals: data.summary
+            ? [
+                { label: 'Billed', value: m(data.summary.billed), strong: true },
+                { label: 'Paid', value: m(data.summary.paid) },
+                { label: 'Still owed', value: m(data.summary.owing) },
+                { label: 'Receipts', value: String(data.summary.receipts) },
+              ]
+            : [],
+        });
+      case 'products':
+        return listDocument({
+          ...base,
+          rows: data.products.map((r) => ({
+            name: r.productName,
+            detail: `${r.receipts} receipts · cost ${m(r.cost)} · made ${m(r.margin)}`,
+            amount: m(r.revenue),
+          })),
+          totals: [
+            { label: 'Sold', value: m(data.products.reduce((s, r) => s + r.revenue, 0)), strong: true },
+            { label: 'Made', value: m(data.products.reduce((s, r) => s + r.margin, 0)) },
+          ],
+        });
+      case 'takings':
+        return listDocument({
+          ...base,
+          rows: data.methods.map((r) => ({ name: r.method, detail: `${r.payments} payments`, amount: m(r.amount) })),
+          totals: [{ label: 'Came in', value: m(data.methods.reduce((s, r) => s + r.amount, 0)), strong: true }],
+        });
+      case 'debtors':
+        return listDocument({
+          ...base,
+          rows: data.debtors.map((r) => ({
+            name: r.customerName,
+            detail: [r.phone, r.daysOld != null ? `${r.daysOld} days` : null].filter(Boolean).join(' · '),
+            amount: m(r.balance),
+          })),
+          totals: [{ label: 'Owed to you', value: m(data.debtors.reduce((s, r) => s + r.balance, 0)), strong: true }],
+        });
+      case 'stock':
+        return listDocument({
+          ...base,
+          rows: (data.stock?.lines ?? []).map((l) => ({
+            name: l.name,
+            detail: `${l.onHand} ${l.unit} at ${m(Number(l.unitCost) || 0)}`,
+            amount: m(l.value),
+          })),
+          totals: [{ label: 'Stock is worth', value: m(data.stock?.total ?? 0), strong: true }],
+        });
+      case 'staff':
+        return listDocument({
+          ...base,
+          rows: data.staff.map((r) => ({
+            name: r.who,
+            detail: `${r.receipts} receipts · ${r.corrections} corrections · ${r.deliveries} deliveries · ${r.counts} counts`,
+            amount: m(r.sold),
+          })),
+        });
+      default:
+        return listDocument({
+          ...base,
+          rows: data.prices.map((r) => ({
+            name: r.productName,
+            detail: r.unitName,
+            amount: m(r.price),
+          })),
+        });
+    }
+  };
   const printedAt = formatDateTime(new Date().toISOString());
 
   /**
@@ -358,6 +443,19 @@ export default function ReportsPage() {
                 Save as CSV
               </Button>
             </div>
+            <Button
+              variant="secondary"
+              fullWidth
+              onClick={() =>
+                printShare({
+                  title: active.name,
+                  filename: `${active.name.toLowerCase().replace(/\s+/g, '-')}-${new Date().toISOString().slice(0, 10)}`,
+                  build: () => rollOf(data),
+                })
+              }
+            >
+              <PrinterIcon /> Receipt printer or share
+            </Button>
 
             {which === 'prices' ? (
               <PricePoster

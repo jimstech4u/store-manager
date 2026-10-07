@@ -27,13 +27,18 @@ import { receiptLines } from '@/lib/escpos-text';
 import type { ReceiptImageInput } from '@/lib/share';
 import { swapTo } from '@/lib/finish-flow';
 import { DocumentActions } from '@/components/ui/DocumentActions';
-import { CashIcon } from '@/components/ui/Icon';
+import { CashIcon, PlusIcon } from '@/components/ui/Icon';
+import { FloatingAction } from '@/components/ui/FloatingAction';
+import { ProductPicker } from '@/components/catalog/ProductPicker';
+import { useFinishedGuard } from '@/components/sell/FinishedItem';
+import { useBankAccounts } from '@/lib/stacks/bank-accounts';
 import { getSupabase } from '@/lib/supabase/client';
 import { ChargesEditor, DepositEditor } from '@/components/sell/OrderExtras';
 import { ACCOUNT_DERIVED_SCOPE } from '@/lib/stacks/customer-account';
 import { LEDGERS_SCOPE, depositLedger, type DepositMove } from '@/lib/stacks/customer-ledgers';
 import { owedRowsFromReceipt, rollUpOwed } from '@/lib/empties-rollup';
-import { formatDateTime, formatMoney, formatQtySpoken } from '@/lib/format';
+import { formatDateTime, formatMoney, formatQtySpoken, shapeWord } from '@/lib/format';
+import { useSellingUnits } from '@/lib/stacks/selling-units';
 import styles from './order-items-page.module.css';
 
 /**
@@ -108,6 +113,8 @@ export default function OrderItemsPage() {
   const { unpriced } = useUnpricedOnSale(store?.id ?? null, order?.lines);
 
   const [busy, setBusy] = useState<'pay' | null>(null);
+  /* The shop's own plural for each shape ("Crates"), so 20 of them is not "20 Crate". */
+  const { byProduct: shapesOf } = useSellingUnits(store?.id ?? null);
 
   /*
    * WHAT ELSE GOES ON THE LIST — the customer sees the bill as it will be, and changes it now rather
@@ -123,6 +130,25 @@ export default function OrderItemsPage() {
   const [chargesOpen, setChargesOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
   const customerId = order?.customerId ?? null;
+
+  /*
+   * WHERE TO PAY, when asked for — the shop's account printed on the list, chosen from its accounts
+   * the way Take payment chooses one for a transfer. A customer paying from this list pays by
+   * transfer more often than not, and the paper is what they type the number from.
+   */
+  const accounts = useBankAccounts(store?.id ?? null);
+  const [showAccount, setShowAccount] = useState(false);
+  const [accountId, setAccountId] = useState<string | null>(null);
+  const account =
+    accounts.find((a) => a.id === accountId) ?? accounts.find((a) => a.is_default) ?? accounts[0] ?? null;
+
+  /*
+   * MORE ITEMS FROM HERE — the floating "Add an item". The picker opens ON this page; the item is
+   * checked (nothing the records say is finished goes on without somebody looking), then the till's
+   * own line page sets how many, exactly as Take payment adds one.
+   */
+  const [picking, setPicking] = useState(false);
+  const finishedGuard = useFinishedGuard();
 
   /* What they owe already — the same cached read Take payment makes. */
   const balance = useResource<number>({
@@ -159,25 +185,47 @@ export default function OrderItemsPage() {
         .map((l) => ({ product_id: l.productId, sale_unit_id: l.saleUnitId, qty: Number(l.qty) })),
     [order?.lines],
   );
-  const empties = useResource<unknown[]>({
-    key: `order-empties:${order?.clientUuid ?? 'none'}:${customerId ?? 'none'}:${JSON.stringify(emptyLines)}`,
+  /*
+   * "IT SHOULD ALSO BRING THEIR OUTSTANDING EMPTIES." It did — added into this order's, so one crate
+   * from last week and one going out today printed as "2 crates" and nothing said either was old.
+   * Now the paper says them apart: what they had before, what this order sends out, and what that
+   * leaves with them in all — the figure the receipt will print. The same reader three ways: the
+   * customer with no lines, the lines with no customer, and both.
+   */
+  const empties = useResource<{ before: unknown[]; order: unknown[]; all: unknown[] }>({
+    key: `order-empties-split:${order?.clientUuid ?? 'none'}:${customerId ?? 'none'}:${JSON.stringify(emptyLines)}`,
     scope: LEDGERS_SCOPE,
     enabled: Boolean(store && order) && showEmpties,
     read: async () => {
-      const { data, error } = await getSupabase().rpc('order_empties_preview', {
-        p_store_id: store?.id,
-        p_customer_id: customerId,
-        p_lines: emptyLines,
-      });
-      if (error) throw error;
-      return (data ?? []) as unknown[];
+      const preview = async (customer: string | null, lines: typeof emptyLines) => {
+        const { data, error } = await getSupabase().rpc('order_empties_preview', {
+          p_store_id: store?.id,
+          p_customer_id: customer,
+          p_lines: lines,
+        });
+        if (error) throw error;
+        return (data ?? []) as unknown[];
+      };
+      const [before, ofOrder, all] = await Promise.all([
+        customerId ? preview(customerId, []) : Promise.resolve([] as unknown[]),
+        preview(null, emptyLines),
+        preview(customerId, emptyLines),
+      ]);
+      return { before, order: ofOrder, all };
     },
   });
+  const rolled = (rows: unknown[] | undefined) =>
+    rows ? rollUpOwed(owedRowsFromReceipt(rows)).filter((l) => l.side === 'they_hold') : [];
   const stillWithYou = useMemo(
-    () =>
-      showEmpties && empties.data
-        ? rollUpOwed(owedRowsFromReceipt(empties.data)).filter((l) => l.side === 'they_hold')
-        : [],
+    () => (showEmpties && empties.data ? rolled(empties.data.all) : []),
+    [showEmpties, empties.data],
+  );
+  const hadBefore = useMemo(
+    () => (showEmpties && empties.data ? rolled(empties.data.before) : []),
+    [showEmpties, empties.data],
+  );
+  const goingOut = useMemo(
+    () => (showEmpties && empties.data ? rolled(empties.data.order) : []),
     [showEmpties, empties.data],
   );
 
@@ -217,6 +265,37 @@ export default function OrderItemsPage() {
     return [{ label: 'Owed before', value: 'Nothing' }];
   };
 
+  /*
+   * STILL WITH YOU, said in parts when there are parts: what they had before this order, what it
+   * sends out, then the two together. With only one of the two it is one list, as the receipt says.
+   */
+  const emptiesRows = (): { label: string; value: string; strong?: boolean }[] => {
+    if (!showEmpties || !empties.data) return [];
+    const said = (l: (typeof stillWithYou)[number]) => ({
+      label: `  ${l.label} ${l.unit.toLowerCase()}`,
+      value: l.said,
+    });
+    if (stillWithYou.length === 0) return [{ label: 'Still with you', value: 'None' }];
+    if (hadBefore.length === 0 || goingOut.length === 0) {
+      return [
+        {
+          label: hadBefore.length > 0 ? 'Still with you (from before)' : 'Still with you',
+          value: '',
+          strong: true,
+        },
+        ...stillWithYou.map(said),
+      ];
+    }
+    return [
+      { label: 'Had before this order', value: '' },
+      ...hadBefore.map(said),
+      { label: 'Going out on this order', value: '' },
+      ...goingOut.map(said),
+      { label: 'Still with you in all', value: '', strong: true },
+      ...stillWithYou.map(said),
+    ];
+  };
+
   /** The document, once — the screen, the paper and the PDF all draw these lines. */
   const input = (): ReceiptImageInput | null => {
     if (!order) return null;
@@ -237,11 +316,18 @@ export default function OrderItemsPage() {
         ...(order.customerName.trim() ? [order.customerName.trim()] : []),
       ],
       lines: order.lines.map((l) => {
-        const qty = `${formatQtySpoken(l.qty || '0')}${l.saleUnitName ? ` ${l.saleUnitName}` : ''}`;
+        const plural = (shapesOf.get(l.productId) ?? []).find((s) => s.productUnitId === l.saleUnitId)?.plural;
+        const qty = `${formatQtySpoken(l.qty || '0')}${
+          l.saleUnitName ? ` ${shapeWord(l.qty, l.saleUnitName, plural)}` : ''
+        }`;
+        /*
+         * THE PRICE EACH, ON THE PAPER TOO. A receipt leaves it off the roll (`qty`), but this list
+         * is what a customer checks the prices on before paying — "the screen has the price, the
+         * printed one removes it". So the roll gets the whole working, as the screen does.
+         */
         return {
           name: l.productName,
           detail: `${qty} x ${formatMoney(Number(l.unitPrice) || 0)}`,
-          qty,
           amount: formatMoney(lineTotal(l)),
         };
       }),
@@ -254,19 +340,15 @@ export default function OrderItemsPage() {
         ...(held > 0.005 ? [{ label: 'Deposit on containers', value: formatMoney(held) }] : []),
         { label: 'Comes to', value: formatMoney(draftTotal(order)), strong: true },
         ...balanceRows(),
-        ...(showEmpties && empties.data
-          ? stillWithYou.length > 0
-            ? [
-                { label: 'Still with you', value: '', strong: true },
-                ...stillWithYou.map((e) => ({
-                  label: `${e.label} ${e.unit.toLowerCase()}`,
-                  value: e.said,
-                })),
-              ]
-            : [{ label: 'Still with you', value: 'None' }]
-          : []),
+        ...emptiesRows(),
       ],
       note: order.note || null,
+      transferDetails:
+        showAccount && account
+          ? ['Pay into', account.bank_name, account.account_number, account.account_name]
+              .filter(Boolean)
+              .join('\n')
+          : null,
     };
   };
 
@@ -420,8 +502,40 @@ export default function OrderItemsPage() {
                         {empties.error ? ' (could not be read)' : ' (checking)'}
                       </span>
                     )}
+                    {showEmpties && empties.data && !customerId && (
+                      <span className={styles.checkNote}>
+                        {' '}(this order only — add a customer to include what they had before)
+                      </span>
+                    )}
                   </span>
                 </label>
+
+                {accounts.length > 0 && (
+                  <>
+                    <label className={styles.check}>
+                      <input
+                        type="checkbox"
+                        checked={showAccount}
+                        onChange={(e) => setShowAccount(e.target.checked)}
+                      />
+                      <span>Account to pay into</span>
+                    </label>
+                    {showAccount && (
+                      <select
+                        className={styles.accountSelect}
+                        aria-label="Which account"
+                        value={account?.id ?? ''}
+                        onChange={(e) => setAccountId(e.target.value)}
+                      >
+                        {accounts.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.bank_name} · {a.account_number} · {a.account_name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </>
+                )}
               </section>
 
               {order.lines.length > 0 && (
@@ -491,10 +605,36 @@ export default function OrderItemsPage() {
                   )}
                 </div>
               )}
+
+              {/* Room for the floating button, so it never sits on the last of the page. */}
+              <div className={styles.floatSpacer} aria-hidden />
+              <FloatingAction
+                label="Add an item"
+                icon={<PlusIcon />}
+                onClick={() => setPicking(true)}
+              />
             </>
           )
         }
       </PageState>
+
+      {finishedGuard.dialog}
+      {order && (
+        <ProductPicker
+          open={picking}
+          onClose={() => setPicking(false)}
+          storeId={store.id}
+          onPick={(p) => {
+            setPicking(false);
+            void (async () => {
+              if (!(await finishedGuard.allow(p))) return;
+              // The line page finds the order by id, so a tab never saved is saved first.
+              const saved = order.id ? order : await push(order);
+              void nav.push('sale_line_page', { id: saved.id ?? order.id ?? '', product: p.id });
+            })();
+          }}
+        />
+      )}
     </PageScaffold>
   );
 }

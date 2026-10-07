@@ -7,7 +7,8 @@ import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/components/ui/Dialog';
 import { Explain, InfoPanel } from '@/components/ui/Explain';
-import { EditIcon, PlusIcon, StarIcon, TrashIcon } from '@/components/ui/Icon';
+import { EditIcon, PlusIcon, PrinterIcon, StarIcon, TrashIcon } from '@/components/ui/Icon';
+import { listDocument, usePrintShare } from '@/components/ui/PrintShare';
 import { useStackBack } from '@/hooks/useStackBack';
 import { usePermission } from '@/hooks/usePermission';
 import { useAuth } from '@/providers/AuthProvider';
@@ -54,6 +55,11 @@ export default function BankPage() {
   const [confirmRemove, setConfirmRemove] = useState<Account | null>(null);
   const removeDialog = useConfirm();
   const problem = useProblem();
+  /*
+   * "ACTIONS TO PRINT AS WELL — even to the printer on Bluetooth, like the receipt." The account a
+   * customer pays into, on a slip to hand over or a picture to send: one account, or all of them.
+   */
+  const printShare = usePrintShare();
 
   /*
    * Nothing reloads after a write any more.
@@ -76,6 +82,23 @@ export default function BankPage() {
    * money — is a form, and a form under a keyboard on a phone is not a sheet. Only the id travels;
    * the form resolves the account from the same cache this list reads.
    */
+  const payInto = (list: Account[]) =>
+    list.map((a) => [a.bank_name, a.account_number, a.account_name].filter(Boolean).join('\n')).join('\n\n');
+  const printAccounts = (list: Account[]) =>
+    printShare({
+      title: list.length === 1 ? `Pay into ${list[0].bank_name}` : 'Pay into',
+      filename: list.length === 1 ? `account-${list[0].account_number}` : 'accounts',
+      message:
+        `Pay ${store.name} into:\n` + payInto(list),
+      build: () =>
+        listDocument({
+          shopName: store.name,
+          title: 'Pay into',
+          rows: [],
+          transferDetails: payInto(list),
+        }),
+    });
+
   const startAdd = () => void nav.push('bank_form_page');
   const startEdit = (a: Account) => void nav.push('bank_form_page', { id: a.id });
 
@@ -142,8 +165,17 @@ export default function BankPage() {
                 )}
               </div>
 
+              <div className={styles.actions}>
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  onClick={() => printAccounts([a])}
+                  aria-label={`Print or share the ${a.bank_name} account`}
+                >
+                  <PrinterIcon size="1.1em" />
+                </button>
               {editable && (
-                <div className={styles.actions}>
+                <>
                   <button
                     type="button"
                     className={styles.iconButton}
@@ -160,11 +192,18 @@ export default function BankPage() {
                   >
                     <TrashIcon size="1.1em" />
                   </button>
-                </div>
+                </>
               )}
+              </div>
             </li>
           ))}
         </ul>
+      )}
+
+      {accounts.length > 1 && (
+        <Button variant="secondary" fullWidth onClick={() => printAccounts(accounts)}>
+          <PrinterIcon /> Print or share all accounts
+        </Button>
       )}
 
       {!editable && (

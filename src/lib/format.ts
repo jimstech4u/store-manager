@@ -209,6 +209,32 @@ export function pluralUnit(unit: string, count: number): string {
   return Math.abs(count) === 1 ? label.one : label.many;
 }
 
+/**
+ * A SHAPE'S WORD FOR THIS MANY — "1 crate", "½ crate", "20 crates".
+ *
+ * "Receipt prints 1 packs and 20 pack." Four screens put a line's shape after its quantity, and
+ * three of them used the one word they had, the singular, whatever the number: "20 Pack". Anything
+ * up to one is one (a half crate is still a crate); more is the plural. The shop's own plural when
+ * it is known, else the English one from the singular, so "Box" is "Boxes" and not "Boxs".
+ */
+export function shapeWord(
+  qty: string | number | null | undefined,
+  one: string | null | undefined,
+  many?: string | null,
+): string {
+  if (!one) return many ?? '';
+  const n = toNumber(qty);
+  if (n !== null && Math.abs(n) <= 1) return one;
+  return many || pluralOfWord(one);
+}
+
+/** English plural of one word, keeping its case: Crate → Crates, Box → Boxes, Tray → Trays. */
+export function pluralOfWord(word: string): string {
+  if (/(s|x|z|ch|sh)$/i.test(word)) return `${word}${word === word.toUpperCase() ? 'ES' : 'es'}`;
+  if (/[^aeiou]y$/i.test(word)) return `${word.slice(0, -1)}${word === word.toUpperCase() ? 'IES' : 'ies'}`;
+  return `${word}${word === word.toUpperCase() ? 'S' : 's'}`;
+}
+
 function pluralise(word: string, count: number): string {
   if (Math.abs(count) === 1) return word.toLowerCase();
   return `${word.toLowerCase()}s`;

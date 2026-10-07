@@ -14,6 +14,9 @@ import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { depositLedger, type DepositMove, LEDGERS_SCOPE } from '@/lib/stacks/customer-ledgers';
 import { formatMoney } from '@/lib/format';
+import { PrintShareButton, listDocument } from '@/components/ui/PrintShare';
+import { useCustomerAccount } from '@/lib/stacks/customer-account';
+import { useAuth } from '@/providers/AuthProvider';
 import styles from './deposit-customer-page.module.css';
 
 /**
@@ -49,6 +52,9 @@ export default function DepositCustomerPage() {
   );
 
   const moves = area.data ?? [];
+  const { store } = useAuth();
+  // Their name and number for the paper — the account's own cached read.
+  const { account } = useCustomerAccount(customerId);
   // Newest first, and the reader carries the running balance — so the first row is what is held.
   const held = moves.length > 0 ? moves[0].running : 0;
 
@@ -189,6 +195,34 @@ export default function DepositCustomerPage() {
                   </li>
                 ))}
               </ul>
+            )}
+
+            {store && (
+              <PrintShareButton
+                label="Print or share their deposit"
+                spec={() => ({
+                  title: `Deposit · ${account?.customer.name ?? 'Customer'}`,
+                  filename: `deposit-${(account?.customer.name ?? 'customer').toLowerCase().replace(/\s+/g, '-')}`,
+                  message: `${store.name} is holding ${formatMoney(held)} deposit for ${account?.customer.name ?? 'you'}.`,
+                  whatsapp: {
+                    phone: account?.customer.phone,
+                    customerId,
+                    customerName: account?.customer.name,
+                  },
+                  build: () =>
+                    listDocument({
+                      shopName: store.name,
+                      title: 'Deposit',
+                      meta: [account?.customer.name ?? '', new Date().toLocaleString()].filter(Boolean),
+                      rows: [...moves].reverse().map((m) => ({
+                        name: m.direction === 'taken' ? 'Taken' : m.direction === 'given' ? 'Given back' : 'Kept',
+                        detail: `${new Date(m.occurredAt).toLocaleDateString()}${m.reason ? ` · ${m.reason}` : ''}`,
+                        amount: `${m.direction === 'taken' ? '' : '-'}${formatMoney(m.amount)}`,
+                      })),
+                      totals: [{ label: 'Holding for them', value: formatMoney(held), strong: true }],
+                    }),
+                })}
+              />
             )}
           </>
         )}

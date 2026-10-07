@@ -10,6 +10,7 @@ import { CameraIcon, PlusIcon } from '@/components/ui/Icon';
 import { ConfirmDialog, useConfirm } from '@/components/ui/Dialog';
 import { FloatingAmount } from '@/components/ui/FloatingAmount';
 import { ProductPicker } from '@/components/catalog/ProductPicker';
+import { useFinishedGuard } from '@/components/sell/FinishedItem';
 import { BarcodeScanner } from '@/components/catalog/BarcodeScanner';
 import { CustomerPicker } from '@/components/customers/CustomerPicker';
 import { SaleLineRow } from '@/components/sell/SaleLineRow';
@@ -62,6 +63,7 @@ export default function AmendPage() {
   const { shapes: saleUnits, ensure: ensureShapes } = useTillShapes(store?.id ?? null, productIds);
 
   const [picking, setPicking] = useState(false);
+  const finishedGuard = useFinishedGuard();
   const [scanning, setScanning] = useState(false);
   const [namingCustomer, setNamingCustomer] = useState(false);
 
@@ -135,6 +137,14 @@ export default function AmendPage() {
    * priced, cannot offer its parts, and cannot say whether a crate goes out with it.
    */
   const put = async (product: { id: string; name: string }) => {
+    /*
+     * FINISHED? Correcting puts this receipt's old lines back on the shelf first, so what it sold of
+     * the item counts as there: a receipt that took the last crate may still say it.
+     */
+    const putBack = (was?.lines ?? [])
+      .filter((l) => l.productId === product.id)
+      .reduce((sum, l) => sum + (Number(l.baseQty) || 0), 0);
+    if (!(await finishedGuard.allow(product, putBack))) return;
     /*
      * `ensure` hands the shapes BACK as well as caching them. Reading `saleUnits` straight after
      * calling it would be reading the render that has not happened yet — the line would be added
@@ -366,6 +376,7 @@ export default function AmendPage() {
         />
       )}
 
+      {finishedGuard.dialog}
       <ProductPicker
         open={picking}
         onClose={() => setPicking(false)}

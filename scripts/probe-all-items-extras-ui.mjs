@@ -114,9 +114,9 @@ try {
   });
   const order = layout.boxes.map((b) => b.text.split(' ')[0]).join(',');
   check('the boxes sit under the paper and above Take payment',
-    layout.boxes.length === 4 && layout.boxes.every((b) => b.y >= layout.paperBottom && b.y < layout.pay),
+    layout.boxes.length === 5 && layout.boxes.every((b) => b.y >= layout.paperBottom && b.y < layout.pay),
     JSON.stringify({ paperBottom: Math.round(layout.paperBottom), pay: Math.round(layout.pay), ys: layout.boxes.map((b) => Math.round(b.y)) }));
-  check('in the order: charges, deposit, their balance, still with you', order === 'Charges,Deposit,Their,Still', order);
+  check('in the order: charges, deposit, their balance, still with you, the account', order === 'Charges,Deposit,Their,Still,Account', order);
 
   // ── Their balance ───────────────────────────────────────────────────────────────
   await box(/Their balance/).check();

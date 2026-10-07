@@ -11,6 +11,8 @@ import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { useCustomerAccount, type HistoryEvent } from '@/lib/stacks/customer-account';
 import { formatMoney } from '@/lib/format';
+import { PrintShareButton, listDocument } from '@/components/ui/PrintShare';
+import { useAuth } from '@/providers/AuthProvider';
 import styles from './money-customer-page.module.css';
 
 /**
@@ -33,6 +35,7 @@ export default function MoneyCustomerPage() {
   const goBack = useStackBack();
   const location = useLocation();
   const customerId = (location?.params?.id as string | undefined) ?? null;
+  const { store } = useAuth();
 
   const { account, history, error, reload } = useCustomerAccount(customerId);
   useLiveRefresh(nav, () => reload());
@@ -142,6 +145,49 @@ export default function MoneyCustomerPage() {
                   );
                 })}
               </ul>
+            )}
+
+            {/* THEIR STATEMENT, on paper or sent: every move and where it leaves them. */}
+            {account && store && (
+              <PrintShareButton
+                label="Print or share their statement"
+                spec={() => ({
+                  title: `Statement · ${account.customer.name}`,
+                  filename: `statement-${account.customer.name.toLowerCase().replace(/\s+/g, '-')}`,
+                  message: `${account.customer.name}: ${
+                    owed > 0.005 ? `you owe ${store.name}` : owed < -0.005 ? `${store.name} owes you` : 'nothing owed'
+                  } ${owed !== 0 ? formatMoney(Math.abs(owed)) : ''}`.trim(),
+                  whatsapp: {
+                    phone: account.customer.phone,
+                    customerId: account.customer.id,
+                    customerName: account.customer.name,
+                  },
+                  build: () =>
+                    listDocument({
+                      shopName: store.name,
+                      title: 'Statement',
+                      meta: [account.customer.name, account.customer.phone, new Date().toLocaleString()].filter(Boolean),
+                      rows: [...moves].reverse().map((m) => {
+                        const lowers = m.kind === 'payment' || m.kind === 'excess';
+                        return {
+                          name: m.label,
+                          detail: `${new Date(m.occurred_at).toLocaleDateString()}${m.detail ? ` · ${m.detail}` : ''}`,
+                          amount:
+                            m.amount !== null
+                              ? `${lowers ? '-' : ''}${formatMoney(Math.abs(Number(m.amount)))}`
+                              : '',
+                        };
+                      }),
+                      totals: [
+                        {
+                          label: owed > 0.005 ? 'They owe' : owed < -0.005 ? 'We owe them' : 'Owed',
+                          value: owed !== 0 ? formatMoney(Math.abs(owed)) : 'Nothing',
+                          strong: true,
+                        },
+                      ],
+                    }),
+                })}
+              />
             )}
           </>
         )}

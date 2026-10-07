@@ -18,7 +18,7 @@ import { openPrinterAppWith } from '@/lib/print-handoff';
 import { printCanvas } from '@/lib/bluetooth-print';
 import { printCanvasOverUsb } from '@/lib/usb-print';
 import { renderReceiptCanvas } from '@/lib/share';
-import { formatDateTime, formatMoney, formatQtySpoken, messageOf, pluralUnit } from '@/lib/format';
+import { formatDateTime, formatMoney, formatQtySpoken, messageOf, pluralUnit, shapeWord } from '@/lib/format';
 import styles from './receipt-history-page.module.css';
 
 /**
@@ -85,8 +85,8 @@ export default function ReceiptHistoryPage() {
     ],
     lines: doc.lines.map((l) => ({
       name: l.productName,
-      detail: `${formatQtySpoken(l.enteredQty)} ${l.unitName ?? pluralUnit('piece', l.enteredQty)} x ${formatMoney(l.unitPrice)}`,
-      qty: `${formatQtySpoken(l.enteredQty)} ${l.unitName ?? pluralUnit('piece', l.enteredQty)}`,
+      detail: `${formatQtySpoken(l.enteredQty)} ${l.unitName ? shapeWord(l.enteredQty, l.unitName) : pluralUnit('piece', l.enteredQty)} x ${formatMoney(l.unitPrice)}`,
+      qty: `${formatQtySpoken(l.enteredQty)} ${l.unitName ? shapeWord(l.enteredQty, l.unitName) : pluralUnit('piece', l.enteredQty)}`,
       amount: formatMoney(l.lineTotal),
     })),
     totals: (() => {

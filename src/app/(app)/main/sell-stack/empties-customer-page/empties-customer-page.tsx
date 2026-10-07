@@ -20,7 +20,9 @@ import {
   type EmptiesMove,
   LEDGERS_SCOPE,
 } from '@/lib/stacks/customer-ledgers';
-import { accountsChanged } from '@/lib/stacks/customer-account';
+import { accountsChanged, useCustomerAccount } from '@/lib/stacks/customer-account';
+import { PrintShareButton, listDocument } from '@/components/ui/PrintShare';
+import { formatQtySpoken } from '@/lib/format';
 import { useAuth } from '@/providers/AuthProvider';
 import { messageOf } from '@/lib/format';
 import { rollUpOwed, saidAsPart, settleLine, type OwedLine, type OwedRow } from '@/lib/empties-rollup';
@@ -87,6 +89,7 @@ export default function EmptiesCustomerPage() {
   });
 
   const owed = useMemo(() => owedArea.data ?? [], [owedArea.data]);
+  const { account } = useCustomerAccount(customerId);
   const outstanding = useMemo(() => owed.filter((r) => r.owed > 0), [owed]);
   const rolled = useMemo(() => rollUpOwed(outstanding), [outstanding]);
 
@@ -398,6 +401,56 @@ export default function EmptiesCustomerPage() {
           )
         }
       </LoadArea>
+
+            {store && (
+              <PrintShareButton
+                label="Print or share their empties"
+                spec={() => ({
+                  title: `Empties · ${account?.customer.name ?? 'Customer'}`,
+                  filename: `empties-${(account?.customer.name ?? 'customer').toLowerCase().replace(/\s+/g, '-')}`,
+                  message: `${account?.customer.name ?? 'Your'} empties at ${store.name}.`,
+                  whatsapp: {
+                    phone: account?.customer.phone,
+                    customerId,
+                    customerName: account?.customer.name,
+                  },
+                  build: () =>
+                    listDocument({
+                      shopName: store.name,
+                      title: 'Empties',
+                      meta: [account?.customer.name ?? '', new Date().toLocaleString()].filter(Boolean),
+                      rows: [...(ledgerArea.data ?? [])].reverse().map((m) => {
+                        const theirs = m.side === 'we_hold';
+                        const what =
+                          m.direction === 'out'
+                            ? theirs ? 'Left with us' : 'Took'
+                            : m.direction === 'returned'
+                              ? theirs ? 'Given back' : 'Brought back'
+                              : 'Written off';
+                        return {
+                          name: `${what} · ${m.productName}`,
+                          detail: `${new Date(m.occurredAt).toLocaleDateString()}${m.reason ? ` · ${m.reason}` : ''}`,
+                          amount: `${formatQtySpoken(m.qty)} ${(m.qty <= 1 ? m.unitName : m.unitPlural).toLowerCase()}`,
+                        };
+                      }),
+                      totals: [
+                        ...(lines.length > 0
+                          ? [
+                              { label: 'Still with you', value: '', strong: true },
+                              ...lines.map((l) => ({ label: `${l.label} ${l.unit.toLowerCase()}`, value: l.said })),
+                            ]
+                          : [{ label: 'Still with you', value: 'None' }]),
+                        ...(oursWithUs.length > 0
+                          ? [
+                              { label: 'Yours with us', value: '', strong: true },
+                              ...oursWithUs.map((l) => ({ label: `${l.label} ${l.unit.toLowerCase()}`, value: l.said })),
+                            ]
+                          : []),
+                      ],
+                    }),
+                })}
+              />
+            )}
           </>
         )}
       </PageState>

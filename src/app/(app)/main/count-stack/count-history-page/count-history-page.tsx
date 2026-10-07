@@ -16,6 +16,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { usePaginatedList, useInfiniteScroll } from '@/hooks/usePaginatedList';
 import { useSayInShapes } from '@/lib/stacks/selling-units';
 import { csvName, fetchAllPages, shareCsv, toCsv } from '@/lib/export-csv';
+import { listDocument, usePrintShare } from '@/components/ui/PrintShare';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatDateTime } from '@/lib/format';
 import styles from './count-history-page.module.css';
@@ -55,6 +56,7 @@ export default function CountHistoryPage() {
   const nav = useNav();
   const { store } = useAuth();
   const say = useSayInShapes(store?.id ?? null);
+  const printList = usePrintShare();
   const [searchId, searchOps, isSearchOpen] = useSearchController();
   const [filter, setFilter] = useState<CountFilter>('all');
 
@@ -149,6 +151,29 @@ export default function CountHistoryPage() {
                 ]}
                 value={filter}
                 onChange={setFilter}
+                onPrint={() =>
+                  printList({
+                    title: 'Counts',
+                    filename: csvName('counts', filter).replace(/\.csv$/, ''),
+                    build: async () => {
+                      const rows = await fetchAllPages(fetchPage);
+                      return listDocument({
+                        shopName: store?.name ?? '',
+                        title: 'Counts',
+                        meta: [`${rows.length} ${rows.length === 1 ? 'count' : 'counts'} · ${filter}`, new Date().toLocaleString()],
+                        rows: rows.map((r) => ({
+                          name: r.product_name,
+                          detail: `${new Date(r.counted_at).toLocaleString()} · ${person(r.counted_by_name)} · counted ${say(
+                            r.product_id,
+                            Number(r.counted),
+                            r.base_unit,
+                          )}${r.expected == null ? '' : `, records ${say(r.product_id, Number(r.expected), r.base_unit)}`}`,
+                          amount: found(r).text,
+                        })),
+                      });
+                    },
+                  })
+                }
                 onExport={async () => {
                   const rows = await fetchAllPages(fetchPage);
                   const csv = toCsv(rows, [

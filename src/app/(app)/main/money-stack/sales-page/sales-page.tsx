@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ListFilters } from '@/components/ui/ListFilters';
 import { csvName, fetchAllPages, shareCsv, toCsv } from '@/lib/export-csv';
+import { listDocument, usePrintShare } from '@/components/ui/PrintShare';
 import { useCallback } from 'react';
 import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
@@ -51,6 +52,7 @@ export default function SalesPage() {
   const goBack = useStackBack();
   const nav = useNav();
   const { store } = useAuth();
+  const printList = usePrintShare();
 
   // Browsing here; searching happens in the sheet, where the results get the whole screen.
   const [searchId, searchOps, isSearchOpen] = useSearchController();
@@ -141,6 +143,34 @@ export default function SalesPage() {
           ]}
           value={filter}
           onChange={setFilter}
+          onPrint={() =>
+            printList({
+              title: 'Sales',
+              filename: csvName('sales', filter).replace(/\.csv$/, ''),
+              build: async () => {
+                const rows = await fetchAllPages(fetchPage);
+                const sum = (k: 'total' | 'paid' | 'outstanding') =>
+                  rows.reduce((t, s) => t + (Number(s[k]) || 0), 0);
+                return listDocument({
+                  shopName: store?.name ?? '',
+                  title: 'Sales',
+                  meta: [`${rows.length} ${rows.length === 1 ? 'sale' : 'sales'} · ${filter}`, new Date().toLocaleString()],
+                  rows: rows.map((s) => ({
+                    name: `#${s.id.slice(0, 8).toUpperCase()} ${s.customer_name ?? 'Walk-in'}`,
+                    detail: `${new Date(s.occurred_at).toLocaleString()}${
+                      Number(s.outstanding) > 0.005 ? ` · owes ${formatMoney(Number(s.outstanding))}` : ' · paid'
+                    }`,
+                    amount: formatMoney(Number(s.total) || 0),
+                  })),
+                  totals: [
+                    { label: 'Sold', value: formatMoney(sum('total')), strong: true },
+                    { label: 'Paid', value: formatMoney(sum('paid')) },
+                    { label: 'Still owed', value: formatMoney(sum('outstanding')) },
+                  ],
+                });
+              },
+            })
+          }
           onExport={async () => {
             const rows = await fetchAllPages(fetchPage);
             const csv = toCsv(rows, [

@@ -79,3 +79,26 @@
   font-size: var(--text-sm);
   color: var(--text-muted);
 }
+
+/* Which account goes on the list — the same select Take payment uses for a transfer. */
+.accountSelect {
+  width: 100%;
+  min-height: var(--touch-comfortable);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-base);
+  color: var(--text);
+  background: var(--surface);
+  border: 2px solid var(--border-strong);
+  border-radius: var(--radius);
+}
+
+.accountSelect:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-subtle);
+}
+
+/* The floating "Add an item" covers what is under it; this keeps the page's end clear of it. */
+.floatSpacer {
+  height: 88px;
+}

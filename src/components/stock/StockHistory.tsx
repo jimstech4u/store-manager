@@ -11,6 +11,8 @@ import { ChevronRightIcon } from '@/components/ui/Icon';
 import { getSupabase } from '@/lib/supabase/client';
 import { useAuth } from '@/providers/AuthProvider';
 import { useSayInShapes } from '@/lib/stacks/selling-units';
+import { PrintShareButton, listDocument } from '@/components/ui/PrintShare';
+import { fetchProduct } from '@/lib/stacks/catalog-stack';
 import styles from './StockHistory.module.css';
 
 /**
@@ -351,6 +353,67 @@ export function StockHistory({
           );
         })}
       </ol>
+
+      {/*
+        THE ITEM'S HISTORY ON PAPER — every entry under this filter, not only the ones scrolled to,
+        oldest first as a ledger reads, each with what was left after it.
+      */}
+      {store && (
+        <PrintShareButton
+          label="Print or share this history"
+          spec={() => ({
+            title: 'Stock history',
+            filename: `stock-history-${productId.slice(0, 8)}`,
+            build: async () => {
+              const [product, rows] = await Promise.all([
+                fetchProduct(productId),
+                (async () => {
+                  const all: Movement[] = [];
+                  let cursor: { at: string; id: string } | null = null;
+                  for (let page = 0; page < 50; page += 1) {
+                    const { data, error } = await getSupabase().rpc('product_history_page', {
+                      p_product_id: productId,
+                      p_kinds: kinds,
+                      p_before_at: cursor?.at ?? null,
+                      p_before_id: cursor?.id ?? null,
+                      p_limit: 200,
+                    });
+                    if (error) throw error;
+                    const got = (data ?? []) as Movement[];
+                    all.push(...got);
+                    if (got.length < 200) break;
+                    const last = got[got.length - 1];
+                    cursor = { at: last.at, id: last.id };
+                  }
+                  return all;
+                })(),
+              ]);
+              return listDocument({
+                shopName: store.name,
+                title: 'Stock history',
+                meta: [product?.name ?? 'This item', FILTERS[filter].label, new Date().toLocaleString()],
+                rows: [...rows].reverse().map((row) => {
+                  const isCount = row.kind === 'count';
+                  const gap = Number(row.qty_delta);
+                  return {
+                    name: whatHappened(row),
+                    detail: `${when(row.at)} · ${person(row.actor_name)} · ${isCount ? 'counted' : 'left'} ${say(
+                      productId,
+                      Number(row.balance),
+                      unit,
+                    )}`,
+                    amount: isCount
+                      ? gap === 0
+                        ? 'Matched'
+                        : `${gap > 0 ? '+' : ''}${say(productId, gap, unit)}`
+                      : `${gap > 0 ? '+' : ''}${say(productId, gap, unit)}`,
+                  };
+                }),
+              });
+            },
+          })}
+        />
+      )}
 
       {list.hasMore && (
         <div ref={more} className={styles.sentinel}>
