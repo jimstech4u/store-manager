@@ -31,6 +31,7 @@ import { CashIcon, PlusIcon } from '@/components/ui/Icon';
 import { FloatingAction } from '@/components/ui/FloatingAction';
 import { ProductPicker } from '@/components/catalog/ProductPicker';
 import { useFinishedGuard } from '@/components/sell/FinishedItem';
+import { CustomerPicker } from '@/components/customers/CustomerPicker';
 import { useBankAccounts } from '@/lib/stacks/bank-accounts';
 import { getSupabase } from '@/lib/supabase/client';
 import { ChargesEditor, DepositEditor } from '@/components/sell/OrderExtras';
@@ -149,6 +150,13 @@ export default function OrderItemsPage() {
    */
   const [picking, setPicking] = useState(false);
   const finishedGuard = useFinishedGuard();
+  /*
+   * WHO IT IS FOR — chosen here as Take payment chooses it: the customer picker on this page, and a
+   * new customer through the one customer form, handed back to the open order ("attach-to-payment",
+   * the till's own hand-back). With a customer, their balance and what is still with them can go on
+   * the list.
+   */
+  const [pickingCustomer, setPickingCustomer] = useState(false);
 
   /* What they owe already — the same cached read Take payment makes. */
   const balance = useResource<number>({
@@ -388,6 +396,21 @@ export default function OrderItemsPage() {
                 </span>
               </div>
 
+              <button
+                type="button"
+                className={styles.forRow}
+                data-print-no-print
+                onClick={() => setPickingCustomer(true)}
+              >
+                <span className={styles.forBody}>
+                  <span className={styles.forLabel}>For</span>
+                  <span className={styles.forValue}>
+                    {order.customerId ? order.customerName : 'Anonymous walk-in'}
+                  </span>
+                </span>
+                <span className={styles.forAction}>{order.customerId ? 'Change' : 'Add customer'}</span>
+              </button>
+
               {order.lines.length === 0 ? (
                 <p className={styles.empty}>Nothing is on this order yet.</p>
               ) : (
@@ -619,6 +642,30 @@ export default function OrderItemsPage() {
       </PageState>
 
       {finishedGuard.dialog}
+      {order && (
+        <CustomerPicker
+          open={pickingCustomer}
+          onClose={() => setPickingCustomer(false)}
+          storeId={store.id}
+          initialName={order.customerName}
+          onPick={(customer) => {
+            updateOrder(order.clientUuid, {
+              customerId: customer.id,
+              customerName: customer.name,
+              customerPhone: customer.phone,
+            });
+            setPickingCustomer(false);
+          }}
+          onCreate={(name) => {
+            setPickingCustomer(false);
+            void nav.push('customer_form_page', {
+              ...(name.trim() ? { name } : {}),
+              then: 'attach-to-payment',
+              required: 'minimum',
+            });
+          }}
+        />
+      )}
       {order && (
         <ProductPicker
           open={picking}

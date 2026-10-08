@@ -76,7 +76,21 @@ export default function ReceiptPage() {
         storeId={store.id}
         emptiesAtCounter={fresh}
         after={
-          can('sales.amend') && (
+          <>
+            {/*
+              PUT TOGETHER (0254): this customer's receipts printed and sent as one paper — a view,
+              nothing changes — so two bills do not each carry the balance and the empties.
+            */}
+            <div className={styles.correct}>
+              <Button
+                variant="secondary"
+                fullWidth
+                onClick={() => void nav.push('combine_page', { id: saleId })}
+              >
+                Put receipts together
+              </Button>
+            </div>
+            {can('sales.amend') && (
             <div className={styles.correct}>
               <Button
                 variant="secondary"
@@ -100,19 +114,9 @@ export default function ReceiptPage() {
               >
                 What this receipt has said
               </Button>
-              {/*
-                COMBINE (0253): this customer's receipts sent and printed as one, so two bills do not
-                each carry the balance and the empties.
-              */}
-              <Button
-                variant="secondary"
-                fullWidth
-                onClick={() => void nav.push('combine_page', { id: saleId })}
-              >
-                Combine with other receipts
-              </Button>
             </div>
-          )
+            )}
+          </>
         }
       />
             </>

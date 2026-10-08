@@ -139,8 +139,6 @@ export const ROUTE_NEEDS: Readonly<Record<string, Permission>> = {
   shape_price_page: 'products.manage',
   expense_page: 'expenses.record',
   amend_page: 'sales.amend',
-  // Combining receipts (0253) is the server's `sales.amend` too.
-  combine_page: 'sales.amend',
   account_action_page: 'payments.record',
   deposit_move_page: 'deposits.manage',
   empties_record_page: 'deposits.manage',

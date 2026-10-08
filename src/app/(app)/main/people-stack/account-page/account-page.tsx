@@ -7,7 +7,7 @@ import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { Explain } from '@/components/ui/Explain';
 import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/components/ui/Dialog';
-import { CashIcon, EditIcon, HistoryIcon, RefreshIcon, ReturnIcon, TrashIcon } from '@/components/ui/Icon';
+import { CashIcon, EditIcon, HistoryIcon, PrinterIcon, RefreshIcon, ReturnIcon, TrashIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { usePermission } from '@/hooks/usePermission';
@@ -155,6 +155,19 @@ export default function AccountPage() {
           onClick: () => void reload(),
           ariaLabel: 'Check for changes',
         },
+        /*
+          THEIR STATEMENT — for a period, of what is chosen, to print or send like a receipt (0255).
+        */
+        ...(account
+          ? [
+              {
+                key: 'statement',
+                icon: <PrinterIcon />,
+                onClick: () => void nav.push('account_statement_page', { id: customerId }),
+                ariaLabel: 'Print or send their statement',
+              },
+            ]
+          : []),
         /*
           CHANGING WHAT THEY ARE CALLED.
 

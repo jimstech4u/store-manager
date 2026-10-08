@@ -233,6 +233,10 @@ export function DocumentActions({
       {printRouteOf(printer) === 'direct' && (
         <p className={styles.note}>Printing straight to {printer.printerName}.</p>
       )}
+      {/* The printer app prints once until it is closed — see Receipt.tsx. */}
+      {printRouteOf(printer) === 'app' && (
+        <p className={styles.note}>Printed once, and the second time the printer app says “there is an issue with your device connection”? Close that app (swipe it away) and print again — it keeps hold of the printer after a print until it is closed.</p>
+      )}
       {note && (
         <p className={styles.note} role="status">
           {note}

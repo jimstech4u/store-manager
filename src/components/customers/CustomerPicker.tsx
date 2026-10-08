@@ -5,6 +5,7 @@ import { searchLook } from '@/components/ui/searchLook';
 import { usePermission } from '@/hooks/usePermission';
 import styles from './CustomerPicker.module.css';
 import { SelectionViewer, useSelectionController } from '@academix-admin/selection-viewer';
+import { useOverlayRoute } from '@academix-admin/navigation-stack';
 import { useTheme } from '@/context/ThemeContext';
 import { ViewerError, ViewerLoading, ViewerNoResult } from '@/components/ui/ViewerState';
 import { useDebounced } from '@/components/ui/SearchField';
@@ -76,6 +77,12 @@ export function CustomerPicker({
   const dark = theme === 'dark';
   // The viewer's own id, so two pickers mounted at once cannot share one panel.
   const [viewerId] = useSelectionController();
+  /*
+   * BACK CLOSES THE PICKER, not the page under it — the product picker's own rule. This one never
+   * took a history entry, so Back with it open on All items or Take payment left the page entirely
+   * (found by the All items probe). Named per instance, as two pickers may be mounted at once.
+   */
+  useOverlayRoute(`customer-picker:${viewerId}`, open, onClose);
 
   const [query, setQuery] = useState(initialName);
   const debounced = useDebounced(query);

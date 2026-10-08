@@ -136,6 +136,15 @@ try {
   await p.waitForTimeout(6000);
   t = await paper();
   check('All items opens on the paper', /NOT A RECEIPT/.test(t) && /Trophy/.test(t), t.slice(0, 80));
+  // Who it is for, chosen here as Take payment chooses it.
+  const forRow = top().getByRole('button', { name: /For\s*Mr Christian\s*Change/ });
+  check('All items says who it is for, with Change', (await forRow.count()) === 1);
+  await forRow.click();
+  await p.waitForTimeout(2000);
+  check('Change opens the customer picker on All items', (await p.locator('[role="dialog"] input').count()) > 0);
+  // Back closes a picker (it has its own history entry), leaving All items as it was.
+  await p.goBack();
+  await p.waitForTimeout(2000);
 
   await box(/Still with you/).check();
   await p.waitForTimeout(5000);

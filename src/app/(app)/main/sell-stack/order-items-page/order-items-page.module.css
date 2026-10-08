@@ -102,3 +102,47 @@
 .floatSpacer {
   height: 88px;
 }
+
+/* Who the list is for — Take payment's own "Recording for" row. */
+.forRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--touch-comfortable);
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-3) 0;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.forBody {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.forLabel {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.forValue {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.forAction {
+  flex: none;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

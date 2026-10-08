@@ -4,7 +4,6 @@ import { useState, type ReactNode } from 'react';
 import styles from './Receipt.module.css';
 import { useNav } from '@academix-admin/navigation-stack';
 import { Button } from '@/components/ui/Button';
-import { InfoPanel } from '@/components/ui/Explain';
 import { Field } from '@/components/ui/Field';
 import { WhatsAppIcon } from '@/components/ui/Icon';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
@@ -26,6 +25,7 @@ import {
   renderReceiptImage,
   shareImage,
   shareLink,
+  type ReceiptImageInput,
 } from '@/lib/share';
 import { receiptPdf, sharePdf } from '@/lib/pdf';
 import { useThisPrinter } from '@/lib/stacks/printer';
@@ -38,7 +38,7 @@ import { appUrl } from '@/lib/app-url';
 import { EmptiesBroughtBack } from '@/components/empties/EmptiesBroughtBack';
 import { ChangeOwed } from '@/components/sell/ChangeOwed';
 
-interface SaleDetail {
+export interface SaleDetail {
   sale: {
     id: string;
     occurred_at: string;
@@ -106,195 +106,24 @@ interface SaleDetail {
   }[];
   payments: { id: string; amount: string; method: string; reference: string | null }[];
   /*
-   * COMBINED RECEIPTS (0253). Heading a group: the PAPER that prints for all of them — every part's
-   * lines, charges, payments and change, the account and what is still with them said once. Part of
-   * one: the receipt it now prints under. Neither changes this sale's own figures, which every
-   * action on this screen still works from.
+   * RECEIPTS PUT TOGETHER (0254, `merged_receipts`): the receipts this one paper is made of, when it
+   * is the merged view of several. Absent on a receipt.
    */
-  combined?: { paper: SaleDetail } | null;
-  combined_into?: { id: string; occurred_at: string; total: string } | null;
-  combined_parts?: { id: string; occurred_at: string; total: string }[] | null;
+  merged_parts?: { id: string; occurred_at: string; total: string }[] | null;
 }
 
 /**
- * The printable receipt.
- *
- * Fetched through `sale_detail`, which returns the sale, its lines, its payments and the customer
- * in one call. Assembling this from four client queries would render the header before the lines
- * on a slow connection, which reads as a broken receipt at exactly the moment a customer is
- * looking at it.
- *
- * The print width comes from the store's setting as a CSS custom property, so an unusual printer
- * gets its real width rather than the nearest preset.
+ * THE RECEIPT'S PAPER, from one reading of it — what the screen draws, the printer is sent, and the
+ * picture and the PDF are made of. A function of the reading alone, so the receipt page and the
+ * merged-receipts page (0254) print the same document in the same words.
  */
-export function Receipt({
-  saleId,
-  storeId,
-  after,
-  emptiesAtCounter = false,
-}: {
-  saleId: string;
-  storeId: string;
-  /**
-   * The sale was just made, at the counter: ask whether they brought empties in with them, BEFORE
-   * the receipt is printed or shared, so "still with you" is true on the paper.
-   */
-  emptiesAtCounter?: boolean;
-  /**
-   * What the page puts under the receipt — drawn only once the receipt is, so no action stands
-   * under a loader acting on a receipt nobody can see yet.
-   */
-  after?: ReactNode;
-}) {
-  /*
-   * A settled receipt in state-stack, keyed by sale.
-   *
-   * A receipt is the most re-opened screen in the app and the most fixed: once a sale is settled
-   * its lines, its total and the shop's own header can no longer change. Refetching all three from
-   * scratch every time somebody taps back into it — from the statement, from the day's takings,
-   * from a customer's history — put a blank rectangle in front of a customer who was handed a
-   * phone to look at their receipt.
-   *
-   * KEPT, AND RE-READ WHEN THE SALE'S FIGURES MOVE. This used to say nothing needs to invalidate it
-   * — but a credit sale is paid later and a sale can be amended, and both change what this receipt
-   * says it is owed. It now re-reads under the account figures' scope (a payment, an amendment, the
-   * same on another till), keeping what is shown until the answer lands. And its error is no longer
-   * stored WITH the receipt: a failed first read was cached as the receipt, with no way to ask again.
-   */
-  const res = useResource<{
-    detail: SaleDetail;
-    shopName: string;
-    settings: { width: number; header: string | null; footer: string | null };
-  }>({
-    key: `receipt:v3:${saleId}`,
-    scope: ACCOUNT_DERIVED_SCOPE,
-    deps: [storeId],
-    read: async () => {
-      const supabase = getSupabase();
-      const [{ data: d, error: dErr }, { data: s }, { data: store }] = await Promise.all([
-        // `sale_detail`, and the combined paper when this heads a group (0253).
-        supabase.rpc('receipt_detail', { p_sale_id: saleId }),
-        supabase.rpc('ensure_store_settings', { p_store_id: storeId }),
-        supabase.from('stores').select('name').eq('id', storeId).maybeSingle(),
-      ]);
-      if (dErr) throw dErr;
-
-      const row = (Array.isArray(s) ? s[0] : s) as
-        | { printer_width_mm: string; receipt_header: string | null; receipt_footer: string | null }
-        | null;
-
-      return {
-        detail: d as unknown as SaleDetail,
-        shopName: (store as { name: string } | null)?.name ?? '',
-        settings: {
-          width: Number(row?.printer_width_mm ?? 80),
-          header: row?.receipt_header ?? null,
-          footer: row?.receipt_footer ?? null,
-        },
-      };
-    },
-  });
-
-  const detail = res.data?.detail ?? null;
-  const shopName = res.data?.shopName ?? '';
-  const settings = res.data?.settings ?? null;
-
-  /*
-   * HOW THIS DEVICE PRINTS, from the shop's own setting (0175) rather than from anything this
-   * component works out for itself.
-   *
-   * An earlier version of this decided on the spot: if the browser had Web Bluetooth, print over
-   * Bluetooth. Which would have taken printing AWAY from a shop on a laptop with a real driver and a
-   * working print dialog, and handed them a device chooser instead. The shop says which; the hook
-   * re-acquires the connection silently where the browser allows it.
-   *
-   * CALLED HERE, above the early returns for loading and failure. It sat below them for one build and
-   * the receipt died with React error 310 — "rendered more hooks than during the previous render" —
-   * because the first pass returned early and the second did not. A hook cannot live after a return.
-   */
-  const printer = useThisPrinter(storeId, Number(settings?.width) || undefined);
-  const route: 'direct' | 'app' | 'browser' =
-    (printer.kind === 'usb' || printer.kind === 'bluetooth') && printer.ready
-      ? 'direct'
-      : printer.kind === 'ios_app'
-        ? 'app'
-        : 'browser';
-  // Only a receipt never read is an error screen; a failed re-read keeps the receipt readable.
-  const error = res.data ? null : res.error;
-
-  const [sharing, setSharing] = useState(false);
-  const nav = useNav();
-  const [shareNote, setShareNote] = useState<string | null>(null);
-  /*
-   * The link this screen made, so it can be taken back.
-   *
-   * You cannot revoke a token you did not keep, and the shop has no other way to see it — the token
-   * is the link. Held per screen rather than fetched: the only link worth withdrawing in a hurry is
-   * the one just sent to the wrong number.
-   */
-  const [sharedToken, setSharedToken] = useState<string | null>(null);
-  const [revoking, setRevoking] = useState(false);
-  const [sharingWhatsApp, setSharingWhatsApp] = useState(false);
-  const [makingPdf, setMakingPdf] = useState(false);
-  const [printing, setPrinting] = useState(false);
-
-  /*
-   * REOPENING A CANCELLATION — offered here because this is the screen somebody is looking at when
-   * they realise. The permission is the same one that cancels and corrects: undoing a cancellation
-   * is the same kind of act, and gating it more tightly would mean the person who made the mistake
-   * cannot fix it.
-   */
-  const { can } = usePermission();
-  const canAmend = can('sales.amend');
-  const [reopening, setReopening] = useState(false);
-  const [reopenWhy, setReopenWhy] = useState('');
-  const [askReopen, setAskReopen] = useState(false);
-
-  /*
-   * WHICH WAY THIS DEVICE CAN REACH A PRINTER. See src/lib/printing.ts for the whole reasoning.
-   *
-   * Decided after mounting, not during the render, because it reads the user agent and the Bluetooth
-   * API: the server has no opinion about which phone this is, and answering differently on the two
-   * passes would make React throw the markup away and rebuild it.
-   *
-   * Three routes, in order of how little they ask of the shop:
-   *
-   *   · BLUETOOTH DIRECT, where the browser has Web Bluetooth — Android, and Chrome on a desktop.
-   *     One tap, nothing installed, straight to the paired roll.
-   *   · THE PRINTER APP, on iOS, through a URL scheme. One tap, and the receipt goes as a picture.
-   *   · THE SHARE SHEET, when neither works — always available, three taps.
-   */
-
-
-  if (error) {
-    return (
-      <FullPageMessage
-        title="Could not load the receipt"
-        tone="error"
-        inPage
-        action={
-          <Button fullWidth onClick={res.reload}>
-            Try again
-          </Button>
-        }
-      >
-        {error}
-      </FullPageMessage>
-    );
-  }
-  if (!detail) {
-    return <FullPageMessage title="Preparing the receipt" tone="loading" inPage />;
-  }
-
-  /*
-   * WHAT PRINTS: this receipt, or — when it heads combined receipts — all of them as one. Every
-   * figure on the paper below reads `paper`; the actions under it keep this sale's own (`detail`),
-   * so change is given, and empties settled, against the receipt they belong to.
-   */
-  const paper: SaleDetail = detail.combined?.paper ?? detail;
-  const parts = paper.combined_parts ?? [];
-  const partOf = detail.combined_into ?? null;
+export function receiptDocument(
+  paper: SaleDetail,
+  shopName: string,
+  settings: { header: string | null; footer: string | null } | null,
+): ReceiptImageInput {
   const { sale, customer, lines, payments, charges, corrected } = paper;
+  const parts = paper.merged_parts ?? [];
   /*
    * STILL WITH YOU, said the way the counter says it — and ALL of it, not just today's.
    *
@@ -347,7 +176,6 @@ export function Receipt({
    */
   const owedAfter = paper.account ? Number(paper.account.owed_after) || 0 : null;
   const owedBefore = owedAfter === null ? null : owedAfter - owing;
-  const width = settings?.width ?? 80;
 
 
 
@@ -382,10 +210,10 @@ export function Receipt({
     formatDateTime(sale.occurred_at),
     `#${sale.id.slice(0, 8).toUpperCase()}`,
     ...(customer ? [customer.name] : []),
-    // COMBINED (0253): which receipts this one paper holds, oldest first.
+    // PUT TOGETHER (0254): which receipts this one paper is made of, oldest first.
     ...(parts.length > 1
       ? [
-          `Combines ${parts.length} receipts: ${parts
+          `${parts.length} receipts put together: ${parts
             .map((p) => `#${p.id.slice(0, 8).toUpperCase()} ${formatDate(p.occurred_at)}`)
             .join(', ')}`,
         ]
@@ -513,6 +341,182 @@ export function Receipt({
       : null,
     });
 
+  return receiptPayload();
+}
+
+/**
+ * The printable receipt.
+ *
+ * Fetched through `sale_detail`, which returns the sale, its lines, its payments and the customer
+ * in one call. Assembling this from four client queries would render the header before the lines
+ * on a slow connection, which reads as a broken receipt at exactly the moment a customer is
+ * looking at it.
+ *
+ * The print width comes from the store's setting as a CSS custom property, so an unusual printer
+ * gets its real width rather than the nearest preset.
+ */
+export function Receipt({
+  saleId,
+  storeId,
+  after,
+  emptiesAtCounter = false,
+}: {
+  saleId: string;
+  storeId: string;
+  /**
+   * The sale was just made, at the counter: ask whether they brought empties in with them, BEFORE
+   * the receipt is printed or shared, so "still with you" is true on the paper.
+   */
+  emptiesAtCounter?: boolean;
+  /**
+   * What the page puts under the receipt — drawn only once the receipt is, so no action stands
+   * under a loader acting on a receipt nobody can see yet.
+   */
+  after?: ReactNode;
+}) {
+  /*
+   * A settled receipt in state-stack, keyed by sale.
+   *
+   * A receipt is the most re-opened screen in the app and the most fixed: once a sale is settled
+   * its lines, its total and the shop's own header can no longer change. Refetching all three from
+   * scratch every time somebody taps back into it — from the statement, from the day's takings,
+   * from a customer's history — put a blank rectangle in front of a customer who was handed a
+   * phone to look at their receipt.
+   *
+   * KEPT, AND RE-READ WHEN THE SALE'S FIGURES MOVE. This used to say nothing needs to invalidate it
+   * — but a credit sale is paid later and a sale can be amended, and both change what this receipt
+   * says it is owed. It now re-reads under the account figures' scope (a payment, an amendment, the
+   * same on another till), keeping what is shown until the answer lands. And its error is no longer
+   * stored WITH the receipt: a failed first read was cached as the receipt, with no way to ask again.
+   */
+  const res = useResource<{
+    detail: SaleDetail;
+    shopName: string;
+    settings: { width: number; header: string | null; footer: string | null };
+  }>({
+    key: `receipt:v4:${saleId}`,
+    scope: ACCOUNT_DERIVED_SCOPE,
+    deps: [storeId],
+    read: async () => {
+      const supabase = getSupabase();
+      const [{ data: d, error: dErr }, { data: s }, { data: store }] = await Promise.all([
+        supabase.rpc('sale_detail', { p_sale_id: saleId }),
+        supabase.rpc('ensure_store_settings', { p_store_id: storeId }),
+        supabase.from('stores').select('name').eq('id', storeId).maybeSingle(),
+      ]);
+      if (dErr) throw dErr;
+
+      const row = (Array.isArray(s) ? s[0] : s) as
+        | { printer_width_mm: string; receipt_header: string | null; receipt_footer: string | null }
+        | null;
+
+      return {
+        detail: d as unknown as SaleDetail,
+        shopName: (store as { name: string } | null)?.name ?? '',
+        settings: {
+          width: Number(row?.printer_width_mm ?? 80),
+          header: row?.receipt_header ?? null,
+          footer: row?.receipt_footer ?? null,
+        },
+      };
+    },
+  });
+
+  const detail = res.data?.detail ?? null;
+  const shopName = res.data?.shopName ?? '';
+  const settings = res.data?.settings ?? null;
+
+  /*
+   * HOW THIS DEVICE PRINTS, from the shop's own setting (0175) rather than from anything this
+   * component works out for itself.
+   *
+   * An earlier version of this decided on the spot: if the browser had Web Bluetooth, print over
+   * Bluetooth. Which would have taken printing AWAY from a shop on a laptop with a real driver and a
+   * working print dialog, and handed them a device chooser instead. The shop says which; the hook
+   * re-acquires the connection silently where the browser allows it.
+   *
+   * CALLED HERE, above the early returns for loading and failure. It sat below them for one build and
+   * the receipt died with React error 310 — "rendered more hooks than during the previous render" —
+   * because the first pass returned early and the second did not. A hook cannot live after a return.
+   */
+  const printer = useThisPrinter(storeId, Number(settings?.width) || undefined);
+  const route: 'direct' | 'app' | 'browser' =
+    (printer.kind === 'usb' || printer.kind === 'bluetooth') && printer.ready
+      ? 'direct'
+      : printer.kind === 'ios_app'
+        ? 'app'
+        : 'browser';
+  // Only a receipt never read is an error screen; a failed re-read keeps the receipt readable.
+  const error = res.data ? null : res.error;
+
+  const [sharing, setSharing] = useState(false);
+  const nav = useNav();
+  const [shareNote, setShareNote] = useState<string | null>(null);
+  /*
+   * The link this screen made, so it can be taken back.
+   *
+   * You cannot revoke a token you did not keep, and the shop has no other way to see it — the token
+   * is the link. Held per screen rather than fetched: the only link worth withdrawing in a hurry is
+   * the one just sent to the wrong number.
+   */
+  const [sharedToken, setSharedToken] = useState<string | null>(null);
+  const [revoking, setRevoking] = useState(false);
+  const [sharingWhatsApp, setSharingWhatsApp] = useState(false);
+  const [makingPdf, setMakingPdf] = useState(false);
+  const [printing, setPrinting] = useState(false);
+
+  /*
+   * REOPENING A CANCELLATION — offered here because this is the screen somebody is looking at when
+   * they realise. The permission is the same one that cancels and corrects: undoing a cancellation
+   * is the same kind of act, and gating it more tightly would mean the person who made the mistake
+   * cannot fix it.
+   */
+  const { can } = usePermission();
+  const canAmend = can('sales.amend');
+  const [reopening, setReopening] = useState(false);
+  const [reopenWhy, setReopenWhy] = useState('');
+  const [askReopen, setAskReopen] = useState(false);
+
+  /*
+   * WHICH WAY THIS DEVICE CAN REACH A PRINTER. See src/lib/printing.ts for the whole reasoning.
+   *
+   * Decided after mounting, not during the render, because it reads the user agent and the Bluetooth
+   * API: the server has no opinion about which phone this is, and answering differently on the two
+   * passes would make React throw the markup away and rebuild it.
+   *
+   * Three routes, in order of how little they ask of the shop:
+   *
+   *   · BLUETOOTH DIRECT, where the browser has Web Bluetooth — Android, and Chrome on a desktop.
+   *     One tap, nothing installed, straight to the paired roll.
+   *   · THE PRINTER APP, on iOS, through a URL scheme. One tap, and the receipt goes as a picture.
+   *   · THE SHARE SHEET, when neither works — always available, three taps.
+   */
+
+
+  if (error) {
+    return (
+      <FullPageMessage
+        title="Could not load the receipt"
+        tone="error"
+        inPage
+        action={
+          <Button fullWidth onClick={res.reload}>
+            Try again
+          </Button>
+        }
+      >
+        {error}
+      </FullPageMessage>
+    );
+  }
+  if (!detail) {
+    return <FullPageMessage title="Preparing the receipt" tone="loading" inPage />;
+  }
+
+  const { sale, customer, corrected } = detail;
+  const width = settings?.width ?? 80;
+  const receiptPayload = () => receiptDocument(detail, shopName, settings);
+
   /*
    * THE RECEIPT AS LINES — one description, read by the screen, the preview and the printer.
    *
@@ -521,7 +525,8 @@ export function Receipt({
    * the single source of how they are set out.
    */
   const printedLines = receiptLines(receiptPayload(), printer.layout);
-  const ownChangeOwed = Math.max(
+  // What is still owed to them in change on this sale — the ChangeOwed block gives it.
+  const changeOwed = Math.max(
     (Number(detail.change?.owed ?? 0) || 0) -
       (detail.change?.given ?? []).reduce((sum, g) => sum + (Number(g.amount) || 0), 0),
     0,
@@ -568,12 +573,12 @@ export function Receipt({
         sale — re-reads and prints the true figure, or none at all.
       */}
       {/* CHANGE OWED, given where it is read — before the paper goes out, or when they come back. */}
-      {sale.status !== 'voided' && ownChangeOwed > 0.005 && (
+      {sale.status !== 'voided' && changeOwed > 0.005 && (
         <div data-print-no-print>
           <ChangeOwed
             storeId={storeId}
             saleId={sale.id}
-            owed={ownChangeOwed}
+            owed={changeOwed}
             atSale={emptiesAtCounter}
             onGiven={() => void res.reload()}
           />
@@ -651,37 +656,6 @@ export function Receipt({
         the roll — a receipt is 32 characters across at this size. Here there is room for it, and
         this is where somebody goes when they are trying to work out what happened to a sale.
       */}
-      {/*
-        COMBINED (0253). Part of a group: it prints and shares under the newest receipt, and its own
-        link opens that one — said here, with the way to it and the way back out. Heading one: which
-        receipts this paper holds.
-      */}
-      {partOf && (
-        <div data-print-no-print>
-          <InfoPanel tone="info" title={`Combined into #${partOf.id.slice(0, 8).toUpperCase()}`}>
-            This receipt prints and is shared as part of #{partOf.id.slice(0, 8).toUpperCase()} (
-            {formatDate(partOf.occurred_at)}), with the customer&rsquo;s balance and empties said once.
-            Its own sale is unchanged.
-            <Button
-              variant="secondary"
-              fullWidth
-              onClick={() => void nav.push('receipt_page', { id: partOf.id })}
-            >
-              Open the combined receipt
-            </Button>
-          </InfoPanel>
-        </div>
-      )}
-      {!partOf && parts.length > 1 && (
-        <div data-print-no-print>
-          <InfoPanel tone="info" title={`This receipt combines ${parts.length}`}>
-            {parts.map((p) => `#${p.id.slice(0, 8).toUpperCase()} (${formatDate(p.occurred_at)})`).join(', ')} —
-            printed and shared as one, with the balance and empties said once. Each sale is still
-            recorded as it was.
-          </InfoPanel>
-        </div>
-      )}
-
       {corrected && sale.status !== 'voided' && (
         <div className={styles.corrected} data-print-no-print>
           <p className={styles.correctedHead}>
@@ -952,6 +926,17 @@ export function Receipt({
           <p className={styles.shareNote}>
             Goes to your printer’s own app. A Bluetooth printer never appears under Print —
             that list is network printers only.
+          </p>
+        )}
+        {/*
+          MOBILE PRINT UTIL PRINTS ONCE. Reported 8 Oct 2026: the first print from the app works, the
+          next is refused with "an issue with your device connection" until the printer app is closed.
+          The app keeps its Bluetooth link after a job and its URL scheme has no way to release it, so
+          nothing this page sends can — the way through is said where it is needed.
+        */}
+        {route === 'app' && (
+          <p className={styles.shareNote}>
+            Printed once, and the second time the printer app says “there is an issue with your device connection”? Close that app (swipe it away) and print again — it keeps hold of the printer after a print until it is closed.
           </p>
         )}
 
