@@ -72,10 +72,17 @@ export interface SaleDocument {
     reference: string | null;
   }[];
   transferDetails?: string | null;
+  /**
+   * THE WHOLE RECEIPT AS IT WAS (0257) — `sale_detail` as that version stood, kept with each version
+   * a correction replaces from 8 Oct 2026, and read live for the current one. Receipt history prints
+   * it through the receipt's own `receiptDocument`. Absent on versions stored before then.
+   */
+  paper?: unknown;
 }
 
 function toDocument(d: Record<string, unknown>): SaleDocument {
   return {
+    paper: d.paper ?? undefined,
     saleId: String(d.sale_id),
     revision: Number(d.revision) || 1,
     status: String(d.status ?? 'posted'),

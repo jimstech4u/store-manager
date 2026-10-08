@@ -1,4 +1,5 @@
 'use client';
+import { columnsAt, receiptLines, type PrintedLine, type ReceiptLayout, type TextSize } from '@/lib/escpos-text';
 
 /**
  * Getting a receipt or report out of the app and onto WhatsApp.
@@ -46,6 +47,28 @@ export interface ReceiptImageInput {
   totals: { label: string; value: string; strong?: boolean }[];
   note?: string | null;
   transferDetails?: string | null;
+  /**
+   * ENTRIES, for a document that is a list of events rather than a bill — a statement. Each one
+   * stands on its own: what it was on the left and when on the right; a sale's items numbered
+   * between double rules and closed by its total; a payment or a charge between single rules.
+   * Drawn after who-and-when, before the totals.
+   */
+  blocks?: DocBlock[];
+}
+
+export interface DocBlock {
+  /** "Sale #26EE2FB7", "Payment received" — on the left. */
+  title: string;
+  /** The date, on the right of the same line. */
+  right?: string;
+  /** A sale's items: numbered, each its quantity and what it came to. */
+  items?: { name: string; qty: string; amount: string }[];
+  /** "Total" and the sale's amount, under the items. */
+  total?: { label: string; value: string };
+  /** Anything else: how it was paid, why it was charged — and its amount. */
+  rows?: { label: string; value: string }[];
+  /** A heavy rule under the title instead of a light one (the opening balance). */
+  heavy?: boolean;
 }
 
 /** True when this browser can hand files to the OS share sheet. */
@@ -82,8 +105,16 @@ export function canShareLink(): boolean {
 export async function renderReceiptCanvas(
   input: ReceiptImageInput,
   widthMm = 80,
+  /**
+   * The shop's roll layout. Given, the picture and the PDF are drawn from the SAME lines the printer
+   * is sent and the screen shows (`receiptLines`) — one layout, every way out. "The receipt, even
+   * the PDF or the image, needs a better format": they had their own, which had no rules between
+   * items and no entries, so a statement came out as one run-on list.
+   */
+  layout?: ReceiptLayout,
 ): Promise<HTMLCanvasElement | null> {
   if (typeof document === 'undefined') return null;
+  if (layout) return linesCanvas(receiptLines(input, layout), layout, widthMm);
 
   const scale = 8;                       // px per mm
   const width = Math.round(widthMm * scale);
@@ -266,12 +297,73 @@ export async function renderReceiptCanvas(
   return canvas;
 }
 
+/*
+ * THE ROLL'S LINES ON A CANVAS — the printer's own arithmetic, as `PrintPreview` draws it on the
+ * screen: one cell is the paper divided by how many of that size fit across it, the font is sized to
+ * fill the cell, and a double-height size is stretched from the baseline. Black on white.
+ */
+const MONO = "ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono', Menlo, Consolas, monospace";
+
+function linesCanvas(lines: PrintedLine[], layout: ReceiptLayout, widthMm: number): HTMLCanvasElement | null {
+  const scale = 8; // px per mm
+  const width = Math.round(widthMm * scale);
+  const pad = Math.round(3 * scale);
+  const paper = width - pad * 2;
+
+  const probe = document.createElement('canvas').getContext('2d');
+  if (!probe) return null;
+  probe.font = `100px ${MONO}`;
+  const measured = probe.measureText('0'.repeat(100)).width / 100 / 100;
+  const ratio = measured > 0.3 && measured < 1 ? measured : 0.6;
+
+  const sized = lines.map((line) => {
+    const spans = line.spans.length > 0 ? line.spans : [{ size: 'ss' as TextSize, text: ' ' }];
+    const parts = spans.map((sp) => {
+      const cell = paper / columnsAt(sp.size, layout);
+      const wide = sp.size.endsWith('w') ? 2 : 1;
+      const tall = sp.size.endsWith('h') || sp.size.endsWith('hw') ? 2 : 1;
+      return { sp, cell, font: cell / ratio, scaleY: tall / wide, height: (cell / ratio) * (tall / wide) };
+    });
+    const rowH = parts.reduce((m, x) => Math.max(m, x.height), 0) * 1.2;
+    return { parts, rowH };
+  });
+
+  const height = Math.round(pad * 2 + sized.reduce((sum, l) => sum + l.rowH, 0));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = '#000000';
+  ctx.textBaseline = 'alphabetic';
+
+  let y = pad;
+  for (const line of sized) {
+    let x = pad;
+    for (const part of line.parts) {
+      ctx.save();
+      ctx.font = `${part.sp.size.startsWith('sl') ? 600 : 500} ${part.font}px ${MONO}`;
+      // Down to the row's baseline, then stretched upward for a tall size.
+      ctx.translate(x, y + line.rowH * 0.82);
+      ctx.scale(1, part.scaleY);
+      ctx.fillText(part.sp.text, 0, 0);
+      ctx.restore();
+      x += part.sp.text.length * part.cell;
+    }
+    y += line.rowH;
+  }
+  return canvas;
+}
+
 /** The same receipt as a PNG, for sharing as a picture. */
 export async function renderReceiptImage(
   input: ReceiptImageInput,
   widthMm = 80,
+  layout?: ReceiptLayout,
 ): Promise<Blob | null> {
-  const canvas = await renderReceiptCanvas(input, widthMm);
+  const canvas = await renderReceiptCanvas(input, widthMm, layout);
   if (!canvas) return null;
   return new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
 }

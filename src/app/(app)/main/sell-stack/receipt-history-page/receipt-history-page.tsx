@@ -1,5 +1,7 @@
 'use client';
 
+import { getSupabase } from '@/lib/supabase/client';
+import { receiptDocument, type SaleDetail } from '../sell-page/Receipt';
 import { useCallback, useState } from 'react';
 import { useLocation } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
@@ -47,7 +49,14 @@ export default function ReceiptHistoryPage() {
 
   const read = useCallback(async () => {
     if (!saleId) return null;
-    const [now, past] = await Promise.all([saleDocument(saleId), saleRevisions(saleId)]);
+    const [nowDoc, past, detail] = await Promise.all([
+      saleDocument(saleId),
+      saleRevisions(saleId),
+      // What it says now, exactly as the receipt reads it — everything on the paper (0257).
+      getSupabase().rpc('sale_detail', { p_sale_id: saleId }),
+    ]);
+    if (detail.error) throw detail.error;
+    const now = nowDoc ? { ...nowDoc, paper: detail.data ?? undefined } : nowDoc;
     return { now, past };
   }, [saleId]);
 
@@ -74,7 +83,16 @@ export default function ReceiptHistoryPage() {
         : { state: 'ready' };
 
   /** A stored document, in the shape the printer and the preview read. */
-  const asPayload = (doc: SaleDocument) => ({
+  /*
+   * A VERSION ON PAPER: the whole receipt it was, where it was kept (0257) — the receipt's own
+   * `receiptDocument`, so an old version prints exactly as the customer held it, Still with you and
+   * balance included. A version stored before then has only its lines and money, set out below.
+   */
+  const asPayload = (doc: SaleDocument) =>
+    doc.paper
+      ? receiptDocument(doc.paper as SaleDetail, store.name, null)
+      : storedPayload(doc);
+  const storedPayload = (doc: SaleDocument) => ({
     shopName: store.name,
     header: null,
     footer: null,
@@ -181,7 +199,7 @@ export default function ReceiptHistoryPage() {
          * old revision on paper is laid out by the same code as a current one. A second renderer
          * for history is a second document nobody would notice was wrong.
          */
-        const canvas = await renderReceiptCanvas(asPayload(doc), printer.widthMm);
+        const canvas = await renderReceiptCanvas(asPayload(doc), printer.widthMm, printer.layout);
         if (!canvas) throw new Error('Could not draw that version');
         if (printer.kind === 'usb') await printCanvasOverUsb(canvas, printer.widthMm);
         else await printCanvas(canvas, printer.widthMm);

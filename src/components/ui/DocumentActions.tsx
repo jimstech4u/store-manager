@@ -168,7 +168,7 @@ export function DocumentActions({
           onClick={() =>
             run('picture', async () => {
               // A picture previews in a chat, where a link is text somebody has to decide to tap.
-              const blob = await renderReceiptImage(doc, width);
+              const blob = await renderReceiptImage(doc, width, printer.layout);
               if (!blob) throw new Error('Could not draw the picture');
               const how = await shareImage(blob, `${filename}.png`, title);
               return how === 'downloaded' ? 'Saved to your downloads.' : null;
@@ -217,7 +217,7 @@ export function DocumentActions({
                 if (sheets.length === 0) throw new Error('Could not draw the pages');
                 pdf = await pagesPdf(sheets);
               } else {
-                const canvas = await renderReceiptCanvas(doc, width);
+                const canvas = await renderReceiptCanvas(doc, width, printer.layout);
                 if (!canvas) throw new Error('Could not draw it');
                 pdf = await receiptPdf(canvas, { widthMm: width });
               }

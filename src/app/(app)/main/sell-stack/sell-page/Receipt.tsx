@@ -802,7 +802,7 @@ export function Receipt({
           onClick={async () => {
             // An image previews inline in a chat, where a link is just text somebody has to
             // decide to tap.
-            const blob = await renderReceiptImage(receiptPayload(), width);
+            const blob = await renderReceiptImage(receiptPayload(), width, printer.layout);
             if (!blob) {
               setShareNote('Could not create the image');
               return;
@@ -852,7 +852,7 @@ export function Receipt({
             setPrinting(true);
             try {
               if (route === 'direct') {
-                const canvas = await renderReceiptCanvas(receiptPayload(), width);
+                const canvas = await renderReceiptCanvas(receiptPayload(), width, printer.layout);
                 if (!canvas) throw new Error('Could not draw the receipt');
                 await printer.print(canvas);
                 setShareNote('Sent to the printer.');
@@ -881,7 +881,7 @@ export function Receipt({
                 'No printer app answered. Pick your printer’s own app in the share sheet.',
               );
 
-              const blob = await renderReceiptImage(receiptPayload(), width);
+              const blob = await renderReceiptImage(receiptPayload(), width, printer.layout);
               if (!blob) throw new Error('Could not draw the receipt');
               const result = await shareImage(
                 blob,
@@ -955,7 +955,7 @@ export function Receipt({
             setMakingPdf(true);
             setShareNote(null);
             try {
-              const canvas = await renderReceiptCanvas(receiptPayload(), width);
+              const canvas = await renderReceiptCanvas(receiptPayload(), width, printer.layout);
               if (!canvas) throw new Error('Could not draw the receipt');
               const pdf = await receiptPdf(canvas, { widthMm: width });
               const where = await sharePdf(

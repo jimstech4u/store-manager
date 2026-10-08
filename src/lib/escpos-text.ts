@@ -345,7 +345,39 @@ export function receiptLines(input: ReceiptImageInput, layout: ReceiptLayout): P
     );
     if (i < input.lines.length - 1) rule();
   });
-  ruleDouble();
+  // Closed only when there were any: a slip with no items (a bank account) is not two heavy rules.
+  if (input.lines.length > 0) ruleDouble();
+
+  /*
+   * ── ENTRIES (a statement) ───────────────────────────────────────────────────
+   *
+   * "Sale to the left and the date to the right, on the same line; under it the double line; the
+   * items, numbered one, two, three; a double line; Total to the left and the sale's amount to the
+   * right. A payment, a charge and the rest between two single lines." Each entry stands alone, with
+   * a gap after it, so a month of them reads as a list of events rather than one run of text.
+   */
+  for (const b of input.blocks ?? []) {
+    spread([{ size: layout.totals, text: asFraction(b.title) }], b.right ?? '', layout.totals);
+    if (b.items && b.items.length > 0) {
+      ruleDouble();
+      b.items.forEach((it, i) => {
+        for (const part of wrap(`${i + 1}. ${it.name}`, cols(layout.itemDetail))) one(layout.itemDetail, part);
+        spread(withSmallFraction(`   ${asFraction(it.qty)}`, layout.itemDetail), it.amount, layout.itemDetail);
+        if (i < b.items!.length - 1) rule();
+      });
+      ruleDouble();
+    } else {
+      if (b.heavy) ruleDouble();
+      else rule();
+    }
+    for (const r of b.rows ?? []) {
+      spread(withSmallFraction(asFraction(r.label), layout.totals), r.value, layout.totals);
+    }
+    if (b.total) spread([{ size: layout.totals, text: b.total.label }], b.total.value, layout.totals);
+    if (!(b.items && b.items.length > 0)) rule();
+    blank();
+  }
+  if ((input.blocks ?? []).length > 0) ruleDouble();
 
   // ── The money, then what they are still holding ─────────────────────────────
   /*

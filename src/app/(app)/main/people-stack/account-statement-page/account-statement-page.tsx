@@ -8,6 +8,7 @@ import { Field } from '@/components/ui/Field';
 import { DocumentActions } from '@/components/ui/DocumentActions';
 import { PrintPreview } from '@/components/settings/PrintPreview';
 import { listDocument } from '@/components/ui/PrintShare';
+import type { DocBlock } from '@/lib/share';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { useResource } from '@/lib/stacks/resource';
@@ -182,9 +183,15 @@ export default function AccountStatementPage() {
     setOn(next);
   };
 
+  /*
+   * THE STATEMENT AS ENTRIES (`DocBlock`): a sale is its title and date, its items numbered — the
+   * quantity and what each came to, no price each — and its total; a payment, a charge, a deposit
+   * or the opening balance is its title and date with what it was between single rules. The totals
+   * under them are the account's own, whatever is ticked.
+   */
   const doc = (() => {
     if (!st) return null;
-    const rows: { name: string; detail?: string; amount?: string }[] = [];
+    const blocks: DocBlock[] = [];
     const sum = { sold: 0, charged: 0, paid: 0 };
     for (const e of st.events) {
       const g = groupOf(e.kind);
@@ -196,53 +203,76 @@ export default function AccountStatementPage() {
       }
       if (!g || !on.has(g)) continue;
       const lowers = e.kind === 'payment' || e.kind === 'excess';
-      rows.push({
-        name: e.label,
-        detail: [formatDate(e.occurred_at), e.detail].filter(Boolean).join(' · '),
-        amount: amount != null ? `${lowers ? '-' : ''}${formatMoney(Math.abs(amount))}` : '',
-      });
-      if (e.kind === 'sale' && on.has('items') && e.ref_id) {
-        for (const l of st.items.filter((x) => x.sale_id === e.ref_id)) {
-          rows.push({
-            name: `  ${l.product_name}`,
-            detail: `${formatQtySpoken(l.entered_qty)}${
-              l.unit_name ? ` ${shapeWord(l.entered_qty, l.unit_name, l.unit_plural)}` : ''
-            } x ${formatMoney(Number(l.unit_price))} = ${formatMoney(Number(l.line_total))}`,
-          });
-        }
+      const money = amount != null ? `${lowers ? '-' : ''}${formatMoney(Math.abs(amount))}` : '';
+      const when = formatDate(e.occurred_at);
+
+      if (e.kind === 'sale') {
+        const tag = e.ref_id ? ` #${e.ref_id.slice(0, 8).toUpperCase()}` : '';
+        const items = on.has('items') && e.ref_id ? st.items.filter((x) => x.sale_id === e.ref_id) : [];
+        blocks.push(
+          items.length > 0
+            ? {
+                title: `Sale${tag}`,
+                right: when,
+                items: items.map((l) => ({
+                  name: l.product_name,
+                  qty: `${formatQtySpoken(l.entered_qty)}${
+                    l.unit_name ? ` ${shapeWord(l.entered_qty, l.unit_name, l.unit_plural)}` : ''
+                  }`,
+                  amount: formatMoney(Number(l.line_total)),
+                })),
+                total: { label: 'Total', value: money },
+              }
+            : { title: `Sale${tag}`, right: when, rows: [{ label: 'Total', value: money }] },
+        );
+        continue;
       }
+      blocks.push({
+        title: e.label,
+        right: when,
+        heavy: e.kind === 'opening',
+        rows: [
+          {
+            label: e.detail ?? (e.qty_units ? `${formatQtySpoken(e.qty_units)}` : ''),
+            value: money,
+          },
+        ],
+      });
     }
     const still = on.has('empties')
       ? rollUpOwed(owedRowsFromReceipt(st.empties)).filter((l) => l.side === 'they_hold')
       : [];
-    return listDocument({
-      shopName: store.name,
-      title: 'Statement',
-      meta: [
-        st.customer?.name ?? '',
-        st.customer?.phone ?? '',
-        period.label,
-        `Printed ${new Date().toLocaleString()}`,
-      ].filter(Boolean),
-      rows,
-      totals: [
-        ...(period.from ? [{ label: 'Owed at the start', value: formatMoney(st.opening) }] : []),
-        { label: 'Sold', value: formatMoney(sum.sold) },
-        ...(sum.charged > 0.005 ? [{ label: 'Charged', value: formatMoney(sum.charged) }] : []),
-        { label: 'Paid', value: formatMoney(sum.paid) },
-        {
-          label: st.closing < -0.005 ? 'We owe you' : 'Owed at the end',
-          value: formatMoney(Math.abs(st.closing)),
-          strong: true,
-        },
-        ...(still.length > 0
-          ? [
-              { label: 'Still with you', value: '', strong: true },
-              ...still.map((l) => ({ label: `${l.label} ${l.unit.toLowerCase()}`, value: l.said })),
-            ]
-          : []),
-      ],
-    });
+    return {
+      ...listDocument({
+        shopName: store.name,
+        title: 'Statement',
+        meta: [
+          st.customer?.name ?? '',
+          st.customer?.phone ?? '',
+          period.label,
+          `Printed ${new Date().toLocaleString()}`,
+        ].filter(Boolean),
+        rows: [],
+        totals: [
+          ...(period.from ? [{ label: 'Owed at the start', value: formatMoney(st.opening) }] : []),
+          { label: 'Sold', value: formatMoney(sum.sold) },
+          ...(sum.charged > 0.005 ? [{ label: 'Charged', value: formatMoney(sum.charged) }] : []),
+          { label: 'Paid', value: formatMoney(sum.paid) },
+          {
+            label: st.closing < -0.005 ? 'We owe you' : 'Owed at the end',
+            value: formatMoney(Math.abs(st.closing)),
+            strong: true,
+          },
+          ...(still.length > 0
+            ? [
+                { label: 'Still with you', value: '', strong: true },
+                ...still.map((l) => ({ label: `${l.label} ${l.unit.toLowerCase()}`, value: l.said })),
+              ]
+            : []),
+        ],
+      }),
+      blocks,
+    };
   })();
 
   const name = st?.customer?.name ?? 'Customer';
