@@ -411,3 +411,16 @@
   color: var(--text-muted);
   overflow-wrap: anywhere;
 }
+
+/* The delivery as recorded — the receipt's own paper. */
+.paper {
+  margin: var(--space-4) 0;
+  font-family: var(--font-numeric);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+}

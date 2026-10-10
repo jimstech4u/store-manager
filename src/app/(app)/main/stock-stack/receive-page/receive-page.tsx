@@ -17,7 +17,14 @@ import { useAuth } from '@/providers/AuthProvider';
 import { fetchProduct, stockMoved, useProductList, type Product } from '@/lib/stacks/catalog-stack';
 import { useListNotifier } from '@/hooks/useListChannel';
 import { getSupabase } from '@/lib/supabase/client';
-import { formatMoney, formatQtySpoken, pluralUnit, messageOf } from '@/lib/format';
+import { formatDateTime, formatMoney, formatQtySpoken, pluralUnit, messageOf, shapeWord } from '@/lib/format';
+import { DocumentActions } from '@/components/ui/DocumentActions';
+import { PrintPreview } from '@/components/settings/PrintPreview';
+import { listDocument } from '@/components/ui/PrintShare';
+import { usePrintSettings } from '@/lib/stacks/print-settings';
+import { useThisPrinter } from '@/lib/stacks/printer';
+import { receiptLines } from '@/lib/escpos-text';
+import type { ReceiptImageInput } from '@/lib/share';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 
 interface ReceiveLine {
@@ -202,6 +209,21 @@ export default function ReceivePage() {
   const [busy, setBusy] = useState(false);
   const error = useProblem();
   const [done, setDone] = useState(false);
+  /*
+   * WHAT WAS RECORDED, as a document — kept the moment the delivery lands, so the page can end on
+   * it: what came in, what it cost, what each item really cost, to print or send to whoever needs
+   * it. The form is put away; a list of lines still carrying crosses after the save read as a
+   * delivery that could still be changed.
+   */
+  const [recorded, setRecorded] = useState<ReceiptImageInput | null>(null);
+  const paperSettings = usePrintSettings(store?.id ?? null);
+  const paperWidth = paperSettings.data?.width ?? 80;
+  const paperPrinter = useThisPrinter(store?.id ?? null, paperWidth);
+  /** "50 packs", "1 crate", "½ crate" — the shape it came in, said for this many. */
+  const unitWord = (l: ReceiveLine, qty: string | number) =>
+    l.buyUnitName || l.packName
+      ? shapeWord(qty, l.buyUnitName ?? l.packName)
+      : pluralUnit(l.baseUnit, Number(qty));
 
   /*
    * An item created from here lands on THIS delivery.
@@ -424,6 +446,47 @@ export default function ReceivePage() {
        */
       stockMoved();
 
+      // The delivery as it was recorded — the page ends on it.
+      setRecorded(
+        listDocument({
+          shopName: store.name,
+          title: 'Delivery',
+          meta: [
+            formatDateTime(new Date().toISOString()),
+            ...(supplier?.name ? [`From ${supplier.name}`] : []),
+            ...(invoiceRef.trim() ? [`Invoice ${invoiceRef.trim()}`] : []),
+          ],
+          rows: lines.map((l, i) => ({
+            name: `${i + 1}. ${l.productName}`,
+            detail: `${formatQtySpoken(Number(l.qty) || 0)} ${unitWord(l, l.qty)}${
+              Number(l.freeQty) > 0 ? ` + ${formatQtySpoken(Number(l.freeQty))} free` : ''
+            } x ${formatMoney(Number(l.unitCost) || 0)}${
+              l.expiresOn ? ` · goes off ${new Date(l.expiresOn).toLocaleDateString()}` : ''
+            }`,
+            amount: formatMoney((Number(l.qty) || 0) * (Number(l.unitCost) || 0)),
+          })),
+          totals: [
+            { label: 'Goods', value: formatMoney(goodsTotal) },
+            ...charges
+              .filter((c) => Number(c.amount) > 0)
+              .map((c) => ({ label: c.label || 'Fee', value: formatMoney(Number(c.amount)) })),
+            ...(Number(rebate) > 0 ? [{ label: 'Rebate', value: `-${formatMoney(Number(rebate))}` }] : []),
+            { label: 'Total paid', value: formatMoney(grandTotal), strong: true },
+            // What each item really cost, once the fees and the rebate are spread over it.
+            ...(lines.some((l) => landedFor(l) !== null)
+              ? [
+                  { label: 'Each really cost', value: '', strong: true },
+                  ...lines
+                    .filter((l) => landedFor(l) !== null)
+                    .map((l) => ({
+                      label: `${l.productName} (per ${pluralUnit(l.baseUnit, 1)})`,
+                      value: formatMoney(landedFor(l) ?? 0),
+                    })),
+                ]
+              : []),
+          ],
+        }),
+      );
       setDone(true);
     } catch (e: unknown) {
       error.show(messageOf(e, 'Could not record this delivery'));
@@ -461,20 +524,60 @@ export default function ReceivePage() {
         The rule this codebase already carries is "a form is a page, a choice is a sheet". A result
         is neither: it is the answer to what the page was for, so it belongs in the page.
       */}
-      {done && (
+      {done ? (
         <>
-          <InfoPanel tone="success" title="Stock is in">
+          <InfoPanel tone="success" title="Delivery recorded — the stock is in">
             Your stock has gone up, and the cost of each item now includes the fees and any rebate
             you entered.
           </InfoPanel>
 
+          {recorded && (
+            <>
+              <div
+                className={styles.paper}
+                data-print-root
+                style={{ ['--receipt-width' as string]: `${paperWidth}mm` }}
+              >
+                <PrintPreview lines={receiptLines(recorded, paperPrinter.layout)} layout={paperPrinter.layout} />
+              </div>
+              <DocumentActions
+                storeId={store.id}
+                doc={recorded}
+                filename={`delivery-${new Date().toISOString().slice(0, 10)}`}
+                title={`Delivery at ${store.name}`}
+                message={`Delivery recorded at ${store.name}`}
+              />
+            </>
+          )}
+
           <div className={styles.actions}>
-            <Button size="large" fullWidth onClick={() => void nav.pop()}>
+            <Button
+              size="large"
+              fullWidth
+              onClick={() => {
+                // A fresh form for the next load; the one just recorded is in the stock now.
+                setLines([]);
+                setDraft(null);
+                setCharges([]);
+                setChargeLabel('');
+                setChargeAmount('');
+                setRebate('');
+                setInvoiceRef('');
+                setSupplier(null);
+                setWentBack({});
+                setRecorded(null);
+                setDone(false);
+              }}
+            >
+              Record another delivery
+            </Button>
+            <Button size="large" variant="secondary" fullWidth onClick={() => void nav.pop()}>
               Done
             </Button>
           </div>
         </>
-      )}
+      ) : (
+        <>
 
       {!done && lines.length === 0 && (
         <InfoPanel tone="info" title="Add what came in">
@@ -523,8 +626,7 @@ export default function ReceivePage() {
               >
                 <span className={styles.loadName}>{l.productName}</span>
                 <span className={styles.loadFacts}>
-                  {formatQtySpoken(Number(l.qty) || 0)}{' '}
-                  {(l.buyUnitName ?? l.packName ?? l.baseUnit).toLowerCase()}
+                  {formatQtySpoken(Number(l.qty) || 0)} {unitWord(l, l.qty).toLowerCase()}
                   {Number(l.freeQty) > 0 ? ` + ${formatQtySpoken(Number(l.freeQty))} free` : ''}
                   {Number(l.unitCost) > 0 ? ` at ${formatMoney(Number(l.unitCost))}` : ''}
                   {l.expiresOn ? ` · goes off ${new Date(l.expiresOn).toLocaleDateString()}` : ''}
@@ -946,6 +1048,9 @@ export default function ReceivePage() {
             Record this delivery
           </Button>
         </div>
+      )}
+
+        </>
       )}
 
       <SupplierPicker
