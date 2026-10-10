@@ -1,0 +1,91 @@
+.codeBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-4);
+  margin: var(--space-4) 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  text-align: center;
+}
+
+.codeLabel {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* Read off the screen and typed on a phone: big, spaced, numeric. */
+.code {
+  font-family: var(--font-numeric);
+  font-size: 2.4rem;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  color: var(--text);
+}
+
+.codeNote {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.waButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: var(--touch-comfortable);
+  margin-top: var(--space-2);
+  border-radius: var(--radius);
+  background: #1f9d55;
+  color: #fff;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.section {
+  margin: var(--space-6) 0 var(--space-3);
+  font-size: var(--text-lg);
+}
+
+.none {
+  color: var(--text-muted);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.rowBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rowName {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.rowMeta {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}

@@ -8,6 +8,10 @@ import { useDemandState } from '@academix-admin/state-stack';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatDateTime, formatMoney, formatQtySpoken, pluralUnit, shapeWord } from '@/lib/format';
 import { owedRowsFromReceipt, rollUpOwed } from '@/lib/empties-rollup';
+import { asInstruction, defaultLayout, receiptLines } from '@/lib/escpos-text';
+import { dotsFor } from '@/lib/escpos';
+import { openPrinterAppWith } from '@/lib/print-handoff';
+import { receiptDocument, type SaleDetail } from '@/app/(app)/main/sell-stack/sell-page/Receipt';
 
 interface SharedReceipt {
   shop: {
@@ -84,6 +88,12 @@ export default function SharedReceiptPage({
   params: Promise<{ token: string }>;
 }) {
   const { token } = use(params);
+  // `?print=1`: opened from the assistant, for the shop's printer.
+  const [printable, setPrintable] = useState(false);
+  const [printNote, setPrintNote] = useState<string | null>(null);
+  useEffect(() => {
+    setPrintable(new URLSearchParams(window.location.search).get('print') === '1');
+  }, []);
 
   /*
    * KEPT, because a receipt does not change and the people opening this have the worst
@@ -172,6 +182,23 @@ export default function SharedReceiptPage({
   const owedBefore = owedAfter === null ? null : owedAfter - owing;
   const width = Number(shop.printer_width_mm) || 80;
   const narrow = width < 58;
+
+  /** This receipt in the till's own shape, so it prints with the till's own `receiptDocument`. */
+  const asDetail = (): SaleDetail =>
+    ({
+      sale: { ...sale, fee_amount: sale.fee_amount, revision: sale.revision ?? 1 },
+      customer: customer ? { id: '', name: customer.name, phone: '', balance: '0' } : null,
+      corrected: sale.corrected ? { replaced_at: sale.corrected.replaced_at, reason: '', was_total: sale.corrected.was_total } : null,
+      charges: charges.map((c) => ({ label: c.label, amount: c.amount })),
+      lines: lines.map((l) => ({ ...l, unit_plural: l.unit_plural ?? l.unit_name, pack_name: null, base_qty: '0' })),
+      payments: payments.map((pm, i) => ({ id: String(i), amount: String(pm.amount), method: pm.method, reference: null })),
+      empties: receipt.empties,
+      account: receipt.account ?? null,
+      change: receipt.change ?? null,
+      deposit_total: receipt.deposit_total,
+      deposit_taken: receipt.deposit_taken ?? 0,
+      deposit_unpaid: 0,
+    }) as unknown as SaleDetail;
 
   return (
     <div className={styles.page}>
@@ -416,6 +443,27 @@ export default function SharedReceiptPage({
       </div>
 
       <div className={styles.actions} data-print-no-print>
+        {/*
+          TO THE SHOP'S PRINTER, from a link (`?print=1` — what the WhatsApp assistant sends). The
+          same hand-off the app's own Print makes: the receipt as the printer's own lines, given to
+          the printer app. WhatsApp cannot open the printer app itself; it opens this page, and one
+          tap does the rest.
+        */}
+        {printable && (
+          <Button
+            fullWidth
+            onClick={() => {
+              const layout = defaultLayout(dotsFor(width));
+              const doc = receiptDocument(asDetail(), shop.name, { header: shop.header, footer: shop.footer });
+              void openPrinterAppWith(asInstruction(receiptLines(doc, layout))).then((went) => {
+                if (!went) setPrintNote('No printer app answered. Install the printer app on this phone, or use Save as PDF or print.');
+              });
+            }}
+          >
+            Print to the shop printer
+          </Button>
+        )}
+        {printNote && <p className={styles.foot}>{printNote}</p>}
         <Button variant="secondary" fullWidth onClick={() => window.print()}>
           Save as PDF or print
         </Button>

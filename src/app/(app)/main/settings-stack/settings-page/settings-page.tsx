@@ -535,6 +535,10 @@ export default function SettingsPage() {
           {ROLE_LABEL[role ?? 'staff']} — {ROLE_DESCRIPTION[role ?? 'staff']}
         </p>
       </div>
+      {/* The shop on WhatsApp: link this member's own number to the assistant (0259). */}
+      <Button variant="secondary" fullWidth onClick={() => void nav.push('whatsapp_page')}>
+        WhatsApp — ask the shop from your chats
+      </Button>
 
       {/*
         YOUR SHOPS — and the two things you could not do with them.
