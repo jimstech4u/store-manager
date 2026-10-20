@@ -53,9 +53,13 @@ export function PageScaffold({
    *
    * The behaviour itself belongs to navigation-stack, not here — an app-level version of this was
    * tried first, rendering the header inside the body, and it read as the header being deleted
-   * rather than moving. `appBarBehavior="scroll"` lays the bar over a body padded by its height
-   * and moves it one-to-one with the scroll, so it follows the finger and comes back with the
-   * page.
+   * rather than moving. With `appBarBehavior="scroll"` the bar is the first thing in the scroll
+   * body, so it moves one-to-one with the page, follows the finger and comes back with it, and the
+   * sticky bar beneath takes the top once it has gone.
+   *
+   * It SNAPS (navigation-stack 1.10.0): stop scrolling with the header part-way off and it settles,
+   * back in full if less than half had gone, otherwise gone with the sticky bar in its place. A
+   * header left half on screen read as a layout fault.
    */
   headerScrolls?: boolean;
   children: ReactNode;
@@ -112,6 +116,7 @@ export function PageScaffold({
     <Scaffold
       appBar={header}
       appBarBehavior={headerScrolls ? 'scroll' : 'pinned'}
+      snap={headerScrolls}
       bodyClassName={`${styles.body} ${flush ? styles.bodyFlush : ''}`}
     >
       <div className={styles.inner}>{children}</div>
