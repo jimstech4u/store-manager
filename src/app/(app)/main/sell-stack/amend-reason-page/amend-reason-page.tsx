@@ -14,7 +14,8 @@ import { InfoPanel } from '@/components/ui/Explain';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { amendTotal, useAmendDraft } from '@/lib/stacks/amend-draft';
-import { amendSale } from '@/lib/stacks/amend';
+import { amendSale, countsTouched } from '@/lib/stacks/amend';
+import { ConfirmDialog, useConfirm } from '@/components/ui/Dialog';
 import { formatMoney, messageOf } from '@/lib/format';
 import styles from './amend-reason-page.module.css';
 
@@ -47,6 +48,12 @@ export default function AmendReasonPage() {
 
   const [state, setState] = useState<AsyncState>('idle');
   const [failure, setFailure] = useState<string | null>(null);
+  /*
+   * COUNTED SINCE THE SALE. The count saw the shelf as it really was, so only the person correcting
+   * this knows whether the stock figure should move: the goods moved, or the paper was wrong.
+   */
+  const askGoods = useConfirm();
+  const [counted, setCounted] = useState<string[] | null>(null);
 
   if (!store) return null;
 
@@ -60,12 +67,38 @@ export default function AmendReasonPage() {
       ? { state: 'loading', what: 'this correction' }
       : { state: 'ready' };
 
+  const baseOf = (l: NonNullable<typeof order>['lines'][number]) =>
+    (Number(l.qty) || 0) * (Number(l.saleUnitBaseQty) || 1);
+
   const save = async () => {
     if (!order || !saleId) return;
     setState('busy');
     setFailure(null);
     try {
+      const items = await countsTouched(
+        saleId,
+        order.lines.map((l) => ({ productId: l.productId, baseQty: baseOf(l) })),
+      );
+      if (items.length > 0) {
+        setState('idle');
+        setCounted(items);
+        return;
+      }
+    } catch (e) {
+      setState('failed');
+      setFailure(messageOf(e, 'Could not correct that receipt.'));
+      return;
+    }
+    await write(null);
+  };
+
+  const write = async (goodsMoved: boolean | null) => {
+    if (!order || !saleId) return;
+    setState('busy');
+    setFailure(null);
+    try {
       const result = await amendSale({
+        goodsMoved,
         takeBack: draft.takeBack ?? [],
         cancelDeposit: Boolean(draft.cancelDeposit),
         saleId,
@@ -74,7 +107,7 @@ export default function AmendReasonPage() {
           productId: l.productId,
           saleUnitId: l.saleUnitId,
           enteredQty: Number(l.qty) || 0,
-          baseQty: (Number(l.qty) || 0) * (Number(l.saleUnitBaseQty) || 1),
+          baseQty: baseOf(l),
           unitPrice: Number(l.unitPrice) || 0,
           lineTotal: (Number(l.qty) || 0) * (Number(l.unitPrice) || 0),
           /*
@@ -203,6 +236,20 @@ export default function AmendReasonPage() {
                   </Button>
                 </AsyncAction>
               </div>
+
+              {counted && (
+                <ConfirmDialog
+                  controller={askGoods}
+                  tone="primary"
+                  title="Did the goods really move?"
+                  message={`${counted.join(', ')} ${counted.length === 1 ? 'was' : 'were'} counted after this receipt. Did the goods go out or come back since that count, or was only the paper wrong?`}
+                  confirmText="Yes, they moved"
+                  alternative={{ text: 'Only the paper was wrong', onClick: () => void write(false) }}
+                  cancelText="Go back"
+                  onConfirm={() => void write(true)}
+                  onDismiss={() => setCounted(null)}
+                />
+              )}
             </>
           )
         }

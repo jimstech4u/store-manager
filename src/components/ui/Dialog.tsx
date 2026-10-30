@@ -65,6 +65,7 @@ export function ConfirmDialog({
   cancelText = 'Cancel',
   tone = 'danger',
   onDismiss,
+  alternative,
 }: {
   controller: ReturnType<typeof useConfirm>;
   title: string;
@@ -75,6 +76,8 @@ export function ConfirmDialog({
   tone?: 'danger' | 'primary';
   /** Called whenever this dialog is finished with — confirmed, cancelled or dismissed. */
   onDismiss?: () => void;
+  /** A second real answer, for a question that is not yes or nothing. Cancel still means neither. */
+  alternative?: { text: string; onClick: () => void };
 }) {
   const { DialogViewer, close, open, layoutProp } = controller;
 
@@ -130,6 +133,18 @@ export function ConfirmDialog({
             onConfirm();
           },
         },
+        ...(alternative
+          ? [
+              {
+                text: alternative.text,
+                variant: 'secondary' as const,
+                onClick: () => {
+                  finish();
+                  alternative.onClick();
+                },
+              },
+            ]
+          : []),
       ]}
       showCancel
       cancelText={cancelText}

@@ -34,6 +34,11 @@ const payment = { type: 'object', properties: {
   amount: { type: 'number' }, method: { type: 'string', enum: ['cash', 'transfer', 'pos'] },
 }, required: ['amount', 'method'] };
 
+const GOODS_MOVED = {
+  type: 'boolean',
+  description: 'Only when the shop has told you: true if the goods really went out or came back since the count, false if only the paper was wrong.',
+};
+
 export const ACTION_TOOLS: ToolDef[] = [
   {
     name: 'propose_sale',
@@ -131,12 +136,13 @@ export const ACTION_TOOLS: ToolDef[] = [
       changes: { type: 'array', items: lineItem },
       paid: { type: 'array', items: payment },
       reason: { type: 'string' },
+      goods_moved: GOODS_MOVED,
     }, required: ['sale_id', 'changes', 'reason'] },
   },
   {
     name: 'propose_cancel_receipt',
     description: 'Propose cancelling a receipt (from recent_receipts), with the reason. Stock goes back; money paid becomes credit.',
-    parameters: { type: 'object', properties: { sale_id: { type: 'string' }, reason: { type: 'string' } }, required: ['sale_id', 'reason'] },
+    parameters: { type: 'object', properties: { sale_id: { type: 'string' }, reason: { type: 'string' }, goods_moved: GOODS_MOVED }, required: ['sale_id', 'reason'] },
   },
 ];
 
@@ -154,6 +160,20 @@ const num = (v: unknown) => {
 };
 const say = (qty: number, s: Shape) => `${formatQtySpoken(qty)} ${shapeWord(qty, s.unit_name, s.unit_plural).toLowerCase()}`;
 const refuse = (error: string) => ({ error });
+
+/**
+ * COUNTED SINCE THE SALE (0263): a count saw the shelf as it really was, so only the person knows
+ * whether this moves stock. Null when there is nothing to ask, or the question to put to them.
+ */
+async function askAboutGoods(ctx: Ctx, saleId: string, lines: Args[], goodsMoved: unknown): Promise<string | null> {
+  if (typeof goodsMoved === 'boolean') return null;
+  const touched = await rpc<{ product_name: string }[]>(ctx, 'correction_touches_a_count', { p_sale_id: saleId, p_lines: lines });
+  if (touched.length === 0) return null;
+  return `${touched.map((t) => t.product_name).join(', ')} counted after this receipt. Ask them: did the goods go out or come back since that count, or was only the paper wrong? Then propose it again with goods_moved.`;
+}
+
+const goodsLine = (goodsMoved: unknown) =>
+  goodsMoved === false ? ['Only the paper was wrong: the stock stays as counted'] : goodsMoved === true ? ['The goods moved: the stock changes'] : [];
 
 async function rpc<T>(ctx: Ctx, fn: string, params: Args): Promise<T> {
   const { data, error } = await ctx.db.rpc(fn, params);
@@ -466,12 +486,15 @@ export async function propose(ctx: Ctx, name: string, a: Args): Promise<unknown>
         said.push(`• ${say(qty, lineShape)} ${p.name} at ${money(price)} — ${money(row.line_total as number)}`);
       }
       if (lines.length === 0) return refuse('That would leave nothing on the receipt. To remove it all, cancel the receipt instead.');
+      const ask = await askAboutGoods(ctx, id, lines, a.goods_moved);
+      if (ask) return refuse(ask);
       const was = num(d.total);
       const extras = was - d.lines.reduce((s, l) => s + num(l.line_total), 0);
       const total = lines.reduce((s, l) => s + num(l.line_total), 0) + extras;
       const paid = methods(a.paid);
       return hold(ctx, 'edit_receipt', {
         sale_id: id, reason: String(a.reason).trim(), customer_id: d.customer?.id ?? null, payments: paid,
+        goods_moved: typeof a.goods_moved === 'boolean' ? a.goods_moved : null,
         lines: lines.map(({ name: _name, ...l }) => l),
       }, [
         `*Correct receipt #${id.slice(0, 8).toUpperCase()}?*`,
@@ -479,6 +502,7 @@ export async function propose(ctx: Ctx, name: string, a: Args): Promise<unknown>
         ...said,
         `It said ${money(was)}; it will say *${money(total)}*`,
         ...(paid.length > 0 ? [`Paid now: ${paid.map((p) => `${money(p.amount)} ${p.method}`).join(', ')}`] : []),
+        ...goodsLine(a.goods_moved),
         `Why: ${String(a.reason)}`,
       ].join('\n'));
     }
@@ -488,8 +512,16 @@ export async function propose(ctx: Ctx, name: string, a: Args): Promise<unknown>
       const d = await rpc<{ sale?: { total?: string | number }; customer?: { name?: string } | null } | null>(ctx, 'sale_detail', { p_sale_id: id });
       if (!d?.sale) return refuse('That receipt was not found. Use recent_receipts first.');
       if (!String(a.reason ?? '').trim()) return refuse('Why is it being cancelled?');
-      return hold(ctx, 'cancel_receipt', { sale_id: id, reason: String(a.reason).trim() },
-        `*Cancel receipt #${id.slice(0, 8).toUpperCase()}?*\n${d.customer?.name ?? 'Walk-in'} — ${money(num(d.sale.total))}\nThe stock goes back on the shelf; money paid becomes their credit.\nWhy: ${String(a.reason)}`);
+      const ask = await askAboutGoods(ctx, id, [], a.goods_moved);
+      if (ask) return refuse(ask);
+      return hold(ctx, 'cancel_receipt', { sale_id: id, reason: String(a.reason).trim(), goods_moved: typeof a.goods_moved === 'boolean' ? a.goods_moved : null },
+        [
+          `*Cancel receipt #${id.slice(0, 8).toUpperCase()}?*`,
+          `${d.customer?.name ?? 'Walk-in'} — ${money(num(d.sale.total))}`,
+          a.goods_moved === false ? 'Money paid becomes their credit.' : 'The stock goes back on the shelf; money paid becomes their credit.',
+          ...goodsLine(a.goods_moved),
+          `Why: ${String(a.reason)}`,
+        ].join('\n'));
     }
 
     default:
@@ -580,12 +612,12 @@ export async function execute(ctx: Ctx, action: string, a: Args): Promise<{ text
         p_take_back: null, p_cancel_deposit: false, p_sale_id: a.sale_id, p_reason: a.reason, p_lines: a.lines,
         p_customer_id: null, p_charges: null,
         p_payments: Array.isArray(a.payments) && a.payments.length > 0 ? a.payments : null,
-        p_deposit: null, p_deposit_reason: null,
+        p_deposit: null, p_deposit_reason: null, p_goods_moved: a.goods_moved ?? null,
       });
       return { text: `Corrected ✅\nTo print: ${await receiptLink(String(a.sale_id))}`, receipt: String(a.sale_id) };
     case 'cancel_receipt':
-      await rpc(ctx, 'void_sale', { p_sale_id: a.sale_id, p_reason: a.reason });
-      return { text: 'Cancelled ✅ The stock is back on the shelf.' };
+      await rpc(ctx, 'void_sale', { p_sale_id: a.sale_id, p_reason: a.reason, p_goods_moved: a.goods_moved ?? null });
+      return { text: a.goods_moved === false ? 'Cancelled ✅' : 'Cancelled ✅ The stock is back on the shelf.' };
     default:
       throw new Error(`Unknown action ${action}`);
   }

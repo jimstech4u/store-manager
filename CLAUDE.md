@@ -379,6 +379,26 @@ version (a list the till built up as items were ADDED) was wrong.
   "Stolen or missing" — each with what it does to the money underneath it, and only the ones that can
   be true of THIS gap (nothing is stolen when there is more on the shelf than expected).
 
+## A count is the truth at its moment, and a correction cannot argue with it
+
+A shelf count says what was there. Two figures carry it forward: the ledger (`stock_on_hand`, the sum
+of movements) and the count chain (each day opens from yesterday's count). Anything that touches one
+and not the other shows up later as stock nobody can reconcile.
+
+**Corrections never miscounted.** The owner suspected re-editing receipts; on all 699 receipts the
+movements equal the lines. The fault was the date. A correction lands now, so a receipt from before a
+count, corrected after it, put stock back that the count had already seen: the 3 crates of Pepsi a
+customer never took were on the shelf on 5 October and went onto the records again on the 6th.
+Only the person correcting it knows whether goods moved, so `correct_sale` and `void_sale` take
+`p_goods_moved`, and the screen and the assistant ask when `correction_touches_a_count` says an item
+was counted since the sale. If only the paper was wrong, the correction explains a difference still
+unsettled and otherwise leaves the stock figure alone (`stock_change_after_count`). The receipt's
+movements stay exactly as written, so they still equal its lines: a check worth keeping.
+
+**Every difference reaches the ledger.** Within tolerance means nobody has to explain it, not that it
+did not happen. `book_small_difference` writes it when the day closes, or the two figures disagree for
+ever. **And anything that moves the ledger moves the batches**: `stock_into_layers`.
+
 ## Three things happen to a container, and all three are recordable
 
 It came back. It is still owed. Or it is GONE. The settle screen could record the first, records the

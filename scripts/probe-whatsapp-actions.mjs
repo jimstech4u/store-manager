@@ -120,9 +120,16 @@ const show = (r) => console.log(`      (${r.ms}ms) ${r.text.replace(/\s+/g, ' ')
 
 const proposals = [];
 /** Ask for something; it must come back as a proposal, which is kept and then refused. */
-const proposes = async (what, text, mustSay) => {
-  const r = await ask(text);
+const proposes = async (what, text, mustSay, paperOnly = false) => {
+  let r = await ask(text);
   show(r);
+  // Counted since the sale (0263): it has to ask before it proposes.
+  if (paperOnly && !/Reply \*YES\*/.test(r.text)) {
+    check(`  asks whether the goods moved: ${what}`, /paper|moved/i.test(r.text), r.text.slice(0, 140));
+    r = await ask('Only the paper was wrong');
+    show(r);
+    check('  and the proposal says so', /stays as counted/.test(r.text), r.text.slice(0, 200));
+  }
   const ok = /Reply \*YES\*/.test(r.text) && mustSay.test(r.text);
   check(`proposes: ${what}`, ok, ok ? '' : r.text.slice(0, 160));
   if (ok) check('  with YES and NO to tap', r.options.join() === 'YES,NO', r.options.join());
@@ -169,8 +176,22 @@ try {
   await proposes('a new customer', 'Add a new customer called Probe Testing Customer, phone 08000000000', /Probe Testing/);
   await proposes('money back', 'Give Busayo Store 700 back in cash, they overpaid', /700/);
   await proposes('empties back', 'Busayo Store brought back 2 crates of Trophy Bottle empties', /2/);
-  await proposes('a receipt correction', `Correct receipt #${number}: make ${onIt.product_name} ${Number(onIt.entered_qty) + 1} ${onIt.unit_name}, because the count was wrong`, /Correct receipt[\s\S]*will say/);
-  await proposes('a receipt cancelled', `Cancel receipt #${number}, the customer returned everything`, new RegExp(number));
+  await proposes('a receipt correction', `Correct receipt #${number}: make ${onIt.product_name} ${Number(onIt.entered_qty) + 1} ${onIt.unit_name}, because the count was wrong`, /Correct receipt[\s\S]*will say/, true);
+  await proposes('a receipt cancelled', `Cancel receipt #${number}, the customer returned everything`, new RegExp(number), true);
+
+  // A receipt with an item counted after it: the question has to come first (0263).
+  const { data: counts } = await admin.from('stock_periods').select('product_id, counted_at').eq('store_id', storeId).not('counted_at', 'is', null).order('counted_at', { ascending: false }).limit(5);
+  let crossed = null;
+  for (const c of counts ?? []) {
+    const { data } = await admin.from('sale_lines').select('sale_id, sales!inner(store_id, status, occurred_at)')
+      .eq('product_id', c.product_id).eq('sales.store_id', storeId).eq('sales.status', 'posted').lt('sales.occurred_at', c.counted_at).limit(1);
+    if (data?.length) {
+      crossed = data[0].sale_id;
+      break;
+    }
+  }
+  check('there is a receipt to ask about', Boolean(crossed));
+  if (crossed) await proposes('a counted receipt cancelled', `Cancel receipt #${crossed.slice(0, 8).toUpperCase()}, it was entered by mistake`, /Cancel receipt/, true);
 
   const none = await ask('yes');
   show(none);
@@ -207,6 +228,7 @@ try {
   const rec = await ask(`Send receipt #${number} as a picture`);
   show(rec);
   const recImg = rec.files.find((f) => f.type === 'image');
+  check('the assistant asked about goods before proposing', sent.some((m) => m.type === 'text' && /counted after|paper was wrong|paper/i.test(m.text)));
   check('a receipt comes back as a picture', recImg && recImg.upload?.bytes.slice(1, 4).toString() === 'PNG', recImg ? '' : await trace());
   if (recImg) writeFileSync(`${OUT}/bot-receipt.png`, recImg.upload.bytes);
   const merged = await ask('Put Busayo Store’s last two receipts together as a PDF');

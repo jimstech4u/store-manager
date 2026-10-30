@@ -48,11 +48,12 @@ interface WaMessage {
 
 /** The model's next steps, on a last line of their own: "OPTIONS: Send as PDF | Who owes me?" */
 function splitOptions(answer: string): { words: string; options: string[] } {
-  const m = answer.match(/\n?\s*OPTIONS:\s*(.+)\s*$/i);
+  // To the end of the message: one model puts each step on its own line, and those reached the chat.
+  const m = answer.match(/\n?\s*\*{0,2}OPTIONS:\*{0,2}\s*([\s\S]*)$/i);
   if (!m) return { words: answer, options: [] };
   return {
     words: answer.slice(0, m.index).trim(),
-    options: m[1].split('|').map((o) => o.replace(/[*_]/g, '').trim()).filter(Boolean),
+    options: m[1].split(/[|\n]/).map((o) => o.replace(/^\s*[-•]\s*/, '').replace(/[*_]/g, '').trim()).filter(Boolean),
   };
 }
 

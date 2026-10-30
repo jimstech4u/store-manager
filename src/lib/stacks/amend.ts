@@ -238,6 +238,23 @@ export interface AmendResult {
 }
 
 /**
+ * WHICH ITEMS THIS CORRECTION CHANGES THAT HAVE BEEN COUNTED SINCE THE SALE (0263). A count already
+ * saw the shelf as it really was, so whether the correction moves the stock figure depends on
+ * something only the person correcting it knows: did the goods move, or was it the paperwork?
+ */
+export async function countsTouched(
+  saleId: string,
+  lines: { productId: string; baseQty: number }[],
+): Promise<string[]> {
+  const { data, error } = await getSupabase().rpc('correction_touches_a_count', {
+    p_sale_id: saleId,
+    p_lines: lines.map((l) => ({ product_id: l.productId, base_qty: l.baseQty })),
+  });
+  if (error) throw error;
+  return ((data ?? []) as { product_name: string }[]).map((r) => r.product_name);
+}
+
+/**
  * Correct it.
  *
  * `customerId` is how a WALK-IN acquires somebody to owe the difference. A receipt corrected into
@@ -280,6 +297,8 @@ export async function amendSale(args: {
   takeBack?: string[];
   /** The deposit put down with the sale, cancelled with this correction (0249). */
   cancelDeposit?: boolean;
+  /** Asked when an item was counted since the sale (0263): did the goods move, or only the paper? */
+  goodsMoved?: boolean | null;
 }): Promise<AmendResult> {
   // ONE CALL (0249): what comes off, what is added and why are written together or not at all.
   const { data, error } = await getSupabase().rpc('correct_sale', {
@@ -313,6 +332,7 @@ export async function amendSale(args: {
       : null,
     p_deposit: args.deposit ?? null,
     p_deposit_reason: args.depositReason ?? null,
+    p_goods_moved: args.goodsMoved ?? null,
   });
   if (error) throw error;
 
