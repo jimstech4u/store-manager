@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+ import { createHmac, timingSafeEqual } from 'node:crypto';
 
 /**
  * META'S WHATSAPP CLOUD API — the few calls the bot makes. Server only.
@@ -8,7 +8,8 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
  *   WHATSAPP_APP_SECRET       the app's secret, which signs every webhook Meta sends
  *   WHATSAPP_VERIFY_TOKEN     any string we choose, typed into Meta's webhook form once
  */
-const GRAPH = 'https://graph.facebook.com/v21.0';
+// Overridable so a probe can stand in for Meta and read what the bot would have sent.
+const GRAPH = process.env.WHATSAPP_GRAPH_URL ?? 'https://graph.facebook.com/v21.0';
 
 export function whatsappConfigured(): boolean {
   return Boolean(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID && process.env.WHATSAPP_APP_SECRET);

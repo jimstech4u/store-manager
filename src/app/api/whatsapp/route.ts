@@ -178,17 +178,24 @@ async function handle(msg: WaMessage, profileName: string | null) {
   }
 
   // The last few turns, so "and yesterday?" means something.
+  /*
+   * ONLY THE CONVERSATION ITSELF: rows carrying the shop, which the link code and the welcome do not —
+   * a six-digit code left in the history was taken for a receipt number. And the current message is
+   * taken out here, not in the query: `.neq` on a column that is NULL for every reply removed the
+   * bot's own answers, so the model saw a row of unanswered questions and answered them all again.
+   */
   const { data: past } = await db
     .from('whatsapp_messages')
-    .select('direction, body')
+    .select('direction, body, wa_message_id')
     .eq('wa_phone', msg.from)
+    .eq('store_id', link.store_id)
     .not('body', 'is', null)
-    .neq('wa_message_id', msg.id)
     .order('created_at', { ascending: false })
-    .limit(8);
-  const history: Message[] = ((past ?? []) as { direction: string; body: string }[])
+    .limit(7);
+  const history: Message[] = ((past ?? []) as { direction: string; body: string; wa_message_id: string | null }[])
+    .filter((m) => m.wa_message_id !== msg.id)
     .reverse()
-    .map((m) => ({ role: m.direction === 'in' ? 'user' : 'assistant', content: m.body }));
+    .map((m) => ({ role: m.direction === 'in' ? 'user' : 'assistant', content: m.body.slice(0, 600) }));
 
   const today = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
   const system: Message = {
@@ -196,14 +203,15 @@ async function handle(msg: WaMessage, profileName: string | null) {
     content:
       `You are the Store Manager assistant for "${mine.store_name}", a shop in Nigeria, chatting on WhatsApp with ` +
       `${profileName ?? 'a member of the shop'} (role: ${mine.role_code}). Today is ${today}. Money is in naira (₦).\n` +
+      '- Answer ONLY the latest message. Earlier messages are context for it, not questions to answer again.\n' +
       '- Answer only from the tools; never invent figures, names or prices. If a tool returns an error, say plainly that you cannot see that.\n' +
-      '- Be brief and clear, in plain English, formatted for WhatsApp (short lines, *bold* for key figures, no tables).\n' +
+      '- Be brief and clear, in plain English, formatted for WhatsApp (short lines, *bold* with single stars for key figures, no tables).\n' +
       '- Find a customer or item first, then use its id. If several match, ask which one.\n' +
       '- For a receipt to send or print, call receipt_link and give the link; it has a Print button for the shop printer app.\n' +
       '- You can only look things up for now. If asked to record a sale, payment, delivery or change anything, say that this is coming soon and to use the app meanwhile.',
   };
 
-  const { answer, trace, providers } = await runAssistant(
+  const { answer, trace, providers, skipped } = await runAssistant(
     [system, ...history, { role: 'user', content }],
     TOOLS,
     (name, args) => runTool(userDb, link.store_id, name, args),
@@ -211,6 +219,6 @@ async function handle(msg: WaMessage, profileName: string | null) {
   await reply(answer || 'I could not work that out — could you ask another way?', {
     store_id: link.store_id,
     user_id: link.user_id,
-    tools: { calls: trace, providers },
+    tools: { calls: trace, providers, skipped },
   });
 }
