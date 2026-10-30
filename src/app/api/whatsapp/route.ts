@@ -96,7 +96,7 @@ export async function POST(request: Request) {
             w.msg.from,
             busy
               ? 'I am very busy right now, so nothing was recorded. Please send that again in a minute.'
-              : 'Sorry — something went wrong on our side. Nothing was recorded. Please try again in a moment.',
+              : 'Sorry — something went wrong on our side. Please try again in a moment.',
           );
         } catch {
           // Nothing more to be done for this message.
