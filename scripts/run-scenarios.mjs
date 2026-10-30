@@ -28,6 +28,7 @@ import { scenarios as accounts } from './scenarios/05-money-on-an-account.mjs';
 import { scenarios as isolation } from './scenarios/06-isolation-and-rounding.mjs';
 import { scenarios as corrections2 } from './scenarios/07-loss-dates-and-corrections.mjs';
 import { scenarios as deposits } from './scenarios/08-deposits-come-back.mjs';
+import { scenarios as shelf } from './scenarios/09-stock-stays-with-the-shelf.mjs';
 
 /*
  * In order, because they build on each other. A scenario that needs a customer uses the one made in
@@ -43,6 +44,7 @@ const ALL = [
   ...isolation,
   ...corrections2,
   ...deposits,
+  ...shelf,
 ];
 
 const wanted = process.argv.slice(2).map(Number).filter((n) => !Number.isNaN(n));

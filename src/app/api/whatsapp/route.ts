@@ -90,7 +90,14 @@ export async function POST(request: Request) {
       } catch (e) {
         console.error('whatsapp handle failed', e);
         try {
-          await sendText(w.msg.from, 'Sorry — something went wrong on our side. Please try again in a moment.');
+          // Somebody who has just reported a sale needs to know it is not on the books.
+          const busy = e instanceof Error && e.message.startsWith('Every assistant is unavailable');
+          await sendText(
+            w.msg.from,
+            busy
+              ? 'I am very busy right now, so nothing was recorded. Please send that again in a minute.'
+              : 'Sorry — something went wrong on our side. Nothing was recorded. Please try again in a moment.',
+          );
         } catch {
           // Nothing more to be done for this message.
         }

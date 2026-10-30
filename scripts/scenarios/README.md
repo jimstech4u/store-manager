@@ -97,6 +97,10 @@ Next, roughly in the order a shop would miss them.
 - [ ] **The other writers, asked the same question 0097 asked.** `record_sale`, `record_purchase`,
       `settle_empties` and `save_product_units` all take ids alongside a store id. The deposit four
       trusted theirs; nothing has checked whether these do.
+- [ ] **Scenarios 6, 9, 10, 12, 19 and 34 no longer finish** (30 Oct): 6 reads `cratesBefore` from another
+      scope, 9 reads `crate` the same way, and 12, 19 and 34 sell crates to a walk-in, which a later
+      rule refuses. The one failed check, in 10, follows from 6 stopping before it took the payment.
+      Stale scripts, not the shop: fix them so the next red means something.
 - [ ] **A second OWNER, not just a second shop.** Scenario 26 uses one person owning both, which is
       the harder read-side case and the easier write-side one. A different owner entirely would
       close it.
