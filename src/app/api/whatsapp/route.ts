@@ -1,8 +1,9 @@
 import { after, NextResponse } from 'next/server';
-import { downloadMedia, markRead, sendText, signatureValid, whatsappConfigured } from '@/lib/whatsapp/meta';
+import { downloadMedia, markRead, sendChoices, sendText, signatureValid, whatsappConfigured } from '@/lib/whatsapp/meta';
 import { clientFor, serviceDb } from '@/lib/whatsapp/session';
-import { llmConfigured, runAssistant, type Content, type Message } from '@/lib/whatsapp/llm';
+import { forWhatsApp, llmConfigured, runAssistant, transcribe, type Content, type Message } from '@/lib/whatsapp/llm';
 import { TOOLS, runTool } from '@/lib/whatsapp/tools';
+import { execute, type Ctx } from '@/lib/whatsapp/actions';
 
 /**
  * THE SHOP ON WHATSAPP — the webhook Meta calls for every message to the bot's number.
@@ -38,6 +39,21 @@ interface WaMessage {
   image?: { id: string; caption?: string };
   audio?: { id: string };
   document?: { id: string; caption?: string; filename?: string };
+  /** A tapped button or a choice from a list. */
+  interactive?: {
+    button_reply?: { id: string; title: string };
+    list_reply?: { id: string; title: string; description?: string };
+  };
+}
+
+/** The model's next steps, on a last line of their own: "OPTIONS: Send as PDF | Who owes me?" */
+function splitOptions(answer: string): { words: string; options: string[] } {
+  const m = answer.match(/\n?\s*OPTIONS:\s*(.+)\s*$/i);
+  if (!m) return { words: answer, options: [] };
+  return {
+    words: answer.slice(0, m.index).trim(),
+    options: m[1].split('|').map((o) => o.replace(/[*_]/g, '').trim()).filter(Boolean),
+  };
 }
 
 export async function POST(request: Request) {
@@ -85,7 +101,11 @@ export async function POST(request: Request) {
 
 async function handle(msg: WaMessage, profileName: string | null) {
   const db = serviceDb();
-  const text = (msg.text?.body ?? msg.image?.caption ?? msg.document?.caption ?? '').trim();
+  const tapped = msg.interactive?.button_reply?.title ??
+    (msg.interactive?.list_reply
+      ? `${msg.interactive.list_reply.title}${msg.interactive.list_reply.description ?? ''}`
+      : undefined);
+  let text = (tapped ?? msg.text?.body ?? msg.image?.caption ?? msg.document?.caption ?? '').trim();
 
   // Once only: Meta retries a webhook it thinks was slow, and a retried message is the same message.
   const { error: dup } = await db.from('whatsapp_messages').insert({
@@ -94,8 +114,8 @@ async function handle(msg: WaMessage, profileName: string | null) {
   if (dup) return;
   await markRead(msg.id);
 
-  const reply = async (body: string, extra: Record<string, unknown> = {}) => {
-    await sendText(msg.from, body);
+  const reply = async (body: string, extra: Record<string, unknown> = {}, options: string[] = []) => {
+    await sendChoices(msg.from, body, options);
     await db.from('whatsapp_messages').insert({ direction: 'out', wa_phone: msg.from, kind: 'text', body, ...extra });
   };
 
@@ -122,8 +142,10 @@ async function handle(msg: WaMessage, profileName: string | null) {
         const { data: store } = await db.from('stores').select('name').eq('id', c.store_id).maybeSingle();
         await reply(
           `Linked ✅ This WhatsApp now speaks for you at ${store?.name ?? 'your shop'}, with the same permissions you have in the app.\n\n` +
-            'Ask me things like:\n• How much Trophy is left?\n• Sales today\n• Who owes me?\n• Send Mrs Adeola’s statement for this month\n• Print her last receipt\n\n' +
+            'Ask me anything, record a sale or a payment, or send me a photo or a voice note.\n\n' +
             'Send "unlink" at any time to disconnect this number.',
+          {},
+          ['Sales today', 'Who owes me?', 'What is running low?'],
         );
         return;
       }
@@ -162,18 +184,87 @@ async function handle(msg: WaMessage, profileName: string | null) {
     return;
   }
 
+  /*
+   * A VOICE NOTE IS A TYPED MESSAGE ONCE IT IS WORDS — so everything below, a YES included, works the
+   * same for it. What was heard is logged in place of the empty body.
+   */
+  if (msg.type === 'audio' && msg.audio?.id) {
+    const media = await downloadMedia(msg.audio.id);
+    const heard = media ? await transcribe(media) : null;
+    if (!heard) {
+      await reply('I could not make out that voice note. Could you say it again, or type it?');
+      return;
+    }
+    text = heard;
+    await db.from('whatsapp_messages').update({ body: heard }).eq('wa_message_id', msg.id);
+  }
+
+  const ctx: Ctx = {
+    db: userDb, service: db, storeId: link.store_id, userId: link.user_id, phone: msg.from, proposed: null,
+  };
+
+  /*
+   * YES OR NO, READ HERE AND NOT BY THE MODEL. Claimed in one UPDATE, so a double tap or a retried
+   * webhook runs it once. Anything else leaves it open: "actually make it 3 crates" goes to the
+   * assistant, whose new proposal replaces this one.
+   */
+  const { data: open } = await db
+    .from('whatsapp_pending')
+    .select('id, action, args')
+    .eq('wa_phone', msg.from)
+    .is('done_at', null)
+    .gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (open) {
+    const word = text.toLowerCase().replace(/[.!\s]+$/, '').trim();
+    const yes = /^(yes|y|yeah|yep|yes please|ok|okay|confirm|go ahead|do it)$/.test(word);
+    const no = /^(no|n|nope|cancel|stop|don'?t)$/.test(word);
+    if (yes || no) {
+      const { data: claimed } = await db
+        .from('whatsapp_pending')
+        .update({ done_at: new Date().toISOString(), outcome: no ? 'cancelled' : 'done' })
+        .eq('id', open.id)
+        .is('done_at', null)
+        .select('id');
+      if (!claimed || claimed.length === 0) return;
+      if (no) {
+        await reply('Cancelled. Nothing was recorded.', { store_id: link.store_id, user_id: link.user_id });
+        return;
+      }
+      try {
+        const done = await execute(ctx, open.action, open.args as Record<string, unknown>);
+        const options = done.receipt ? ['Send as PDF', 'Sales today'] : ['Sales today', 'Who owes me?'];
+        // The receipt itself, on the shop's letterhead, as the site shows it.
+        if (done.receipt) {
+          await runTool(userDb, link.store_id, 'send_file', { kind: 'receipt', sale_id: done.receipt, format: 'picture' }, ctx, mine.store_name)
+            .catch(() => undefined);
+        }
+        await reply(done.text, { store_id: link.store_id, user_id: link.user_id, tools: { executed: open.action, receipt: done.receipt } }, options);
+      } catch (e) {
+        const why = e instanceof Error ? e.message : 'something went wrong';
+        await db.from('whatsapp_pending').update({ outcome: why.slice(0, 300) }).eq('id', open.id);
+        await reply(`That was not recorded: ${why}`, { store_id: link.store_id, user_id: link.user_id });
+      }
+      return;
+    }
+  }
+
   const content: Exclude<Content, string> = [];
   if (text) content.push({ type: 'text', text });
   if (msg.type === 'image' && msg.image?.id) {
     const media = await downloadMedia(msg.image.id);
     if (media) content.push({ type: 'image_url', image_url: { url: `data:${media.mime};base64,${media.base64}` } });
   }
-  if (msg.type === 'audio') {
-    await reply('Voice notes are coming soon — please type your question for now.');
-    return;
+  // A PDF or a document goes to the model as it is: an invoice, a price list, a statement to check.
+  if (msg.type === 'document' && msg.document?.id) {
+    const media = await downloadMedia(msg.document.id);
+    if (media) content.push({ type: 'image_url', image_url: { url: `data:${media.mime};base64,${media.base64}` } });
+    else await reply('That file is too large for me to read.');
   }
   if (content.length === 0) {
-    await reply('I can read text and photos for now. What would you like to know?');
+    await reply('I can read text, photos, PDFs and voice notes. What would you like to do?', {}, ['Sales today', 'Who owes me?', 'What is running low?']);
     return;
   }
 
@@ -192,10 +283,29 @@ async function handle(msg: WaMessage, profileName: string | null) {
     .not('body', 'is', null)
     .order('created_at', { ascending: false })
     .limit(7);
-  const history: Message[] = ((past ?? []) as { direction: string; body: string; wa_message_id: string | null }[])
+  const told = ((past ?? []) as { direction: string; body: string; wa_message_id: string | null }[])
     .filter((m) => m.wa_message_id !== msg.id)
-    .reverse()
-    .map((m) => ({ role: m.direction === 'in' ? 'user' : 'assistant', content: m.body.slice(0, 600) }));
+    .reverse();
+  /*
+   * WHAT THEY CALLED OFF IS NOT STILL BEING ASKED. Left in, with only "cancelled" after it, the model
+   * took the old request for the live one and answered "Busayo paid 10,000" with the sale they had
+   * just said no to. The whole exchange goes: the request, the proposal, the NO and the reply to it.
+   */
+  const live = told.filter((_, i) => {
+    const cancelledAt = told.findIndex(
+      (m, j) => j >= i && j <= i + 3 && m.direction === 'out' && m.body.startsWith('Cancelled. Nothing was recorded.'),
+    );
+    return cancelledAt === -1;
+  });
+  const history: Message[] = live
+    /*
+     * A proposal in the history is a pattern a model copies: one wrote its own "Reply YES" with no
+     * tool behind it, so a YES would have recorded nothing. Only the fact of it stays.
+     */
+    .map((m) => ({
+      role: m.direction === 'in' ? 'user' : 'assistant',
+      content: /Reply \*YES\*/.test(m.body) ? '(A proposal was shown to them.)' : m.body.slice(0, 600),
+    }));
 
   const today = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
   const system: Message = {
@@ -208,17 +318,57 @@ async function handle(msg: WaMessage, profileName: string | null) {
       '- Be brief and clear, in plain English, formatted for WhatsApp (short lines, *bold* with single stars for key figures, no tables).\n' +
       '- Find a customer or item first, then use its id. If several match, ask which one.\n' +
       '- For a receipt to send or print, call receipt_link and give the link; it has a Print button for the shop printer app.\n' +
-      '- You can only look things up for now. If asked to record a sale, payment, delivery or change anything, say that this is coming soon and to use the app meanwhile.',
+      '- You cannot record or change anything yourself. To do so you MUST call the matching propose_ tool: it shows them the summary and asks for YES itself. Never write a confirmation request in your own words, and never say something was recorded. If the tool returns an error, tell them what it says and ask for what is missing.\n' +
+      '- To spare typing, end a reply with a last line starting OPTIONS: then up to five short next steps separated by |, each under 20 characters, written for THIS answer and what this person would most likely do next (a customer\'s name, "Remind them", "Their statement", "Send as PDF" only after a list or report). Never offer what you just did. When several customers or items match, the names go there so they can tap one.\n' +
+      '- When searching for an item or customer, pass the name as they wrote it, misspelling and all, with only the name: the search works out what they meant. Never shorten it to one common word like "bottle".\n' +
+      '- When they quote a receipt number, call find_receipt first.\n' +
+      '- Never show ids, or the words tool or function. Use names, dates and receipt numbers like #1AC5EB6F.\n' +
+      '- When they ask for a PDF, picture, file, print or share of a statement, receipt, sales, stock or who owes, use send_file. For a printer link for one receipt, use receipt_link.\n' +
+      '- Be the shop\'s assistant: when an answer points at something to do, offer it as an option (a reminder, a PDF, the receipt). Give the headline figure first, then the few names that matter.\n' +
+      '- A photo or PDF of an invoice is a delivery: read the supplier, items, quantities and costs from it, find each item, and propose it. Ask only for what you cannot read.',
   };
 
-  const { answer, trace, providers, skipped } = await runAssistant(
-    [system, ...history, { role: 'user', content }],
-    TOOLS,
-    (name, args) => runTool(userDb, link.store_id, name, args),
+  const ask = (extra: Message[] = []) =>
+    runAssistant(
+      [system, ...history, { role: 'user', content }, ...extra],
+      TOOLS,
+      (name, args) => runTool(userDb, link.store_id, name, args, ctx, mine.store_name),
+      () => ctx.proposed !== null,
+    );
+  const began = Date.now();
+  let { answer, trace, providers, skipped } = await ask();
+  /*
+   * A CONFIRMATION WITH NOTHING BEHIND IT. A model that asks for YES in its own words has proposed
+   * nothing, and the person's YES would do nothing while they believed it had. Told once to use the
+   * tool; if it still will not, it does not get to say so.
+   */
+  const imitated = (t: string) => /reply\s+\*?yes\b/i.test(t) || /\brecorded\s*✅/i.test(t);
+  if (!ctx.proposed && imitated(answer) && Date.now() - began < 20_000) {
+    ({ answer, trace, providers, skipped } = await ask([
+      { role: 'system', content: 'You did not call a propose_ tool, so nothing is set up. Call the right propose_ tool now.' },
+    ]));
+  }
+  if (!ctx.proposed && imitated(answer)) answer = 'I could not set that up. Could you say it again with the details?';
+  // The same for a file: "it has been sent" with nothing in the chat is a promise nobody can find.
+  const delivered = () => trace.some((t) => t.tool === 'send_file' && (t.result as { sent?: boolean } | null)?.sent === true);
+  const claimsFile = (t: string) => /\b(has been sent|have been sent|is sent|sent as|in the chat|attached)\b/i.test(t);
+  if (!ctx.proposed && claimsFile(answer) && !delivered() && Date.now() - began < 20_000) {
+    ({ answer, trace, providers, skipped } = await ask([
+      { role: 'system', content: 'No file was sent. Call send_file now; if it returns an error, say what it says.' },
+    ]));
+  }
+  if (!ctx.proposed && claimsFile(answer) && !delivered()) answer = 'I could not send that file just now. Please try again.';
+  /*
+   * A PROPOSAL IS SENT IN THE SERVER'S WORDS. What they say yes to is exactly what runs, whatever
+   * the model made of it.
+   */
+  const said = splitOptions(answer);
+  const words = ctx.proposed
+    ? `${forWhatsApp(ctx.proposed)}\n\nReply *YES* to record it, or *NO* to cancel.`
+    : said.words || 'I could not work that out — could you ask another way?';
+  await reply(
+    words,
+    { store_id: link.store_id, user_id: link.user_id, tools: { calls: trace, providers, skipped } },
+    ctx.proposed ? ['YES', 'NO'] : said.options,
   );
-  await reply(answer || 'I could not work that out — could you ask another way?', {
-    store_id: link.store_id,
-    user_id: link.user_id,
-    tools: { calls: trace, providers, skipped },
-  });
 }

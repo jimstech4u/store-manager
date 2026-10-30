@@ -1,5 +1,3 @@
-'use client';
-
 import type { ReceiptImageInput } from '@/lib/share';
 import { spellFractions } from '@/lib/format';
 

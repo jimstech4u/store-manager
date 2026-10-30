@@ -44,7 +44,8 @@ const meta = createServer((req, res) => {
   req.on('end', () => {
     try {
       const j = JSON.parse(body || '{}');
-      if (j.text?.body) sent.push({ to: j.to, text: j.text.body });
+      const said = j.text?.body ?? j.interactive?.body?.text;
+      if (said) sent.push({ to: j.to, text: said });
     } catch {
       // Not ours to judge.
     }
@@ -95,7 +96,7 @@ try {
 
   // What the shop's records say, read as the owner.
   const { data: items } = await anon.rpc('search_products', { p_store_id: storeId, p_query: 'trophy bottle', p_limit: 8, p_offset: 0 });
-  const { data: debtors } = await anon.rpc('debtors_aged', { p_store_id: storeId });
+  const { data: debtors } = await anon.rpc('list_customers', { p_store_id: storeId, p_filter: 'owes', p_limit: 100 });
   const total = (debtors ?? []).reduce((s, r) => s + Number(r.balance), 0);
 
   const stock = await ask(PHONE, 'How much Trophy Bottle is left?');
@@ -115,9 +116,10 @@ try {
   console.log(`      (${receipt.ms}ms) ${receipt.text.replace(/\s+/g, ' ').slice(0, 200)}`);
   check('a receipt comes as a link with the print flag', /\/r\/[^\s]+\?print=1/.test(receipt.text));
 
-  const write = await ask(PHONE, 'Record a sale of 2 crates of Trophy to Busayo Store');
+  const write = await ask(PHONE, 'Record a sale of 2 crates of Trophy Bottle to Busayo Store');
   console.log(`      (${write.ms}ms) ${write.text.replace(/\s+/g, ' ').slice(0, 160)}`);
-  check('asked to change something, it says it cannot yet', /coming soon|app|cannot|can.t/i.test(write.text));
+  check('asked to record something, it only proposes', /Reply \*YES\*/.test(write.text));
+  check('and NO leaves nothing recorded', /Nothing was recorded/.test((await ask(PHONE, 'no')).text));
 
   const { data: log } = await admin.from('whatsapp_messages').select('tools').eq('wa_phone', PHONE).eq('direction', 'out').not('tools', 'is', null);
   const providers = [...new Set((log ?? []).flatMap((m) => m.tools?.providers ?? []))];
@@ -129,6 +131,7 @@ try {
   failed += 1;
 } finally {
   meta.close();
+  await admin.from('whatsapp_pending').delete().eq('wa_phone', PHONE);
   await admin.from('whatsapp_messages').delete().in('wa_phone', [PHONE, STRANGER]);
   await admin.from('whatsapp_links').delete().eq('wa_phone', PHONE);
   console.log('  (probe rows removed)');

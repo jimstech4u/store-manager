@@ -105,3 +105,6 @@ Recorded so the next scan does not re-raise them:
   `purchase_lines`, `purchases`, `payment_allocations`, `stock_layers`, `store_customers`,
   `identities`, `store_member_permissions`, and the rest of the write-side. Reading them through
   functions is the server-authoritative pattern, not an oversight.
+- Readers with no screen yet, on purpose: `customer_items` and `stock_runway` (0262) are consumed by
+  the WhatsApp assistant only. Both deserve a screen: what a customer usually takes on the account,
+  and days of stock left beside the low-stock list.

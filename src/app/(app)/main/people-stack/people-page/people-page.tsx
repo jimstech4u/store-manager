@@ -22,9 +22,11 @@ import { useAuth } from '@/providers/AuthProvider';
 import { usePaginatedList, useInfiniteScroll } from '@/hooks/usePaginatedList';
 import { useProvideCustomers } from '@/lib/stacks/customer-directory';
 import { getSupabase } from '@/lib/supabase/client';
-import { formatMoney } from '@/lib/format';
+import { formatDate, formatMoney } from '@/lib/format';
 
-type PeopleFilter = 'all' | 'owes' | 'credit' | 'empties';
+type PeopleFilter = 'all' | 'owes' | 'credit' | 'deposit' | 'empties' | 'quiet';
+/** "Owes above 100k": an amount of whatever the filter is about, chosen, not typed. */
+type AtLeast = 'any' | '10000' | '50000' | '100000' | '500000';
 
 interface CustomerRow {
   id: string;
@@ -32,6 +34,8 @@ interface CustomerRow {
   business_name: string | null;
   phone: string;
   balance: string;
+  deposit_held?: string;
+  last_sale_at?: string | null;
 }
 
 /**
@@ -57,6 +61,9 @@ export default function PeoplePage() {
 
   /* Who owes, who is owed, who holds our containers — asked of the server (0228). */
   const [filter, setFilter] = useState<PeopleFilter>('all');
+  const [atLeast, setAtLeast] = useState<AtLeast>('any');
+  const hasAmount = filter === 'owes' || filter === 'credit' || filter === 'deposit';
+  const minAmount = hasAmount && atLeast !== 'any' ? Number(atLeast) : null;
 
   const fetchPage = useCallback(
     async (cursor: unknown | null, limit: number) => {
@@ -69,21 +76,22 @@ export default function PeoplePage() {
         p_after_id: c?.id ?? null,
         p_limit: limit,
         p_filter: filter === 'all' ? null : filter,
+        p_min_amount: minAmount,
       });
       if (error) throw error;
       const rows = (data ?? []) as CustomerRow[];
       const last = rows[rows.length - 1];
       return { rows, cursor: last ? { name: last.display_name, id: last.id } : null };
     },
-    [store, filter],
+    [store, filter, minAmount],
   );
 
   const list = usePaginatedList<CustomerRow>({
     fetchPage,
     getId: (r) => r.id,
-    key: filter === 'all' ? 'customers' : `customers:${filter}`,
+    key: filter === 'all' ? 'customers' : `customers:${filter}:${minAmount ?? 'any'}`,
     scope: 'customer_flow',
-    deps: [store?.id, filter],
+    deps: [store?.id, filter, minAmount],
     enabled: Boolean(store),
   });
 
@@ -198,10 +206,16 @@ export default function PeoplePage() {
             { value: 'all', label: 'Everyone' },
             { value: 'owes', label: 'Owes you' },
             { value: 'credit', label: 'You owe them' },
+            { value: 'deposit', label: 'Holding a deposit' },
             { value: 'empties', label: 'Has your empties' },
+            { value: 'quiet', label: 'Stopped buying' },
           ]}
           value={filter}
-          onChange={setFilter}
+          // The amount was about the last question: ₦100,000+ of debt says nothing of deposits.
+          onChange={(v) => {
+            setFilter(v);
+            setAtLeast('any');
+          }}
           onPrint={() =>
             printList({
               title: 'Customers',
@@ -244,6 +258,19 @@ export default function PeoplePage() {
             return how === 'downloaded' ? `${rows.length} people saved to your downloads.` : how === 'shared' ? `${rows.length} people shared.` : null;
           }}
         />
+        {hasAmount && (
+          <ListFilters<AtLeast>
+            options={[
+              { value: 'any', label: 'Any amount' },
+              { value: '10000', label: formatMoney(10000) + '+' },
+              { value: '50000', label: formatMoney(50000) + '+' },
+              { value: '100000', label: formatMoney(100000) + '+' },
+              { value: '500000', label: formatMoney(500000) + '+' },
+            ]}
+            value={atLeast}
+            onChange={setAtLeast}
+          />
+        )}
       </PinnedTools>
 
       <SearchSheet<CustomerRow>
@@ -307,11 +334,17 @@ export default function PeoplePage() {
       {list.items.length === 0 ? (
         filter !== 'all' ? (
           <InfoPanel tone="info" title="Nobody here">
-            {filter === 'owes'
+            {minAmount !== null
+              ? `Nobody at ${formatMoney(minAmount)} or more.`
+              : filter === 'owes'
               ? 'Nobody owes you anything.'
               : filter === 'credit'
                 ? 'You owe nobody anything.'
-                : 'Nobody is holding your containers.'}
+                : filter === 'deposit'
+                  ? 'Nobody has a deposit with you.'
+                  : filter === 'quiet'
+                    ? 'Everybody has bought in the last 30 days.'
+                    : 'Nobody is holding your containers.'}
           </InfoPanel>
         ) : (
         <InfoPanel tone="info" title="No customers saved yet">
@@ -337,6 +370,8 @@ export default function PeoplePage() {
                       <span className={styles.rowMeta}>
                         {c.phone}
                         {c.business_name ? ` · ${c.business_name}` : ''}
+                        {filter === 'deposit' ? ` · deposit ${formatMoney(c.deposit_held ?? 0)}` : ''}
+                        {filter === 'quiet' && c.last_sale_at ? ` · last bought ${formatDate(c.last_sale_at)}` : ''}
                       </span>
                     </span>
                     <span

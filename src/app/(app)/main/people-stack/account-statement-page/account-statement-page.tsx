@@ -7,8 +7,6 @@ import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { Field } from '@/components/ui/Field';
 import { DocumentActions } from '@/components/ui/DocumentActions';
 import { PrintPreview } from '@/components/settings/PrintPreview';
-import { listDocument } from '@/components/ui/PrintShare';
-import type { DocBlock } from '@/lib/share';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { useResource } from '@/lib/stacks/resource';
@@ -17,8 +15,8 @@ import { usePrintSettings } from '@/lib/stacks/print-settings';
 import { useThisPrinter } from '@/lib/stacks/printer';
 import { getSupabase } from '@/lib/supabase/client';
 import { receiptLines } from '@/lib/escpos-text';
-import { owedRowsFromReceipt, rollUpOwed } from '@/lib/empties-rollup';
-import { formatDate, formatMoney, formatQtySpoken, shapeWord } from '@/lib/format';
+import { formatDate, formatMoney } from '@/lib/format';
+import { KINDS, statementDocument, type Kind, type Statement } from '@/lib/statement-document';
 import styles from './account-statement-page.module.css';
 
 /**
@@ -42,56 +40,6 @@ const PERIODS: { kind: PeriodKind; label: string }[] = [
   { kind: 'all', label: 'All time' },
   { kind: 'custom', label: 'Pick dates' },
 ];
-
-type Kind = 'sales' | 'items' | 'payments' | 'charges' | 'deposits' | 'empties';
-const KINDS: { kind: Kind; label: string }[] = [
-  { kind: 'sales', label: 'Sales' },
-  { kind: 'items', label: 'Items on each sale' },
-  { kind: 'payments', label: 'Payments' },
-  { kind: 'charges', label: 'Charges and opening balance' },
-  { kind: 'deposits', label: 'Deposits' },
-  { kind: 'empties', label: 'Empties' },
-];
-
-interface Event {
-  occurred_at: string;
-  kind: string;
-  label: string;
-  detail: string | null;
-  amount: string | null;
-  qty_units: string | null;
-  ref_table: string | null;
-  ref_id: string | null;
-}
-interface Statement {
-  customer: { id: string; name: string; business: string | null; phone: string | null } | null;
-  opening: number;
-  closing: number;
-  events: Event[];
-  items: {
-    sale_id: string;
-    product_name: string;
-    entered_qty: string;
-    unit_name: string | null;
-    unit_plural: string | null;
-    unit_price: string;
-    line_total: string;
-  }[];
-  empties: unknown;
-}
-
-const groupOf = (kind: string): Kind | null =>
-  kind === 'sale'
-    ? 'sales'
-    : kind === 'payment' || kind === 'excess' || kind === 'refund'
-      ? 'payments'
-      : kind === 'charge' || kind === 'opening'
-        ? 'charges'
-        : kind.startsWith('deposit_')
-          ? 'deposits'
-          : kind.startsWith('empties_')
-            ? 'empties'
-            : null;
 
 function periodOf(kind: PeriodKind, fromText: string, toText: string) {
   const midnight = new Date();
@@ -183,97 +131,9 @@ export default function AccountStatementPage() {
     setOn(next);
   };
 
-  /*
-   * THE STATEMENT AS ENTRIES (`DocBlock`): a sale is its title and date, its items numbered — the
-   * quantity and what each came to, no price each — and its total; a payment, a charge, a deposit
-   * or the opening balance is its title and date with what it was between single rules. The totals
-   * under them are the account's own, whatever is ticked.
-   */
-  const doc = (() => {
-    if (!st) return null;
-    const blocks: DocBlock[] = [];
-    const sum = { sold: 0, charged: 0, paid: 0 };
-    for (const e of st.events) {
-      const g = groupOf(e.kind);
-      const amount = e.amount == null ? null : Number(e.amount);
-      if (amount != null) {
-        if (e.kind === 'sale') sum.sold += amount;
-        else if (e.kind === 'charge' || e.kind === 'opening') sum.charged += amount;
-        else if (e.kind === 'payment' || e.kind === 'excess') sum.paid += amount;
-      }
-      if (!g || !on.has(g)) continue;
-      const lowers = e.kind === 'payment' || e.kind === 'excess';
-      const money = amount != null ? `${lowers ? '-' : ''}${formatMoney(Math.abs(amount))}` : '';
-      const when = formatDate(e.occurred_at);
-
-      if (e.kind === 'sale') {
-        const tag = e.ref_id ? ` #${e.ref_id.slice(0, 8).toUpperCase()}` : '';
-        const items = on.has('items') && e.ref_id ? st.items.filter((x) => x.sale_id === e.ref_id) : [];
-        blocks.push(
-          items.length > 0
-            ? {
-                title: `Sale${tag}`,
-                right: when,
-                items: items.map((l) => ({
-                  name: l.product_name,
-                  qty: `${formatQtySpoken(l.entered_qty)}${
-                    l.unit_name ? ` ${shapeWord(l.entered_qty, l.unit_name, l.unit_plural)}` : ''
-                  }`,
-                  amount: formatMoney(Number(l.line_total)),
-                })),
-                total: { label: 'Total', value: money },
-              }
-            : { title: `Sale${tag}`, right: when, rows: [{ label: 'Total', value: money }] },
-        );
-        continue;
-      }
-      blocks.push({
-        title: e.label,
-        right: when,
-        heavy: e.kind === 'opening',
-        rows: [
-          {
-            label: e.detail ?? (e.qty_units ? `${formatQtySpoken(e.qty_units)}` : ''),
-            value: money,
-          },
-        ],
-      });
-    }
-    const still = on.has('empties')
-      ? rollUpOwed(owedRowsFromReceipt(st.empties)).filter((l) => l.side === 'they_hold')
-      : [];
-    return {
-      ...listDocument({
-        shopName: store.name,
-        title: 'Statement',
-        meta: [
-          st.customer?.name ?? '',
-          st.customer?.phone ?? '',
-          period.label,
-          `Printed ${new Date().toLocaleString()}`,
-        ].filter(Boolean),
-        rows: [],
-        totals: [
-          ...(period.from ? [{ label: 'Owed at the start', value: formatMoney(st.opening) }] : []),
-          { label: 'Sold', value: formatMoney(sum.sold) },
-          ...(sum.charged > 0.005 ? [{ label: 'Charged', value: formatMoney(sum.charged) }] : []),
-          { label: 'Paid', value: formatMoney(sum.paid) },
-          {
-            label: st.closing < -0.005 ? 'We owe you' : 'Owed at the end',
-            value: formatMoney(Math.abs(st.closing)),
-            strong: true,
-          },
-          ...(still.length > 0
-            ? [
-                { label: 'Still with you', value: '', strong: true },
-                ...still.map((l) => ({ label: `${l.label} ${l.unit.toLowerCase()}`, value: l.said })),
-              ]
-            : []),
-        ],
-      }),
-      blocks,
-    };
-  })();
+  const doc = st
+    ? statementDocument(st, { shopName: store.name, periodLabel: period.label, hasStart: Boolean(period.from), on })
+    : null;
 
   const name = st?.customer?.name ?? 'Customer';
 

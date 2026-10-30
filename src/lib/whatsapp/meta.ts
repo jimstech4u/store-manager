@@ -50,6 +50,42 @@ export async function sendText(to: string, text: string): Promise<void> {
   for (const p of parts) await post({ to, type: 'text', text: { body: p, preview_url: true } });
 }
 
+/**
+ * WORDS WITH THINGS TO TAP, so a phone is typed on less. Up to three options are buttons; more are a
+ * list, which opens in a sheet. WhatsApp's limits decide the rest: a button title is 20 characters, a
+ * list title 24 with 72 under it, and the words above them 1,024 — longer goes as its own message.
+ */
+export async function sendChoices(to: string, body: string, options: string[]): Promise<void> {
+  const opts = options.map((o) => o.trim()).filter(Boolean).slice(0, 10);
+  if (opts.length === 0) return sendText(to, body);
+  let words = body.trim() || 'What next?';
+  if (words.length > 1000) {
+    await sendText(to, words);
+    words = 'What next?';
+  }
+  const action =
+    opts.length <= 3
+      ? {
+          type: 'button',
+          action: { buttons: opts.map((o, i) => ({ type: 'reply', reply: { id: `o${i}`, title: o.slice(0, 20) } })) },
+        }
+      : {
+          type: 'list',
+          action: {
+            button: 'Choose',
+            sections: [{
+              title: 'Options',
+              rows: opts.map((o, i) => ({
+                id: `o${i}`,
+                title: o.slice(0, 24),
+                ...(o.length > 24 ? { description: o.slice(24, 96) } : {}),
+              })),
+            }],
+          },
+        };
+  await post({ to, type: 'interactive', interactive: { ...action, body: { text: words } } });
+}
+
 /** The read tick and "typing…", while the answer is worked out. */
 export async function markRead(messageId: string): Promise<void> {
   try {
@@ -59,7 +95,32 @@ export async function markRead(messageId: string): Promise<void> {
   }
 }
 
-/** A photo or a voice note the sender attached, as base64 for the model. */
+/** A file of ours, into Meta's store, for a chat: nothing about it sits at a public address. */
+async function upload(bytes: Buffer, mime: string, filename: string): Promise<string> {
+  const form = new FormData();
+  form.append('messaging_product', 'whatsapp');
+  form.append('type', mime);
+  form.append('file', new Blob([new Uint8Array(bytes)], { type: mime }), filename);
+  const res = await fetch(`${GRAPH}/${process.env.WHATSAPP_PHONE_NUMBER_ID}/media`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}` },
+    body: form,
+  });
+  if (!res.ok) throw new Error(`WhatsApp upload failed: ${res.status} ${(await res.text()).slice(0, 300)}`);
+  return ((await res.json()) as { id: string }).id;
+}
+
+export async function sendPdf(to: string, bytes: Buffer, filename: string, caption?: string): Promise<void> {
+  const id = await upload(bytes, 'application/pdf', filename);
+  await post({ to, type: 'document', document: { id, filename, ...(caption ? { caption } : {}) } });
+}
+
+export async function sendPicture(to: string, bytes: Buffer, caption?: string): Promise<void> {
+  const id = await upload(bytes, 'image/png', 'document.png');
+  await post({ to, type: 'image', image: { id, ...(caption ? { caption } : {}) } });
+}
+
+/** A photo, a voice note or a document the sender attached, as base64 for the model. */
 export async function downloadMedia(mediaId: string): Promise<{ mime: string; base64: string } | null> {
   const auth = { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}` };
   const meta = await fetch(`${GRAPH}/${mediaId}`, { headers: auth });

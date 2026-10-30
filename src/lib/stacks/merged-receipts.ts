@@ -3,7 +3,7 @@
 import { getSupabase } from '@/lib/supabase/client';
 import { useResource } from '@/lib/stacks/resource';
 import { ACCOUNT_DERIVED_SCOPE } from '@/lib/stacks/customer-account';
-import type { SaleDetail } from '@/app/(app)/main/sell-stack/sell-page/Receipt';
+import type { SaleDetail } from '@/lib/receipt-document';
 
 /**
  * RECEIPTS PUT TOGETHER (0254) — a VIEW of one customer's receipts as one, for printing and

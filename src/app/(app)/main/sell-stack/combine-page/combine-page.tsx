@@ -14,7 +14,7 @@ import { usePrintSettings } from '@/lib/stacks/print-settings';
 import { useThisPrinter } from '@/lib/stacks/printer';
 import { receiptLines } from '@/lib/escpos-text';
 import { formatDateTime, formatMoney } from '@/lib/format';
-import { receiptDocument } from '../sell-page/Receipt';
+import { receiptDocument } from '@/lib/receipt-document';
 import styles from './combine-page.module.css';
 
 /**

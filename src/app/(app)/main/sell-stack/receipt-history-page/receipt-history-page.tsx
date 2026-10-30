@@ -1,7 +1,7 @@
 'use client';
 
 import { getSupabase } from '@/lib/supabase/client';
-import { receiptDocument, type SaleDetail } from '../sell-page/Receipt';
+import { receiptDocument, type SaleDetail } from '@/lib/receipt-document';
 import { useCallback, useState } from 'react';
 import { useLocation } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';

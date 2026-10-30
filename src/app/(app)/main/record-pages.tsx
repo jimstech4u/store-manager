@@ -62,6 +62,7 @@ import PrintPage from './money-stack/print-page/print-page';
 import CombinePage from './sell-stack/combine-page/combine-page';
 import AccountStatementPage from './people-stack/account-statement-page/account-statement-page';
 import WhatsAppPage from './settings-stack/whatsapp-page/whatsapp-page';
+import ItemDebtsPage from './stock-stack/item-debts-page/item-debts-page';
 import CustomerFormPage from './people-stack/customer-form-page/customer-form-page';
 import CustomerEditPage from './people-stack/customer-edit-page/customer-edit-page';
 import ShopPage from './settings-stack/shop-page/shop-page';
@@ -223,6 +224,8 @@ export const RECORD_PAGES: Record<string, ComponentType> = gateAll({
   account_statement_page: AccountStatementPage,
   // Appended: a route is written into the URL as its POSITION here.
   whatsapp_page: WhatsAppPage,
+  // Appended: a route is written into the URL as its POSITION here.
+  item_debts_page: ItemDebtsPage,
 });
 
 /** Handed to each stack's `additionalNavLinks` — one array, so its identity never changes. */

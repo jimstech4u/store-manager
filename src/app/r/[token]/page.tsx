@@ -11,7 +11,7 @@ import { owedRowsFromReceipt, rollUpOwed } from '@/lib/empties-rollup';
 import { asInstruction, defaultLayout, receiptLines } from '@/lib/escpos-text';
 import { dotsFor } from '@/lib/escpos';
 import { openPrinterAppWith } from '@/lib/print-handoff';
-import { receiptDocument, type SaleDetail } from '@/app/(app)/main/sell-stack/sell-page/Receipt';
+import { receiptDocument, type SaleDetail } from '@/lib/receipt-document';
 
 interface SharedReceipt {
   shop: {

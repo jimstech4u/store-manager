@@ -676,6 +676,19 @@ export default function ProductPage() {
         </InfoPanel>
       )}
 
+      {/* "Who took Zitar and still owes for it?" asked of Zitar. */}
+      <button
+        type="button"
+        className={styles.unitsRow}
+        onClick={() => void nav.push('item_debts_page', { id: product.id })}
+      >
+        <span className={styles.unitsMain}>
+          <span className={styles.unitsTitle}>Who took this</span>
+          <span className={styles.unitsNote}>Who still owes for it, and everyone who has bought it</span>
+        </span>
+        <ChevronRightIcon />
+      </button>
+
       <StockHistoryCard
         productId={product.id}
         onOpen={() => void nav.push('stock_history_page', { id: product.id })}

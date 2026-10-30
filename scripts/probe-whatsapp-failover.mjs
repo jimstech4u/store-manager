@@ -40,7 +40,8 @@ const meta = createServer((req, res) => {
   req.on('end', () => {
     try {
       const j = JSON.parse(body || '{}');
-      if (j.text?.body) sent.push({ to: j.to, text: j.text.body });
+      const said = j.text?.body ?? j.interactive?.body?.text;
+      if (said) sent.push({ to: j.to, text: said });
     } catch {
       // Not ours to judge.
     }

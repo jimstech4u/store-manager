@@ -24,10 +24,7 @@
  */
 export type Content =
   | string
-  | ({ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } } | {
-      type: 'input_audio';
-      input_audio: { data: string; format: string };
-    })[];
+  | ({ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } })[];
 
 export interface Message {
   role: 'system' | 'user' | 'assistant' | 'tool';
@@ -98,7 +95,7 @@ function wordsOnly(messages: Message[]): Message[] {
           ...m,
           content:
             m.content
-              .map((c) => (c.type === 'text' ? c.text : c.type === 'image_url' ? '[a photo]' : '[a voice note]'))
+              .map((c) => (c.type === 'text' ? c.text : '[a photo or document this model cannot read]'))
               .join('\n') || '',
         }
       : m,
@@ -199,7 +196,13 @@ async function complete(
     return 0;
   });
   const errors: string[] = [];
-  for (const p of order) {
+  /*
+   * A FILE ONLY GOES TO A MODEL THAT CAN READ IT. One that cannot is handed the words without the
+   * file, and answers as though there had been none: "I can't read the document, what is the
+   * customer's name?" Better the apology below than a confident answer about nothing.
+   */
+  const able = media && order.some((p) => p.vision !== false) ? order.filter((p) => p.vision !== false) : order;
+  for (const p of able) {
     /*
      * ONLY THE TIME THAT IS LEFT. Each provider had 20 seconds whatever had already been spent, so
      * three slow ones near the end outran the function's 60: it was killed, and the person heard
@@ -237,6 +240,28 @@ export function forWhatsApp(text: string): string {
     .trim();
 }
 
+/**
+ * A VOICE NOTE, AS WORDS — Groq's hosted Whisper, on the Groq key already in the list, so a voice note
+ * then goes down exactly the path a typed message does. Null when there is no Groq in the list.
+ */
+export async function transcribe(media: { mime: string; base64: string }): Promise<string | null> {
+  const groq = providers().find((p) => p.base.includes('groq.com'));
+  if (!groq) return null;
+  const form = new FormData();
+  form.append('model', 'whisper-large-v3-turbo');
+  form.append('language', 'en');
+  const ext = media.mime.includes('wav') ? 'wav' : media.mime.includes('mp4') ? 'm4a' : media.mime.includes('mpeg') ? 'mp3' : 'ogg';
+  form.append('file', new Blob([Buffer.from(media.base64, 'base64')], { type: media.mime }), `voice.${ext}`);
+  const res = await fetch(`${groq.base.replace(/\/$/, '')}/audio/transcriptions`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${groq.key}` },
+    body: form,
+  });
+  if (!res.ok) return null;
+  const text = ((await res.json()) as { text?: string }).text?.trim();
+  return text || null;
+}
+
 const MAX_ROUNDS = 8;
 /** From here the model is asked to answer with what it has. */
 const DEADLINE_MS = 35_000;
@@ -254,6 +279,8 @@ export async function runAssistant(
   messages: Message[],
   tools: ToolDef[],
   call: (name: string, args: Record<string, unknown>) => Promise<unknown>,
+  /** True once a tool has settled the turn (an action proposed): no more rounds. */
+  finished: () => boolean = () => false,
 ): Promise<{
   answer: string;
   trace: { tool: string; args: unknown; result: unknown }[];
@@ -296,6 +323,7 @@ export async function runAssistant(
       trace.push({ tool: tc.function.name, args, result });
       convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result).slice(0, 12000) });
     }
+    if (finished()) return { answer: '', trace, providers: used, skipped };
   }
   return { answer: 'That took too many steps — can you ask it a simpler way?', trace, providers: used, skipped };
 }
