@@ -120,6 +120,8 @@ const show = (r) => console.log(`      (${r.ms}ms) ${r.text.replace(/\s+/g, ' ')
 
 const proposals = [];
 let probeDraft = null;
+// Every order the probe opens, not just the last: it opens more than one.
+const probeDrafts = new Set();
 const probeWords = [];
 /** Ask for something; it must come back as a proposal, which is kept and then refused. */
 const proposes = async (what, text, mustSay, paperOnly = false) => {
@@ -197,6 +199,7 @@ try {
     show(r1);
     const { data: lk } = await admin.from('whatsapp_links').select('working_draft_id').eq('wa_phone', PHONE).maybeSingle();
     probeDraft = lk?.working_draft_id ?? null;
+    if (probeDraft) probeDrafts.add(probeDraft);
     check('an order is opened on the till', Boolean(probeDraft) && /Trophy/i.test(r1.text) && /Goldberg/i.test(r1.text), r1.text.slice(0, 160));
     const r2 = await ask('Make the Trophy 3 crates');
     show(r2);
@@ -253,6 +256,7 @@ try {
     show(o);
     const { data: lk } = await admin.from('whatsapp_links').select('working_draft_id, order_questions').eq('wa_phone', PHONE).maybeSingle();
     probeDraft = lk?.working_draft_id ?? probeDraft;
+    if (probeDraft) probeDrafts.add(probeDraft);
     const { data: placed } = await admin.from('draft_order_lines').select('product_id').eq('draft_order_id', lk?.working_draft_id ?? '00000000-0000-0000-0000-000000000000');
     check('clear lines go on the order', (placed ?? []).length >= 2, `${(placed ?? []).length} placed`);
     check('unclear lines are held, not guessed', (lk?.order_questions ?? []).length >= 1 && /\?/.test(o.text), JSON.stringify(lk?.order_questions ?? []).slice(0, 200));
@@ -440,7 +444,8 @@ try {
   // The words the probe taught, and only those.
   for (const w of probeWords) await admin.from('product_aliases').delete().eq('phrase', w);
   // The probe's own open order, cancelled as the till cancels one.
-  if (probeDraft) await admin.from('draft_orders').update({ status: 'cancelled' }).eq('id', probeDraft).eq('status', 'open');
+  if (probeDraft) probeDrafts.add(probeDraft);
+  for (const d of probeDrafts) await admin.from('draft_orders').update({ status: 'cancelled' }).eq('id', d).eq('status', 'open');
   await admin.from('whatsapp_pending').delete().eq('wa_phone', PHONE);
   await admin.from('whatsapp_messages').delete().eq('wa_phone', PHONE);
   await admin.from('whatsapp_links').delete().eq('wa_phone', PHONE);
