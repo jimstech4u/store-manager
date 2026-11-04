@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useDemandState } from '@academix-admin/state-stack';
+import { StateStack, useDemandState } from '@academix-admin/state-stack';
+import { noteLocalWrite } from '@/lib/stacks/invalidation';
 import { getSupabase } from '@/lib/supabase/client';
 import { messageOf } from '@/lib/format';
 
@@ -399,6 +400,8 @@ export function useDraftOrders(storeId: string | null) {
       setSyncing(true);
       setError(null);
       try {
+        // So what live-shop hears back in the next moments is known for this device's own save.
+        noteLocalWrite();
         const { data, error: err } = await getSupabase().rpc('save_draft_order', {
           p_store_id: storeId,
           p_draft_id: order.id,
@@ -959,7 +962,7 @@ export function useDraftOrders(storeId: string | null) {
   useEffect(() => {
     if (!storeId) return;
 
-    void demandOrders(async ({ get, set }) => {
+    const pull = () => void demandOrders(async ({ get, set }) => {
       const { data } = await getSupabase().rpc('my_open_drafts', { p_store_id: storeId });
       const rows = (data ?? []) as Record<string, unknown>[];
 
@@ -1092,9 +1095,17 @@ export function useDraftOrders(storeId: string | null) {
           });
         }
 
-        const mine = new Set(restored.map((o) => o.id));
+        /*
+         * AN ORDER WITH EDITS THIS DEVICE HAS NOT SENT YET IS THIS DEVICE'S. Re-read on another
+         * device's change or on waking, the shop's copy is a moment behind what is being typed here;
+         * taking it would undo the typing. Its own save sends it shortly after.
+         */
+        const unsent = new Map(held.filter((o) => o.id && o.synced === false).map((o) => [o.id, o]));
+        const fromShop = restored.map((o) => unsent.get(o.id) ?? o);
+
+        const mine = new Set(fromShop.map((o) => o.id));
         const keep = held.filter((o) => (!o.id || o.settled) && !mine.has(o.id));
-        const next = [...restored, ...keep];
+        const next = [...fromShop, ...keep];
 
         set(next, { override: true });
 
@@ -1120,6 +1131,17 @@ export function useDraftOrders(storeId: string | null) {
        * and that write landed on top of the hundred and sixty-seven the shop had just sent.
        */
       setLoaded(true);
+    });
+
+    pull();
+    /*
+     * AND AGAIN WHENEVER ANOTHER DEVICE CHANGES AN ORDER, or the app comes back (`live-shop`). It was
+     * read once, on opening: an order built on the tablet never reached the phone until the phone
+     * was closed and opened again.
+     */
+    return StateStack.core.onInvalidate('sell_flow', () => {
+      StateStack.core.resetDemand('sell_flow', 'draftOrders');
+      pull();
     });
   }, [storeId, demandOrders, setActiveId]);
 

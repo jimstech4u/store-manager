@@ -28,5 +28,29 @@ import { StateStack } from '@academix-admin/state-stack';
  * is left here is this project's own word for the thing.
  */
 export function invalidate(scope: string) {
+  noteLocalWrite();
   StateStack.core.invalidateScope(scope);
+}
+
+/**
+ * WHAT ANOTHER DEVICE DID, heard by `live-shop`: the same re-read, without counting as this device's
+ * own write.
+ */
+export function invalidateHeard(scope: string) {
+  StateStack.core.invalidateScope(scope);
+}
+
+/*
+ * THIS DEVICE'S OWN WRITES, by time rather than by person. `live-shop` skipped any change written by
+ * the person signed in, to save re-reading what this phone had just done — and a shop using ONE
+ * account on two phones never heard the other phone at all: an order changed on the tablet stayed old
+ * on the phone until it was closed and opened again. What this device wrote is what it wrote in the
+ * last few seconds; anything else is somebody else, even with the same name.
+ */
+let lastLocalWrite = 0;
+export function noteLocalWrite() {
+  lastLocalWrite = Date.now();
+}
+export function wroteHereRecently(ms = 5000): boolean {
+  return Date.now() - lastLocalWrite < ms;
 }

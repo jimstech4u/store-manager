@@ -2,7 +2,8 @@
 
 import { useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase/client';
-import { invalidate } from '@/lib/stacks/invalidation';
+import { invalidateHeard, wroteHereRecently } from '@/lib/stacks/invalidation';
+import { useWakeRefresh } from '@/hooks/useWakeRefresh';
 
 /**
  * WHAT ANOTHER TILL RECORDS, HEARD HERE AS IT HAPPENS.
@@ -96,7 +97,21 @@ const REACHES: Record<string, string[]> = {
   store_settings: ['store_settings', 'settings_flow', 'low_stock'],
   product_low_stock_levels: ['catalog_derived', 'low_stock'],
   sale_charges: ['account_derived', 'money_flow'],
+
+  /*
+   * ── ORDERS OPEN ON THE TILL (0273) ───────────────────────────────────────────
+   *
+   * "When we are using multiple devices and open one from the background, we have to close and
+   * reopen to see changes like draft order changes." They were never published, so an order built,
+   * changed or settled on one device reached no other. The till re-reads its open orders on
+   * `sell_flow`, keeping any tab with edits this device has not sent yet.
+   */
+  draft_orders: ['sell_flow', 'online_orders'],
+  draft_order_lines: ['sell_flow'],
 };
+
+/** Tables whose rows name no writer: an echo of this device's own save is told apart by time alone. */
+const NO_WRITER = new Set(['draft_order_lines']);
 
 /*
  * TABLES WITH NO `store_id` — heard WITHOUT the shop filter.
@@ -116,6 +131,7 @@ const NO_STORE_COLUMN = new Set([
   'identities',
   'product_low_stock_levels',
   'sale_charges',
+  'draft_order_lines',
 ]);
 
 /** Columns that name who wrote a row, where the table has one. */
@@ -134,12 +150,13 @@ export function useLiveShop(storeId: string | null, userId: string | null) {
       timer = null;
       const scopes = [...pending];
       pending.clear();
-      for (const scope of scopes) invalidate(scope);
+      for (const scope of scopes) invalidateHeard(scope);
     };
 
     const heard = (table: string, row: Record<string, unknown> | null | undefined) => {
-      // This person's own write: already applied here, and already invalidated by its writer.
-      if (row && userId && WRITER_COLUMNS.some((c) => row[c] === userId)) return;
+      // THIS DEVICE'S own write: already applied here and already invalidated by its writer. Judged by
+      // time as well as name, because the same person on another phone is another device.
+      if (wroteHereRecently() && (NO_WRITER.has(table) || (row && userId && WRITER_COLUMNS.some((c) => row[c] === userId)))) return;
       for (const scope of REACHES[table] ?? []) pending.add(scope);
       if (!timer) timer = setTimeout(flush, BATCH_MS);
     };
@@ -167,4 +184,14 @@ export function useLiveShop(storeId: string | null, userId: string | null) {
       void supabase.removeChannel(channel);
     };
   }, [storeId, userId]);
+
+  /*
+   * AND WHAT WAS MISSED WHILE THE APP WAS AWAY. A phone puts a backgrounded app to sleep and its
+   * connection with it: whatever changed meanwhile was never heard. Coming back is when to catch up —
+   * every scope this hook would have reached, re-read once, as if all of it had been heard.
+   */
+  useWakeRefresh(() => {
+    if (!storeId) return;
+    for (const scope of new Set(Object.values(REACHES).flat())) invalidateHeard(scope);
+  }, 15_000);
 }
