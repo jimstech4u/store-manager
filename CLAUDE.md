@@ -760,6 +760,15 @@ write through the same YES as everything else, with a summary the server writes 
 - **The database is still the guard.** The gateway hides what would be refused; it never allows
   what the function itself would not.
 
+## A document is drawn in one place, wherever it goes
+
+The picture and the PDF of a receipt, statement, payment or list are drawn by `src/lib/paper-canvas.ts`
+and wrapped by `src/lib/pdf-core.ts`, which take their canvas from the caller: the browser's in the
+app (`share.ts`, `pdf.ts`), `@napi-rs/canvas` on the server (`whatsapp/paper.ts`). The agent had its
+own renderer and WhatsApp got a different-looking receipt from the one the app shares; never give a
+new way out its own drawing. Documents themselves are built by the pure builders the screens use:
+`receiptDocument`, `statementDocument`, `paymentDocument`.
+
 ## Verification
 
 Click-through with Playwright is the standard of proof — `tsc` passing is not evidence a screen

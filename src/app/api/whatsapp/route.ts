@@ -268,13 +268,18 @@ async function handle(msg: WaMessage, profileName: string | null) {
       }
       try {
         const done = await execute(ctx, open.action, open.args as Record<string, unknown>);
-        const options = done.receipt ? ['Send as PDF', 'Sales today'] : ['Sales today', 'Who owes me?'];
+        const options = done.receipt || done.payment ? ['Send as PDF', 'Their statement'] : ['Sales today', 'Who owes me?'];
         // The receipt itself, on the shop's letterhead, as the site shows it.
         if (done.receipt) {
           await runTool(userDb, link.store_id, 'send_file', { kind: 'receipt', sale_id: done.receipt, format: 'picture' }, ctx, mine.store_name)
             .catch(() => undefined);
         }
-        await reply(done.text, { store_id: link.store_id, user_id: link.user_id, tools: { executed: open.action, receipt: done.receipt } }, options);
+        // And money paid or given back: its payment receipt, as the payment page prints it.
+        if (done.payment) {
+          await runTool(userDb, link.store_id, 'send_file', { kind: 'payment', payment_id: done.payment, format: 'picture' }, ctx, mine.store_name)
+            .catch(() => undefined);
+        }
+        await reply(done.text, { store_id: link.store_id, user_id: link.user_id, tools: { executed: open.action, receipt: done.receipt, payment: done.payment } }, options);
       } catch (e) {
         const why = e instanceof Error ? e.message : 'something went wrong';
         await db.from('whatsapp_pending').update({ outcome: why.slice(0, 300) }).eq('id', open.id);
@@ -351,6 +356,8 @@ async function handle(msg: WaMessage, profileName: string | null) {
       (paper?.header ? `- The shop as its receipts print it (address, phone): ${paper.header.replace(/\s*\n\s*/g, ' | ')}\n` : '') +
       '- For anything your other tools do not cover, call find_capability with what they want, then use_capability. Never say something cannot be done until you have searched.\n' +
       '- Never choose a customer, item or supplier for them. When it is unclear which, ask, and offer the names as options.\n' +
+      '- An order of several items, or one built over several messages, goes on a working order (order_start, then order_set for each item): it is saved on the till with a code, so quantities and prices are never kept in your memory. Show it with order_show and sell it with order_sell. A single quick sale can still use propose_sale.\n' +
+      '- Ask only for what is required. A detail the shop may leave blank (a supplier on a delivery, a business name, a note, a reference) you may ask for once; if they skip it or say to ignore it, go ahead without it.\n' +
       '- Answer ONLY the latest message. Earlier messages are context for it, not questions to answer again.\n' +
       '- Answer only from the tools; never invent figures, names or prices. If a tool returns an error, say plainly that you cannot see that.\n' +
       '- Be brief and clear, in plain English, formatted for WhatsApp (short lines, *bold* with single stars for key figures, no tables).\n' +
@@ -361,6 +368,7 @@ async function handle(msg: WaMessage, profileName: string | null) {
       '- When searching for an item or customer, pass the name as they wrote it, misspelling and all, with only the name: the search works out what they meant. Never shorten it to one common word like "bottle".\n' +
       '- When they quote a receipt number, call find_receipt first.\n' +
       '- Never show ids, or the words tool or function. Use names, dates and receipt numbers like #1AC5EB6F.\n' +
+      '- Send the paper the shop itself uses: a payment receipt for money paid (send_file kind payment), a receipt for a sale, a statement only when they ask for the account.\n' +
       '- When they ask for a PDF, picture, file, print or share of a statement, receipt, sales, stock or who owes, use send_file. For a printer link for one receipt, use receipt_link.\n' +
       '- Be the shop\'s assistant: when an answer points at something to do, offer it as an option (a reminder, a PDF, the receipt). Give the headline figure first, then the few names that matter.\n' +
       '- A photo or PDF of an invoice is a delivery: read the supplier, items, quantities and costs from it, find each item, and propose it. Ask only for what you cannot read.',

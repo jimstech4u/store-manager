@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { formatMoney, formatQtySpoken, shapeWord } from '@/lib/format';
 import type { ToolDef } from '@/lib/whatsapp/llm';
 import { executeCapability } from '@/lib/agent/gateway';
+import { sellOrder } from '@/lib/whatsapp/orders';
 
 /**
  * THE ASSISTANT PROPOSES; THE PERSON'S "YES" DOES IT. Server only.
@@ -50,7 +51,6 @@ export const ACTION_TOOLS: ToolDef[] = [
       lines: { type: 'array', items: lineItem },
       paid: { type: 'array', items: payment },
       charges: { type: 'array', items: { type: 'object', properties: { label: { type: 'string' }, amount: { type: 'number' } }, required: ['label', 'amount'] } },
-      as_draft: { type: 'boolean', description: 'true when they ask for a draft or an order to finish later: it is saved as an open order on the till, and nothing leaves the shelf yet.' },
     }, required: ['lines'] },
   },
   {
@@ -148,20 +148,20 @@ export const ACTION_TOOLS: ToolDef[] = [
   },
 ];
 
-type Args = Record<string, unknown>;
-type Shape = {
+export type Args = Record<string, unknown>;
+export type Shape = {
   product_id: string; product_unit_id: string; unit_name: string; unit_plural: string; base_qty: string | number;
   is_default: boolean; is_returnable: boolean; is_sold?: boolean; is_bought?: boolean; is_counted?: boolean;
   price_per_unit: string | number | null;
 };
 
-const money = (n: number) => formatMoney(n);
-const num = (v: unknown) => {
+export const money = (n: number) => formatMoney(n);
+export const num = (v: unknown) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 };
-const say = (qty: number, s: Shape) => `${formatQtySpoken(qty)} ${shapeWord(qty, s.unit_name, s.unit_plural).toLowerCase()}`;
-const refuse = (error: string) => ({ error });
+export const say = (qty: number, s: Shape) => `${formatQtySpoken(qty)} ${shapeWord(qty, s.unit_name, s.unit_plural).toLowerCase()}`;
+export const refuse = (error: string) => ({ error });
 
 /**
  * COUNTED SINCE THE SALE (0263): a count saw the shelf as it really was, so only the person knows
@@ -177,7 +177,7 @@ async function askAboutGoods(ctx: Ctx, saleId: string, lines: Args[], goodsMoved
 const goodsLine = (goodsMoved: unknown) =>
   goodsMoved === false ? ['Only the paper was wrong: the stock stays as counted'] : goodsMoved === true ? ['The goods moved: the stock changes'] : [];
 
-async function rpc<T>(ctx: Ctx, fn: string, params: Args): Promise<T> {
+export async function rpc<T>(ctx: Ctx, fn: string, params: Args): Promise<T> {
   const { data, error } = await ctx.db.rpc(fn, params);
   if (error) throw new Error(error.message);
   return data as T;
@@ -198,7 +198,7 @@ export async function hold(ctx: Ctx, action: string, args: Args, summary: string
 }
 
 const shapesCache = new WeakMap<Ctx, Shape[]>();
-async function shapesOf(ctx: Ctx, productId: string): Promise<Shape[]> {
+export async function shapesOf(ctx: Ctx, productId: string): Promise<Shape[]> {
   let all = shapesCache.get(ctx);
   if (!all) {
     all = await rpc<Shape[]>(ctx, 'product_selling_units', { p_store_id: ctx.storeId });
@@ -208,7 +208,7 @@ async function shapesOf(ctx: Ctx, productId: string): Promise<Shape[]> {
 }
 
 /** The shape named, or the one the shop usually uses for this. Null when the word matches nothing. */
-function pick(shapes: Shape[], word: unknown, role: (s: Shape) => boolean): Shape | null {
+export function pick(shapes: Shape[], word: unknown, role: (s: Shape) => boolean): Shape | null {
   const usable = shapes.filter(role);
   const pool = usable.length > 0 ? usable : shapes;
   const w = typeof word === 'string' ? word.trim().toLowerCase().replace(/s$/, '') : '';
@@ -218,18 +218,18 @@ function pick(shapes: Shape[], word: unknown, role: (s: Shape) => boolean): Shap
   return pool.find((s) => s.is_default) ?? [...pool].sort((a, b) => num(b.base_qty) - num(a.base_qty))[0] ?? null;
 }
 
-async function product(ctx: Ctx, id: string) {
+export async function product(ctx: Ctx, id: string) {
   const rows = await rpc<{ id: string; name: string; on_hand: string }[]>(ctx, 'get_product', { p_product_id: id });
   return rows?.[0] ?? null;
 }
 
-async function customerName(ctx: Ctx, id: unknown): Promise<string | null> {
+export async function customerName(ctx: Ctx, id: unknown): Promise<string | null> {
   if (typeof id !== 'string' || !id) return null;
   const a = await rpc<{ customer?: { name?: string } } | null>(ctx, 'customer_account', { p_store_customer_id: id });
   return a?.customer?.name ?? null;
 }
 
-function methods(list: unknown): { amount: number; method: string }[] {
+export function methods(list: unknown): { amount: number; method: string }[] {
   return (Array.isArray(list) ? list : [])
     .map((p) => ({ amount: num((p as Args).amount), method: String((p as Args).method ?? 'cash') }))
     .filter((p) => p.amount > 0);
@@ -242,8 +242,6 @@ export async function propose(ctx: Ctx, name: string, a: Args): Promise<unknown>
       if (lines.length === 0) return refuse('Which items, and how many?');
       const who = await customerName(ctx, a.customer_id);
       if (a.customer_id && !who) return refuse('That customer is not in this shop. Use find_customer first.');
-      // An order to finish later: nothing leaves the shelf, so the shelf's rules wait for the sale.
-      const draft = a.as_draft === true;
 
       const out: Args[] = [];
       const words: string[] = [];
@@ -257,10 +255,10 @@ export async function propose(ctx: Ctx, name: string, a: Args): Promise<unknown>
         const shape = pick(await shapesOf(ctx, id), l.unit, (s) => s.is_sold !== false);
         if (!shape) return refuse(`${p.name} is not sold in "${String(l.unit)}".`);
         // The app's own rules, before anybody is asked to say yes.
-        if (!draft && num(p.on_hand) <= 0) {
+        if (num(p.on_hand) <= 0) {
           return refuse(`${p.name} is finished: the records say none is left. Check the shelf; if there is some, count it first.`);
         }
-        if (!draft && await rpc<boolean>(ctx, 'needs_count_today', { p_product_id: id })) {
+        if (await rpc<boolean>(ctx, 'needs_count_today', { p_product_id: id })) {
           return refuse(`${p.name} has not been counted today, and it must be before it sells. Ask for today's count of it, then use propose_count.`);
         }
         let price = l.price != null ? num(l.price) : null;
@@ -287,15 +285,6 @@ export async function propose(ctx: Ctx, name: string, a: Args): Promise<unknown>
       const total = goods + extra;
       const paid = methods(a.paid);
       const paidTotal = paid.reduce((s, p) => s + p.amount, 0);
-      if (draft) {
-        return hold(ctx, 'draft', { customer_id: a.customer_id ?? null, label: who, lines: out, charges, total }, [
-          `*Save this order on the till${who ? ` for ${who}` : ''}?*`,
-          ...words,
-          ...charges.map((c) => `• ${c.label} — ${money(c.amount)}`),
-          `*Total ${money(total)}*`,
-          'Nothing leaves the shelf until it is sold on the till.',
-        ].join('\n'));
-      }
       if (!who && paidTotal < total - 0.005) return refuse('A sale that is not fully paid needs a customer. Who is it for?');
       if (!who && paidTotal > total + 0.005) return refuse('That is more than the sale comes to, and with no customer it cannot be held as credit. Who is it for?');
       const summary = [
@@ -326,7 +315,7 @@ export async function propose(ctx: Ctx, name: string, a: Args): Promise<unknown>
         ? suppliers.find((s) => s.name.toLowerCase() === typed) ??
           suppliers.find((s) => s.name.toLowerCase().includes(typed) || typed.includes(s.name.toLowerCase()))
         : undefined;
-      if (!typed || !supplier) {
+      if (typed && !supplier) {
         return refuse(
           `${typed ? `"${String(a.supplier)}" is not one of the shop's suppliers. ` : ''}The shop has: ${suppliers.map((s) => s.name).join(', ')}. ` +
           'Ask them which one; never pick one for them. If it is a new supplier, add it first with find_capability "add a supplier".',
@@ -361,14 +350,14 @@ export async function propose(ctx: Ctx, name: string, a: Args): Promise<unknown>
       const rebate = num(a.rebate);
       const total = goods + fees.reduce((s, f) => s + f.amount, 0) - rebate;
       const summary = [
-        `*Record this delivery from ${supplier.name}?*`,
+        `*Record this delivery${supplier ? ` from ${supplier.name}` : ''}?*`,
         ...(a.invoice ? [`Invoice ${String(a.invoice)}`] : []),
         ...words,
         ...fees.map((f) => `• ${f.label} — ${money(f.amount)}`),
         ...(rebate > 0 ? [`• Rebate — -${money(rebate)}`] : []),
         `*Total ${money(total)}*`,
       ].join('\n');
-      return hold(ctx, 'delivery', { supplier: supplier.name, invoice: a.invoice ?? null, lines: payload, fees, rebate, count: lines.length }, summary);
+      return hold(ctx, 'delivery', { supplier: supplier?.name ?? null, invoice: a.invoice ?? null, lines: payload, fees, rebate, count: lines.length }, summary);
     }
 
     case 'propose_charge': {
@@ -552,7 +541,7 @@ export async function propose(ctx: Ctx, name: string, a: Args): Promise<unknown>
 }
 
 /** The YES: the action as it was shown, as the member, through the app's own functions. */
-export async function execute(ctx: Ctx, action: string, a: Args): Promise<{ text: string; receipt?: string }> {
+export async function execute(ctx: Ctx, action: string, a: Args): Promise<{ text: string; receipt?: string; payment?: string }> {
   const s = ctx.storeId;
   const receiptLink = async (saleId: string) => {
     const token = await rpc<string>(ctx, 'create_share_link', {
@@ -580,24 +569,19 @@ export async function execute(ctx: Ctx, action: string, a: Args): Promise<{ text
         throw e;
       }
     }
-    case 'draft': {
-      const id = await rpc<string>(ctx, 'save_draft_order', {
-        p_store_id: s, p_draft_id: null, p_customer_id: a.customer_id ?? null, p_label: a.label ?? null,
-        p_fee_amount: 0, p_fee_label: null, p_charges: a.charges ?? [], p_deposits: [], p_note: null,
-        p_client_uuid: randomUUID(), p_lines: a.lines,
-      });
-      const open = await rpc<{ id: string; code: string | null }[]>(ctx, 'my_open_drafts', { p_store_id: s });
-      const code = open.find((d) => d.id === id)?.code;
-      return { text: `Saved ✅ An open order on the till${code ? `, code *${code}*` : ''}. Sell it from the till when they come for it.` };
+    case 'order_sell': {
+      const sale = await sellOrder(ctx, a);
+      return { text: `Sold ✅ *${money(num(a.total))}*, receipt #${sale.slice(0, 8).toUpperCase()}\nTo print: ${await receiptLink(sale)}`, receipt: sale };
     }
     case 'capability':
       return executeCapability({ db: ctx.db, service: ctx.service, storeId: ctx.storeId, userId: ctx.userId }, a);
-    case 'payment':
-      await rpc(ctx, 'record_payment', {
+    case 'payment': {
+      const paid = await rpc<string>(ctx, 'record_payment', {
         p_store_id: s, p_customer_id: a.customer_id, p_amount: a.amount, p_method: a.method,
         p_reference: a.reference ?? null, p_client_uuid: randomUUID(), p_bank_account_id: null,
       });
-      return { text: `Recorded ✅ ${money(num(a.amount))} received.` };
+      return { text: `Recorded ✅ ${money(num(a.amount))} received, payment #${String(paid).slice(0, 8).toUpperCase()}.`, payment: paid };
+    }
     case 'delivery':
       await rpc(ctx, 'record_purchase', {
         p_store_id: s, p_lines: a.lines, p_supplier: a.supplier, p_invoice_ref: a.invoice ?? null,
@@ -609,12 +593,13 @@ export async function execute(ctx: Ctx, action: string, a: Args): Promise<{ text
         p_store_id: s, p_customer_id: a.customer_id, p_amount: a.amount, p_reason: a.reason, p_owed_to_them: a.owed_to_them === true,
       });
       return { text: 'Recorded ✅' };
-    case 'money_back':
-      await rpc(ctx, 'record_money_back', {
+    case 'money_back': {
+      const back = await rpc<string>(ctx, 'record_money_back', {
         p_store_id: s, p_customer_id: a.customer_id, p_amount: a.amount, p_method: a.method,
         p_reason: a.reason ?? null, p_client_uuid: randomUUID(), p_bank_account_id: null,
       });
-      return { text: 'Recorded ✅' };
+      return { text: 'Recorded ✅', payment: back };
+    }
     case 'deposit':
       await rpc(ctx, 'take_customer_deposit', {
         p_store_id: s, p_customer_id: a.customer_id, p_amount: a.amount, p_reason: a.reason ?? null,

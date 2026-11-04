@@ -58,6 +58,14 @@ const nextConfig: NextConfig = {
    * reach a control it can see is worse than no probe.
    */
   devIndicators: false,
+  /*
+   * THE SERVER CANVAS AND ITS FONT, kept out of the bundle and shipped with the agent's route: the
+   * agent draws the app's own paper on `@napi-rs/canvas` (a native module), in a bundled font.
+   */
+  serverExternalPackages: ['@napi-rs/canvas'],
+  outputFileTracingIncludes: {
+    '/api/whatsapp': ['./node_modules/dejavu-fonts-ttf/ttf/DejaVuSansMono-Bold.ttf'],
+  },
 
   eslint: { ignoreDuringBuilds: true },
   output: 'standalone',

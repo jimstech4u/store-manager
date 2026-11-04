@@ -12,6 +12,7 @@ import { useResource } from '@/lib/stacks/resource';
 import { ACCOUNT_DERIVED_SCOPE } from '@/lib/stacks/customer-account';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatDateTime, formatMoney } from '@/lib/format';
+import { paymentDocument } from '@/lib/payment-document';
 import styles from './payment-done-page.module.css';
 
 interface Done {
@@ -132,36 +133,14 @@ export default function PaymentDonePage() {
    * receipt goes out. Built from what the shop recorded, never from what was typed.
    */
   const slip: ReceiptImageInput | null = d
-    ? {
-        shopName: store.name,
-        banner: gave ? 'MONEY GIVEN BACK' : 'PAYMENT RECEIPT',
-        meta: [formatDateTime(d.at), d.customerName, `#${(paymentId ?? '').slice(0, 8).toUpperCase()}`],
-        lines: [
-          {
-            name: gave ? 'Given back' : 'Payment received',
-            detail: `by ${d.method}${d.reference ? ` · ${d.reference}` : ''}`,
-            qty: `by ${d.method}`,
-            amount: formatMoney(d.amount),
-          },
-        ],
-        totals: [
-          { label: gave ? 'Given back' : 'Paid', value: formatMoney(d.amount), strong: true },
-          ...(d.balance === null
-            ? []
-            : [
-                {
-                  label:
-                    d.balance > 0.005
-                      ? `Still owes${now}`
-                      : d.balance < -0.005
-                        ? `In credit${now}`
-                        : `Balance${now}`,
-                  value: formatMoney(Math.abs(d.balance)),
-                  strong: true,
-                },
-              ]),
-        ],
-      }
+    ? paymentDocument(
+        {
+          paymentId: paymentId ?? '', customerName: d.customerName, amount: d.amount, method: d.method,
+          reference: d.reference, direction: d.direction, at: d.at, balance: d.balance,
+        },
+        store.name,
+        { now: fromHistory },
+      )
     : null;
 
   return (

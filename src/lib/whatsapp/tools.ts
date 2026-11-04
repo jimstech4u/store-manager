@@ -3,9 +3,11 @@ import type { ToolDef } from '@/lib/whatsapp/llm';
 import { stockInShapes, type ShapeQuantity } from '@/lib/shape-quantities';
 import { ACTION_TOOLS, hold, propose, type Ctx } from '@/lib/whatsapp/actions';
 import { GATEWAY_TOOLS, runCapability } from '@/lib/agent/gateway';
+import { ORDER_TOOLS, runOrder } from '@/lib/whatsapp/orders';
 import { documentPdf, documentPng } from '@/lib/whatsapp/paper';
 import { sendPdf, sendPicture } from '@/lib/whatsapp/meta';
 import { receiptDocument, type SaleDetail } from '@/lib/receipt-document';
+import { paymentDocument } from '@/lib/payment-document';
 import { KINDS, statementDocument, type Statement } from '@/lib/statement-document';
 import type { ReceiptImageInput } from '@/lib/share';
 
@@ -84,11 +86,12 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'send_file',
     description:
-      'Send a document into this chat as a PDF or a picture, on the shop\'s own letterhead. kind: statement (needs customer_id, optional from/to), receipt (needs sale_id), combined (needs sale_ids: one customer\'s receipts put together as one paper, the same items added up, the balance once; changes nothing), sales (needs period), who_owes, stock, customers (the same filter, min, max and quiet_days as filter_customers), item_debts (needs item_id: who_owes_for_item on paper). Use whenever they ask for a PDF, a picture, a file, or to print, share or merge receipts.',
+      'Send a document into this chat as a PDF or a picture, on the shop\'s own letterhead. kind: statement (needs customer_id, optional from/to), receipt (needs sale_id), payment (a payment receipt, the paper for money a customer paid or was given back: payment_id, or customer_id for their latest), combined (needs sale_ids: one customer\'s receipts put together as one paper, the same items added up, the balance once; changes nothing), sales (needs period), who_owes, stock, customers (the same filter, min, max and quiet_days as filter_customers), item_debts (needs item_id: who_owes_for_item on paper). Use whenever they ask for a PDF, a picture, a file, or to print, share or merge receipts.',
     parameters: {
       type: 'object',
       properties: {
-        kind: { type: 'string', enum: ['statement', 'receipt', 'combined', 'sales', 'who_owes', 'stock', 'customers', 'item_debts'] },
+        kind: { type: 'string', enum: ['statement', 'receipt', 'payment', 'combined', 'sales', 'who_owes', 'stock', 'customers', 'item_debts'] },
+        payment_id: { type: 'string' },
         filter: { type: 'string', enum: ['owes', 'we_owe', 'deposit', 'empties', 'quiet'] },
         min: { type: 'number' },
         max: { type: 'number' },
@@ -186,6 +189,8 @@ export const TOOLS: ToolDef[] = [
     parameters: { type: 'object', properties: {} },
   },
   ...ACTION_TOOLS,
+  // An order built in the chat lives on the till, not in the model's memory.
+  ...ORDER_TOOLS,
   // Everything else the shop can do, found when it is needed rather than carried in every prompt.
   ...GATEWAY_TOOLS,
 ];
@@ -268,6 +273,7 @@ export async function runTool(
   shopName: string,
 ): Promise<unknown> {
   if (name.startsWith('propose_')) return propose(ctx, name, args);
+  if (name.startsWith('order_')) return runOrder(ctx, name, args);
   if (name === 'find_capability' || name === 'use_capability') {
     return runCapability({ db, service: ctx.service, storeId, userId: ctx.userId }, name, args, (action, a, summary) =>
       hold(ctx, action, a, summary));
@@ -674,6 +680,29 @@ export async function runTool(
         if (!d) return { error: 'That receipt was not found.' };
         doc = receiptDocument(d, shopName, { header: paper.header, footer: paper.footer });
         filename = `receipt-${String(args.sale_id).slice(0, 8)}.pdf`;
+      } else if (kind === 'payment') {
+        // The shop's own payment receipt, as its payment page prints it: never a statement in its place.
+        let q = db.from('payments').select('id, amount, method, reference, direction, occurred_at, store_customer_id').eq('store_id', storeId);
+        q = args.payment_id ? q.eq('id', String(args.payment_id)) : q.eq('store_customer_id', String(args.customer_id ?? '')).order('occurred_at', { ascending: false });
+        const { data: rows } = await q.limit(1);
+        const pay = (rows ?? [])[0] as
+          | { id: string; amount: string; method: string; reference: string | null; direction: 'in' | 'out'; occurred_at: string; store_customer_id: string }
+          | undefined;
+        if (!pay) return { error: 'That payment was not found. Give the customer, or the payment number.' };
+        const [{ data: who }, { data: bal }] = await Promise.all([
+          db.from('store_customers').select('display_name').eq('id', pay.store_customer_id).maybeSingle(),
+          db.rpc('customer_balance_total', { p_store_customer_id: pay.store_customer_id }),
+        ]);
+        doc = paymentDocument(
+          {
+            paymentId: pay.id, customerName: (who as { display_name?: string } | null)?.display_name ?? 'Customer',
+            amount: Number(pay.amount) || 0, method: pay.method, reference: pay.reference, direction: pay.direction,
+            at: pay.occurred_at, balance: bal === null || bal === undefined ? null : Number(bal),
+          },
+          shopName,
+          { header: paper.header, footer: paper.footer, now: !args.payment_id },
+        );
+        filename = `payment-${pay.id.slice(0, 8)}.pdf`;
       } else if (kind === 'combined') {
         const ids = Array.isArray(args.sale_ids) ? (args.sale_ids as string[]) : [];
         if (ids.length < 2) return { error: 'Which receipts should go together? Use recent_receipts.' };
@@ -746,7 +775,7 @@ export async function runTool(
         return { error: `No document called ${kind}` };
       }
       if (args.format === 'picture') await sendPicture(ctx.phone, await documentPng(doc, paper.width));
-      else await sendPdf(ctx.phone, documentPdf(doc, paper.width), filename);
+      else await sendPdf(ctx.phone, await documentPdf(doc, paper.width), filename);
       return { sent: true, note: 'It is already in the chat. Say so in one short line.' };
     }
     default:

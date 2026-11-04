@@ -119,6 +119,7 @@ const tap = (title) => send({ type: 'interactive', interactive: { type: 'button_
 const show = (r) => console.log(`      (${r.ms}ms) ${r.text.replace(/\s+/g, ' ').slice(0, 170)}${r.options?.length ? ` [${r.options.join(' | ')}]` : ''}`);
 
 const proposals = [];
+let probeDraft = null;
 /** Ask for something; it must come back as a proposal, which is kept and then refused. */
 const proposes = async (what, text, mustSay, paperOnly = false) => {
   let r = await ask(text);
@@ -183,7 +184,23 @@ try {
   await proposes('an item renamed', 'Rename Guinness big stout to Guinness Big Stout 60cl', /Rename an item[\s\S]*Guinness/);
   await proposes('a customer phone changed', "Change Busayo Store's phone number to 08011112222", /phone number[\s\S]*08011112222/);
   await proposes('a supplier added', 'Add a new supplier called Oreoluwa Ventures, phone 08033334444', /Add a supplier[\s\S]*Oreoluwa/);
-  await proposes('a draft order', 'Build a draft order for Busayo Store: 2 crates of Trophy Bottle', /Save this order on the till/);
+  // An order built over several messages lives on the till (0267): read back, never remembered.
+  {
+    const r1 = await ask('Build an order for Busayo Store: 2 crates of Trophy Bottle and 1 crate of Goldberg Bottle');
+    show(r1);
+    const { data: lk } = await admin.from('whatsapp_links').select('working_draft_id').eq('wa_phone', PHONE).maybeSingle();
+    probeDraft = lk?.working_draft_id ?? null;
+    check('an order is opened on the till', Boolean(probeDraft) && /Trophy/i.test(r1.text) && /Goldberg/i.test(r1.text), r1.text.slice(0, 160));
+    const r2 = await ask('Make the Trophy 3 crates');
+    show(r2);
+    const { data: lines } = await admin.from('draft_order_lines').select('entered_qty, product_id').eq('draft_order_id', probeDraft ?? '00000000-0000-0000-0000-000000000000');
+    check('a change is saved on the order itself', (lines ?? []).some((l) => Number(l.entered_qty) === 3) && (lines ?? []).length === 2, JSON.stringify(lines));
+    const r3 = await ask('Show me the order');
+    show(r3);
+    const { data: d } = await admin.from('draft_orders').select('code').eq('id', probeDraft ?? '00000000-0000-0000-0000-000000000000').maybeSingle();
+    check('the order shown is the saved one, with its code', d?.code && r3.text.includes(d.code) && /3 crates/i.test(r3.text), r3.text.slice(0, 160));
+  }
+  await proposes('the order sold', 'Sell the order, they have not paid', /Sell order[\s\S]*Total/);
   {
     const r = await ask('How much did we spend on expenses this month?');
     show(r);
@@ -316,6 +333,8 @@ try {
 } finally {
   writeFileSync(`${OUT}/bot-proposals.json`, JSON.stringify(proposals, null, 1));
   meta.close();
+  // The probe's own open order, cancelled as the till cancels one.
+  if (probeDraft) await admin.from('draft_orders').update({ status: 'cancelled' }).eq('id', probeDraft).eq('status', 'open');
   await admin.from('whatsapp_pending').delete().eq('wa_phone', PHONE);
   await admin.from('whatsapp_messages').delete().eq('wa_phone', PHONE);
   await admin.from('whatsapp_links').delete().eq('wa_phone', PHONE);
