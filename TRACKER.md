@@ -244,6 +244,7 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 | 0269 | the shop's words for its items: `product_aliases`, `name_phrase`, `teach_product_name`, `forget_product_name`, `product_name_meanings`, `product_names_learned`; `search_products` finds a taught word first; `whatsapp_links.order_questions` | ☑ |
 | 0270 | `save_product_units` refuses two standalone shapes of the same size | ☑ |
 | 0271 | a sale line in the accidental twin of a same-size shape is refused (Zetar's Piece; its Pack still sells); Malta Guinness Can's 24 named Pack and its one Can; "m/gns" taught | ☑ |
+| 0272 | Zetar counted in pieces, 12 to a pack (owner's explicit yes; append-only lifted for Zetar's rows only, once): every base quantity ×12 and every cost per base unit ÷12 across 94 movements, 62 receipt lines, 3 deliveries, 6 batches and the open count; 169 rows kept in `_rebase_backup_0272`; 11 packs = 132 pieces, every receipt still equal to its lines | ☑ |
 | 0264 | Ashabi: three small count differences booked, batches aligned to the stock figure on every item | ☑ |
 
 ---
