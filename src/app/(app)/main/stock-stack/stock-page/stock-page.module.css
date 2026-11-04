@@ -177,3 +177,26 @@
   color: var(--warning);
   white-space: nowrap;
 }
+
+/* ── The first screen of Stock ────────────────────────────────────────────────────── */
+
+/* The headline in the body's own figures, tabular so the digits line up — see money-page. */
+.summary .summaryValue {
+  font-family: inherit;
+  font-size: 2.25rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.itemSells {
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.itemPrice {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}

@@ -1,3 +1,8 @@
+/*
+ * ONE ROW: the chips scroll, and export and print sit at its end as two named icons. They wrapped
+ * onto a row of their own under the chips, two wide outlined buttons between the filters and the
+ * list they act on.
+ */
 .wrap {
   display: flex;
   flex-wrap: wrap;
@@ -45,4 +50,14 @@
   margin: 0;
   font-size: var(--text-sm);
   color: var(--text-muted);
+}
+
+.chips {
+  flex: 1 1 0;
+}
+
+.tool {
+  flex: none;
+  min-width: 40px;
+  padding-inline: var(--space-2);
 }

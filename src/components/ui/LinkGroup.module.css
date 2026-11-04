@@ -1,0 +1,133 @@
+.group {
+  margin: 0 0 var(--space-5);
+}
+
+.title {
+  margin: 0 0 var(--space-2) var(--space-1);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--touch-comfortable);
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+/* A hairline between rows, starting where the words start — the icons read as one column. */
+.row + .row::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: calc(var(--space-4) + 36px + var(--space-3));
+  right: 0;
+  border-top: 1px solid var(--border);
+}
+
+.row:hover:not(:disabled) {
+  background: var(--surface-sunken);
+}
+
+.row:disabled {
+  cursor: default;
+}
+
+.icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius);
+  background: var(--primary-subtle);
+  color: var(--primary);
+}
+
+.iconDanger {
+  background: var(--danger-subtle, var(--surface-sunken));
+  color: var(--danger);
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.danger {
+  color: var(--danger);
+}
+
+.primary {
+  color: var(--primary);
+}
+
+.note {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.value {
+  flex: none;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.current .name {
+  color: var(--primary);
+}
+
+.current .value {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--warning);
+  color: #fff;
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.chevron {
+  flex: none;
+  color: var(--text-muted);
+}

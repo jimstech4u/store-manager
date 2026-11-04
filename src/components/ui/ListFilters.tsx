@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
-import { PrinterIcon } from '@/components/ui/Icon';
+import { PrinterIcon, ShareIcon } from '@/components/ui/Icon';
 import styles from './ListFilters.module.css';
 
 /**
@@ -60,6 +60,9 @@ export function ListFilters<V extends string>({
           size="small"
           busy={busy}
           busyLabel="Preparing"
+          className={styles.tool}
+          aria-label={exportLabel}
+          title={exportLabel}
           onClick={async () => {
             setBusy(true);
             setNote(null);
@@ -72,12 +75,12 @@ export function ListFilters<V extends string>({
             }
           }}
         >
-          {exportLabel}
+          <ShareIcon />
         </Button>
       )}
       {onPrint && (
-        <Button variant="secondary" size="small" onClick={onPrint}>
-          <PrinterIcon /> Print
+        <Button variant="secondary" size="small" className={styles.tool} aria-label="Print" title="Print" onClick={onPrint}>
+          <PrinterIcon />
         </Button>
       )}
       {note && (

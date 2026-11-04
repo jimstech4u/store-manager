@@ -80,11 +80,11 @@ try {
   }
 
   // ── And each one is reachable and works where it went ─────────────────────
-  check('Settings points at the receipt and the printer', /The receipt, your printer and your paper/i.test(settingsText));
-  check('and at the update reminder', /How often to ask again/i.test(settingsText));
+  check('Settings points at the receipt and the printer', /Receipt and printer/i.test(settingsText));
+  check('and at the update reminder', /Updates/.test(settingsText));
 
   console.log('\n— the update reminder, on its own page —');
-  await p.getByRole('button', { name: /How often to ask again/i }).first().click();
+  await p.getByRole('button', { name: /^Updates$/ }).first().click();
   await p.waitForTimeout(7000);
   const sel = p.locator('select:visible').first();
   check('the page has the setting', (await sel.count()) > 0, (await body()).slice(0, 100));
@@ -115,7 +115,7 @@ try {
     await link.click();
     await p.waitForTimeout(7000);
   }
-  await p.getByRole('button', { name: /The receipt, your printer and your paper/i }).first().click();
+  await p.getByRole('button', { name: /^Receipt and printer$/ }).first().click();
   await p.waitForTimeout(9000);
 
   const printText = await body();

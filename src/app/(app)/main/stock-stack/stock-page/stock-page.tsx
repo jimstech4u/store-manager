@@ -10,6 +10,7 @@ import { PinnedTools } from '@/components/ui/PinnedTools';
 import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
 import { FloatingAction } from '@/components/ui/FloatingAction';
+import { ActionTiles } from '@/components/ui/ActionTiles';
 import { ClipboardCheckIcon } from '@/components/ui/Icon';
 import { AlertIcon, BoxIcon, WarningIcon,
   PeopleIcon, ChevronRightIcon, PlusIcon } from '@/components/ui/Icon';
@@ -168,61 +169,10 @@ export default function StockPage() {
       title="Stock"
       subtitle={store.name}
       /*
-       * Both actions live in the header now.
-       *
-       * "Record a delivery" was a bar pinned to the bottom of this page: it cost a row of the
-       * list on every screen and covered the last product. Two icons here cost nothing, and the
-       * header is where the other action already was.
+       * Only ADD stays in the header — the one thing done from here many times a day. The other
+       * four are named tiles under the headline (see below).
        */
       actions={[
-        /*
-          GOING OFF, always reachable.
-
-          It was only offered through the banner, which appears only once something is already
-          expiring — so a shop checking ahead, or with nothing close yet, had no way in.
-        */
-        {
-          key: 'expiry',
-          icon: <AlertIcon />,
-          onClick: () => void nav.push('expiry_page'),
-          ariaLabel: 'What is going off',
-        },
-        /*
-          WHEN TO BE TOLD SOMETHING IS RUNNING OUT.
-          
-          Reachable from Settings too, but this is where a shop looking at a list of quantities
-          actually is — the thought "I should be warned before that happens again" arrives while
-          reading this screen, not while reading preferences.
-        */
-        {
-          key: 'low-stock',
-          icon: <WarningIcon />,
-          onClick: () => void nav.push('low_stock_page'),
-          ariaLabel: 'When to be told stock is running low',
-        },
-        ...(can('stock.receive')
-          ? [
-              {
-                key: 'receive',
-                icon: <BoxIcon />,
-                onClick: () => void nav.push('receive_page'),
-                ariaLabel: 'Record a delivery',
-              },
-              /*
-                WHO THE SHOP BUYS FROM, beside recording a delivery.
-
-                Here rather than in settings because it is the same thought: a load arrives, and
-                what is owed for it and what went back on the lorry belong to somebody. Behind the
-                same permission for the same reason.
-              */
-              {
-                key: 'suppliers',
-                icon: <PeopleIcon />,
-                onClick: () => void nav.push('suppliers_page'),
-                ariaLabel: 'Suppliers and what you owe them',
-              },
-            ]
-          : []),
         ...(can('products.manage')
           ? [
               {
@@ -238,6 +188,91 @@ export default function StockPage() {
       <PageState status={status}>
         {() => (
           <>
+      {/*
+        WHAT THE SHELF IS WORTH, FIRST — the headline, the way Money opens on what it is owed. It sat
+        under the search and the filters, and vanished whenever a filter matched nothing.
+
+        NOT ₦0 WHILE IT IS BEING WORKED OUT. The figure, once there is one; until then a word that
+        cannot be mistaken for it, and if the read failed, a way to try again here.
+      */}
+      <div className={styles.summary}>
+        <span className={styles.summaryLabel}>Stock is worth</span>
+        {worth.data ? (
+          <>
+            <span className={styles.summaryValue}>{formatMoney(worth.data.total)}</span>
+            <span className={styles.summaryNote}>
+              at what it cost you, not what you sell it for
+              {worth.data.estimated > 0 && (
+                <>
+                  {' · '}
+                  {formatMoney(worth.data.estimated)} of it still estimated
+                </>
+              )}
+            </span>
+          </>
+        ) : worth.error ? (
+          <span className={styles.summaryNote}>
+            Could not work it out.{' '}
+            <button type="button" className={styles.summaryRetry} onClick={worth.reload}>
+              Try again
+            </button>
+          </span>
+        ) : (
+          <span className={styles.summaryNote} role="status">
+            Working it out…
+          </span>
+        )}
+      </div>
+
+      {/*
+        THE OTHER DOORS FROM STOCK, NAMED. They were five bare icons in the header — an exclamation
+        mark, a warning triangle, a box, two people and a plus — each a guess until tapped. Adding an
+        item keeps the header's plus; the rest are here with their words on.
+
+        Going off is always reachable, not only through the banner (which appears once something is
+        already expiring). Running low is here as well as in Settings because the thought "warn me
+        before that happens again" arrives while reading quantities. Suppliers sit beside a
+        delivery: a load arrives, and what is owed for it belongs to somebody.
+      */}
+      <ActionTiles
+        label="Stock"
+        tiles={[
+          ...(can('stock.receive')
+            ? [
+                {
+                  key: 'receive',
+                  icon: <BoxIcon />,
+                  label: 'Delivery',
+                  ariaLabel: 'Record a delivery',
+                  onClick: () => void nav.push('receive_page'),
+                },
+                {
+                  key: 'suppliers',
+                  icon: <PeopleIcon />,
+                  label: 'Suppliers',
+                  ariaLabel: 'Suppliers and what you owe them',
+                  onClick: () => void nav.push('suppliers_page'),
+                },
+              ]
+            : []),
+          {
+            key: 'expiry',
+            icon: <AlertIcon />,
+            label: 'Going off',
+            ariaLabel: 'What is going off',
+            badge: expiry.summary ? expiry.summary.expiredItems + expiry.summary.soonItems : undefined,
+            onClick: () => void nav.push('expiry_page'),
+          },
+          {
+            key: 'low-stock',
+            icon: <WarningIcon />,
+            label: 'Running low',
+            ariaLabel: 'When to be told stock is running low',
+            onClick: () => void nav.push('low_stock_page'),
+          },
+        ]}
+      />
+
       {/*
         THE ALARM, and only when there is something to sound it about.
 
@@ -261,8 +296,12 @@ export default function StockPage() {
                 } going off soon`
           }
         >
+          {/* The money only when there is a figure: "₦0 of stock cannot be sold" said the opposite
+              of the title above it, about stock whose cost was simply never recorded. */}
           {expiry.summary.expiredItems > 0
-            ? `${formatMoney(expiry.summary.expiredValue)} of stock cannot be sold. `
+            ? expiry.summary.expiredValue > 0
+              ? `${formatMoney(expiry.summary.expiredValue)} of stock cannot be sold. `
+              : 'Take it off the shelf so it is not sold. '
             : ''}
           {expiry.summary.soonItems > 0 && expiry.summary.nextDate
             ? `The next goes off on ${new Date(expiry.summary.nextDate).toLocaleDateString()}. `
@@ -418,40 +457,6 @@ export default function StockPage() {
         )
       ) : (
         <>
-          {(
-            <div className={styles.summary}>
-              <span className={styles.summaryLabel}>Stock is worth</span>
-              {/*
-                NOT ₦0 WHILE IT IS BEING WORKED OUT. The figure, once there is one; until then a word
-                that cannot be mistaken for it, and if the read failed, a way to try again here.
-              */}
-              {worth.data ? (
-                <>
-                  <span className={styles.summaryValue}>{formatMoney(worth.data.total)}</span>
-                  <span className={styles.summaryNote}>
-                    at what it cost you, not what you sell it for
-                    {worth.data.estimated > 0 && (
-                      <>
-                        {' · '}
-                        {formatMoney(worth.data.estimated)} of it still estimated
-                      </>
-                    )}
-                  </span>
-                </>
-              ) : worth.error ? (
-                <span className={styles.summaryNote}>
-                  Could not work it out.{' '}
-                  <button type="button" className={styles.summaryRetry} onClick={worth.reload}>
-                    Try again
-                  </button>
-                </span>
-              ) : (
-                <span className={styles.summaryNote} role="status">
-                  Working it out…
-                </span>
-              )}
-            </div>
-          )}
 
           {gaps.length > 0 && (
             <InfoPanel
@@ -512,14 +517,28 @@ export default function StockPage() {
                   >
                   <div className={styles.itemMain}>
                     <p className={styles.itemName}>{p.name}</p>
+                    {/*
+                      WHAT IT SELLS FOR AND WHERE IT IS FILED, then WHAT IT COST — one line each.
+                      Three facts strung on one wrapping line broke as "· sells for ₦9,500" and
+                      "· Nigerian Breweries" on lines of their own, each starting with a dot.
+                    */}
+                    {(pricedUnit(sellingUnits)?.price != null || p.categoryName) && (
+                      <p className={styles.itemSells}>
+                        {pricedUnit(sellingUnits)?.price != null && (
+                          <span className={styles.itemPrice}>
+                            {formatMoney(pricedUnit(sellingUnits)!.price!)}
+                            {' a '}
+                            {pricedUnit(sellingUnits)!.name.toLowerCase()}
+                          </span>
+                        )}
+                        {pricedUnit(sellingUnits)?.price != null && p.categoryName && ' · '}
+                        {p.categoryName}
+                      </p>
+                    )}
                     <p className={styles.itemMeta}>
                       {lead
                         ? costLine(lead.cost, lead.name.toLowerCase())
                         : costLine(Number(p.avgUnitCost), p.baseUnit)}
-                      {pricedUnit(sellingUnits)?.price != null && (
-                        <span>· sells for {formatMoney(pricedUnit(sellingUnits)!.price!)}</span>
-                      )}
-                      {p.categoryName && <span>· {p.categoryName}</span>}
                       {p.costIsEstimated && <span className={styles.estimate}>estimated</span>}
                     </p>
 

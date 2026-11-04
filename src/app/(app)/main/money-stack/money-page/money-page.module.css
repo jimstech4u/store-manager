@@ -233,3 +233,123 @@
   font-weight: 600;
   cursor: pointer;
 }
+
+/* ── The first screen of Money ────────────────────────────────────────────────────── */
+
+/*
+ * The headline in the body's own figures, tabular so the digits still line up. Monospace made
+ * ₦7,660,250 read like a till printout rather than the most important number in the shop.
+ */
+.summary .summaryValue {
+  font-family: inherit;
+  font-size: 2.25rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.windowCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.windowCard .window {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.windowIn {
+  color: var(--success);
+}
+
+.windowOwed {
+  color: var(--warning);
+}
+
+.windowNote {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+/* One card, rows divided by hairlines. */
+.ledger {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.ledger > li + li .ledgerRow {
+  border-top: 1px solid var(--border);
+}
+
+.ledgerRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--touch-comfortable);
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.ledgerRow:hover {
+  background: var(--surface-sunken);
+}
+
+.ledgerChevron {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.avatar {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  background: var(--primary-subtle);
+  color: var(--primary);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+/* Where they stand, in words as well as colour: an amount, "credit", or "Clear". */
+.amount {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.amount.owing {
+  background: none;
+  color: var(--warning);
+}
+
+.amount.credit {
+  color: var(--success);
+}
+
+.amount.clear {
+  background: none;
+  color: var(--text-muted);
+  font-weight: 500;
+}

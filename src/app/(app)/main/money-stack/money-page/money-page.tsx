@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import styles from './money-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
@@ -10,6 +10,8 @@ import { SearchSheet } from '@/components/ui/SearchSheet';
 import { useSearchController } from '@academix-admin/search-viewer';
 import { InfoPanel } from '@/components/ui/Explain';
 import { FilterBar } from '@/components/ui/FilterBar';
+import { ListFilters } from '@/components/ui/ListFilters';
+import { ActionTiles } from '@/components/ui/ActionTiles';
 import { FloatingAction } from '@/components/ui/FloatingAction';
 import { usePermission } from '@/hooks/usePermission';
 import { customPeriod, resolvePeriod, usePeriod } from '@/lib/stacks/periods';
@@ -32,6 +34,25 @@ interface CustomerRow {
   business_name: string | null;
   phone: string;
   balance: string;
+}
+
+/** Which customers the list is about — `list_customers`'s own filter (0262). */
+type Who = 'owes' | 'credit' | 'all';
+
+/**
+ * A balance, said the way it is: owed, held, or nothing. A customer in credit used to read "Clear",
+ * which is the one thing they are not — the shop is holding their money.
+ */
+function balanceSaid(balance: number): { text: string; tone: 'owing' | 'credit' | 'clear' } {
+  if (balance > 0.005) return { text: formatMoney(balance), tone: 'owing' };
+  if (balance < -0.005) return { text: `${formatMoney(-balance)} credit`, tone: 'credit' };
+  return { text: 'Clear', tone: 'clear' };
+}
+
+/** Two letters to find a name by before it is read. */
+function initials(name: string): string {
+  const words = name.replace(/[^\p{L}\p{N} ]/gu, ' ').trim().split(/\s+/).filter(Boolean);
+  return ((words[0]?.[0] ?? '?') + (words[1]?.[0] ?? '')).toUpperCase();
 }
 
 /**
@@ -70,6 +91,13 @@ export default function MoneyPage() {
   // Browsing here; searching happens in the sheet, where the results get the whole screen.
   const [searchId, searchOps, isSearchOpen] = useSearchController();
 
+  /*
+   * WHO THE LIST IS ABOUT. The page is headed "who owes you" and listed EVERY customer, A to Z, so
+   * the first rows were people who owed nothing ("A406 Hotel — Clear") and the twenty-seven who did
+   * were somewhere in four hundred. It opens on the ones who owe; the rest are a tap away.
+   */
+  const [who, setWho] = useState<Who>('owes');
+
   const fetchPage = useCallback(
     async (cursor: unknown | null, limit: number) => {
       if (!store) return { rows: [] as CustomerRow[], cursor: null };
@@ -80,13 +108,14 @@ export default function MoneyPage() {
         p_after_name: c?.name ?? null,
         p_after_id: c?.id ?? null,
         p_limit: limit,
+        p_filter: who === 'all' ? null : who,
       });
       if (err) throw err;
       const rows = (data ?? []) as CustomerRow[];
       const last = rows[rows.length - 1];
       return { rows, cursor: last ? { name: last.display_name, id: last.id } : null };
     },
-    [store],
+    [store, who],
   );
 
   const list = usePaginatedList<CustomerRow>({
@@ -95,7 +124,7 @@ export default function MoneyPage() {
     // Persisted, so returning from a statement or a receipt keeps the list and its cursor.
     key: 'debtors',
     scope: 'money_flow',
-    deps: [store?.id],
+    deps: [store?.id, who],
     enabled: Boolean(store),
   });
 
@@ -236,35 +265,6 @@ export default function MoneyPage() {
       onBack={goBack}
       title="Money"
       subtitle="Who owes you, and what has been paid"
-      actions={[
-        // Only for somebody who may read them — the page would only say "not part of your job".
-        ...(canOpen('reports_page')
-          ? [
-              {
-                key: 'reports',
-                icon: <ChartIcon />,
-                onClick: () => void nav.push('reports_page'),
-                ariaLabel: 'Reports you can print or save',
-              },
-              {
-                /*
-                 * EXPORT A REPORT — who owes, who paid and when, what was counted, what is in
-                 * stock — as CSV, PDF, a picture or on paper.
-                 */
-                key: 'export',
-                icon: <ShareIcon />,
-                onClick: () => void nav.push('export_page'),
-                ariaLabel: 'Export a report',
-              },
-            ]
-          : []),
-        {
-          key: 'sales',
-          icon: <ReceiptIcon />,
-          onClick: () => void nav.push('sales_page'),
-          ariaLabel: 'All sales and receipts',
-        },
-      ]}
     >
       <PageState status={status}>
         {() => (
@@ -310,6 +310,43 @@ export default function MoneyPage() {
           </span>
         )}
       </div>
+
+      {/*
+        WHERE ELSE MONEY IS LOOKED AT — named, not three bare icons in the header. Reports and
+        export only for somebody who may read them: the page would only say "not part of your job".
+      */}
+      <ActionTiles
+        label="Money"
+        tiles={[
+          {
+            key: 'sales',
+            icon: <ReceiptIcon />,
+            label: 'Receipts',
+            ariaLabel: 'All sales and receipts',
+            onClick: () => void nav.push('sales_page'),
+          },
+          ...(canOpen('reports_page')
+            ? [
+                {
+                  key: 'reports',
+                  icon: <ChartIcon />,
+                  label: 'Reports',
+                  ariaLabel: 'Reports you can print or save',
+                  onClick: () => void nav.push('reports_page'),
+                },
+                {
+                  // Who owes, who paid and when, what was counted, what is in stock — CSV, PDF,
+                  // a picture or on paper.
+                  key: 'export',
+                  icon: <ShareIcon />,
+                  label: 'Export',
+                  ariaLabel: 'Export a report',
+                  onClick: () => void nav.push('export_page'),
+                },
+              ]
+            : []),
+        ]}
+      />
 
       {/*
         WHAT THE PERIOD CAME TO, on the list rather than in a reports tab.
@@ -363,20 +400,38 @@ export default function MoneyPage() {
             </p>
           )}
 
+          {/*
+            BILLED, CAME IN, AND WHAT OF IT IS STILL OWED — the sentence a month is. The receipt
+            count was a third figure beside two sums of money; it is the note under them now, and
+            the third figure is the one a shop acts on.
+          */}
           {trading.data && (
-            <div className={styles.window}>
-              <div className={styles.windowFig}>
-                <span className={styles.windowLabel}>Billed</span>
-                <span className={styles.windowValue}>{formatMoney(trading.data.billed)}</span>
+            <div className={styles.windowCard}>
+              <div className={styles.window}>
+                <div className={styles.windowFig}>
+                  <span className={styles.windowLabel}>Billed</span>
+                  <span className={styles.windowValue}>{formatMoney(trading.data.billed)}</span>
+                </div>
+                <div className={styles.windowFig}>
+                  <span className={styles.windowLabel}>Came in</span>
+                  <span className={`${styles.windowValue} ${styles.windowIn}`}>
+                    {formatMoney(trading.data.paid)}
+                  </span>
+                </div>
+                <div className={styles.windowFig}>
+                  <span className={styles.windowLabel}>Still owed</span>
+                  <span
+                    className={`${styles.windowValue} ${trading.data.owing > 0 ? styles.windowOwed : ''}`}
+                  >
+                    {formatMoney(trading.data.owing)}
+                  </span>
+                </div>
               </div>
-              <div className={styles.windowFig}>
-                <span className={styles.windowLabel}>Came in</span>
-                <span className={styles.windowValue}>{formatMoney(trading.data.paid)}</span>
-              </div>
-              <div className={styles.windowFig}>
-                <span className={styles.windowLabel}>Receipts</span>
-                <span className={styles.windowValue}>{trading.data.receipts}</span>
-              </div>
+              <span className={styles.windowNote}>
+                {trading.data.receipts} {trading.data.receipts === 1 ? 'receipt' : 'receipts'}
+                {trading.data.customers > 0 &&
+                  ` · ${trading.data.customers} ${trading.data.customers === 1 ? 'customer' : 'customers'}`}
+              </span>
             </div>
           )}
         </>
@@ -388,6 +443,15 @@ export default function MoneyPage() {
           label="Search customers"
           placeholder="Search by name or phone"
           onOpen={searchOps.open}
+        />
+        <ListFilters<Who>
+          options={[
+            { value: 'owes', label: 'Owe you' },
+            { value: 'credit', label: 'In credit' },
+            { value: 'all', label: 'Everyone' },
+          ]}
+          value={who}
+          onChange={setWho}
         />
       </PinnedTools>
 
@@ -429,53 +493,41 @@ export default function MoneyPage() {
               searchOps.close();
             }}
           >
-            <span className={styles.rowMain}>
-              <span className={styles.rowName}>{c.display_name}</span>
-              <span className={styles.rowMeta}>{c.phone}</span>
-            </span>
-            <span
-              className={`${styles.rowBalance} ${
-                Number(c.balance) > 0 ? styles.owing : styles.clear
-              }`}
-            >
-              {Number(c.balance) > 0 ? formatMoney(c.balance) : 'Clear'}
-            </span>
+            <CustomerLine c={c} />
           </button>
         )}
       />
 
       {list.items.length === 0 ? (
-        <InfoPanel tone="info" title="Nobody owes you anything yet">
-          Customers appear here once you sell to them on credit.
-        </InfoPanel>
+        who === 'owes' ? (
+          <InfoPanel tone="info" title="Nobody owes you anything">
+            Customers appear here when you sell to them on credit.
+          </InfoPanel>
+        ) : who === 'credit' ? (
+          <InfoPanel tone="info" title="Nobody is in credit">
+            A customer who pays more than they owe shows here, with what you are holding for them.
+          </InfoPanel>
+        ) : (
+          <InfoPanel tone="info" title="No customers yet">
+            Add one at the till when you sell, or from Everyone you sell to in Settings.
+          </InfoPanel>
+        )
       ) : (
         <>
-          <ul className={styles.list}>
-            {list.items.map((c) => {
-              const balance = Number(c.balance);
-              return (
-                <li key={c.id}>
-                  <button
-                    type="button"
-                    className={`${styles.row} ${styles.rowLink}`}
-                    onClick={() =>
-                      void nav.push('account_page', { id: c.id })
-                    }
-                  >
-                    <span className={styles.rowMain}>
-                      <span className={styles.rowName}>{c.display_name}</span>
-                      <span className={styles.rowMeta}>{c.phone}</span>
-                    </span>
-                    <span
-                      className={`${styles.rowBalance} ${balance > 0 ? styles.owing : styles.clear}`}
-                    >
-                      {balance > 0 ? formatMoney(balance) : 'Clear'}
-                    </span>
-                    <ChevronRightIcon />
-                  </button>
-                </li>
-              );
-            })}
+          {/* One card of rows rather than a card per customer: a list, read down, not a deck. */}
+          <ul className={styles.ledger}>
+            {list.items.map((c) => (
+              <li key={c.id}>
+                <button
+                  type="button"
+                  className={styles.ledgerRow}
+                  onClick={() => void nav.push('account_page', { id: c.id })}
+                >
+                  <CustomerLine c={c} />
+                  <ChevronRightIcon className={styles.ledgerChevron} />
+                </button>
+              </li>
+            ))}
           </ul>
 
           {list.hasMore && (
@@ -516,5 +568,22 @@ export default function MoneyPage() {
         )}
       </PageState>
     </PageScaffold>
+  );
+}
+
+/** One customer: who, how to reach them, and where they stand — the same in the list and in search. */
+function CustomerLine({ c }: { c: CustomerRow }) {
+  const said = balanceSaid(Number(c.balance));
+  return (
+    <>
+      <span className={styles.avatar} aria-hidden>
+        {initials(c.display_name)}
+      </span>
+      <span className={styles.rowMain}>
+        <span className={styles.rowName}>{c.display_name}</span>
+        <span className={styles.rowMeta}>{c.phone}</span>
+      </span>
+      <span className={`${styles.amount} ${styles[said.tone]}`}>{said.text}</span>
+    </>
   );
 }
