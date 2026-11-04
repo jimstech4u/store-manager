@@ -2,7 +2,7 @@ import { after, NextResponse } from 'next/server';
 import { downloadMedia, markRead, sendChoices, sendText, signatureValid, whatsappConfigured } from '@/lib/whatsapp/meta';
 import { clientFor, serviceDb } from '@/lib/whatsapp/session';
 import { forWhatsApp, llmConfigured, runAssistant, transcribe, type Content, type Message } from '@/lib/whatsapp/llm';
-import { TOOLS, runTool } from '@/lib/whatsapp/tools';
+import { TOOLS, paperOf, runTool } from '@/lib/whatsapp/tools';
 import { execute, type Ctx } from '@/lib/whatsapp/actions';
 
 /**
@@ -39,11 +39,26 @@ interface WaMessage {
   image?: { id: string; caption?: string };
   audio?: { id: string };
   document?: { id: string; caption?: string; filename?: string };
+  /** A contact card shared into the chat. */
+  contacts?: { name?: { formatted_name?: string }; phones?: { phone?: string; wa_id?: string }[] }[];
   /** A tapped button or a choice from a list. */
   interactive?: {
     button_reply?: { id: string; title: string };
     list_reply?: { id: string; title: string; description?: string };
   };
+}
+
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+
+/**
+ * NO ID REACHES THE CHAT. The prompt says so and a model still wrote "Wunmi stores (ID 6560971e-…)".
+ * Links carry tokens, not these, so taking every one out loses nothing a person can use.
+ */
+function withoutIds(text: string): string {
+  return text
+    .replace(new RegExp(`\\s*\\((?:id|ID|Id)[:\\s]*${UUID.source}\\)`, 'gi'), '')
+    .replace(new RegExp(`(?:\\b(?:id|ID)[:\\s]+)?${UUID.source}`, 'gi'), '')
+    .replace(/[ \t]{2,}/g, ' ');
 }
 
 /** The model's next steps, on a last line of their own: "OPTIONS: Send as PDF | Who owes me?" */
@@ -89,6 +104,11 @@ export async function POST(request: Request) {
         await handle(w.msg, w.name);
       } catch (e) {
         console.error('whatsapp handle failed', e);
+        // Kept with the conversation, so a reply that never came can be found afterwards.
+        await serviceDb().from('whatsapp_messages').insert({
+          direction: 'out', wa_phone: w.msg.from, kind: 'error', body: null,
+          tools: { error: e instanceof Error ? e.message.slice(0, 300) : String(e).slice(0, 300) },
+        }).then(() => undefined, () => undefined);
         try {
           // Somebody who has just reported a sale needs to know it is not on the books.
           const busy = e instanceof Error && e.message.startsWith('Every assistant is unavailable');
@@ -113,7 +133,11 @@ async function handle(msg: WaMessage, profileName: string | null) {
     (msg.interactive?.list_reply
       ? `${msg.interactive.list_reply.title}${msg.interactive.list_reply.description ?? ''}`
       : undefined);
-  let text = (tapped ?? msg.text?.body ?? msg.image?.caption ?? msg.document?.caption ?? '').trim();
+  // A shared contact is words like any other: "change her number to this" then has something to point at.
+  const shared = (msg.contacts ?? [])
+    .map((c) => `${c.name?.formatted_name ?? 'A contact'}: ${(c.phones ?? []).map((p) => p.phone ?? p.wa_id).filter(Boolean).join(', ')}`)
+    .join('; ');
+  let text = (tapped ?? msg.text?.body ?? msg.image?.caption ?? msg.document?.caption ?? (shared ? `(Shared a contact) ${shared}` : '')).trim();
 
   // Once only: Meta retries a webhook it thinks was slow, and a retried message is the same message.
   const { error: dup } = await db.from('whatsapp_messages').insert({
@@ -122,8 +146,9 @@ async function handle(msg: WaMessage, profileName: string | null) {
   if (dup) return;
   await markRead(msg.id);
 
-  const reply = async (body: string, extra: Record<string, unknown> = {}, options: string[] = []) => {
-    await sendChoices(msg.from, body, options);
+  const reply = async (said: string, extra: Record<string, unknown> = {}, options: string[] = []) => {
+    const body = withoutIds(said);
+    await sendChoices(msg.from, body, options.map(withoutIds));
     await db.from('whatsapp_messages').insert({ direction: 'out', wa_phone: msg.from, kind: 'text', body, ...extra });
   };
 
@@ -292,7 +317,8 @@ async function handle(msg: WaMessage, profileName: string | null) {
     .order('created_at', { ascending: false })
     .limit(7);
   const told = ((past ?? []) as { direction: string; body: string; wa_message_id: string | null }[])
-    .filter((m) => m.wa_message_id !== msg.id)
+    // An empty turn (a contact card, a sticker) is refused by some models, and then nobody answers.
+    .filter((m) => m.wa_message_id !== msg.id && m.body.trim() !== '')
     .reverse();
   /*
    * WHAT THEY CALLED OFF IS NOT STILL BEING ASKED. Left in, with only "cancelled" after it, the model
@@ -316,11 +342,15 @@ async function handle(msg: WaMessage, profileName: string | null) {
     }));
 
   const today = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
+  const paper = await paperOf(userDb, link.store_id).catch(() => null);
   const system: Message = {
     role: 'system',
     content:
-      `You are the Store Manager assistant for "${mine.store_name}", a shop in Nigeria, chatting on WhatsApp with ` +
+      `You are the Store Manager AI agent for "${mine.store_name}", a shop in Nigeria, chatting on WhatsApp with ` +
       `${profileName ?? 'a member of the shop'} (role: ${mine.role_code}). Today is ${today}. Money is in naira (₦).\n` +
+      (paper?.header ? `- The shop as its receipts print it (address, phone): ${paper.header.replace(/\s*\n\s*/g, ' | ')}\n` : '') +
+      '- For anything your other tools do not cover, call find_capability with what they want, then use_capability. Never say something cannot be done until you have searched.\n' +
+      '- Never choose a customer, item or supplier for them. When it is unclear which, ask, and offer the names as options.\n' +
       '- Answer ONLY the latest message. Earlier messages are context for it, not questions to answer again.\n' +
       '- Answer only from the tools; never invent figures, names or prices. If a tool returns an error, say plainly that you cannot see that.\n' +
       '- Be brief and clear, in plain English, formatted for WhatsApp (short lines, *bold* with single stars for key figures, no tables).\n' +

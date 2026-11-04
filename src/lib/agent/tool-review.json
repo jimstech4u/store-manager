@@ -1,0 +1,362 @@
+{
+  "$comment": [
+    "THE AGENT TOOL REVIEW. The crawler (scripts/agent-crawl.mjs) finds every function the app can call and",
+    "writes it to agent_tools switched off. A function is offered to the agent only when it is listed here with",
+    "enabled true and its signature still matches: a changed function is switched off until it is reviewed again.",
+    "Each change to this file is the diff that gets approved. Arguments the shop is (p_store_id) or the server",
+    "makes (p_client_uuid) are filled in by the gateway; hidden ones are never sent."
+  ],
+  "tools": {
+    "update_product": {
+      "enabled": true,
+      "signature": "p_product_id uuid, p_name text, p_sku text, p_barcode text, p_category_id uuid, p_list_price money_amt",
+      "title": "Rename an item",
+      "description": "Give an item a new name.",
+      "args": {
+        "p_product_id": {
+          "description": "Item: the id from find_items"
+        },
+        "p_name": {
+          "description": "The new name"
+        }
+      },
+      "hidden": [
+        "p_sku",
+        "p_barcode",
+        "p_category_id",
+        "p_list_price"
+      ]
+    },
+    "set_shape_price": {
+      "enabled": true,
+      "signature": "p_product_unit_id uuid, p_price money_amt",
+      "title": "Change a selling price",
+      "description": "Set the price of an item in one of the shapes it sells in (a crate, a pack, a bottle). Get the shape from item_shapes.",
+      "args": {
+        "p_product_unit_id": {
+          "description": "The shape: product_unit_id from item_shapes"
+        },
+        "p_price": {
+          "description": "The new price, in naira"
+        }
+      }
+    },
+    "update_customer": {
+      "enabled": true,
+      "signature": "p_customer_id uuid, p_display_name text, p_business_name text, p_notes text",
+      "title": "Change a customer's name",
+      "description": "Change a customer's name, business name or notes.",
+      "args": {
+        "p_customer_id": {
+          "description": "Customer: the id from find_customer"
+        },
+        "p_display_name": {
+          "description": "The new name"
+        },
+        "p_business_name": {
+          "description": "Business name"
+        },
+        "p_notes": {
+          "description": "Notes"
+        }
+      }
+    },
+    "update_customer_phone": {
+      "enabled": true,
+      "signature": "p_customer_id uuid, p_phone text",
+      "title": "Change a customer's phone number",
+      "description": "Change a customer's phone number, for example from a contact they shared.",
+      "args": {
+        "p_customer_id": {
+          "description": "Customer: the id from find_customer"
+        },
+        "p_phone": {
+          "description": "The new phone number"
+        }
+      }
+    },
+    "upsert_supplier": {
+      "enabled": true,
+      "signature": "p_store_id uuid, p_name text, p_phone text, p_note text, p_id uuid",
+      "title": "Add a supplier",
+      "description": "Add a new supplier the shop buys from.",
+      "args": {
+        "p_name": {
+          "description": "Supplier name"
+        },
+        "p_phone": {
+          "description": "Phone number"
+        },
+        "p_note": {
+          "description": "Note"
+        }
+      },
+      "hidden": [
+        "p_id"
+      ]
+    },
+    "record_supplier_payment": {
+      "enabled": true,
+      "signature": "p_store_id uuid, p_supplier_id uuid, p_amount money_amt, p_direction text, p_method text, p_reason text, p_purchase_id uuid, p_occurred_at timestamp with time zone",
+      "title": "Pay a supplier",
+      "description": "Record money the shop paid a supplier.",
+      "args": {
+        "p_supplier_id": {
+          "description": "Supplier: the id from list_suppliers"
+        },
+        "p_amount": {
+          "description": "Amount, in naira"
+        },
+        "p_method": {
+          "description": "cash, transfer or pos"
+        },
+        "p_reason": {
+          "description": "What it was for"
+        }
+      },
+      "hidden": [
+        "p_direction",
+        "p_purchase_id",
+        "p_occurred_at"
+      ]
+    },
+    "rename_product_group": {
+      "enabled": true,
+      "signature": "p_category_id uuid, p_name text",
+      "title": "Rename a group of items",
+      "description": "Give a group (category) of items a new name.",
+      "args": {
+        "p_category_id": {
+          "description": "The group id"
+        },
+        "p_name": {
+          "description": "The new name"
+        }
+      }
+    },
+    "selling_units_for_product": {
+      "enabled": true,
+      "signature": "p_product_id uuid",
+      "title": "Item shapes",
+      "description": "The shapes an item sells in, with each one's price and what is on the shelf in it. Use before changing a price.",
+      "args": {
+        "p_product_id": {
+          "description": "Item: the id from find_items"
+        }
+      }
+    },
+    "store_suppliers": {
+      "enabled": true,
+      "signature": "p_store_id uuid, p_include_archived boolean",
+      "title": "List suppliers",
+      "description": "Every supplier the shop buys from, with their phone and last delivery.",
+      "permission": "stock.receive",
+      "args": {},
+      "hidden": [
+        "p_include_archived"
+      ]
+    },
+    "supplier_history": {
+      "enabled": true,
+      "signature": "p_supplier_id uuid",
+      "title": "A supplier's account",
+      "description": "Deliveries and payments with one supplier.",
+      "permission": "stock.receive",
+      "args": {
+        "p_supplier_id": {
+          "description": "Supplier: the id from list_suppliers"
+        }
+      }
+    },
+    "supplier_balance": {
+      "enabled": true,
+      "signature": "p_supplier_id uuid",
+      "title": "What we owe a supplier",
+      "description": "How much the shop owes one supplier.",
+      "permission": "stock.receive",
+      "args": {
+        "p_supplier_id": {
+          "description": "Supplier: the id from list_suppliers"
+        }
+      }
+    },
+    "list_expenses": {
+      "enabled": true,
+      "signature": "p_store_id uuid, p_from timestamp with time zone, p_to timestamp with time zone, p_category uuid",
+      "title": "Expenses",
+      "description": "Money spent, with what on and who by, over a period.",
+      "args": {
+        "p_from": {
+          "description": "From this date, YYYY-MM-DD"
+        },
+        "p_to": {
+          "description": "Up to and including this date, YYYY-MM-DD"
+        }
+      },
+      "hidden": [
+        "p_category"
+      ]
+    },
+    "report_payments": {
+      "enabled": true,
+      "signature": "p_store_id uuid, p_from timestamp with time zone, p_to timestamp with time zone, p_direction text",
+      "title": "Payments received",
+      "description": "Every payment customers made over a period, with method and reference.",
+      "args": {
+        "p_from": {
+          "description": "From this date, YYYY-MM-DD"
+        },
+        "p_to": {
+          "description": "Up to and including this date, YYYY-MM-DD"
+        }
+      },
+      "hidden": [
+        "p_direction"
+      ]
+    },
+    "takings_by_method": {
+      "enabled": true,
+      "signature": "p_store_id uuid, p_from timestamp with time zone, p_to timestamp with time zone",
+      "title": "Takings by method",
+      "description": "Money taken over a period, split by cash, transfer and POS.",
+      "permission": "reports.view",
+      "args": {
+        "p_from": {
+          "description": "From this date, YYYY-MM-DD"
+        },
+        "p_to": {
+          "description": "Up to and including this date, YYYY-MM-DD"
+        }
+      }
+    },
+    "sales_by_day": {
+      "enabled": true,
+      "signature": "p_store_id uuid, p_from timestamp with time zone, p_to timestamp with time zone, p_staff uuid",
+      "title": "Sales day by day",
+      "description": "Receipts, amount billed and paid for each day of a period.",
+      "permission": "reports.view",
+      "args": {
+        "p_from": {
+          "description": "From this date, YYYY-MM-DD"
+        },
+        "p_to": {
+          "description": "Up to and including this date, YYYY-MM-DD"
+        }
+      },
+      "hidden": [
+        "p_staff"
+      ]
+    },
+    "search_sales": {
+      "enabled": true,
+      "signature": "p_store_id uuid, p_query text, p_limit integer",
+      "title": "Search receipts",
+      "description": "Find receipts by customer name or note.",
+      "args": {
+        "p_query": {
+          "description": "Words to search for"
+        }
+      },
+      "hidden": [
+        "p_limit"
+      ]
+    },
+    "price_list": {
+      "enabled": true,
+      "signature": "p_store_id uuid",
+      "title": "Price list",
+      "description": "Every item and its selling prices, by group.",
+      "args": {}
+    },
+    "expiring_stock": {
+      "enabled": true,
+      "signature": "p_store_id uuid, p_within_days integer",
+      "title": "Stock about to expire",
+      "description": "Batches that expire soon, with days left and their value.",
+      "args": {
+        "p_within_days": {
+          "description": "How many days ahead"
+        }
+      }
+    },
+    "list_bank_accounts": {
+      "enabled": true,
+      "signature": "p_store_id uuid",
+      "title": "Bank accounts",
+      "description": "The shop's bank accounts customers pay into.",
+      "args": {}
+    },
+    "my_open_drafts": {
+      "enabled": true,
+      "signature": "p_store_id uuid",
+      "title": "Open orders on the till",
+      "description": "Orders saved but not yet sold, with their codes.",
+      "args": {}
+    },
+    "pending_online_orders": {
+      "enabled": true,
+      "signature": "p_store_id uuid",
+      "title": "Online orders waiting",
+      "description": "Orders customers placed online that are waiting for the shop.",
+      "args": {}
+    },
+    "report_counts": {
+      "enabled": true,
+      "signature": "p_store_id uuid, p_from timestamp with time zone, p_to timestamp with time zone",
+      "title": "Counts over a period",
+      "description": "Every shelf count in a period: expected, counted and the difference.",
+      "permission": "reports.view",
+      "args": {
+        "p_from": {
+          "description": "From this date, YYYY-MM-DD"
+        },
+        "p_to": {
+          "description": "Up to and including this date, YYYY-MM-DD"
+        }
+      }
+    },
+    "activity_feed_page": {
+      "enabled": true,
+      "signature": "p_store_id uuid, p_before timestamp with time zone, p_limit integer",
+      "title": "What happened in the shop",
+      "description": "The latest things done in the shop, newest first: sales, payments, deliveries, counts.",
+      "permission": "reports.view",
+      "args": {},
+      "hidden": [
+        "p_before",
+        "p_limit"
+      ]
+    },
+    "customers_with_empties": {
+      "enabled": true,
+      "signature": "p_store_id uuid",
+      "title": "Who holds our empties",
+      "description": "Customers holding the shop's containers, with how many.",
+      "args": {}
+    },
+    "report_empties_holders": {
+      "enabled": true,
+      "signature": "p_store_id uuid",
+      "title": "Empties by customer and shape",
+      "description": "Every container still out, by customer, product and shape.",
+      "args": {}
+    },
+    "staff_charges_owed": {
+      "enabled": true,
+      "signature": "p_store_id uuid",
+      "title": "Staff charges",
+      "description": "What each member of staff owes the shop.",
+      "args": {}
+    },
+    "list_staff": {
+      "enabled": true,
+      "signature": "p_store_id uuid, p_include_removed boolean",
+      "title": "Staff",
+      "description": "The shop's staff and their roles.",
+      "args": {},
+      "hidden": [
+        "p_include_removed"
+      ]
+    }
+  }
+}

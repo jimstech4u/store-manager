@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { formatMoney, formatQtySpoken, shapeWord } from '@/lib/format';
 import type { ToolDef } from '@/lib/whatsapp/llm';
+import { executeCapability } from '@/lib/agent/gateway';
 
 /**
  * THE ASSISTANT PROPOSES; THE PERSON'S "YES" DOES IT. Server only.
@@ -49,6 +50,7 @@ export const ACTION_TOOLS: ToolDef[] = [
       lines: { type: 'array', items: lineItem },
       paid: { type: 'array', items: payment },
       charges: { type: 'array', items: { type: 'object', properties: { label: { type: 'string' }, amount: { type: 'number' } }, required: ['label', 'amount'] } },
+      as_draft: { type: 'boolean', description: 'true when they ask for a draft or an order to finish later: it is saved as an open order on the till, and nothing leaves the shelf yet.' },
     }, required: ['lines'] },
   },
   {
@@ -181,7 +183,7 @@ async function rpc<T>(ctx: Ctx, fn: string, params: Args): Promise<T> {
   return data as T;
 }
 
-async function hold(ctx: Ctx, action: string, args: Args, summary: string) {
+export async function hold(ctx: Ctx, action: string, args: Args, summary: string) {
   await ctx.service
     .from('whatsapp_pending')
     .update({ done_at: new Date().toISOString(), outcome: 'replaced' })
@@ -240,6 +242,8 @@ export async function propose(ctx: Ctx, name: string, a: Args): Promise<unknown>
       if (lines.length === 0) return refuse('Which items, and how many?');
       const who = await customerName(ctx, a.customer_id);
       if (a.customer_id && !who) return refuse('That customer is not in this shop. Use find_customer first.');
+      // An order to finish later: nothing leaves the shelf, so the shelf's rules wait for the sale.
+      const draft = a.as_draft === true;
 
       const out: Args[] = [];
       const words: string[] = [];
@@ -253,10 +257,10 @@ export async function propose(ctx: Ctx, name: string, a: Args): Promise<unknown>
         const shape = pick(await shapesOf(ctx, id), l.unit, (s) => s.is_sold !== false);
         if (!shape) return refuse(`${p.name} is not sold in "${String(l.unit)}".`);
         // The app's own rules, before anybody is asked to say yes.
-        if (num(p.on_hand) <= 0) {
+        if (!draft && num(p.on_hand) <= 0) {
           return refuse(`${p.name} is finished: the records say none is left. Check the shelf; if there is some, count it first.`);
         }
-        if (await rpc<boolean>(ctx, 'needs_count_today', { p_product_id: id })) {
+        if (!draft && await rpc<boolean>(ctx, 'needs_count_today', { p_product_id: id })) {
           return refuse(`${p.name} has not been counted today, and it must be before it sells. Ask for today's count of it, then use propose_count.`);
         }
         let price = l.price != null ? num(l.price) : null;
@@ -283,6 +287,15 @@ export async function propose(ctx: Ctx, name: string, a: Args): Promise<unknown>
       const total = goods + extra;
       const paid = methods(a.paid);
       const paidTotal = paid.reduce((s, p) => s + p.amount, 0);
+      if (draft) {
+        return hold(ctx, 'draft', { customer_id: a.customer_id ?? null, label: who, lines: out, charges, total }, [
+          `*Save this order on the till${who ? ` for ${who}` : ''}?*`,
+          ...words,
+          ...charges.map((c) => `• ${c.label} — ${money(c.amount)}`),
+          `*Total ${money(total)}*`,
+          'Nothing leaves the shelf until it is sold on the till.',
+        ].join('\n'));
+      }
       if (!who && paidTotal < total - 0.005) return refuse('A sale that is not fully paid needs a customer. Who is it for?');
       if (!who && paidTotal > total + 0.005) return refuse('That is more than the sale comes to, and with no customer it cannot be held as credit. Who is it for?');
       const summary = [
@@ -307,9 +320,18 @@ export async function propose(ctx: Ctx, name: string, a: Args): Promise<unknown>
 
     case 'propose_delivery': {
       const suppliers = await rpc<{ id: string; name: string }[]>(ctx, 'store_suppliers', { p_store_id: ctx.storeId, p_include_archived: false });
-      const typed = String(a.supplier ?? '').trim().toLowerCase();
-      const supplier = suppliers.find((s) => s.name.toLowerCase() === typed) ?? suppliers.find((s) => s.name.toLowerCase().includes(typed));
-      if (!typed || !supplier) return refuse(`Which supplier? The shop has: ${suppliers.map((s) => s.name).join(', ')}.`);
+      // "Random supplier" is Random: the word supplier is how people say it, not part of the name.
+      const typed = String(a.supplier ?? '').trim().toLowerCase().replace(/\s+suppliers?$/, '');
+      const supplier = typed
+        ? suppliers.find((s) => s.name.toLowerCase() === typed) ??
+          suppliers.find((s) => s.name.toLowerCase().includes(typed) || typed.includes(s.name.toLowerCase()))
+        : undefined;
+      if (!typed || !supplier) {
+        return refuse(
+          `${typed ? `"${String(a.supplier)}" is not one of the shop's suppliers. ` : ''}The shop has: ${suppliers.map((s) => s.name).join(', ')}. ` +
+          'Ask them which one; never pick one for them. If it is a new supplier, add it first with find_capability "add a supplier".',
+        );
+      }
       const lines = Array.isArray(a.lines) ? (a.lines as Args[]) : [];
       if (lines.length === 0) return refuse('Which items came in?');
       const payload: Args[] = [];
@@ -551,13 +573,25 @@ export async function execute(ctx: Ctx, action: string, a: Args): Promise<{ text
         const sale = await rpc<string>(ctx, 'settle_draft_with_deposit', {
           p_draft_id: draft, p_payments: a.payments ?? [], p_client_uuid: clientUuid, p_deposit: null, p_deposit_reason: null,
         });
-        return { text: `Recorded ✅ *${money(num(a.total))}*\nTo print: ${await receiptLink(sale)}`, receipt: sale };
+        return { text: `Recorded ✅ *${money(num(a.total))}*, receipt #${sale.slice(0, 8).toUpperCase()}\nTo print: ${await receiptLink(sale)}`, receipt: sale };
       } catch (e) {
         // Nothing sold: the open order does not stay on somebody's till.
         await ctx.db.rpc('cancel_draft_order', { p_draft_id: draft });
         throw e;
       }
     }
+    case 'draft': {
+      const id = await rpc<string>(ctx, 'save_draft_order', {
+        p_store_id: s, p_draft_id: null, p_customer_id: a.customer_id ?? null, p_label: a.label ?? null,
+        p_fee_amount: 0, p_fee_label: null, p_charges: a.charges ?? [], p_deposits: [], p_note: null,
+        p_client_uuid: randomUUID(), p_lines: a.lines,
+      });
+      const open = await rpc<{ id: string; code: string | null }[]>(ctx, 'my_open_drafts', { p_store_id: s });
+      const code = open.find((d) => d.id === id)?.code;
+      return { text: `Saved ✅ An open order on the till${code ? `, code *${code}*` : ''}. Sell it from the till when they come for it.` };
+    }
+    case 'capability':
+      return executeCapability({ db: ctx.db, service: ctx.service, storeId: ctx.storeId, userId: ctx.userId }, a);
     case 'payment':
       await rpc(ctx, 'record_payment', {
         p_store_id: s, p_customer_id: a.customer_id, p_amount: a.amount, p_method: a.method,

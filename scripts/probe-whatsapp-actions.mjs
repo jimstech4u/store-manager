@@ -179,6 +179,27 @@ try {
   await proposes('a receipt correction', `Correct receipt #${number}: make ${onIt.product_name} ${Number(onIt.entered_qty) + 1} ${onIt.unit_name}, because the count was wrong`, /Correct receipt[\s\S]*will say/, true);
   await proposes('a receipt cancelled', `Cancel receipt #${number}, the customer returned everything`, new RegExp(number), true);
 
+  // The gateway: anything the shop can do, found when needed, changes still behind YES (0266).
+  await proposes('an item renamed', 'Rename Guinness big stout to Guinness Big Stout 60cl', /Rename an item[\s\S]*Guinness/);
+  await proposes('a customer phone changed', "Change Busayo Store's phone number to 08011112222", /phone number[\s\S]*08011112222/);
+  await proposes('a supplier added', 'Add a new supplier called Oreoluwa Ventures, phone 08033334444', /Add a supplier[\s\S]*Oreoluwa/);
+  await proposes('a draft order', 'Build a draft order for Busayo Store: 2 crates of Trophy Bottle', /Save this order on the till/);
+  {
+    const r = await ask('How much did we spend on expenses this month?');
+    show(r);
+    check('a read nobody hand-wrote a tool for is answered', /₦|nothing|no expenses/i.test(r.text), r.text.slice(0, 120));
+  }
+  {
+    const r = await ask('What is the balance of I R E K A N M I');
+    show(r);
+    check('a name spelled out letter by letter is found', /irekanmi/i.test(r.text) && !/akanni/i.test(r.text), r.text.slice(0, 120));
+  }
+  {
+    const r = await send({ type: 'contacts', contacts: [{ name: { formatted_name: 'Probe Contact' }, phones: [{ phone: '+234 801 111 2222', wa_id: '2348011112222' }] }] });
+    show(r);
+    check('a shared contact is read', /Probe Contact|0801|2348011112222|contact|phone number/i.test(r.text) && !/I can read text, photos/.test(r.text), r.text.slice(0, 120));
+  }
+
   // A receipt with an item counted after it: the question has to come first (0263).
   const { data: counts } = await admin.from('stock_periods').select('product_id, counted_at').eq('store_id', storeId).not('counted_at', 'is', null).order('counted_at', { ascending: false }).limit(5);
   let crossed = null;

@@ -741,6 +741,25 @@ Backdating stays where it is meant to be: `backfill_debtor` and `backfill_emptie
 DATE, separately and on purpose, because "this is from the old book" is a thing somebody says
 deliberately.
 
+## The AI agent reaches the shop through the registry
+
+The agent (WhatsApp is its first channel) does not get hand-written tools for everything. Every
+database function a member may call is crawled into `agent_tools` by `scripts/agent-crawl.mjs`,
+switched off; `src/lib/agent/tool-review.json` is the review that switches one on, at the signature
+it was reviewed at, and a function whose arguments change switches itself off until it is reviewed
+again. The gateway (`src/lib/agent/gateway.ts`) lets the agent search for a capability rather than
+carry them all, filters by the person's permissions, takes the shop from the session, and sends every
+write through the same YES as everything else, with a summary the server writes in names.
+
+- **A new function is a new capability.** After a migration that adds or changes one, run the
+  crawler; to offer it, add it to the review file with what it is for and what each argument means.
+  `node scripts/agent-crawl.mjs --check` fails when a reviewed tool has gone stale.
+- **The curated tools stay for what needs judgement**: a sale works out prices, shapes, the count
+  gate and who owes the rest, which no generic summary can. Simple reads and edits go through the
+  registry.
+- **The database is still the guard.** The gateway hides what would be refused; it never allows
+  what the function itself would not.
+
 ## Verification
 
 Click-through with Playwright is the standard of proof — `tsc` passing is not evidence a screen

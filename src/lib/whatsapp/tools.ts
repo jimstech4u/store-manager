@@ -1,7 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ToolDef } from '@/lib/whatsapp/llm';
 import { stockInShapes, type ShapeQuantity } from '@/lib/shape-quantities';
-import { ACTION_TOOLS, propose, type Ctx } from '@/lib/whatsapp/actions';
+import { ACTION_TOOLS, hold, propose, type Ctx } from '@/lib/whatsapp/actions';
+import { GATEWAY_TOOLS, runCapability } from '@/lib/agent/gateway';
 import { documentPdf, documentPng } from '@/lib/whatsapp/paper';
 import { sendPdf, sendPicture } from '@/lib/whatsapp/meta';
 import { receiptDocument, type SaleDetail } from '@/lib/receipt-document';
@@ -185,6 +186,8 @@ export const TOOLS: ToolDef[] = [
     parameters: { type: 'object', properties: {} },
   },
   ...ACTION_TOOLS,
+  // Everything else the shop can do, found when it is needed rather than carried in every prompt.
+  ...GATEWAY_TOOLS,
 ];
 
 /**
@@ -236,7 +239,7 @@ const dateBound = (s: unknown, endOfDay = false): string | null => {
 };
 
 /** The shop's paper: its width, letterhead and footer. */
-async function paperOf(db: SupabaseClient, storeId: string) {
+export async function paperOf(db: SupabaseClient, storeId: string) {
   const { data } = await db.rpc('ensure_store_settings', { p_store_id: storeId });
   const row = (Array.isArray(data) ? data[0] : data) as
     | { printer_width_mm?: string; receipt_header?: string | null; receipt_footer?: string | null }
@@ -265,6 +268,10 @@ export async function runTool(
   shopName: string,
 ): Promise<unknown> {
   if (name.startsWith('propose_')) return propose(ctx, name, args);
+  if (name === 'find_capability' || name === 'use_capability') {
+    return runCapability({ db, service: ctx.service, storeId, userId: ctx.userId }, name, args, (action, a, summary) =>
+      hold(ctx, action, a, summary));
+  }
 
   if (NEEDS[name]) {
     const { data } = await db.rpc('member_permissions', { p_store_id: storeId, p_user_id: ctx.userId });
@@ -616,6 +623,12 @@ export async function runTool(
       };
     }
     case 'receipt_link': {
+      /*
+       * A RECEIPT OF THIS SHOP, first. The share link is made for any id it is given, and a model once
+       * passed a link's own token as the receipt: the printer link it sent opened nothing.
+       */
+      const { data: sale } = await db.from('sales').select('id').eq('store_id', storeId).eq('id', String(args.sale_id ?? '')).maybeSingle();
+      if (!sale) return { error: 'That is not a receipt in this shop. Use find_receipt or recent_receipts for its id.' };
       const token = await rpc<string>('create_share_link', {
         p_store_id: storeId, p_kind: 'receipt', p_ref_id: String(args.sale_id ?? ''), p_expires_in: '30 days',
       });
