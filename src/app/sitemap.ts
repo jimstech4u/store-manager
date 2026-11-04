@@ -1,4 +1,5 @@
 import type { MetadataRoute } from 'next';
+import { siteUrl } from '@/lib/site-url';
 import { createClient } from '@supabase/supabase-js';
 import { productHref } from '@/lib/marketplace/links';
 
@@ -36,7 +37,7 @@ interface ProductRow {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const base = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://store-manager.vercel.app';
+  const base = siteUrl();
 
   const pages: MetadataRoute.Sitemap = [
     { url: `${base}/`, changeFrequency: 'daily', priority: 1 },

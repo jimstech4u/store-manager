@@ -1,4 +1,5 @@
 import type { MetadataRoute } from 'next';
+import { siteUrl } from '@/lib/site-url';
 
 /**
  * WHAT A CRAWLER MAY READ, AND WHAT IT MAY NOT.
@@ -17,7 +18,7 @@ import type { MetadataRoute } from 'next';
  * become the thing that ranks for the shop's own name.
  */
 export default function robots(): MetadataRoute.Robots {
-  const base = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://store-manager.vercel.app';
+  const base = siteUrl();
 
   return {
     rules: [

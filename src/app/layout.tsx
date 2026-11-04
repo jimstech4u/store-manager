@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import { siteUrl } from '@/lib/site-url';
 import { ServiceWorker } from '@/components/ui/ServiceWorker';
 import { StateStackRouter } from '@/providers/StateStackRouter';
 import { ThemeProvider } from '@/context/ThemeContext';
@@ -14,7 +15,7 @@ export const metadata: Metadata = {
    * else, and "/s/7R8U2A" means nothing to it. Next resolves relative ones against this; without it
    * they resolve against localhost, which is both wrong and invisible until somebody shares a link.
    */
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'https://store-manager.vercel.app'),
+  metadataBase: new URL(siteUrl()),
   title: 'Store Manager',
   description: 'Stock, sales and accounts for distribution businesses.',
   applicationName: 'Store Manager',
