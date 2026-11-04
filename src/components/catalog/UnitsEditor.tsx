@@ -647,5 +647,15 @@ export function unitProblems(units: ProductUnit[]): string | null {
   if (unmeasured.length > 0) {
     return `Say how many, for ${unmeasured.map((u) => u.name.toLowerCase()).join(', ')}.`;
   }
+  /*
+   * TWO SHAPES STANDING ALONE AT THE SAME SIZE (0270). Only shapes that DID name what they are made of
+   * were checked, so Zetar got a Piece that said nothing, stood at the size of a pack, and sold at the
+   * pack's price. Each standalone shape counts as its own size; two at the same size are one thing.
+   */
+  const alone = units.filter((u) => u.definedAgainst === null);
+  const same = alone.filter((u) => alone.some((v) => v !== u && v.baseQty === u.baseQty));
+  if (same.length > 1) {
+    return `${same.map((u) => u.name).join(' and ')} each stand on their own at the same size, so they would count as the same thing. Say what one of them holds.`;
+  }
   return null;
 }

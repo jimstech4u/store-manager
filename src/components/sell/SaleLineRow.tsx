@@ -157,8 +157,9 @@ export function SaleLineRow({
                   saleUnitBaseQty: u.baseQty,
                   // Switching shape switches price: each shape carries its own,
                   // and keeping the previous one would quietly sell a half pack
-                  // at the full pack price.
-                  unitPrice: u.price ?? line.unitPrice,
+                  // at the full pack price. A shape with NO price stays empty, so
+                  // "No price yet" asks for it: a Zetar piece kept the pack's ₦6,000.
+                  unitPrice: u.price ?? '',
                 });
                 // ...then let any bulk band for the NEW shape apply on top.
                 void onReprice(line.qty, u.id);

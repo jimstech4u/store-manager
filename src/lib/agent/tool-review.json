@@ -357,6 +357,99 @@
       "hidden": [
         "p_include_removed"
       ]
+    },
+    "pending_review": {
+      "enabled": true,
+      "signature": "p_store_id uuid",
+      "title": "Waiting for approval",
+      "description": "Customers and items added at the counter that an owner has not approved yet.",
+      "args": {}
+    },
+    "confirm_customer": {
+      "enabled": true,
+      "signature": "p_customer_id uuid",
+      "title": "Approve a customer",
+      "description": "Approve a customer that was added at the counter.",
+      "args": {
+        "p_customer_id": {
+          "description": "Customer: the id from find_customer"
+        }
+      }
+    },
+    "confirm_product": {
+      "enabled": true,
+      "signature": "p_product_id uuid",
+      "title": "Approve an item",
+      "description": "Approve an item that was added at the counter.",
+      "args": {
+        "p_product_id": {
+          "description": "Item: the id from find_items or pending_review"
+        }
+      }
+    },
+    "online_order_detail": {
+      "enabled": true,
+      "signature": "p_draft_id uuid",
+      "title": "An online order",
+      "description": "What a customer ordered online: items, total, note and phone.",
+      "args": {
+        "p_draft_id": {
+          "description": "Online order: the id from pending_online_orders"
+        }
+      }
+    },
+    "accept_online_order": {
+      "enabled": true,
+      "signature": "p_draft_id uuid",
+      "title": "Accept an online order",
+      "description": "Accept an order a customer placed online, so it is put on the till to fill.",
+      "args": {
+        "p_draft_id": {
+          "description": "Online order: the id from pending_online_orders"
+        }
+      }
+    },
+    "decline_online_order": {
+      "enabled": true,
+      "signature": "p_draft_id uuid, p_reason text",
+      "title": "Decline an online order",
+      "description": "Decline an order a customer placed online, saying why.",
+      "args": {
+        "p_draft_id": {
+          "description": "Online order: the id from pending_online_orders"
+        },
+        "p_reason": {
+          "description": "Why it is declined"
+        }
+      }
+    },
+    "write_off_expired": {
+      "enabled": true,
+      "signature": "p_layer_id uuid, p_qty qty, p_reason text",
+      "title": "Write off expired stock",
+      "description": "Take stock that has expired or gone bad off the shelf, from one batch. Get the batch from expiring_stock.",
+      "args": {
+        "p_layer_id": {
+          "description": "The batch: layer_id from expiring_stock"
+        },
+        "p_qty": {
+          "description": "How many, in single pieces; leave out for the whole batch"
+        },
+        "p_reason": {
+          "description": "Why"
+        }
+      }
+    },
+    "customer_empties_owed": {
+      "enabled": true,
+      "signature": "p_store_customer_id uuid",
+      "title": "Empties a customer holds",
+      "description": "The containers one customer still has, by shape.",
+      "args": {
+        "p_store_customer_id": {
+          "description": "Customer: the id from find_customer"
+        }
+      }
     }
   }
 }

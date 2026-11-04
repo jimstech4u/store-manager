@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { ToolDef } from '@/lib/whatsapp/llm';
 import {
-  customerName, hold, methods, money, num, pick, product, refuse, rpc, say, shapesOf,
+  customerName, decidedOnAccount, hold, methods, money, num, paymentGate, pick, product, qtyAllowed, refuse, rpc, sameSize, say, shapesOf,
   type Args, type Ctx, type Shape,
 } from '@/lib/whatsapp/actions';
 
@@ -35,9 +35,31 @@ export const ORDER_TOOLS: ToolDef[] = [
         qty: { type: 'number' },
         unit: { type: 'string', description: 'crate, pack, bottle… Leave out for the usual one.' },
         price: { type: 'number', description: 'Each, in naira. Leave out for the shop price.' },
+        written: { type: 'string', description: 'The line as the customer wrote it, when it settles a held line.' },
       },
       required: ['product_id', 'qty'],
     },
+  },
+  {
+    name: 'order_hold',
+    description:
+      'Hold a line of the order that cannot be placed yet: a name that matches nothing or several items, no quantity, or an unclear shape. It is kept with the order (not in your memory) and shown under to_confirm until order_set settles it or order_skip leaves it off. choices are the item ids it could be.',
+    parameters: {
+      type: 'object',
+      properties: {
+        written: { type: 'string', description: 'The line as written, e.g. "Coke 1" or "Dudu"' },
+        qty: { type: 'number' },
+        unit: { type: 'string' },
+        why: { type: 'string', description: 'What has to be asked: which item, how many, which shape' },
+        choices: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['written', 'why'],
+    },
+  },
+  {
+    name: 'order_skip',
+    description: 'Leave a held line off the order, when they say so.',
+    parameters: { type: 'object', properties: { written: { type: 'string' } }, required: ['written'] },
   },
   {
     name: 'order_customer',
@@ -56,6 +78,7 @@ export const ORDER_TOOLS: ToolDef[] = [
       type: 'object',
       properties: {
         paid: { type: 'array', items: { type: 'object', properties: { amount: { type: 'number' }, method: { type: 'string', enum: ['cash', 'transfer', 'pos'] } }, required: ['amount', 'method'] } },
+        rest_on_account: { type: 'boolean', description: 'Only once they have said so: true when what is not paid now goes on the customer\'s account.' },
       },
     },
   },
@@ -96,7 +119,26 @@ async function working(ctx: Ctx): Promise<Draft | null> {
 }
 
 async function remember(ctx: Ctx, draftId: string | null) {
-  await ctx.service.from('whatsapp_links').update({ working_draft_id: draftId }).eq('wa_phone', ctx.phone).is('revoked_at', null);
+  // A new order, or none: the lines held for the last one are not this one's.
+  await ctx.service.from('whatsapp_links').update({ working_draft_id: draftId, order_questions: [] }).eq('wa_phone', ctx.phone).is('revoked_at', null);
+}
+
+interface Held {
+  written: string;
+  qty?: number | null;
+  unit?: string | null;
+  why: string;
+  choices?: string[];
+}
+const sameLine = (a: string, b: string) =>
+  a.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() === b.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+async function heldLines(ctx: Ctx): Promise<Held[]> {
+  const { data } = await ctx.service.from('whatsapp_links').select('order_questions').eq('wa_phone', ctx.phone).is('revoked_at', null).maybeSingle();
+  return ((data as { order_questions?: Held[] } | null)?.order_questions ?? []) as Held[];
+}
+async function keepHeld(ctx: Ctx, held: Held[]) {
+  await ctx.service.from('whatsapp_links').update({ order_questions: held }).eq('wa_phone', ctx.phone).is('revoked_at', null);
 }
 
 async function linesOf(ctx: Ctx, draftId: string): Promise<Line[]> {
@@ -141,9 +183,11 @@ async function save(ctx: Ctx, d: Draft | null, lines: Line[], customerId: string
 async function view(ctx: Ctx, d: Draft) {
   const lines = await linesOf(ctx, d.id);
   const items = [];
+  const comingBack: string[] = [];
   for (const l of lines) {
     const p = await product(ctx, l.product_id);
     const s = (await shapesOf(ctx, l.product_id)).find((x) => x.product_unit_id === l.sale_unit_id);
+    if (s?.is_returnable) comingBack.push(s.unit_plural.toLowerCase());
     items.push({
       product_id: l.product_id,
       item: p?.name ?? 'Item',
@@ -160,6 +204,17 @@ async function view(ctx: Ctx, d: Draft) {
     items,
     total: money(goods + num(d.fee_amount)),
     link_for_customer: d.share_token ? `${base}/t/${encodeURIComponent(d.share_token)}` : `${base}/track?code=${encodeURIComponent(d.code)}`,
+    // What could not be placed yet, kept with the order: asked about one at a time.
+    ...(await heldLines(ctx).then(async (held) => (held.length > 0 ? {
+      to_confirm: await Promise.all(held.map(async (h) => ({
+        written: h.written, qty: h.qty ?? undefined, why: h.why,
+        choices: h.choices?.length ? await Promise.all(h.choices.map(async (id) => ({ id, name: (await product(ctx, id))?.name ?? 'Item' }))) : undefined,
+      }))),
+    } : {}))),
+    // Said while the order is built, as the till says it: not a refusal yet, a thing to settle before selling.
+    ...(comingBack.length > 0 && !d.store_customer_id
+      ? { needs_a_customer: `The ${[...new Set(comingBack)].join(' and ')} come back empty, so it needs a customer before it can be sold. Ask who it is for.` }
+      : {}),
     note: 'Saved on the till. Answer from this, not from memory.',
   };
 }
@@ -186,6 +241,24 @@ export async function runOrder(ctx: Ctx, name: string, a: Args): Promise<unknown
 
   if (name === 'order_show') return view(ctx, d);
 
+  if (name === 'order_hold') {
+    const held = (await heldLines(ctx)).filter((h) => !sameLine(h.written, String(a.written ?? '')));
+    held.push({
+      written: String(a.written ?? '').trim(),
+      qty: a.qty != null ? num(a.qty) : null,
+      unit: a.unit ? String(a.unit) : null,
+      why: String(a.why ?? 'which item'),
+      choices: Array.isArray(a.choices) ? (a.choices as string[]).slice(0, 8) : undefined,
+    });
+    await keepHeld(ctx, held);
+    return view(ctx, d);
+  }
+
+  if (name === 'order_skip') {
+    await keepHeld(ctx, (await heldLines(ctx)).filter((h) => !sameLine(h.written, String(a.written ?? ''))));
+    return view(ctx, d);
+  }
+
   if (name === 'order_customer') {
     const who = await customerName(ctx, a.customer_id);
     if (!who) return refuse('That customer is not in this shop. Use find_customer first.');
@@ -204,6 +277,11 @@ export async function runOrder(ctx: Ctx, name: string, a: Args): Promise<unknown
       : (at >= 0 ? shapes.find((s) => s.product_unit_id === lines[at].sale_unit_id) ?? null : null) ?? pick(shapes, null, (s) => s.is_sold !== false);
     if (!shape) return refuse(`${p.name} is not sold in "${String(a.unit)}".`);
     const qty = num(a.qty);
+    if (qty > 0) {
+      const wrongQty = sameSize(p.name, shapes, shape) ?? qtyAllowed(p.name, qty, shape);
+      if (wrongQty) return refuse(wrongQty);
+    }
+    if (a.written) await keepHeld(ctx, (await heldLines(ctx)).filter((h) => !sameLine(h.written, String(a.written))));
     if (qty <= 0) {
       if (at >= 0) lines.splice(at, 1);
     } else {
@@ -230,6 +308,10 @@ export async function runOrder(ctx: Ctx, name: string, a: Args): Promise<unknown
   if (name === 'order_sell') {
     const lines = await linesOf(ctx, d.id);
     if (lines.length === 0) return refuse('The order has nothing on it yet.');
+    const held = await heldLines(ctx);
+    if (held.length > 0) {
+      return refuse(`These lines are not settled yet: ${held.map((h) => `"${h.written}" (${h.why})`).join('; ')}. Ask about them, or order_skip the ones they want left off.`);
+    }
     // The app's own rules, before anybody is asked to say yes: what is finished, what needs counting.
     for (const l of lines) {
       const p = await product(ctx, l.product_id);
@@ -242,7 +324,14 @@ export async function runOrder(ctx: Ctx, name: string, a: Args): Promise<unknown
     const total = lines.reduce((t, l) => t + l.line_total, 0) + num(d.fee_amount);
     const paid = methods(a.paid);
     const paidTotal = paid.reduce((t, p) => t + p.amount, 0);
-    if (!d.store_customer_id && paidTotal < total - 0.005) return refuse('An order that is not fully paid needs a customer. Who is it for? Then order_customer.');
+    const comingBack: string[] = [];
+    for (const l of lines) {
+      const s = (await shapesOf(ctx, l.product_id)).find((x) => x.product_unit_id === l.sale_unit_id);
+      if (s?.is_returnable) comingBack.push(s.unit_plural.toLowerCase());
+    }
+    const who = d.store_customer_id ? (d.label ?? (await customerName(ctx, d.store_customer_id))) : null;
+    const gate = paymentGate({ who, total, paid, paidTotal, comingBack, restOnAccount: decidedOnAccount(ctx, a) });
+    if (gate) return refuse(gate.includes('Who is it for') ? `${gate} Then order_customer.` : gate);
     return hold(ctx, 'order_sell', { draft_id: d.id, payments: paid, total }, [
       `*Sell order ${d.code}${d.store_customer_id ? ` to ${v.for}` : ''}?*`,
       ...v.items.map((i) => `• ${i.qty} ${i.item} — ${i.total}`),

@@ -19,6 +19,7 @@ import {
 } from '@/lib/stacks/product-units';
 import styles from './units-page.module.css';
 import { messageOf } from '@/lib/format';
+import { InfoPanel } from '@/components/ui/Explain';
 
 /**
  * How a shop buys and sells one thing, on its own screen.
@@ -137,6 +138,15 @@ export default function UnitsPage() {
         also the honest gesture: the last thing somebody should see before saving is the last
         answer they gave.
       */}
+      {/*
+        WHY SAVE IS WAITING, said on the page: a greyed button with no reason left Zetar's two
+        same-size shapes looking like a broken screen. A condition, so it stays until it is fixed.
+      */}
+      {unitProblems(units) && (
+        <InfoPanel tone="warning" title="Before this can be saved">
+          {unitProblems(units)}
+        </InfoPanel>
+      )}
       <div className={styles.actions}>
         <AsyncAction state={state} problem={problem} label="Saving how you buy and sell this">
           <Button onClick={() => void save()} disabled={unitProblems(units) !== null} fullWidth>

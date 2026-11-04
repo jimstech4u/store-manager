@@ -76,7 +76,9 @@ export function startLine(product: Product, shapes: SaleUnit[]): DraftLine {
     saleUnitId: first?.id ?? null,
     saleUnitName: first?.name ?? null,
     saleUnitBaseQty: first?.baseQty ?? null,
-    unitPrice: first?.price ?? product.listPrice ?? '',
+    // The shape's own price, or nothing to ask for: never the item's list price, which is another
+    // shape's (a Zetar piece started at the pack's ₦6,000). Only an item with no shapes uses it.
+    unitPrice: first ? (first.price ?? '') : (product.listPrice ?? ''),
     qty: String(
       startingQty({
         wholeDigit: first?.wholeDigit ?? true,

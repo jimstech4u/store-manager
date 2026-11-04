@@ -250,6 +250,8 @@ async function handle(msg: WaMessage, profileName: string | null) {
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
+  // After a YES, what is left of the message the proposal came from (several things asked at once).
+  let continuing: { asked: string; done: string[] } | null = null;
   if (open) {
     const word = text.toLowerCase().replace(/[.!\s]+$/, '').trim();
     const yes = /^(yes|y|yeah|yep|yes please|ok|okay|confirm|go ahead|do it)$/.test(word);
@@ -280,12 +282,17 @@ async function handle(msg: WaMessage, profileName: string | null) {
             .catch(() => undefined);
         }
         await reply(done.text, { store_id: link.store_id, user_id: link.user_id, tools: { executed: open.action, receipt: done.receipt, payment: done.payment } }, options);
+        const asked = String((open.args as Record<string, unknown>)._asked ?? '').trim();
+        const before = ((open.args as Record<string, unknown>)._done as string[] | undefined) ?? [];
+        // At most three in a row from one message: a loop is not allowed to run on its own.
+        if (asked && before.length < 3) continuing = { asked, done: [...before, done.text.split('\n')[0]] };
       } catch (e) {
         const why = e instanceof Error ? e.message : 'something went wrong';
         await db.from('whatsapp_pending').update({ outcome: why.slice(0, 300) }).eq('id', open.id);
         await reply(`That was not recorded: ${why}`, { store_id: link.store_id, user_id: link.user_id });
       }
-      return;
+      if (!continuing) return;
+      text = continuing.asked;
     }
   }
 
@@ -330,12 +337,16 @@ async function handle(msg: WaMessage, profileName: string | null) {
    * took the old request for the live one and answered "Busayo paid 10,000" with the sale they had
    * just said no to. The whole exchange goes: the request, the proposal, the NO and the reply to it.
    */
-  const live = told.filter((_, i) => {
-    const cancelledAt = told.findIndex(
-      (m, j) => j >= i && j <= i + 3 && m.direction === 'out' && m.body.startsWith('Cancelled. Nothing was recorded.'),
-    );
-    return cancelledAt === -1;
+  const dropped = new Set<number>();
+  told.forEach((m, k) => {
+    if (m.direction !== 'out' || !m.body.startsWith('Cancelled. Nothing was recorded.')) return;
+    // Back to where that exchange began: a question asked about it ("₦7,000 remains…") is part of it.
+    for (let j = k; j >= Math.max(0, k - 6); j -= 1) {
+      if (j < k && told[j].direction === 'out' && /^(Recorded|Sold|Saved|Corrected|Settled|Written off|Counted|Cancelled|Done) ✅|^Cancelled\. Nothing/.test(told[j].body)) break;
+      dropped.add(j);
+    }
   });
+  const live = told.filter((_, i) => !dropped.has(i));
   const history: Message[] = live
     /*
      * A proposal in the history is a pattern a model copies: one wrote its own "Reply YES" with no
@@ -346,6 +357,9 @@ async function handle(msg: WaMessage, profileName: string | null) {
       content: /Reply \*YES\*/.test(m.body) ? '(A proposal was shown to them.)' : m.body.slice(0, 600),
     }));
 
+  // What was just said, both ways, for the rules that must know the person decided rather than the model.
+  ctx.said = { lastOut: [...live].reverse().find((m) => m.direction === 'out')?.body ?? '', now: text, done: continuing?.done };
+
   const today = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
   const paper = await paperOf(userDb, link.store_id).catch(() => null);
   const system: Message = {
@@ -353,10 +367,18 @@ async function handle(msg: WaMessage, profileName: string | null) {
     content:
       `You are the Store Manager AI agent for "${mine.store_name}", a shop in Nigeria, chatting on WhatsApp with ` +
       `${profileName ?? 'a member of the shop'} (role: ${mine.role_code}). Today is ${today}. Money is in naira (₦).\n` +
+      (continuing
+        ? `- Just done on their YES: ${continuing.done.join('; ')}. The message below is the one they sent before. Do ONLY what is still left of it, never again what is done. If nothing is left, reply with exactly NOTHING_LEFT.\n`
+        : '') +
       (paper?.header ? `- The shop as its receipts print it (address, phone): ${paper.header.replace(/\s*\n\s*/g, ' | ')}\n` : '') +
       '- For anything your other tools do not cover, call find_capability with what they want, then use_capability. Never say something cannot be done until you have searched.\n' +
+      '- A walk-in, or "no customer", means none: never attach a customer from earlier in the chat to a new sale they did not name one for.\n' +
       '- Never choose a customer, item or supplier for them. When it is unclear which, ask, and offer the names as options.\n' +
       '- An order of several items, or one built over several messages, goes on a working order (order_start, then order_set for each item): it is saved on the till with a code, so quantities and prices are never kept in your memory. Show it with order_show and sell it with order_sell. A single quick sale can still use propose_sale.\n' +
+      '- An order list (a photo, typed, or forwarded from a customer): order_start for the customer, then for each line, if find_items gives exactly one item and the quantity and shape are plain, order_set it with written set to the line; otherwise order_hold it with why. Then order_show, and ask about the held lines one at a time, offering the choices as options. Never guess a name, a quantity or a shape.\n' +
+      '- When they tell you or correct what a written name means, call name_means so it is found next time (several items when it should always be asked, like Coke). Never teach a choice they made once among several.\n' +
+      '- After a count shows a difference, ask what happened to it, using only the reasons count_status gives, then propose_settle_count with parts that add up to the whole difference.\n' +
+      '- When less than the whole amount is paid, never decide what happens to the rest: ask whether it goes on the customer\'s account or another payment is coming, as the tool tells you.\n' +
       '- Ask only for what is required. A detail the shop may leave blank (a supplier on a delivery, a business name, a note, a reference) you may ask for once; if they skip it or say to ignore it, go ahead without it.\n' +
       '- Answer ONLY the latest message. Earlier messages are context for it, not questions to answer again.\n' +
       '- Answer only from the tools; never invent figures, names or prices. If a tool returns an error, say plainly that you cannot see that.\n' +
@@ -408,6 +430,8 @@ async function handle(msg: WaMessage, profileName: string | null) {
    * A PROPOSAL IS SENT IN THE SERVER'S WORDS. What they say yes to is exactly what runs, whatever
    * the model made of it.
    */
+  // After a YES with nothing left of the message, the done reply already said all there is.
+  if (continuing && !ctx.proposed && /NOTHING_LEFT/.test(answer)) return;
   const said = splitOptions(answer);
   const words = ctx.proposed
     ? `${forWhatsApp(ctx.proposed)}\n\nReply *YES* to record it, or *NO* to cancel.`

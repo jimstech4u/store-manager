@@ -120,6 +120,7 @@ const show = (r) => console.log(`      (${r.ms}ms) ${r.text.replace(/\s+/g, ' ')
 
 const proposals = [];
 let probeDraft = null;
+const probeWords = [];
 /** Ask for something; it must come back as a proposal, which is kept and then refused. */
 const proposes = async (what, text, mustSay, paperOnly = false) => {
   let r = await ask(text);
@@ -167,7 +168,13 @@ try {
     return JSON.stringify({ providers: data?.tools?.providers, skipped: data?.tools?.skipped, calls: data?.tools?.calls?.map((c) => c.tool) });
   };
 
-  await proposes('a sale', 'I sold 2 crates of Trophy Bottle to Busayo Store, they paid 5000 cash', /Trophy.*\n?[\s\S]*Total/);
+  {
+    // Part paid: the rest is asked about first (the till's rule), then proposed as they say.
+    const r = await ask('I sold 2 crates of Trophy Bottle to Busayo Store, they paid 5000 cash');
+    show(r);
+    check('a part payment asks about the rest first', /remain/i.test(r.text) && !/Reply \*YES\*/.test(r.text), r.text.slice(0, 160));
+  }
+  await proposes('a sale', 'Put the rest on her account', /Trophy[\s\S]*Total[\s\S]*account/);
   await proposes('a payment', 'Busayo Store paid 10000 by transfer', /10,000/);
   await proposes('a delivery', 'We received 520 packs of Mr. V PET from Random at 1200 each', /Mr\. V[\s\S]*Total/);
   await proposes('an expense', 'I spent 3000 cash on diesel for the generator', /3,000/);
@@ -200,7 +207,56 @@ try {
     const { data: d } = await admin.from('draft_orders').select('code').eq('id', probeDraft ?? '00000000-0000-0000-0000-000000000000').maybeSingle();
     check('the order shown is the saved one, with its code', d?.code && r3.text.includes(d.code) && /3 crates/i.test(r3.text), r3.text.slice(0, 160));
   }
-  await proposes('the order sold', 'Sell the order, they have not paid', /Sell order[\s\S]*Total/);
+  await proposes('the order sold', 'Sell the order, they have not paid, put it on their account', /Sell order[\s\S]*Total/);
+
+  // Two things in one message: the second is asked about after the YES on the first.
+  {
+    const r1 = await ask(`Busayo Store paid 1000 cash, and also add a new customer called Probe Twostep, phone 0809${String(Date.now()).slice(-7)}`);
+    show(r1);
+    check('the first of two things is proposed', /Reply \*YES\*/.test(r1.text), r1.text.slice(0, 140));
+    // Answered NO here, so nothing is recorded: what is left is only taken up after a YES, which a probe cannot give.
+    await ask('no');
+    const fake = await ask('Add a new customer called Probe Nophone');
+    show(fake);
+    check('a phone is never made up', !/Reply \*YES\*/.test(fake.text) && /phone/i.test(fake.text), fake.text.slice(0, 140));
+    if (/Reply \*YES\*/.test(fake.text)) await ask('no');
+
+    // What is left after a YES: proven on a change that changes nothing, a group renamed to its own name.
+    const { data: group } = await admin.from('product_categories').select('id, name').eq('store_id', storeId).limit(1).maybeSingle();
+    if (group) {
+      await admin.from('whatsapp_pending').insert({
+        wa_phone: PHONE, store_id: storeId, user_id: user.id, action: 'capability', summary: 'probe',
+        args: { name: 'rename_product_group', params: { p_category_id: group.id, p_name: group.name },
+          _asked: `Rename the ${group.name} group to ${group.name}, and tell me how much Trophy Bottle is left`, _done: [] },
+      });
+      const before = sent.length;
+      await ask('YES');
+      // The done reply, then the rest of the message answered on its own.
+      for (let i = 0; i < 120 && !sent.slice(before).some((m) => m.type === 'text' && /trophy/i.test(m.text)); i += 1) await sleep(500);
+      const after = sent.slice(before).filter((m) => m.type === 'text').map((m) => m.text);
+      console.log('      after YES:', after.map((t) => t.replace(/\s+/g, ' ').slice(0, 90)).join(' || '));
+      check('after the YES, the rest of the message is done too', after.some((t) => /^Done/.test(t)) && after.some((t) => /trophy/i.test(t) && /\d/.test(t)));
+    }
+  }
+
+  // The shop's words: taught once, found after; a word that means several is always asked.
+  {
+    const t = await ask('B/S means Guinness Big Bottle. Remember that.');
+    show(t);
+    const { data: taught } = await admin.from('product_aliases').select('phrase').eq('store_id', storeId).eq('phrase', 'b s');
+    check('a word the shop uses is learned', (taught ?? []).length === 1, t.text.slice(0, 120));
+    if ((taught ?? []).length) probeWords.push('b s');
+    const f = await ask('How much B/S is left?');
+    show(f);
+    check('and found next time', /guinness big/i.test(f.text), f.text.slice(0, 140));
+    const o = await ask('Order for Busayo Store: Goldberg 2, B/S 1, Coke 1, Dudu');
+    show(o);
+    const { data: lk } = await admin.from('whatsapp_links').select('working_draft_id, order_questions').eq('wa_phone', PHONE).maybeSingle();
+    probeDraft = lk?.working_draft_id ?? probeDraft;
+    const { data: placed } = await admin.from('draft_order_lines').select('product_id').eq('draft_order_id', lk?.working_draft_id ?? '00000000-0000-0000-0000-000000000000');
+    check('clear lines go on the order', (placed ?? []).length >= 2, `${(placed ?? []).length} placed`);
+    check('unclear lines are held, not guessed', (lk?.order_questions ?? []).length >= 1 && /\?/.test(o.text), JSON.stringify(lk?.order_questions ?? []).slice(0, 200));
+  }
   {
     const r = await ask('How much did we spend on expenses this month?');
     show(r);
@@ -215,6 +271,54 @@ try {
     const r = await send({ type: 'contacts', contacts: [{ name: { formatted_name: 'Probe Contact' }, phones: [{ phone: '+234 801 111 2222', wa_id: '2348011112222' }] }] });
     show(r);
     check('a shared contact is read', /Probe Contact|0801|2348011112222|contact|phone number/i.test(r.text) && !/I can read text, photos/.test(r.text), r.text.slice(0, 120));
+  }
+
+  // Reconciling, as the count screen does it: what the count found, and what happened to it.
+  {
+    const { data: off } = await admin.from('stock_periods').select('product_id, variance_qty, products!inner(name, store_id)')
+      .eq('products.store_id', storeId).eq('status', 'open').not('counted_at', 'is', null).neq('variance_qty', 0).limit(1);
+    const item = off?.[0]?.products?.name;
+    check('there is a count with a difference to settle', Boolean(item));
+    if (item) {
+      const r = await ask(`What is the count difference on ${item}, and what can explain it?`);
+      show(r);
+      check('the agent says what the count found', /expected|counted|short|over|difference/i.test(r.text), r.text.slice(0, 140));
+      const short = Number(off[0].variance_qty) < 0;
+      await proposes('a count difference settled',
+        `Settle the count of ${item}: the whole difference was ${short ? 'broken or spoiled' : 'a delivery nobody entered'}`,
+        /Settle the count[\s\S]*(short|over)/);
+    }
+  }
+  {
+    // Only containers they actually hold can be written off; one they do not is refused before any YES.
+    const { data: held } = await anon.rpc('customer_empties_owed', { p_store_customer_id: buyer.id });
+    const one = (held ?? []).find((h) => Number(h.owed) >= 1 && (h.side ?? 'they_hold') === 'they_hold');
+    if (one) {
+      await proposes('empties written off', `Busayo Store broke 1 ${one.unit_name} of ${one.product_name}, they paid 1000 for it`, /Write off[\s\S]*not coming back/);
+    }
+    const none = await ask('Busayo Store broke 500 crates of Trophy Bottle');
+    show(none);
+    check('it will not write off containers they do not hold', !/Reply \*YES\*/.test(none.text), none.text.slice(0, 140));
+    if (/Reply \*YES\*/.test(none.text)) await ask('no');
+  }
+  // Part payment: what is left is asked about, never assumed; and crates need a customer.
+  {
+    const r = await ask('Busayo Store bought 2 crates of Trophy Bottle, paid 5000 cash');
+    show(r);
+    check('asked again, it still asks rather than deciding', /remain|rest|account|another payment|balance/i.test(r.text) && !/Reply \*YES\*/.test(r.text), r.text.slice(0, 180));
+    const r2 = await ask('Put the rest on her account');
+    show(r2);
+    check('and once told, proposes it on the account', /Reply \*YES\*/.test(r2.text) && /account/i.test(r2.text), r2.text.slice(0, 180));
+    if (/Reply \*YES\*/.test(r2.text)) await ask('no');
+    const r3 = await ask('A walk-in customer bought 1 crate of Trophy Bottle, paid in full by cash. No name.');
+    show(r3);
+    check('crates going out need a customer', !/Reply \*YES\*/.test(r3.text) && /customer|who/i.test(r3.text), r3.text.slice(0, 180));
+    if (/Reply \*YES\*/.test(r3.text)) await ask('no');
+  }
+  {
+    const r = await ask('What is waiting for my approval?');
+    show(r);
+    check('records waiting for approval are listed', /customer|item|approv|nothing/i.test(r.text), r.text.slice(0, 140));
   }
 
   // A receipt with an item counted after it: the question has to come first (0263).
@@ -333,6 +437,8 @@ try {
 } finally {
   writeFileSync(`${OUT}/bot-proposals.json`, JSON.stringify(proposals, null, 1));
   meta.close();
+  // The words the probe taught, and only those.
+  for (const w of probeWords) await admin.from('product_aliases').delete().eq('phrase', w);
   // The probe's own open order, cancelled as the till cancels one.
   if (probeDraft) await admin.from('draft_orders').update({ status: 'cancelled' }).eq('id', probeDraft).eq('status', 'open');
   await admin.from('whatsapp_pending').delete().eq('wa_phone', PHONE);

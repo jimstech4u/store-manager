@@ -4,6 +4,7 @@ import { formatMoney, formatQtySpoken, shapeWord } from '@/lib/format';
 import type { ToolDef } from '@/lib/whatsapp/llm';
 import { executeCapability } from '@/lib/agent/gateway';
 import { sellOrder } from '@/lib/whatsapp/orders';
+import { countReport, executeStock, proposeStock } from '@/lib/whatsapp/stock-actions';
 
 /**
  * THE ASSISTANT PROPOSES; THE PERSON'S "YES" DOES IT. Server only.
@@ -24,6 +25,8 @@ export interface Ctx {
   phone: string;
   /** Set when a tool has proposed: the turn ends and this is what is sent. */
   proposed: string | null;
+  /** What was just said, both ways: lets a rule check the person decided, not the model. */
+  said?: { lastOut: string; now: string; done?: string[] };
 }
 
 const lineItem = { type: 'object', properties: {
@@ -51,6 +54,7 @@ export const ACTION_TOOLS: ToolDef[] = [
       lines: { type: 'array', items: lineItem },
       paid: { type: 'array', items: payment },
       charges: { type: 'array', items: { type: 'object', properties: { label: { type: 'string' }, amount: { type: 'number' } }, required: ['label', 'amount'] } },
+      rest_on_account: { type: 'boolean', description: 'Only once they have said so: true when what is not paid now goes on the customer\'s account.' },
     }, required: ['lines'] },
   },
   {
@@ -116,10 +120,11 @@ export const ACTION_TOOLS: ToolDef[] = [
   },
   {
     name: 'propose_count',
-    description: "Propose recording today's count of an item on the shelf, in its shapes, e.g. 12 crates and 3 bottles.",
+    description: "Propose recording a count of an item on the shelf, in its shapes, e.g. 12 crates and 3 bottles. If it was already counted today, counting again needs a reason.",
     parameters: { type: 'object', properties: {
       product_id: { type: 'string' },
       counted: { type: 'array', items: { type: 'object', properties: { unit: { type: 'string' }, qty: { type: 'number' } }, required: ['qty'] } },
+      reason: { type: 'string', description: 'Only to count again today: why.' },
     }, required: ['product_id', 'counted'] },
   },
   {
@@ -153,7 +158,39 @@ export type Shape = {
   product_id: string; product_unit_id: string; unit_name: string; unit_plural: string; base_qty: string | number;
   is_default: boolean; is_returnable: boolean; is_sold?: boolean; is_bought?: boolean; is_counted?: boolean;
   price_per_unit: string | number | null;
+  whole_digit?: boolean; allow_quarter?: boolean; allow_half?: boolean; allow_three_quarter?: boolean;
 };
+
+/**
+ * THE QUANTITIES A SHAPE ALLOWS, as the till enforces them: whole numbers, and halves, quarters or
+ * three-quarters only where the shop ticked them. "1½ crates" of something sold only in whole crates
+ * is refused before anybody says yes, with what IS allowed.
+ */
+/** A shape the same size as another of the item's is a setup fault (0270): never sold through it. */
+export function sameSize(name: string, shapes: Shape[], s: Shape): string | null {
+  const twin = shapes.find((x) => x.product_unit_id !== s.product_unit_id && num(x.base_qty) === num(s.base_qty));
+  return twin
+    ? `${name}'s ${s.unit_name} is set up as the same size as its ${twin.unit_name}, so it would sell at the wrong price and take the wrong stock. It has to be fixed in the item's shapes first.`
+    : null;
+}
+
+export function qtyAllowed(name: string, qty: number, s: Shape): string | null {
+  const whole = Math.floor(qty);
+  const part = Math.round((qty - whole) * 100) / 100;
+  const ok =
+    (part === 0 && s.whole_digit !== false) ||
+    (part === 0.5 && s.allow_half === true) ||
+    (part === 0.25 && s.allow_quarter === true) ||
+    (part === 0.75 && s.allow_three_quarter === true);
+  if (ok) return null;
+  const allowed = [
+    s.whole_digit !== false ? 'whole numbers' : null,
+    s.allow_half ? 'halves' : null,
+    s.allow_quarter ? 'quarters' : null,
+    s.allow_three_quarter ? 'three quarters' : null,
+  ].filter(Boolean);
+  return `${name} is sold by the ${s.unit_name.toLowerCase()} in ${allowed.join(', ') || 'set amounts'}: ${qty} is not allowed. Ask how many.`;
+}
 
 export const money = (n: number) => formatMoney(n);
 export const num = (v: unknown) => {
@@ -189,8 +226,14 @@ export async function hold(ctx: Ctx, action: string, args: Args, summary: string
     .update({ done_at: new Date().toISOString(), outcome: 'replaced' })
     .eq('wa_phone', ctx.phone)
     .is('done_at', null);
+  /*
+   * AND THE MESSAGE IT CAME FROM. "New customer Daddy Rotimi, wants 50 water at 1,250, paid 62,500
+   * POS" is two things; the YES on the first ended the turn and the sale was never asked about. With
+   * the message kept, the agent goes back to it after the YES and does what is left.
+   */
   const { error } = await ctx.service.from('whatsapp_pending').insert({
-    wa_phone: ctx.phone, store_id: ctx.storeId, user_id: ctx.userId, action, args, summary,
+    wa_phone: ctx.phone, store_id: ctx.storeId, user_id: ctx.userId, action, summary,
+    args: { ...args, _asked: ctx.said?.now ?? null, _done: ctx.said?.done ?? [] },
   });
   if (error) throw new Error(error.message);
   ctx.proposed = summary;
@@ -229,6 +272,51 @@ export async function customerName(ctx: Ctx, id: unknown): Promise<string | null
   return a?.customer?.name ?? null;
 }
 
+/**
+ * THE TILL'S OWN GATES, before anybody is asked to say yes (TakePayment, and the server's trigger on
+ * sale lines). Containers that come back need somebody to owe them; money not paid needs somebody to
+ * owe it. And what is left unpaid is ASKED about, never assumed: "₦7,000 remains — on their account,
+ * or is another payment coming?" A part payment that silently became a debt is the shop finding out
+ * at the end of the month.
+ */
+/**
+ * THE PERSON DECIDED, NOT THE MODEL. A model asked once whether the rest went on the account, and the
+ * next time set it there itself. So "on their account" counts only when they were just asked, or say
+ * it themselves in this message.
+ */
+export function decidedOnAccount(ctx: Ctx, a: Args): boolean {
+  if (a.rest_on_account !== true) return false;
+  const now = (ctx.said?.now ?? '').toLowerCase();
+  const lastOut = ctx.said?.lastOut ?? '';
+  return /\bremains\b/.test(lastOut) || /\b(account|owe|owing|credit|later|balance|rest)\b/.test(now);
+}
+
+export function paymentGate(g: {
+  who: string | null;
+  total: number;
+  paid: { amount: number; method: string }[];
+  paidTotal: number;
+  comingBack: string[];
+  restOnAccount: boolean;
+}): string | null {
+  const rest = g.total - g.paidTotal;
+  if (!g.who && g.comingBack.length > 0) {
+    return `The ${[...new Set(g.comingBack)].join(' and ')} on this sale come back empty, so it needs a customer to owe them. Who is it for?`;
+  }
+  if (g.paidTotal > g.total + 0.005 && !g.who) {
+    return 'That is more than the sale comes to, and with no customer it cannot be held as credit. Who is it for?';
+  }
+  if (rest > 0.005) {
+    if (!g.who) return `It comes to ${money(g.total)}${g.paidTotal > 0 ? ` and ${money(g.paidTotal)} is paid` : ''}: ${money(rest)} is not paid, so it needs a customer to owe it. Who is it for?`;
+    if (!g.restOnAccount) {
+      return `It comes to ${money(g.total)}${g.paid.length > 0 ? `; paid ${g.paid.map((p) => `${money(p.amount)} ${p.method}`).join(' and ')}` : '; nothing paid yet'}. ` +
+        `${money(rest)} remains. Ask them: does the ${money(rest)} go on ${g.who}'s account, or is another payment coming (cash, transfer or POS)? ` +
+        'Then propose again with that payment added to paid, or with rest_on_account true.';
+    }
+  }
+  return null;
+}
+
 export function methods(list: unknown): { amount: number; method: string }[] {
   return (Array.isArray(list) ? list : [])
     .map((p) => ({ amount: num((p as Args).amount), method: String((p as Args).method ?? 'cash') }))
@@ -246,6 +334,7 @@ export async function propose(ctx: Ctx, name: string, a: Args): Promise<unknown>
       const out: Args[] = [];
       const words: string[] = [];
       let goods = 0;
+      const comingBack: string[] = [];
       for (const l of lines) {
         const id = String(l.product_id ?? '');
         const p = await product(ctx, id);
@@ -254,6 +343,9 @@ export async function propose(ctx: Ctx, name: string, a: Args): Promise<unknown>
         if (!(qty > 0)) return refuse(`How many ${p.name}?`);
         const shape = pick(await shapesOf(ctx, id), l.unit, (s) => s.is_sold !== false);
         if (!shape) return refuse(`${p.name} is not sold in "${String(l.unit)}".`);
+        if (shape.is_returnable) comingBack.push(shape.unit_plural.toLowerCase());
+        const wrongQty = sameSize(p.name, await shapesOf(ctx, id), shape) ?? qtyAllowed(p.name, qty, shape);
+        if (wrongQty) return refuse(wrongQty);
         // The app's own rules, before anybody is asked to say yes.
         if (num(p.on_hand) <= 0) {
           return refuse(`${p.name} is finished: the records say none is left. Check the shelf; if there is some, count it first.`);
@@ -285,8 +377,8 @@ export async function propose(ctx: Ctx, name: string, a: Args): Promise<unknown>
       const total = goods + extra;
       const paid = methods(a.paid);
       const paidTotal = paid.reduce((s, p) => s + p.amount, 0);
-      if (!who && paidTotal < total - 0.005) return refuse('A sale that is not fully paid needs a customer. Who is it for?');
-      if (!who && paidTotal > total + 0.005) return refuse('That is more than the sale comes to, and with no customer it cannot be held as credit. Who is it for?');
+      const gate = paymentGate({ who, total, paid, paidTotal, comingBack, restOnAccount: decidedOnAccount(ctx, a) });
+      if (gate) return refuse(gate);
       const summary = [
         `*Record this sale${who ? ` to ${who}` : ''}?*`,
         ...words,
@@ -428,14 +520,31 @@ export async function propose(ctx: Ctx, name: string, a: Args): Promise<unknown>
         base += qty * num(shape.base_qty);
         words.push(say(qty, shape));
       }
-      return hold(ctx, 'count', { product_id: id, counted: base },
-        `*Record today's count?*\n${p.name}: ${words.join(', ')} on the shelf`);
+      // Once a day from the till; again only with a reason, by somebody allowed to correct a count.
+      const already = (await rpc<{ counted_at: string | null; counted_by_name: string | null; counted_qty: number | null }[]>(
+        ctx, 'todays_counts', { p_product_ids: [id] }))?.[0];
+      const again = Boolean(already?.counted_at);
+      const reason = String(a.reason ?? '').trim();
+      if (again && !reason) {
+        return refuse(`${p.name} was already counted today${already?.counted_by_name ? ` by ${already.counted_by_name}` : ''}. To count it again, say why (an owner or manager only).`);
+      }
+      return hold(ctx, 'count', { product_id: id, counted: base, reason: again ? reason : null },
+        `*Record ${again ? 'a fresh' : "today's"} count?*\n${p.name}: ${words.join(', ')} on the shelf${again ? `\nWhy again: ${reason}` : ''}`);
     }
 
     case 'propose_new_customer': {
       const name2 = String(a.name ?? '').trim();
       const phone = String(a.phone ?? '').trim();
       if (!name2 || !phone) return refuse('What is their name and phone number?');
+      /*
+       * A PHONE THEY GAVE, NEVER ONE MADE UP. A customer needs one, so a model filled in 00000000000
+       * for Daddy Rotimi rather than ask. The number has to be in what they sent.
+       */
+      const digits = phone.replace(/\D/g, '');
+      const sent = (ctx.said?.now ?? '').replace(/\D/g, '');
+      if (digits.length < 7 || /^(\d)\1+$/.test(digits) || !sent.includes(digits.slice(-7))) {
+        return refuse(`What is ${name2}'s phone number? A customer needs one, and it has to be theirs: ask for it.`);
+      }
       return hold(ctx, 'new_customer', { name: name2, phone, business: a.business ?? null },
         `*Add this customer?*\n${name2} — ${phone}${a.business ? `\n${String(a.business)}` : ''}`);
     }
@@ -536,6 +645,7 @@ export async function propose(ctx: Ctx, name: string, a: Args): Promise<unknown>
     }
 
     default:
+      if (name === 'count_status' || name === 'propose_settle_count' || name === 'propose_empties_written_off') return proposeStock(ctx, name, a);
       return refuse(`No action called ${name}`);
   }
 }
@@ -573,6 +683,9 @@ export async function execute(ctx: Ctx, action: string, a: Args): Promise<{ text
       const sale = await sellOrder(ctx, a);
       return { text: `Sold ✅ *${money(num(a.total))}*, receipt #${sale.slice(0, 8).toUpperCase()}\nTo print: ${await receiptLink(sale)}`, receipt: sale };
     }
+    case 'settle_count':
+    case 'empties_written_off':
+      return (await executeStock(ctx, action, a)) ?? { text: 'Done ✅' };
     case 'capability':
       return executeCapability({ db: ctx.db, service: ctx.service, storeId: ctx.storeId, userId: ctx.userId }, a);
     case 'payment': {
@@ -618,9 +731,22 @@ export async function execute(ctx: Ctx, action: string, a: Args): Promise<{ text
         p_paid_to: a.paid_to ?? null, p_member_user_id: null,
       });
       return { text: 'Recorded ✅' };
-    case 'count':
-      await rpc(ctx, 'count_from_till', { p_product_id: a.product_id, p_counted: a.counted });
-      return { text: 'Counted ✅' };
+    case 'count': {
+      if (a.reason) {
+        const period = await rpc<string>(ctx, 'ensure_open_period', { p_product_id: a.product_id });
+        await rpc(ctx, 'enter_stock_count', { p_period_id: period, p_counted: a.counted, p_reason: a.reason });
+      } else {
+        await rpc(ctx, 'count_from_till', { p_product_id: a.product_id, p_counted: a.counted });
+      }
+      // What the count found, said at once: the shop is standing at the shelf now.
+      const r = await countReport(ctx, String(a.product_id));
+      return {
+        text: [
+          `Counted ✅ Records expected ${r.records_expected ?? '?'}; on the shelf ${r.on_the_shelf ?? '?'}.`,
+          r.needs_settling ? `That is ${r.difference}. Tell me what happened to them and I will settle it.` : 'Nothing is missing.',
+        ].join('\n'),
+      };
+    }
     case 'new_customer':
       await rpc(ctx, 'upsert_customer', {
         p_store_id: s, p_phone: a.phone, p_display_name: a.name, p_business_name: a.business ?? null,

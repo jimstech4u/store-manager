@@ -4,6 +4,7 @@ import { stockInShapes, type ShapeQuantity } from '@/lib/shape-quantities';
 import { ACTION_TOOLS, hold, propose, type Ctx } from '@/lib/whatsapp/actions';
 import { GATEWAY_TOOLS, runCapability } from '@/lib/agent/gateway';
 import { ORDER_TOOLS, runOrder } from '@/lib/whatsapp/orders';
+import { STOCK_ACTION_TOOLS } from '@/lib/whatsapp/stock-actions';
 import { documentPdf, documentPng } from '@/lib/whatsapp/paper';
 import { sendPdf, sendPicture } from '@/lib/whatsapp/meta';
 import { receiptDocument, type SaleDetail } from '@/lib/receipt-document';
@@ -26,7 +27,7 @@ const PERIOD = { type: 'string', enum: ['today', 'yesterday', 'this_week', 'this
 export const TOOLS: ToolDef[] = [
   {
     name: 'find_items',
-    description: 'Find items the shop sells by name or group, with what is left on the shelf and the selling prices.',
+    description: 'Find items the shop sells by name or group, with what is left on the shelf and the selling prices. Words the shop has taught (like "B/S") are found as the item they mean.',
     parameters: { type: 'object', properties: { query: { type: 'string', description: 'Part of the item name, e.g. "trophy" or "coke"' } }, required: ['query'] },
   },
   {
@@ -107,6 +108,22 @@ export const TOOLS: ToolDef[] = [
       },
       required: ['kind'],
     },
+  },
+  {
+    name: 'name_means',
+    description:
+      'Teach what a word customers write means, so next time it is found at once, in this chat and in the app: "B/S" means Guinness Big Bottle. Give several item_ids when the word should always be asked about among those items (like "Coke": 50cl, PET or can). Use it when they tell you or correct what a written name means. Never to record a choice they made once among several.',
+    parameters: { type: 'object', properties: { phrase: { type: 'string' }, item_ids: { type: 'array', items: { type: 'string' } } }, required: ['phrase', 'item_ids'] },
+  },
+  {
+    name: 'forget_name',
+    description: 'Forget a word the shop taught, when it was wrong.',
+    parameters: { type: 'object', properties: { phrase: { type: 'string' } }, required: ['phrase'] },
+  },
+  {
+    name: 'names_learned',
+    description: 'Every word the shop has taught and what it means.',
+    parameters: { type: 'object', properties: {} },
   },
   {
     name: 'find_receipt',
@@ -191,6 +208,8 @@ export const TOOLS: ToolDef[] = [
   ...ACTION_TOOLS,
   // An order built in the chat lives on the till, not in the model's memory.
   ...ORDER_TOOLS,
+  // Counting, settling what a count found, and empties that are never coming back.
+  ...STOCK_ACTION_TOOLS,
   // Everything else the shop can do, found when it is needed rather than carried in every prompt.
   ...GATEWAY_TOOLS,
 ];
@@ -272,7 +291,7 @@ export async function runTool(
   ctx: Ctx,
   shopName: string,
 ): Promise<unknown> {
-  if (name.startsWith('propose_')) return propose(ctx, name, args);
+  if (name.startsWith('propose_') || name === 'count_status') return propose(ctx, name, args);
   if (name.startsWith('order_')) return runOrder(ctx, name, args);
   if (name === 'find_capability' || name === 'use_capability') {
     return runCapability({ db, service: ctx.service, storeId, userId: ctx.userId }, name, args, (action, a, summary) =>
@@ -535,14 +554,42 @@ export async function runTool(
       const s = rows?.[0] ?? {};
       return { worth_at_cost: naira(s.total_value), of_which_estimated: naira(s.estimated_value), items_in_stock: s.items_in_stock };
     }
+    case 'name_means': {
+      const ids = Array.isArray(args.item_ids) ? (args.item_ids as string[]) : [];
+      await rpc<number>('teach_product_name', { p_store_id: storeId, p_phrase: String(args.phrase ?? ''), p_product_ids: ids });
+      return { learned: true, note: ids.length > 1 ? 'Noted: this word will always be asked about among these items.' : 'Noted: this word now finds that item, here and in the app.' };
+    }
+    case 'forget_name': {
+      const n = await rpc<number>('forget_product_name', { p_store_id: storeId, p_phrase: String(args.phrase ?? '') });
+      return { forgotten: n > 0 };
+    }
+    case 'names_learned': {
+      const rows = await rpc<{ phrase: string; items: string[] }[]>('product_names_learned', { p_store_id: storeId });
+      return { words: rows.map((r) => ({ word: r.phrase, means: r.items })) };
+    }
     case 'find_items': {
-      const items = await rpc<Record<string, unknown>[]>('search_products', {
-        p_store_id: storeId, p_query: String(args.query ?? ''), p_limit: 8, p_offset: 0,
-      });
-      if (items.length === 0) return { items: [], note: 'Nothing by that name.' };
+      const query = String(args.query ?? '');
+      const [items, meant] = await Promise.all([
+        rpc<Record<string, unknown>[]>('search_products', { p_store_id: storeId, p_query: query, p_limit: 8, p_offset: 0 }),
+        rpc<{ product_id: string; name: string }[]>('product_name_meanings', { p_store_id: storeId, p_phrase: query }),
+      ]);
+      if (items.length === 0) {
+        return { items: [], note: 'Nothing by that name. Hold the line and ask what it is; when they say, teach it with name_means.' };
+      }
+      // What the shop said this word means comes first, and is the only answer when it said one.
+      const taught = new Set(meant.map((m) => m.product_id));
+      const shown = taught.size > 0 ? items.filter((p) => taught.has(String(p.id))) : items;
+      const note = taught.size === 1
+        ? `The shop has taught that "${query}" means ${meant[0].name}.`
+        : taught.size > 1
+          ? `The shop says "${query}" can be any of these: ask which, offering them as options.`
+          : shown.length > 1
+            ? 'Several match. Unless the order makes it plain, ask which, with the names as options.'
+            : undefined;
       const shapes = await rpc<Record<string, unknown>[]>('product_selling_units', { p_store_id: storeId });
       return {
-        items: items.map((p) => {
+        ...(note ? { note } : {}),
+        items: shown.map((p) => {
           const mine = shapes.filter((s) => s.product_id === p.id);
           const q: ShapeQuantity[] = mine
             .filter((s) => s.is_counted !== false)
@@ -551,9 +598,14 @@ export async function runTool(
             id: p.id,
             name: p.name,
             left: q.length > 0 ? stockInShapes(q) : `${Number(p.on_hand)} ${p.base_unit}`,
+            // Every shape it sells in, with its OWN price, or plainly none: never another shape's.
             prices: mine
-              .filter((s) => s.is_sold !== false && s.price_per_unit != null)
-              .map((s) => `${s.unit_name} ${naira(s.price_per_unit)}`),
+              .filter((s) => s.is_sold !== false)
+              .map((s) => `${s.unit_name} ${s.price_per_unit != null ? naira(s.price_per_unit) : 'no price set'}`),
+            // How it sells, so an order says which shape and how many the till will take.
+            sold_in: mine
+              .filter((s) => s.is_sold !== false)
+              .map((s) => `${s.unit_name} (${Number(s.base_qty)} each${s.allow_half ? ', halves allowed' : ''}${s.allow_quarter ? ', quarters allowed' : ''})`),
           };
         }),
       };

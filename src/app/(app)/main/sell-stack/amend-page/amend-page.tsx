@@ -161,7 +161,8 @@ export default function AmendPage() {
       packId: null,
       packName: null,
       packQty: null,
-      unitPrice: first?.price ?? '0',
+      // Empty, not ₦0, when the shape has no price: ₦0 sells it for nothing without anybody deciding to.
+      unitPrice: first?.price ?? '',
       containersOut: first?.isReturnable ? '1' : '0',
       depositCharged: '0',
       saleUnitId: first?.id ?? null,
