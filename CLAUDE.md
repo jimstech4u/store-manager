@@ -68,8 +68,12 @@ The rule:
   stock on hand, landed cost, which units something sells in. The lists are not in it. Notifying
   the scope the paginated list lives in means every save costs a full re-read to learn something
   this device decided.
-- **Another device is the exception.** Its changes arrive on the next genuine read — `onResume`,
-  or a reload somebody asked for. That is a real trigger; our own writes are not.
+- **Another device is the exception.** Its changes arrive on the live feed (`live-shop.ts`: a table
+  in the realtime publication, mapped in `REACHES` to the scopes that show it), and whatever the feed
+  missed while the app slept is re-read when it comes back (`useWakeRefresh` inside `useLiveShop`).
+  "Another device" is judged by TIME, not by person: one account on two phones is two devices, so the
+  feed skips only what THIS device wrote in the last few seconds (`noteLocalWrite`). A new table the
+  app writes goes into the publication and `REACHES` in the same change (0226, 0273).
 
 `scripts/probe-no-round-trip.mjs` holds the line: it **watches the network**, not the pixels, and
 fails if a list-read RPC fires after an add, a rename or a new unit. "It appeared" is not the
