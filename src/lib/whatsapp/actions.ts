@@ -166,9 +166,14 @@ export type Shape = {
  * three-quarters only where the shop ticked them. "1½ crates" of something sold only in whole crates
  * is refused before anybody says yes, with what IS allowed.
  */
-/** A shape the same size as another of the item's is a setup fault (0270): never sold through it. */
+/**
+ * A shape the same size as another of the item's is a setup fault (0270). Only the ACCIDENTAL one is
+ * refused, as the server does (0271): Zetar's priceless Piece, never its Pack. When neither stands out
+ * the server decides, at the sale.
+ */
 export function sameSize(name: string, shapes: Shape[], s: Shape): string | null {
-  const twin = shapes.find((x) => x.product_unit_id !== s.product_unit_id && num(x.base_qty) === num(s.base_qty));
+  const twin = shapes.find((x) => x.product_unit_id !== s.product_unit_id && num(x.base_qty) === num(s.base_qty) &&
+    s.price_per_unit == null && x.price_per_unit != null);
   return twin
     ? `${name}'s ${s.unit_name} is set up as the same size as its ${twin.unit_name}, so it would sell at the wrong price and take the wrong stock. It has to be fixed in the item's shapes first.`
     : null;

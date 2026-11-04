@@ -243,6 +243,7 @@ data or click-through) — not when it merely compiles. Newest work at the top o
 | 0268 | `agent_names` names an order by its code and a batch by its item and expiry | ☑ |
 | 0269 | the shop's words for its items: `product_aliases`, `name_phrase`, `teach_product_name`, `forget_product_name`, `product_name_meanings`, `product_names_learned`; `search_products` finds a taught word first; `whatsapp_links.order_questions` | ☑ |
 | 0270 | `save_product_units` refuses two standalone shapes of the same size | ☑ |
+| 0271 | a sale line in the accidental twin of a same-size shape is refused (Zetar's Piece; its Pack still sells); Malta Guinness Can's 24 named Pack and its one Can; "m/gns" taught | ☑ |
 | 0264 | Ashabi: three small count differences booked, batches aligned to the stock figure on every item | ☑ |
 
 ---
