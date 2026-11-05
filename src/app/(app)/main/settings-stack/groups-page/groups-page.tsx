@@ -138,6 +138,7 @@ export default function GroupsPage() {
 
   return (
     <PageScaffold
+      layout="wide"
       onBack={goBack}
       title="Groups you file under"
       subtitle="NBL, soft drinks, water — however you sort your shelves"
@@ -171,7 +172,7 @@ export default function GroupsPage() {
               copied — each product points at the group rather than holding its own spelling.
             </InfoPanel>
 
-            <ul className={styles.list}>
+            <ul className={styles.list} data-grid>
               {(groups.data ?? []).map((group) => {
                 const edit = edits[group.id];
                 const dirty = edit != null && edit.trim() !== group.name && edit.trim() !== '';

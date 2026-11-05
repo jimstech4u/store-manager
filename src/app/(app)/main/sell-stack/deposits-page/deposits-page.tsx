@@ -72,7 +72,7 @@ export default function DepositsPage() {
       : { state: 'loading', what: 'the deposits you are holding' };
 
   return (
-    <PageScaffold headerScrolls onBack={goBack} title="Deposits" subtitle="Money you are holding">
+    <PageScaffold layout="wide" headerScrolls onBack={goBack} title="Deposits" subtitle="Money you are holding">
       <PageState status={status}>
         {() => (
           <>
@@ -133,7 +133,7 @@ export default function DepositsPage() {
           No deposits taken yet. They appear here as soon as you take one.
         </p>
       ) : (
-        <ul className={styles.list}>
+        <ul className={styles.list} data-grid>
           {rows.map((r) => (
             <li key={r.customerId}>
               <button

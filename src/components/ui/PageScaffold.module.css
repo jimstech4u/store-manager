@@ -62,9 +62,73 @@
   padding-right: 0;
 }
 
+/*
+ * A CONTAINER, named `page`. A page lays itself out with `@container page (min-width: …)` rather
+ * than a media query, because the width it has is not the window's: beside an open SideBar on a
+ * tablet it is a phone's column, beside a closed one it is two.
+ */
 .inner {
-  max-width: 640px;
+  container: page / inline-size;
+  max-width: var(--page-max);
   margin: 0 auto;
   padding-top: var(--space-5);
+}
+
+/* The three widths (PageScaffold's `layout`), on the header and the content alike. */
+.column {
+  --page-max: 640px;
+}
+
+.record {
+  --page-max: 1040px;
+}
+
+.wide {
+  --page-max: 1320px;
+}
+
+/*
+ * A LIST MARKED `data-grid` IS A GRID OF CARDS once two fit side by side — every list page, one rule,
+ * instead of a copy in each page's stylesheet. Each row stretches to its line's tallest, so a line
+ * of cards ends level.
+ */
+@container page (min-width: 720px) {
+  .inner :global([data-grid]) {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: var(--space-3);
+    align-items: stretch;
+  }
+
+  .inner :global([data-grid] > li) {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .inner :global([data-grid] > li > :only-child) {
+    flex: 1;
+  }
+}
+
+/* More room at the sides once there is room. */
+@media (min-width: 801px) {
+  .body:not(.bodyFlush) {
+    padding-left: var(--space-6);
+    padding-right: var(--space-6);
+  }
+
+  .headerScrolls {
+    margin: 0 calc(var(--space-6) * -1);
+  }
+
+  /*
+   * The title over the content, not at the window's edge: the header's own row is held to the
+   * page's width (plus the 28px the package insets it by) and centred, as the content is.
+   */
+  .header :global(.ax-header__content) {
+    max-width: calc(var(--page-max) + 56px);
+    margin-inline: auto;
+  }
 }
 

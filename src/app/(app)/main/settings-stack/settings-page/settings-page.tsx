@@ -221,6 +221,10 @@ export default function SettingsPage() {
       title="Settings"
       subtitle={store.name}
       /*
+       * The whole width beside the SideBar, laid out by it — see the `@container page` rules.
+       */
+      layout="wide"
+      /*
         NO SAVE ACTION IN THE HEADER, because this screen no longer edits anything.
 
         It was a checkmark that governed the whole page: a select at the top, a paper width, a
@@ -273,6 +277,8 @@ export default function SettingsPage() {
         </InfoPanel>
       )}
 
+      {/* The groups, in columns once the page is wide enough for two. */}
+      <div className={styles.groups}>
       {settings && (
         <>
           {/*
@@ -514,6 +520,7 @@ export default function SettingsPage() {
           href="/"
         />
       </LinkGroup>
+      </div>
 
       <div className={styles.signOut}>
         <Button variant="secondary" size="large" fullWidth onClick={() => void signOut()}>

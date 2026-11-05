@@ -683,6 +683,10 @@ export default function SellPage() {
       title="Sell"
       subtitle={store.name}
       /*
+       * The whole width beside the SideBar, laid out by it — see the `@container page` rules.
+       */
+      layout="wide"
+      /*
        * The header travels with the receipt.
        *
        * The customer bar below it is sticky, and two things cannot both own the top of the screen.

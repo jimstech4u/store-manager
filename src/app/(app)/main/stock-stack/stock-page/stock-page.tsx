@@ -169,6 +169,10 @@ export default function StockPage() {
       title="Stock"
       subtitle={store.name}
       /*
+       * The whole width beside the SideBar, laid out by it — see the `@container page` rules.
+       */
+      layout="wide"
+      /*
        * Only ADD stays in the header — the one thing done from here many times a day. The other
        * four are named tiles under the headline (see below).
        */
@@ -195,6 +199,7 @@ export default function StockPage() {
         NOT ₦0 WHILE IT IS BEING WORKED OUT. The figure, once there is one; until then a word that
         cannot be mistaken for it, and if the read failed, a way to try again here.
       */}
+      <div className={styles.overview}>
       <div className={styles.summary}>
         <span className={styles.summaryLabel}>Stock is worth</span>
         {worth.data ? (
@@ -236,6 +241,7 @@ export default function StockPage() {
       */}
       <ActionTiles
         label="Stock"
+        className={styles.overviewTiles}
         tiles={[
           ...(can('stock.receive')
             ? [
@@ -272,6 +278,7 @@ export default function StockPage() {
           },
         ]}
       />
+      </div>
 
       {/*
         THE ALARM, and only when there is something to sound it about.

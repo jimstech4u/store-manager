@@ -51,6 +51,7 @@ export default function MoneyCustomerPage() {
 
   return (
     <PageScaffold
+      layout="record"
       onBack={goBack}
       title="Money"
       subtitle="What they owe you, what you owe them, and every move of it"

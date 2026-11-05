@@ -127,7 +127,7 @@ export default function ExpiryPage() {
   );
 
   return (
-    <PageScaffold onBack={goBack} title="Going off" subtitle="Dated stock, soonest first">
+    <PageScaffold layout="record" onBack={goBack} title="Going off" subtitle="Dated stock, soonest first">
       <ProblemDialog problem={problem} title="Could not read what is going off" />
 
       {/*

@@ -242,6 +242,7 @@ export default function CountGatePage() {
 
   return (
     <PageScaffold
+      layout="record"
       onBack={goBack}
       title="Count before selling"
       subtitle="What is on the shelf right now"

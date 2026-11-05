@@ -265,10 +265,17 @@ export default function MoneyPage() {
       onBack={goBack}
       title="Money"
       subtitle="Who owes you, and what has been paid"
+      /*
+       * The whole width beside the SideBar, laid out by it — see the `@container page` rules.
+       */
+      layout="wide"
     >
       <PageState status={status}>
         {() => (
           <>
+      {/* On a wide screen: what is owed and the doors beside what the period came to. */}
+      <div className={styles.overview}>
+      <div className={styles.overviewLead}>
       <div className={styles.summary}>
         <span className={styles.summaryLabel}>
           Owed to you
@@ -347,7 +354,9 @@ export default function MoneyPage() {
             : []),
         ]}
       />
+      </div>
 
+      <div className={styles.overviewSide}>
       {/*
         WHAT THE PERIOD CAME TO, on the list rather than in a reports tab.
 
@@ -436,6 +445,8 @@ export default function MoneyPage() {
           )}
         </>
       )}
+      </div>
+      </div>
 
       {/* Search, filters and export stay in reach as the list scrolls — see PinnedTools. */}
       <PinnedTools>

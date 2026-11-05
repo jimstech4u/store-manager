@@ -135,6 +135,7 @@ export default function CountPage() {
 
   return (
     <PageScaffold
+      layout="wide"
       headerScrolls
       /*
         A SECONDARY PAGE NOW, so it carries a back arrow like every other.
@@ -230,7 +231,7 @@ export default function CountPage() {
           looking at right now.
         </InfoPanel>
       ) : (
-        <ul className={styles.list}>
+        <ul className={styles.list} data-grid>
           {products.map((p) => (
             <li key={p.id}>
               <button

@@ -360,7 +360,7 @@ export default function ReportsPage() {
     : { state: 'ready' };
 
   return (
-    <PageScaffold onBack={goBack} title="Reports" subtitle="On paper, or as a PDF">
+    <PageScaffold layout="record" onBack={goBack} title="Reports" subtitle="On paper, or as a PDF">
       <ProblemDialog problem={problem} title="Could not build that report" />
 
       <PageState status={status}>

@@ -80,6 +80,7 @@ export default function DepositCustomerPage() {
 
   return (
     <PageScaffold
+      layout="record"
       onBack={goBack}
       title="Deposit"
       /*

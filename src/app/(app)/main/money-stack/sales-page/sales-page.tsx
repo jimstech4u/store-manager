@@ -123,7 +123,7 @@ export default function SalesPage() {
           : { state: 'ready' };
 
   return (
-    <PageScaffold headerScrolls onBack={goBack} title="Sales" subtitle="Every receipt you have issued">
+    <PageScaffold layout="wide" headerScrolls onBack={goBack} title="Sales" subtitle="Every receipt you have issued">
       <PageState status={status}>
         {() => (
           <>
@@ -258,7 +258,7 @@ export default function SalesPage() {
         )
       ) : (
         <>
-          <ul className={styles.list}>
+          <ul className={styles.list} data-grid>
             {list.items.map((s) => (
               <li key={s.id}>
                 <button

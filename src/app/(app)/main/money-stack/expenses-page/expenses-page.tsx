@@ -102,6 +102,7 @@ export default function ExpensesPage() {
 
   return (
     <PageScaffold
+      layout="record"
       onBack={goBack}
       title="Money going out"
       subtitle="Rent, fuel, transport — what the shop spends"

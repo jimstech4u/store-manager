@@ -80,6 +80,7 @@ export default function YardPage() {
 
   return (
     <PageScaffold
+      layout="record"
       onBack={goBack}
       title="Your yard"
       subtitle="The empties standing here, not the ones out with people"

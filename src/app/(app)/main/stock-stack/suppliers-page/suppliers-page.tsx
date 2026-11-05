@@ -133,6 +133,7 @@ export default function SuppliersPage() {
 
   return (
     <PageScaffold
+      layout="wide"
       headerScrolls
       onBack={goBack}
       title="Suppliers"
@@ -204,7 +205,7 @@ export default function SuppliersPage() {
               </span>
             </div>
 
-            <ul className={styles.list}>
+            <ul className={styles.list} data-grid>
               {rows.map((s) => (
                 <li key={s.id}>{row(s)}</li>
               ))}

@@ -172,7 +172,7 @@ export default function AmendPage() {
   };
 
   return (
-    <PageScaffold onBack={goBack} title="Correct this receipt" subtitle="What it should have said">
+    <PageScaffold layout="record" onBack={goBack} title="Correct this receipt" subtitle="What it should have said">
       <PageState status={status}>
         {() =>
           order && (

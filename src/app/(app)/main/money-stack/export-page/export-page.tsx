@@ -130,7 +130,7 @@ export default function ExportPage() {
     : 'report';
 
   return (
-    <PageScaffold onBack={goBack} title="Export a report" subtitle="CSV, PDF, a picture, or print">
+    <PageScaffold layout="record" onBack={goBack} title="Export a report" subtitle="CSV, PDF, a picture, or print">
       <div data-print-no-print>
         {groups.map((g) => (
           <section key={g} className={styles.group}>

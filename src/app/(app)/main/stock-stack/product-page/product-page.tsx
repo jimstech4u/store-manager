@@ -188,6 +188,7 @@ export default function ProductPage() {
 
   return (
     <PageScaffold
+      layout="record"
       onBack={goBack}
       title={product?.name ?? 'Item'}
       subtitle={product ? product.categoryName ?? store.name : undefined}
@@ -378,6 +379,13 @@ export default function ProductPage() {
         )}
       </dl>
 
+      {/*
+        ON A WIDE SCREEN, TWO COLUMNS: what is SET for this item (its running-low levels, what is
+        out) beside where else it leads (its shapes, who took it, its history, its photo). One
+        column on a phone, in the same order.
+      */}
+      <div className={styles.recordCols}>
+      <div className={styles.recordMain}>
       {/*
         WHAT IS OUT, IN THIS ITEM'S OWN SHAPES.
 
@@ -633,7 +641,9 @@ export default function ProductPage() {
           }
         </LoadArea>
       </section>
+      </div>
 
+      <div className={styles.recordSide}>
       {/*
         How this is bought and sold.
 
@@ -708,6 +718,8 @@ export default function ProductPage() {
         productName={product.name}
         canManage={can('products.manage')}
       />
+      </div>
+      </div>
             </>
           )
         }

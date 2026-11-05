@@ -126,6 +126,7 @@ export default function LowStockPage() {
 
   return (
     <PageScaffold
+      layout="wide"
       onBack={goBack}
       title="Running low"
       subtitle="When to be told stock is running out"
@@ -206,7 +207,7 @@ export default function LowStockPage() {
                   } a level of their own.`}
             </p>
 
-            <ul className={styles.list}>
+            <ul className={styles.list} data-grid>
               {(own.data ?? []).map((item) => (
                 <li key={item.productId} className={styles.row}>
                   <button

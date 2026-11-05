@@ -54,7 +54,7 @@ export default function ItemDebtsPage() {
       : { state: 'ready' };
 
   return (
-    <PageScaffold onBack={goBack} title="Who took this" subtitle={name}>
+    <PageScaffold layout="wide" onBack={goBack} title="Who took this" subtitle={name}>
       <PageState status={status}>
         {() => (
           <>
@@ -93,7 +93,7 @@ export default function ItemDebtsPage() {
                           </span>
                           <ChevronRightIcon />
                         </button>
-                        <ul className={styles.list}>
+                        <ul className={styles.list} data-grid>
                           {receipts.map((r) => (
                             <li key={r.saleId}>
                               <button
@@ -146,7 +146,7 @@ export default function ItemDebtsPage() {
                 This item has not been sold.
               </InfoPanel>
             ) : (
-              <ul className={styles.list}>
+              <ul className={styles.list} data-grid>
                 {(data.data?.buyers ?? []).map((b) => (
                   <li key={b.customerId ?? 'walk-in'}>
                     <button

@@ -125,7 +125,7 @@ export default function StaffChargesPage() {
     d === 'charged' ? 'Charged' : d === 'paid' ? 'Paid back' : 'Written off';
 
   return (
-    <PageScaffold onBack={goBack} title="What staff owe" subtitle="Missing stock and short tills">
+    <PageScaffold layout="record" onBack={goBack} title="What staff owe" subtitle="Missing stock and short tills">
       <ProblemDialog problem={problem} title="Could not read this" />
 
       <InfoPanel id="staff.charges" tone="info" title="This is not a customer account">

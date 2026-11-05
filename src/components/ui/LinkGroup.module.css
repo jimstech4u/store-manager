@@ -1,5 +1,7 @@
 .group {
   margin: 0 0 var(--space-5);
+  /* Settings sets its groups in columns on a wide screen; a group stays whole in one of them. */
+  break-inside: avoid;
 }
 
 .title {

@@ -134,7 +134,7 @@ export default function CountHistoryPage() {
   };
 
   return (
-    <PageScaffold headerScrolls onBack={goBack} title="Count history" subtitle="Every count, and what it found">
+    <PageScaffold layout="wide" headerScrolls onBack={goBack} title="Count history" subtitle="Every count, and what it found">
       <PageState status={status}>
         {() => (
           <>
@@ -240,7 +240,7 @@ export default function CountHistoryPage() {
               </InfoPanel>
             ) : (
               <>
-                <ul className={styles.list}>
+                <ul className={styles.list} data-grid>
                   {list.items.map((r) => (
                     <li key={r.id}>
                       <button

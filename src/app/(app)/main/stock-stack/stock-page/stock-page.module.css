@@ -200,3 +200,38 @@
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
+
+/* ── Wide: the page's own width, beside the SideBar ───────────────────────────────── */
+
+/* What the shelf is worth, and the four doors two by two beside it. */
+@container page (min-width: 760px) {
+  .overview {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--space-5);
+    margin-bottom: var(--space-5);
+  }
+
+  .overview .summary,
+  .overview .overviewTiles {
+    margin-bottom: 0;
+  }
+
+  /* Raised over ActionTiles' own grid, whichever stylesheet loads last. */
+  .overview .overviewTiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* The products as a grid of cards. */
+@container page (min-width: 720px) {
+  .list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: var(--space-2);
+  }
+
+  .list > li > .item {
+    height: 100%;
+  }
+}

@@ -264,7 +264,7 @@ export default function PrintingPage() {
   const escpos = printer.kind === 'usb' || printer.kind === 'bluetooth' || printer.kind === 'ios_app';
 
   return (
-    <PageScaffold onBack={goBack} title="Printing" subtitle="Your printer, and how a receipt is set out">
+    <PageScaffold layout="record" onBack={goBack} title="Printing" subtitle="Your printer, and how a receipt is set out">
       <PageState status={status}>
         {() => (
           <>

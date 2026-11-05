@@ -370,3 +370,15 @@ li + li .emptiesRow { border-top: 1px solid var(--border); }
   font-weight: 600;
   cursor: pointer;
 }
+
+/* ── Wide: the page's own width (PageScaffold layout="record") ────────────────────── */
+
+/* What is set for this item beside where else it leads. */
+@container page (min-width: 900px) {
+  .recordCols {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: var(--space-5);
+    align-items: start;
+  }
+}

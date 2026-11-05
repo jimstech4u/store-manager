@@ -179,7 +179,7 @@ export default function YardCountPage() {
   };
 
   return (
-    <PageScaffold onBack={goBack} title="Count the yard" subtitle="The empties standing here">
+    <PageScaffold layout="record" onBack={goBack} title="Count the yard" subtitle="The empties standing here">
       <ProblemDialog problem={problem} title="Could not read what you keep" />
 
       <Explain label="Why count the empties too?">

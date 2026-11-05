@@ -130,6 +130,7 @@ export default function WordsPage() {
 
   return (
     <PageScaffold
+      layout="wide"
       onBack={goBack}
       title="Words you measure in"
       subtitle="Crate, bottle, dirica, paint — whatever you say"
@@ -163,7 +164,7 @@ export default function WordsPage() {
         points at the word rather than holding its own spelling.
       </InfoPanel>
 
-      <ul className={styles.list}>
+      <ul className={styles.list} data-grid>
         {units.map((unit) => {
           const edit = edits[unit.id];
           const products = Number((unit as { products?: number }).products ?? 0);

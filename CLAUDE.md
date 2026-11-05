@@ -773,6 +773,24 @@ own renderer and WhatsApp got a different-looking receipt from the one the app s
 new way out its own drawing. Documents themselves are built by the pure builders the screens use:
 `receiptDocument`, `statementDocument`, `paymentDocument`.
 
+## A wide screen is used, not left empty
+
+From 801px the SideBar replaces the tab bar (`main/page.tsx`, as JIMSteps and academix-web do it) and
+`--nav-height` / `--bar-clearance` are 0 on the shell, so nothing makes room for a bar that is not
+there and the floating pills sit in the corner.
+
+Every page says how much width it uses — `PageScaffold layout=`:
+- `column` (default) — a form, 640px. Wider is not easier to fill in.
+- `record` — one customer, product or supplier, a ledger, a report: 1040px.
+- `wide` — a tab's first page, and any list to browse: the whole width.
+
+A page lays itself out by ITS OWN width, never the window's: `.inner` is `container: page`, and
+layouts use `@container page (min-width: …)`, so a page beside an open SideBar on a tablet is one
+column and beside a closed one is two. A browse list gets `data-grid` on its `<ul>` and becomes a
+grid of cards (one rule, in PageScaffold.module.css). The header's row is held to the page's width,
+so the title sits over the content. A new page picks its `layout`; a new list adds `data-grid`.
+`scripts/probe-wide-shell-ui.mjs` screenshots it at 1440 and 1024.
+
 ## Verification
 
 Click-through with Playwright is the standard of proof — `tsc` passing is not evidence a screen

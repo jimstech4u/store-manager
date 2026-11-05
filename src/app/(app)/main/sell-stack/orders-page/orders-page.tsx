@@ -101,6 +101,7 @@ export default function OrdersPage() {
 
   return (
     <PageScaffold
+      layout="wide"
       headerScrolls
       title="Orders"
       subtitle="Asked for from the marketplace"
@@ -145,7 +146,7 @@ export default function OrdersPage() {
 
       <PageState status={status}>
         {() => (
-          <ul className={styles.list}>
+          <ul className={styles.list} data-grid>
             {list.map((order) => (
               <li key={order.id}>
                 {/*

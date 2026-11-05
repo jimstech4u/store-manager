@@ -156,6 +156,7 @@ export default function OrderPage() {
 
   return (
     <PageScaffold
+      layout="record"
       title="Order"
       subtitle={data ? `${data.code} · from the marketplace` : 'From the marketplace'}
       onBack={goBack}

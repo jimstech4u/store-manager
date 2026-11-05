@@ -9,6 +9,8 @@ import {
   useRevealTappedInRows,
 } from '@academix-admin/navigation-stack';
 import NavigationBar from '@academix-admin/navigation-bar';
+import SideBar from '@academix-admin/sidebar';
+import { Logo } from '@/components/ui/Logo';
 import { useTheme } from '@/context/ThemeContext';
 import { reportNavBarState } from '@/providers/NavBarState';
 import { usePermission } from '@/hooks/usePermission';
@@ -106,8 +108,41 @@ export default function MainShell() {
   // reach nothing in is five stacks' worth of work for a screen they will never see.
   if (isShopper) return <CustomerHome />;
 
+  /*
+   * TWO NAVIGATORS FED THE SAME TABS, AND CSS PICKS ONE — JIMSteps' and academix-web's shell.
+   *
+   * On a phone the tab bar at the foot. From 801px (a tablet on its side, a laptop) the SideBar at
+   * the left, and the pages take the rest of the width beside it, following it as it expands and
+   * collapses: every page lays itself out by its OWN width (`PageScaffold` is a container), so the
+   * same page is one column beside an open sidebar on a tablet and two beside a closed one.
+   *
+   * Tapping the tab already shown returns it to its first page, in either navigator — the bar has
+   * `onReselect`; the SideBar calls `onChange` for the active item too, so it is caught there.
+   */
   return (
     <div className={styles.shell}>
+      <div className={styles.row}>
+        <div className={styles.side}>
+          <SideBar
+            id="main-sidebar"
+            navKeys={navKeys}
+            activeId={activeId}
+            onChange={(id) => (id === activeId ? popStackToRoot(id) : setActive(id))}
+            logo={<Logo size={26} />}
+            backgroundColor={isDark ? '#171d1c' : '#ffffff'}
+            activeColor={isDark ? '#8fcbbe' : '#0b6252'}
+            inactiveColor={isDark ? '#a8b3b1' : '#4d5554'}
+            hoverColor={isDark ? '#a5d8cb' : '#0f7a66'}
+            borderRight={`1px solid ${isDark ? '#2a3231' : '#dde1e0'}`}
+            shadow="none"
+            widthExpanded="232px"
+            widthCollapsed="68px"
+            textSize="15px"
+            iconSize="22px"
+            fontWeight={600}
+            className={styles.sidebar}
+          />
+        </div>
       <div className={styles.stacks}>
         <GroupNavigationStack
           id="main-group"
@@ -123,6 +158,7 @@ export default function MainShell() {
            */
           backStaysInTab
         />
+      </div>
       </div>
 
       <div className={styles.navWrap}>

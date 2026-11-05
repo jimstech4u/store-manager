@@ -353,3 +353,38 @@
   color: var(--text-muted);
   font-weight: 500;
 }
+
+/* ── Wide: the page's own width, beside the SideBar ───────────────────────────────── */
+
+@container page (min-width: 840px) {
+  .overview {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--space-5);
+    align-items: start;
+    margin-bottom: var(--space-2);
+  }
+}
+
+/* The customers as a grid of cards rather than one long column of rows. */
+@container page (min-width: 720px) {
+  .ledger {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: var(--space-2);
+    border: 0;
+    background: none;
+    overflow: visible;
+  }
+
+  .ledger > li + li .ledgerRow {
+    border-top: 1px solid var(--border);
+  }
+
+  .ledgerRow {
+    height: 100%;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+}

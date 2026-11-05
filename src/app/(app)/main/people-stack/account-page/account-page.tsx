@@ -145,6 +145,7 @@ export default function AccountPage() {
 
   return (
     <PageScaffold
+      layout="record"
       onBack={goBack}
       title={account?.customer.name ?? 'Account'}
       subtitle={account?.customer.phone}
@@ -451,7 +452,7 @@ export default function AccountPage() {
       {(receipts.data ?? []).length > 0 && (
         <>
           <h2 className={styles.section}>Receipts</h2>
-          <ul className={styles.receipts}>
+          <ul className={styles.receipts} data-grid>
             {(receipts.data ?? []).map((r) => (
               <li key={r.sale_id}>
                 <button

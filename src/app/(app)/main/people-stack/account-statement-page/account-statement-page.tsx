@@ -138,7 +138,7 @@ export default function AccountStatementPage() {
   const name = st?.customer?.name ?? 'Customer';
 
   return (
-    <PageScaffold onBack={goBack} title="Statement" subtitle={st?.customer?.name ?? 'Their account'}>
+    <PageScaffold layout="record" onBack={goBack} title="Statement" subtitle={st?.customer?.name ?? 'Their account'}>
       <div className={styles.chips} role="tablist" aria-label="Which period">
         {PERIODS.map((p) => (
           <button

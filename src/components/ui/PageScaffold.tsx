@@ -31,6 +31,7 @@ export function PageScaffold({
   action,
   flush = false,
   headerScrolls = false,
+  layout = 'column',
   children,
 }: {
   title: string;
@@ -62,6 +63,20 @@ export function PageScaffold({
    * header left half on screen read as a layout fault.
    */
   headerScrolls?: boolean;
+  /**
+   * HOW MUCH OF A WIDE SCREEN THE PAGE USES. On a phone all three are the phone's width.
+   *
+   *  - `column` (default): a form, or anything read top to bottom — 640px. A form is not easier to
+   *    fill in for being wider; the eye has further to travel between a label and its box.
+   *  - `record`: one customer, one product, one supplier, a ledger — 1040px, its sections side by
+   *    side where they lay themselves out that way.
+   *  - `wide`: a tab's first page, and any page that is a list to browse — the whole width beside
+   *    the SideBar. A list marked `data-grid` becomes a grid of cards once there is room for two.
+   *
+   * The title lines up with the content in every case, rather than sitting at the window's edge
+   * over a column in the middle.
+   */
+  layout?: 'column' | 'record' | 'wide';
   children: ReactNode;
 }) {
   /*
@@ -108,7 +123,7 @@ export function PageScaffold({
       backAriaLabel={backLabel}
       actions={actions}
       rightContent={action}
-      className={`${styles.header} ${headerScrolls ? styles.headerScrolls : ''}`}
+      className={`${styles.header} ${headerScrolls ? styles.headerScrolls : ''} ${styles[layout]}`}
     />
   );
 
@@ -119,7 +134,7 @@ export function PageScaffold({
       snap={headerScrolls}
       bodyClassName={`${styles.body} ${flush ? styles.bodyFlush : ''}`}
     >
-      <div className={styles.inner}>{children}</div>
+      <div className={`${styles.inner} ${styles[layout]}`}>{children}</div>
     </Scaffold>
   );
 }

@@ -166,6 +166,7 @@ export default function PeoplePage() {
 
   return (
     <PageScaffold
+      layout="wide"
       headerScrolls
       onBack={goBack}
       title="People"
@@ -353,7 +354,7 @@ export default function PeoplePage() {
         )
       ) : (
         <>
-          <ul className={styles.list}>
+          <ul className={styles.list} data-grid>
             {list.items.map((c) => {
               const balance = Number(c.balance);
               return (

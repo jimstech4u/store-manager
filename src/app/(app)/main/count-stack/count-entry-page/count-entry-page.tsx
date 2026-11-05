@@ -542,7 +542,7 @@ export default function CountEntryPage() {
             : null) ?? { state: 'ready' });
 
   return (
-    <PageScaffold onBack={goBack} title={active?.name ?? 'Count'} subtitle="Check the shelf"
+    <PageScaffold layout="record" onBack={goBack} title={active?.name ?? 'Count'} subtitle="Check the shelf"
       // UP TO THE RECORD THIS BELONGS TO: the item being counted.
       actions={[
         {

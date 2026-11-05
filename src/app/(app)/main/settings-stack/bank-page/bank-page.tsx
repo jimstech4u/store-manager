@@ -104,6 +104,7 @@ export default function BankPage() {
 
   return (
     <PageScaffold
+      layout="wide"
       onBack={goBack}
       title="Bank accounts"
       subtitle="Where transfers are paid"
@@ -149,7 +150,7 @@ export default function BankPage() {
           recorded — there is just nothing to read out to the customer.
         </InfoPanel>
       ) : (
-        <ul className={styles.list}>
+        <ul className={styles.list} data-grid>
           {accounts.map((a) => (
             <li key={a.id} className={styles.row}>
               <div className={styles.rowMain}>

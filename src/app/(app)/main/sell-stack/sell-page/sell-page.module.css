@@ -336,3 +336,19 @@
   gap: var(--space-3);
   margin-bottom: var(--space-3);
 }
+
+/* ── Wide: the page's own width, beside the SideBar ───────────────────────────────── */
+
+/* A long receipt's lines side by side, so more of the order is on screen at once. */
+@container page (min-width: 880px) {
+  .lines {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    align-items: start;
+  }
+
+  /* "Add an item" and "Scan" stay a pair, not two bars across a desktop. */
+  .addRow {
+    max-width: 640px;
+  }
+}

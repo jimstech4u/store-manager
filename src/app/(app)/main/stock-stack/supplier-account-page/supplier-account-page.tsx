@@ -100,7 +100,7 @@ export default function SupplierAccountPage() {
   const owed = account.data?.owed ?? 0;
 
   return (
-    <PageScaffold onBack={goBack} title="Supplier" subtitle="What you owe, and what went back">
+    <PageScaffold layout="record" onBack={goBack} title="Supplier" subtitle="What you owe, and what went back">
       <ProblemDialog problem={problem} title="Could not read this account" />
 
       <LoadArea area={account} what="this account">

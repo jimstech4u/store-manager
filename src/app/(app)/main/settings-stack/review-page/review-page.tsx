@@ -184,6 +184,7 @@ export default function ReviewPage() {
 
   return (
     <PageScaffold
+      layout="wide"
       onBack={goBack}
       title="Waiting for you"
       subtitle={!queue ? undefined : total === 0 ? 'Nothing to check' : `${total} to check`}
@@ -262,7 +263,7 @@ export default function ReviewPage() {
           </h2>
           <p className={styles.sectionNote}>Items your staff started selling.</p>
 
-          <ul className={styles.list}>
+          <ul className={styles.list} data-grid>
             {queue.products.map((p) => (
               <li className={styles.card} key={p.id}>
                 <div className={styles.cardMain}>
@@ -326,7 +327,7 @@ export default function ReviewPage() {
           </h2>
           <p className={styles.sectionNote}>People your staff added, usually to sell on credit.</p>
 
-          <ul className={styles.list}>
+          <ul className={styles.list} data-grid>
             {queue.customers.map((c) => (
               <li className={styles.card} key={c.id}>
                 <div className={styles.cardMain}>
@@ -381,7 +382,7 @@ export default function ReviewPage() {
             after.
           </p>
 
-          <ul className={styles.list}>
+          <ul className={styles.list} data-grid>
             {queue.stock_entries.map((s) => (
               <li className={styles.card} key={s.id}>
                 <div className={styles.cardMain}>

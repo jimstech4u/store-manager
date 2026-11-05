@@ -26,10 +26,18 @@ export interface ActionTile {
  * suppliers?" is not a question anybody at a counter should have to answer twice. A row of tiles,
  * each a picture AND a word, the way a banking app lays out what can be done from its first screen.
  */
-export function ActionTiles({ tiles, label }: { tiles: ActionTile[]; label: string }) {
+export function ActionTiles({
+  tiles,
+  label,
+  className,
+}: {
+  tiles: ActionTile[];
+  label: string;
+  className?: string;
+}) {
   if (tiles.length === 0) return null;
   return (
-    <nav className={styles.tiles} aria-label={label}>
+    <nav className={`${styles.tiles} ${className ?? ''}`} aria-label={label}>
       {tiles.map((t) => (
         <button
           key={t.key}

@@ -179,6 +179,7 @@ export default function StaffPage() {
 
   return (
     <PageScaffold
+      layout="wide"
       onBack={goBack}
       title="Your team"
       subtitle={(() => {
@@ -237,7 +238,7 @@ export default function StaffPage() {
       */}
       <ProblemDialog problem={problem} title="Not changed" />
 
-      <ul className={styles.list}>
+      <ul className={styles.list} data-grid>
         {members.filter((m) => m.status === 'active').map((m) => (
           <li key={m.user_id} className={styles.row}>
             <div className={styles.rowMain}>
@@ -297,7 +298,7 @@ export default function StaffPage() {
       {members.some((m) => m.status === 'removed') && (
         <>
           <h2 className={styles.section}>No longer here</h2>
-          <ul className={styles.list}>
+          <ul className={styles.list} data-grid>
             {members
               .filter((m) => m.status === 'removed')
               .map((m) => (
@@ -345,7 +346,7 @@ export default function StaffPage() {
             These people have been given a role but have not signed up yet. They join automatically
             the first time they sign in with this email address.
           </p>
-          <ul className={styles.list}>
+          <ul className={styles.list} data-grid>
             {invites.map((i) => (
               <li key={i.id} className={styles.row}>
                 <div className={styles.rowMain}>

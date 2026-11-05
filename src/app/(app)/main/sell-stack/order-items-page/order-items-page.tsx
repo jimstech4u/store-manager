@@ -382,7 +382,7 @@ export default function OrderItemsPage() {
   const message = link && order ? orderShareMessage(store.name, link, formatMoney(draftTotal(order))) : '';
 
   return (
-    <PageScaffold onBack={goBack} title="All items" subtitle={order?.customerName || 'This order'}>
+    <PageScaffold layout="record" onBack={goBack} title="All items" subtitle={order?.customerName || 'This order'}>
       <PageState status={status}>
         {() =>
           order && doc && (

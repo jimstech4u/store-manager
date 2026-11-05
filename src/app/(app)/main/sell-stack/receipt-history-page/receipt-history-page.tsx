@@ -215,6 +215,7 @@ export default function ReceiptHistoryPage() {
 
   return (
     <PageScaffold
+      layout="record"
       onBack={goBack}
       title="What this receipt has said"
       subtitle="Every version, and why it changed"

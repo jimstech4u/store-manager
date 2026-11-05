@@ -522,3 +522,22 @@
 .signOut {
   margin: var(--space-2) 0 var(--space-6);
 }
+
+/* ── Wide: the page's own width, beside the SideBar ───────────────────────────────── */
+
+@container page (min-width: 760px) {
+  .groups {
+    columns: 2;
+    column-gap: var(--space-5);
+  }
+
+  .signOut {
+    max-width: 360px;
+  }
+}
+
+@container page (min-width: 1160px) {
+  .groups {
+    columns: 3;
+  }
+}

@@ -71,7 +71,7 @@ export default function EmptiesPage() {
       : { state: 'loading', what: 'who is holding your containers' };
 
   return (
-    <PageScaffold headerScrolls onBack={goBack} title="Empties" subtitle="Who is holding your containers">
+    <PageScaffold layout="wide" headerScrolls onBack={goBack} title="Empties" subtitle="Who is holding your containers">
       <PageState status={status}>
         {() => (
           <>
@@ -137,7 +137,7 @@ export default function EmptiesPage() {
           No containers have gone out yet. They will appear here as soon as somebody takes some.
         </p>
       ) : (
-        <ul className={styles.list}>
+        <ul className={styles.list} data-grid>
           {rows.map((r) => (
             <li key={r.customerId}>
               <button

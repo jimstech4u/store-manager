@@ -164,6 +164,7 @@ export default function EmptiesCustomerPage() {
 
   return (
     <PageScaffold
+      layout="record"
       onBack={goBack}
       title="Empties"
       subtitle="What they are holding, and every move of it"
