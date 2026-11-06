@@ -775,9 +775,10 @@ new way out its own drawing. Documents themselves are built by the pure builders
 
 ## A wide screen is used, not left empty
 
-From 801px the SideBar replaces the tab bar (`main/page.tsx`, as JIMSteps and academix-web do it) and
-`--nav-height` / `--bar-clearance` are 0 on the shell, so nothing makes room for a bar that is not
-there and the floating pills sit in the corner.
+From 801px the SideBar replaces the tab bar (`main/page.tsx`, as JIMSteps and academix-web do it).
+The bar has `media="(max-width: 800px)"` (navigation-bar 0.2.0): above that it draws nothing, gives
+back the `--nav-height` it writes on `<body>`, and reports itself hidden, so `:root`'s 0 applies and
+the floating pills sit in the corner. The sidebar's tints are its own props (sidebar 0.2.0).
 
 Every page says how much width it uses — `PageScaffold layout=`:
 - `column` (default) — a form, 640px. Wider is not easier to fill in.
