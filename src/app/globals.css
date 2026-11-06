@@ -628,37 +628,12 @@ svg[data-icon] {
 }
 
 /*
- * THE SIDEBAR IN THIS APP'S COLOURS. sidebar 0.1.1 draws its hover, selected and divider tints as
- * white-on-dark, which vanish on the light theme — the selected tab was told apart by its text
- * colour alone. Raised over the package's own `#id .sidebar-item` rules by the `.sidebar` class.
- * (USAGE_PATTERN.md, sidebar → Gaps.)
+ * NO TAB BAR ON A WIDE SCREEN — the SideBar is the navigation there (main/page.tsx). The bar is not
+ * drawn and gives back the `--nav-height` it writes on <body> (navigation-bar 0.2.0 `media`), so
+ * this is the value: nothing leaves room at a page's foot for a bar that is not there.
  */
-#main-sidebar.sidebar .sidebar-item {
-  min-height: 44px;
-}
-
-#main-sidebar.sidebar .sidebar-item:hover {
-  background-color: var(--surface-sunken);
-}
-
-#main-sidebar.sidebar .sidebar-item.active {
-  background-color: var(--primary-subtle);
-}
-
-#main-sidebar.sidebar .sidebar-header,
-#main-sidebar.sidebar .sidebar-footer {
-  border-color: var(--border);
-}
-
-#main-sidebar.sidebar .sidebar-toggle {
-  color: var(--text-muted);
-}
-
-#main-sidebar.sidebar .sidebar-toggle:hover {
-  background-color: var(--surface-sunken);
-  color: var(--text);
-}
-
-#main-sidebar.sidebar {
-  height: 100%;
+@media (min-width: 801px) {
+  :root {
+    --nav-height: 0px;
+  }
 }

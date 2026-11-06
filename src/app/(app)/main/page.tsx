@@ -116,8 +116,8 @@ export default function MainShell() {
    * collapses: every page lays itself out by its OWN width (`PageScaffold` is a container), so the
    * same page is one column beside an open sidebar on a tablet and two beside a closed one.
    *
-   * Tapping the tab already shown returns it to its first page, in either navigator — the bar has
-   * `onReselect`; the SideBar calls `onChange` for the active item too, so it is caught there.
+   * Tapping the tab already shown returns it to its first page, in either navigator (`onReselect`
+   * on both, sidebar 0.2.0).
    */
   return (
     <div className={styles.shell}>
@@ -127,7 +127,8 @@ export default function MainShell() {
             id="main-sidebar"
             navKeys={navKeys}
             activeId={activeId}
-            onChange={(id) => (id === activeId ? popStackToRoot(id) : setActive(id))}
+            onChange={(id) => setActive(id)}
+            onReselect={(id) => popStackToRoot(id)}
             logo={<Logo size={26} />}
             backgroundColor={isDark ? '#171d1c' : '#ffffff'}
             activeColor={isDark ? '#8fcbbe' : '#0b6252'}
@@ -135,6 +136,13 @@ export default function MainShell() {
             hoverColor={isDark ? '#a5d8cb' : '#0f7a66'}
             borderRight={`1px solid ${isDark ? '#2a3231' : '#dde1e0'}`}
             shadow="none"
+            // The tints in the app's own tokens, so they follow the theme (sidebar 0.2.0; they were
+            // white-on-dark, invisible on the light theme).
+            activeBackground="var(--primary-subtle)"
+            hoverBackground="var(--surface-sunken)"
+            dividerColor="var(--border)"
+            toggleColor="var(--text-muted)"
+            height="100%"
             widthExpanded="232px"
             widthCollapsed="68px"
             textSize="15px"
@@ -188,6 +196,12 @@ export default function MainShell() {
            * `autohide` slides the whole bar down and brings it straight back on an upward scroll.
            */
           mode="autohide"
+          /*
+           * The bar exists only on a phone-width screen (navigation-bar 0.2.0). From 801px the
+           * SideBar is the navigation: the bar draws nothing, gives back the `--nav-height` it
+           * wrote on <body>, and reports itself hidden — so the floating pills drop to the corner.
+           */
+          media="(max-width: 800px)"
           barBorderRadius="16px 16px 0 0"
           barShadow={
             isDark ? '0 -4px 20px rgba(0, 0, 0, 0.4)' : '0 -4px 20px rgba(0, 0, 0, 0.1)'

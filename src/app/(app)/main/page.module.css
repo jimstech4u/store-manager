@@ -40,20 +40,10 @@
 }
 
 /*
- * Wide screens: the SideBar, no tab bar — so nothing leaves room at its foot for a bar that is not
- * drawn, and the floating pills sit in the corner.
- *
- * Set HERE, on the shell, not on :root: navigation-bar writes `--nav-height` inline on <body> while
- * it is mounted (hidden by CSS, it still is), and an inline body value beats any :root rule. The
- * shell is nearer every page than <body>, so its own value is the one they inherit. (JIMSteps sets
- * it on its shell for the same reason.)
+ * Wide screens: the SideBar, no tab bar. The bar itself is not drawn there (`media`); its wrapper
+ * goes too. `--nav-height` is 0 there (globals.css).
  */
 @media (min-width: 801px) {
-  .shell {
-    --nav-height: 0px;
-    --bar-clearance: 0px;
-  }
-
   .navWrap {
     display: none;
   }

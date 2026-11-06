@@ -48,11 +48,9 @@ export function FloatingAction({
    * rest, so the very first paint is never on top of it.
    */
   const clearsBar = bar === null || !bar.hidden;
-  /*
-   * `--bar-clearance` is 0 on a wide screen (main/page.module.css), where the SideBar replaces the
-   * bar and the pill belongs in the corner. On a phone it is unset and the bar's report decides.
-   */
-  const barHeight = `var(--bar-clearance, ${bar?.height ?? 'var(--nav-height)'})`;
+  // On a wide screen the bar is not drawn and reports itself hidden (`media`), so the pill takes
+  // the corner.
+  const barHeight = bar?.height ?? 'var(--nav-height)';
 
   return (
     <button
