@@ -19,6 +19,7 @@ import { chromium } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 import { trackDrafts, sweepDrafts } from './probe-drafts.mjs';
+import { addOnTill } from './till.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3100';
 const env = Object.fromEntries(
@@ -79,7 +80,14 @@ await p.route('**/rest/v1/rpc/save_draft_order*', async (route) => {
 });
 
 const payBox = () => p.locator('section').filter({ hasText: 'How are they paying?' }).first();
-const qty = async () => p.getByLabel('Quantity').locator('visible=true').first().inputValue();
+// The quantity on the till's compact line, read from its button ("3 crates — type a quantity").
+const qty = async () => {
+  const label = await p.getByRole('button', { name: /— type a quantity$/ }).locator('visible=true').first().getAttribute('aria-label');
+  const word = (label ?? '').split(' ')[0];
+  const parts = { '½': 0.5, '¼': 0.25, '¾': 0.75 };
+  const m = /^(\d*)([½¼¾]?)$/.exec(word);
+  return m ? String(Number(m[1] || 0) + (parts[m[2]] ?? 0)) : word;
+};
 
 try {
   await p.goto(`${BASE}/login`, { waitUntil: 'networkidle' });
@@ -89,12 +97,8 @@ try {
   await p.waitForURL(/\/main/, { timeout: 60000 });
   await p.waitForTimeout(7000);
 
-  await p.getByRole('button', { name: /Add an item/ }).locator('visible=true').first().click();
+  await addOnTill(p, 'Big Stout', ITEM);
   await p.waitForTimeout(1500);
-  await p.keyboard.type('Big Stout');
-  await p.waitForTimeout(2500);
-  await p.locator('.react-modal-sheet-container').getByText(ITEM, { exact: true }).locator('visible=true').first().click();
-  await p.waitForTimeout(3000);
   const more = p.getByRole('button', { name: `One more ${ITEM}` }).locator('visible=true').first();
   await more.click();
   await p.waitForTimeout(3500); // saved, quietly

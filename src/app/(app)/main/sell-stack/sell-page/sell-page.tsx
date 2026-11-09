@@ -6,20 +6,20 @@ import { PageScaffold } from '@/components/ui/PageScaffold';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { useWakeRefresh } from '@/hooks/useWakeRefresh';
-import { useOverlayRoute } from '@academix-admin/navigation-stack';
 import { useNav, scrollIntoViewBelow } from '@academix-admin/navigation-stack';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
-import { CameraIcon, CloseIcon, MinusIcon, PlusIcon, ReceiptIcon, CashIcon,
+import { CloseIcon, MinusIcon, ReceiptIcon, CashIcon,
   ReturnIcon, BoxIcon } from '@/components/ui/Icon';
 import { onlineOrdersChanged, usePendingOrderCount } from '@/lib/stacks/online-orders';
 import { CustomerPicker } from '@/components/customers/CustomerPicker';
 import { CustomerTabs } from '@/components/sell/CustomerTabs';
 import { ConfirmDialog, useConfirm } from '@/components/ui/Dialog';
 import { useAsyncAction } from '@/components/ui/AsyncAction';
-import { ProductPicker } from '@/components/catalog/ProductPicker';
-import { SaleLineRow } from '@/components/sell/SaleLineRow';
+import { QuickAdd } from '@/components/sell/QuickAdd';
+import { TillLine } from '@/components/sell/TillLine';
+import { usePermission } from '@/hooks/usePermission';
 import { findByBarcode } from '@/lib/stacks/mid-sale';
 import { useUncountedToday } from '@/lib/stacks/count-gate';
 import { useUnpricedOnSale } from '@/lib/stacks/price-gate';
@@ -77,6 +77,7 @@ export default function SellPage() {
   const goBack = useStackBack();
   const nav = useNav();
   const { store } = useAuth();
+  const { canOpen } = usePermission();
   /*
    * How many orders are waiting, for the badge. Its own small read rather than the list, because the
    * till asks on every visit and the list is opened rarely.
@@ -137,24 +138,6 @@ export default function SellPage() {
     );
     return cleanup;
   }, [nav, savedChannel]);
-
-  /*
-   * Whether the item picker is up — a plain flag, not a second SelectionViewer controller.
-   *
-   * `ProductPicker` owns the viewer and its controller. This page held one too, so the same sheet
-   * had two things claiming to control it; the picker's own theme, search and snap state are its
-   * business now, and all this screen has to say is whether it is asking.
-   */
-  const [isPickerOpen, setPickerOpen] = useState(false);
-  const pickerOps = useMemo(
-    () => ({ open: () => setPickerOpen(true), close: () => setPickerOpen(false) }),
-    [],
-  );
-
-  // Back dismisses the picker rather than leaving the app mid-sale.
-  useOverlayRoute('sell:picker', isPickerOpen, () => {
-    pickerOps.close();
-  });
 
   /*
    * Three dialogs, because three of the four customer actions ask something first.
@@ -466,7 +449,7 @@ export default function SellPage() {
     };
   }, [nav]);
 
-  const addProductRef = useRef<((product: Product) => Promise<void>) | null>(null);
+  const addProductRef = useRef<((product: Product, qty?: number | null) => Promise<void>) | null>(null);
 
   /*
    * WHAT IS ON ITS WAY IN, by name.
@@ -483,13 +466,16 @@ export default function SellPage() {
   /* Nothing the records say is finished goes on without somebody looking (FinishedItem). */
   const finishedGuard = useFinishedGuard();
 
-  const addProduct = async (product: Product) => {
+  /*
+   * `qty` is what was typed in front of the item in the till's box ("3 b/s"), or null when nothing
+   * was — a barcode, a new item, or a name on its own.
+   */
+  const addProduct = async (product: Product, qty: number | null = null) => {
     if (!activeOrder) return;
     const productId = product.id;
     setAdding(product.name);
     // The picker, a barcode and a new item all come through here, so all of them are checked.
     if (!(await finishedGuard.allow(product))) {
-      pickerOps.close();
       setAdding(null);
       return;
     }
@@ -532,14 +518,18 @@ export default function SellPage() {
        */
       const rules = unitRulesFor(existing);
       const soldWholeOnly = rules.wholeDigit && partsFor(rules).length === 0;
+      const current = Number(existing.qty);
+      const had = Number.isFinite(current) ? current : 0;
 
-      if (soldWholeOnly) {
-        const current = Number(existing.qty);
-        updateLine(activeOrder.clientUuid, existing.key, {
-          qty: String((Number.isFinite(current) ? current : 0) + 1),
-        });
+      /*
+       * A NUMBER TYPED IN FRONT IS MORE OF IT — "2 b/s" with three already on is five. Said, so it
+       * is added whatever the item is sold in, snapped to the parts the shop sells.
+       */
+      if (qty !== null || soldWholeOnly) {
+        const next = String(snapQty(had + (qty ?? 1), rules));
+        updateLine(activeOrder.clientUuid, existing.key, { qty: next });
+        void repriceLine(existing, next, existing.saleUnitId);
       }
-      pickerOps.close();
       setAdding(null);
       return;
     }
@@ -548,8 +538,14 @@ export default function SellPage() {
      * The till's new line: first shape, that shape's price, one crate or nothing — the same
      * `startLine` the sale-line page composes with, so a line starts the same wherever it is added.
      */
-    addLine(activeOrder.clientUuid, startLine(product, units));
-    pickerOps.close();
+    const line = startLine(product, units);
+    /*
+     * HOW MANY WAS SAID, when it was — snapped to what the shop sells this shape in, so "2.3"
+     * typed at a half-crate item lands on 2½ rather than on a line the database refuses.
+     */
+    if (qty !== null) line.qty = String(snapQty(qty, lineRules(line, units)));
+    addLine(activeOrder.clientUuid, line);
+    if (qty !== null) void repriceLine(line, line.qty, line.saleUnitId);
     // The line is on the receipt, so the placeholder has done its job — cleared here rather than
     // after the count question below, which is a background enquiry the seller is not waiting on.
     setAdding(null);
@@ -677,6 +673,16 @@ export default function SellPage() {
      * a payment screen for the wrong customer.
      */
     await nav.push('take_payment_page', { id: saved?.id ?? activeOrder.id });
+  };
+
+  /*
+   * A LINE OPENS ON ITS OWN PAGE — the full row, to type a quantity, a price or the whole amount.
+   * Saved first, so the page finds the order by its id on a reload or another phone.
+   */
+  const openLine = async (lineKey: string) => {
+    if (!activeOrder) return;
+    const saved = await push(activeOrder);
+    void nav.push('sale_line_page', { id: saved?.id ?? activeOrder.id ?? '', line: lineKey });
   };
 
   if (!store) return null;
@@ -883,6 +889,37 @@ export default function SellPage() {
          */
         <div ref={orderTopRef} className={styles.orderBox}>
           {/*
+            THE ONE BOX: type what they are buying ("3 b/s") and it goes on. It replaced "Add an
+            item" (a sheet, a search inside it, rows with no price) and "Scan a barcode", which is
+            the camera in the box now. At the top, under the customer bar, so its results are above
+            the keyboard rather than under it.
+          */}
+          <QuickAdd
+            storeId={store.id}
+            onAdd={(product, qty) => addProductRef.current?.(product, qty)}
+            onScan={() => {
+              setScanProblem(null);
+              setScanning(true);
+            }}
+            /*
+             * THE REAL FORM, PUSHED — offered to whoever may make items. The till is pushed UNDER,
+             * so nothing on the order is lost; the new item comes back on this page's own channel.
+             */
+            onAddNew={
+              canOpen('product_form_page')
+                ? (typed) => {
+                    setScanProblem(null);
+                    void nav.push('product_form_page', {
+                      required: 'minimum',
+                      then: savedChannel,
+                      ...(typed.trim() ? { name: typed.trim() } : {}),
+                    });
+                  }
+                : undefined
+            }
+          />
+
+          {/*
             WHAT IS ON ITS WAY IN.
 
             Outside the `lines.length > 0` guard deliberately: the first item added to an empty
@@ -958,15 +995,10 @@ export default function SellPage() {
             <div className={styles.lines}>
               {activeOrder.lines.map((line) => (
                 /*
-                 * THE ROW IS SHARED WITH THE CORRECTION SCREEN — see SaleLineRow.
-                 *
-                 * It was ~300 lines inline here. Correcting a settled receipt now works like the
-                 * till, and the alternative was a second copy of the shape chips, the stepper, the
-                 * snapping, the fractions and the tap-the-total behaviour, which would have drifted
-                 * within a month. Nothing about the till moved into the row: it still does not know
-                 * whether there is a draft behind it or how a price is worked out.
+                 * COMPACT ON THE TILL (TillLine), so the whole order is in view; the full row
+                 * (SaleLineRow) is the line's own page, opened by tapping its name, quantity or price.
                  */
-                <SaleLineRow
+                <TillLine
                   key={line.key}
                   line={line}
                   shapes={saleUnits[line.productId] ?? []}
@@ -979,6 +1011,7 @@ export default function SellPage() {
                   onRemove={() => removeLine(activeOrder.clientUuid, line.key)}
                   onStep={(direction) => step(line, direction)}
                   onReprice={(qty, saleUnitId) => repriceLine(line, qty, saleUnitId)}
+                  onOpen={() => void openLine(line.key)}
                   onCountNow={() => void nav.push('count_gate_page', { focus: line.productId })}
                   onPriceNow={() => void nav.push('price_gate_page')}
                 />
@@ -986,46 +1019,21 @@ export default function SellPage() {
             </div>
           )}
 
-          {/* ── Add an item ───────────────────────────────────────────────────── */}
-          {/*
-            The two ways onto a receipt, side by side on the page.
-
-            Scanning was inside the picker, which meant opening a list to search in order to say
-            "I do not want to search". It belongs next to the button it is an alternative to.
-          */}
-          <div className={styles.addRow}>
-            <Button size="large" fullWidth onClick={pickerOps.open}>
-              <PlusIcon /> Add an item
-            </Button>
-            <Button
-              variant="secondary"
-              size="large"
-              fullWidth
-              onClick={() => {
-                setScanProblem(null);
-                setScanning(true);
-              }}
-            >
-              <CameraIcon /> Scan a barcode
-            </Button>
-          </div>
-
           {/*
             ALL ITEMS — the order on its own, marked NOT A RECEIPT, to share, print or save before
-            anything is paid. Under the two ways onto the receipt, because it is about the same list.
+            anything is paid. A link under the list it is about, not a third full-width button.
           */}
           {activeOrder.lines.length > 0 && (
-            <Button
-              variant="secondary"
-              size="large"
-              fullWidth
+            <button
+              type="button"
+              className={styles.allItems}
               onClick={async () => {
                 const saved = await push(activeOrder);
                 void nav.push('order_items_page', { id: saved?.id ?? activeOrder.id ?? '' });
               }}
             >
-              <ReceiptIcon /> All items
-            </Button>
+              <ReceiptIcon /> All items — share, print or save the list
+            </button>
           )}
 
           {/*
@@ -1039,54 +1047,7 @@ export default function SellPage() {
 
         </div>
       )}
-      {/*
-        Choosing a product is a SELECTION, so it uses the selection viewer.
-
-        It was an inline branch that replaced the whole receipt with a search box and a list —
-        the seller lost sight of what they were building at the exact moment they were adding to
-        it. A sheet keeps the order on screen behind it, gets the full height for results, and
-        brings its own search, empty and error states rather than this page hand-rolling three
-        more.
-
-        zIndex 1000: the tab bar is 50 and a sibling of the page, so anything lower is a sheet the
-        tabs punch through.
-      */}
       {finishedGuard.dialog}
-      {activeOrder && (
-        <ProductPicker
-          open={isPickerOpen}
-          onClose={pickerOps.close}
-          storeId={store.id}
-          onPick={(p) => void addProduct(p)}
-          /*
-           * OFFERED TO ANYONE WHO MAY SELL, which is the whole point.
-           *
-           * It used to appear only for `products.manage`, so a seller who was asked for something
-           * the shop had never entered had no way forward at all — and the way they find is paper,
-           * which loses the sale as well as the record. Whoever may sell may add; what they cannot
-           * do is vouch for it, and the review queue handles that.
-           *
-           * The quick sheet rather than the full form even for a manager: there is a customer
-           * waiting, and the eleven-question form belongs on the item's own screen.
-           */
-          /*
-            THE REAL FORM, PUSHED — not a second one in a sheet.
-
-            The till is pushed UNDER, not popped, so nothing on the receipt is lost by using the
-            whole screen. `required: 'minimum'` asks only what a sale needs; the result comes back
-            through `onProductSaved`, which this page already provides.
-          */
-          onAddNew={(typed) => {
-            pickerOps.close();
-            setScanProblem(null);
-            void nav.push('product_form_page', {
-              required: 'minimum',
-              then: savedChannel,
-              ...(typed?.trim() ? { name: typed.trim() } : {}),
-            });
-          }}
-        />
-      )}
 
       {/*
         Reserves the pill's height at the foot of the page.

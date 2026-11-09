@@ -1,0 +1,165 @@
+/*
+  THE TILL'S ONE BOX, and what it finds.
+
+  The field is the SearchField's shape (pill, 2px border, the focus ring), with a camera in place of
+  the clear button while it is empty: scanning is the other way of saying what they are buying.
+  Results are rows under the box, never a sheet — a sheet with a keyboard in it is the thing the
+  shop asked to be rid of.
+*/
+
+.box {
+  margin-bottom: var(--space-4);
+}
+
+.field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.icon {
+  position: absolute;
+  left: var(--space-4);
+  display: inline-flex;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.input {
+  width: 100%;
+  min-height: var(--touch-comfortable);
+  padding: var(--space-3) var(--touch-comfortable) var(--space-3) calc(var(--space-4) + 30px);
+  font-size: var(--text-base);
+  color: var(--text);
+  background: var(--surface);
+  border: 2px solid var(--border-strong);
+  border-radius: var(--radius-full);
+}
+
+.input::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-subtle);
+}
+
+/* The browser's own clear cross would sit beside ours. */
+.input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.action {
+  position: absolute;
+  right: var(--space-1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--touch-min);
+  min-height: var(--touch-min);
+  border-radius: var(--radius-full);
+  color: var(--primary);
+}
+
+.action:hover {
+  background: var(--surface-sunken);
+}
+
+/* "3 of b/s": what the number in front was read as, before anything is added. */
+.said {
+  margin: var(--space-2) var(--space-4) 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.said strong {
+  color: var(--text);
+}
+
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+}
+
+.result:hover {
+  border-color: var(--border-strong);
+}
+
+/* The one Enter adds. */
+.first {
+  border: 2px solid var(--primary);
+  background: var(--primary-subtle);
+}
+
+.top,
+.bottom {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.name {
+  font-weight: 700;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.price {
+  flex: none;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.left {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  min-width: 0;
+}
+
+.enter {
+  flex: none;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.note {
+  margin: 0;
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* Making the item new, when results are there: a link, so it does not outshout what was found. */
+.addNew {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: flex-start;
+  min-height: var(--touch-min);
+  padding: 0 var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--primary);
+}

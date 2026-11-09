@@ -2,7 +2,7 @@
  * THE SELL FLOW, PHOTOGRAPHED — one sale walked through on a phone, every screen saved, so the flow
  * can be redesigned against what it is and compared as it changes.
  *
- * Builds a three-item sale on a tab of its own (the shop's real open orders untouched: the browser
+ * Builds a three-item sale through the till's box on a tab of its own (the shop's real open orders untouched: the browser
  * is told there are none), opens each step — the picker, the till, a line, Take payment, All items —
  * and never settles. The tab is cancelled at the end.
  *
@@ -48,15 +48,15 @@ const shot = async (step, full = false) => {
 };
 const scrollAll = (to) => p.evaluate((y) => document.querySelectorAll('*').forEach((e) => { if (e.scrollHeight > e.clientHeight + 50) e.scrollTop = y === 'end' ? e.scrollHeight : 0; }), to);
 
-async function addItem(search, exact) {
-  await tap(p.getByRole('button', { name: /Add an item/ }).locator('visible=true').first());
-  await p.waitForTimeout(1500);
-  if (search) { await p.keyboard.type(search); await p.waitForTimeout(2500); }
-  if (!exact) return;
-  await tap(p.locator('.react-modal-sheet-container').getByText(exact, { exact: true }).locator('visible=true').first());
+/** One item through the till's box: tap it, type, tap the result. Three taps, whatever the quantity. */
+async function addItem(typed, exact, shotName) {
+  const box = p.getByLabel('Add an item: how many, then what').locator('visible=true').first();
+  await tap(box);
+  await box.pressSequentially(typed, { delay: 40 });
+  await p.waitForTimeout(2500);
+  if (shotName) await shot(shotName);
+  await tap(p.getByRole('option').filter({ hasText: exact }).first());
   await p.waitForTimeout(3000);
-  await tap(p.getByRole('button', { name: `One more ${exact}` }).locator('visible=true').first());
-  await p.waitForTimeout(1200);
 }
 
 try {
@@ -69,20 +69,10 @@ try {
   await p.waitForTimeout(8000);
   await shot('till-empty');
 
-  await addItem('', null);
-  await shot('picker-open');
-  await p.keyboard.type('Big Stout');
-  await p.waitForTimeout(2500);
-  await shot('picker-searching');
-  await tap(p.locator('.react-modal-sheet-container').getByText('Big Stout Bottle (600mL)', { exact: true }).locator('visible=true').first());
-  await p.waitForTimeout(3000);
-  await shot('till-one-line-no-qty');
-  await tap(p.getByRole('button', { name: 'One more Big Stout Bottle (600mL)' }).locator('visible=true').first());
-  await p.waitForTimeout(1200);
+  await addItem('2 Big Stout', 'Big Stout Bottle (600mL)', 'till-typing');
   await shot('till-one-line');
-
-  await addItem('Heineken', 'Heineken Big Bottle (600mL)');
-  await addItem('Small 7up', 'Small 7up Bottle (35cl)');
+  await addItem('½ Heineken', 'Heineken Big Bottle (600mL)');
+  await addItem('1 Small 7up', 'Small 7up Bottle (35cl)');
   await shot('till-three-lines');
   await scrollAll('end');
   await p.waitForTimeout(800);

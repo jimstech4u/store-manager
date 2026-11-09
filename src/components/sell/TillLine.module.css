@@ -1,0 +1,197 @@
+/*
+  ONE LINE OF THE ORDER, COMPACT.
+
+  Three rows at most — the name and its total, the shapes when there is a choice, then minus, the
+  quantity, plus, the parts and the price — so six items fit where one full row used to.
+*/
+
+.line {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+/* A line with nothing on it is not a sale yet, and the pay button says so too. */
+.lineEmpty {
+  border-color: var(--warning);
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+  font-weight: 700;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.total {
+  flex: none;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.below {
+  color: var(--danger);
+}
+
+.remove {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin: -4px -4px 0 0;
+  border-radius: var(--radius);
+  color: var(--danger);
+}
+
+.remove:hover {
+  background: var(--danger-subtle);
+}
+
+.flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.flag {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--warning-subtle);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.shapes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.shape {
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.shapeOn {
+  border: 2px solid var(--primary);
+  background: var(--primary-subtle);
+  color: var(--primary);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.stepper {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--touch-min);
+  min-height: var(--touch-min);
+  color: var(--primary);
+  background: var(--surface);
+}
+
+.step:disabled {
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+.qty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 64px;
+  padding: 0 var(--space-2);
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.qtyEmpty {
+  background: var(--warning-subtle);
+}
+
+.qtyFigure {
+  font-size: var(--text-lg);
+  font-weight: 800;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.qtyUnit {
+  font-size: var(--text-xs, 12px);
+  color: var(--text-muted);
+}
+
+.parts {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.part {
+  min-width: 40px;
+  min-height: var(--touch-min);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 700;
+}
+
+.partOn {
+  border: 2px solid var(--primary);
+  background: var(--primary-subtle);
+  color: var(--primary);
+}
+
+/* The price, as a way in to change it — pushed to the end of the row. */
+.each {
+  margin-left: auto;
+  padding: var(--space-1) 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.ask {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}

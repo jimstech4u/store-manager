@@ -17,6 +17,7 @@ import { chromium } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 import { trackDrafts, sweepDrafts } from './probe-drafts.mjs';
+import { addOnTill } from './till.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3100';
 const env = Object.fromEntries(
@@ -45,7 +46,7 @@ const PROBE_DRAFTS = trackDrafts(p);
 await p.route('**/rest/v1/rpc/my_open_drafts*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
 
 const tab = (name) => p.locator('.nav-item').filter({ hasText: new RegExp(`^${name}$`) }).first().click();
-const lines = () => p.locator('[class*="SaleLineRow_line__"]').locator('visible=true').count();
+const lines = () => p.locator('[class*="TillLine_line__"]').locator('visible=true').count();
 
 try {
   await p.goto(`${BASE}/login`, { waitUntil: 'networkidle' });
@@ -56,12 +57,8 @@ try {
   await p.waitForURL(/\/main/, { timeout: 60000 });
   await p.waitForTimeout(8000);
 
-  await p.getByRole('button', { name: /Add an item/ }).locator('visible=true').first().click();
-  await p.waitForTimeout(1800);
-  await p.keyboard.type('Chivita Active');
+  await addOnTill(p, 'Chivita Active', 'Chivita Active (1L)');
   await p.waitForTimeout(3000);
-  await p.locator('.react-modal-sheet-container').getByText('Chivita Active (1L)', { exact: true }).locator('visible=true').first().click();
-  await p.waitForTimeout(5000);
   const before = await lines();
   check('the till has an order with one item', before === 1, `${before} line(s)`);
 

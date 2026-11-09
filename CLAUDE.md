@@ -823,6 +823,12 @@ free, then start.
 Before saying it is done: `npx tsc --noEmit`, `npx next lint`, `npx next build`, and the probes
 for the areas touched.
 
+**The till adds through its one box now** (`QuickAdd`, "3 b/s"), not the "Add an item" sheet, and its
+lines are `TillLine` (compact; the full `SaleLineRow` is the line's own page). Probes that opened the
+sheet from the till need `addOnTill(page, typed, name)` from `scripts/till.mjs`; the delivery screen
+and the Stock "Add an item you sell" button are unchanged. Moved so far: `probe-order-keeps-payments-ui`,
+`probe-product-save-stays-off-till-ui`, `shots-sell-flow`.
+
 **Chrome is not the iPhone.** Safari drops a hidden element's scroll offset; Chrome keeps it. Every
 page went back to the top on iPhone after a push and Back while Chrome showed nothing wrong
 (navigation-stack 1.10.1 fixed it). Anything about scroll, layout or the keyboard is checked in
