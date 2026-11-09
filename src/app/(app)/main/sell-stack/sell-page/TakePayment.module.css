@@ -638,3 +638,61 @@
   font-weight: 600;
   cursor: pointer;
 }
+
+/*
+  THE SHORT FORM (`compact`, the till's payment page).
+
+  What is being bought, folded to one row: they built the order a moment ago on the till. And a
+  charge, a deposit and a note, each a small "+" until it is wanted.
+*/
+.itemsFolded {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  margin-bottom: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.itemsFoldedText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.itemsFoldedText .itemsLabel {
+  margin-bottom: var(--space-1);
+}
+
+.itemsShow {
+  flex: none;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.extras {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.extra {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--touch-min);
+  padding: 0 var(--space-4);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--primary);
+  font-weight: 600;
+}

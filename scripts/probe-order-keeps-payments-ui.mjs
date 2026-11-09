@@ -138,6 +138,8 @@ try {
   await p.waitForTimeout(7000);
   await p.locator('button').filter({ hasText: /Take payment/ }).locator('visible=true').last().click();
   await p.waitForTimeout(4000);
+  // Waited for, not slept on: on a slow line the page is still reading the order at four seconds.
+  await p.getByText('Paying with').first().waitFor({ timeout: 20000 }).catch(() => {});
   const body = await p.locator('body').innerText();
   check(/Paying with[\s\S]*Cash[\s\S]*₦1,000/.test(body), 'the ₦1,000 cash payment is still listed after the next customer and a reload');
   check((await payBox().getByLabel('Amount').inputValue()).replace(/\D/g, '') === '250', 'the ₦250 left in the box is still in it');

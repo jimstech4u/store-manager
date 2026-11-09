@@ -110,6 +110,7 @@ export function TakePayment({
   onOpenLine,
   itemActions,
   already,
+  compact = false,
 }: {
   order: DraftOrder;
   /** Needed to look up the shop's bank accounts; a draft does not carry its store. */
@@ -213,6 +214,12 @@ export function TakePayment({
   /** Buttons under "What they are buying" — All items, Add an item, Scan. The page decides. */
   itemActions?: ReactNode;
   /**
+   * THE SHORT FORM, for the till: what is being bought folds to one row (they have just built it),
+   * and a charge, a deposit and a note are each a "+" that opens its editor. The payment box comes
+   * up a screen and a half sooner. A correction leaves it off and reads the receipt in full.
+   */
+  compact?: boolean;
+  /**
    * WHAT THE RECEIPT ALREADY HOLDS — a correction's deposit and payments, drawn with the same lines
    * this screen draws its own with ("reuse the same payment line and deposit line and charges line
    * Take payment already uses, not a new one again"). Each cross calls back: taking a payment back
@@ -248,6 +255,9 @@ export function TakePayment({
   onUpdateOrder: (patch: Partial<DraftOrder>) => void;
 }) {
   const accounts = useBankAccounts(storeId);
+  // The short form's folds (`compact`): the items list, and which extra is being added.
+  const [showItems, setShowItems] = useState(!compact);
+  const [extra, setExtra] = useState<'charge' | 'deposit' | 'note' | null>(null);
 
   /*
    * Starts empty: a payment exists once it has been added, not before.
@@ -772,6 +782,20 @@ export function TakePayment({
       */}
       <ProblemDialog problem={error} title="Could not record this payment" />
 
+      {compact && !showItems ? (
+        <button type="button" className={styles.itemsFolded} onClick={() => setShowItems(true)}>
+          <span className={styles.itemsFoldedText}>
+            <span className={styles.itemsLabel}>What they are buying</span>
+            <span>
+              {order.lines.length} {order.lines.length === 1 ? 'item' : 'items'} ·{' '}
+              {formatMoney(itemsTotal)}
+              {charges > 0 ? ` + ${formatMoney(charges)} charges` : ''}
+              {held > 0 ? ` + ${formatMoney(held)} deposit` : ''}
+            </span>
+          </span>
+          <span className={styles.itemsShow}>Show</span>
+        </button>
+      ) : (
       <div className={styles.items}>
         <span className={styles.itemsLabel}>What they are buying</span>
         {order.lines.map((line) => {
@@ -918,33 +942,86 @@ export function TakePayment({
           </div>
         ))}
       </div>
+      )}
 
-      {itemActions && <div className={styles.itemActions}>{itemActions}</div>}
+      {itemActions && (!compact || showItems) && (
+        <div className={styles.itemActions}>{itemActions}</div>
+      )}
 
+      {compact ? (
+        <>
+          {/*
+            A CHARGE, A DEPOSIT, A NOTE — each a "+" until it is wanted. Most sales have none, and
+            three open forms between the items and the money were most of this page's length.
+          */}
+          {extra === null && (
+            <div className={styles.extras}>
+              <button type="button" className={styles.extra} onClick={() => setExtra('charge')}>
+                <PlusIcon /> Charge
+              </button>
+              <button type="button" className={styles.extra} onClick={() => setExtra('deposit')}>
+                <PlusIcon /> Deposit
+              </button>
+              {!order.note && (
+                <button type="button" className={styles.extra} onClick={() => setExtra('note')}>
+                  <PlusIcon /> Note
+                </button>
+              )}
+            </div>
+          )}
+          {extra === 'charge' && (
+            <div className={styles.charges}>
+              <ChargesEditor
+                charges={order.charges ?? []}
+                onChange={(next) => onUpdateOrder({ charges: next })}
+                onCancel={() => setExtra(null)}
+              />
+            </div>
+          )}
+          {extra === 'deposit' && (
+            <DepositEditor
+              deposits={order.deposits ?? []}
+              onChange={(deposits) => onUpdateOrder({ deposits })}
+              alreadyHeld={alreadyHeld}
+              onCancel={() => setExtra(null)}
+            />
+          )}
+          {(extra === 'note' || Boolean(order.note)) && (
+            <Field
+              label="Note on the whole sale"
+              optional
+              value={order.note}
+              onChange={(e) => onUpdateOrder({ note: e.target.value })}
+              placeholder="Anything to remember about this sale"
+            />
+          )}
+        </>
+      ) : (
+        <>
       {/*
-        ONE BOX THAT COMPOSES A CHARGE, and the charges themselves listed above with the items. The
-        same form All items uses (`OrderExtras`), so a charge added while the customer reads the
-        list back is the charge settled here.
-      */}
-      <div className={styles.charges}>
-        <ChargesEditor
-          charges={order.charges ?? []}
-          onChange={(charges) => onUpdateOrder({ charges })}
-        />
-      </div>
+            ONE BOX THAT COMPOSES A CHARGE, and the charges themselves listed above with the items. The
+            same form All items uses (`OrderExtras`), so a charge added while the customer reads the
+            list back is the charge settled here.
+          */}
+          <div className={styles.charges}>
+            <ChargesEditor
+              charges={order.charges ?? []}
+              onChange={(charges) => onUpdateOrder({ charges })}
+            />
+          </div>
 
-      {/*
-        THE DEPOSIT, COMPOSED THE SAME WAY AND KEPT PLAINLY APART: a charge is the shop's money, a
-        deposit is the customer's and the shop is only holding it. What is already held is said,
-        because the two add up.
-      */}
-      <DepositEditor
-        deposits={order.deposits ?? []}
-        onChange={(deposits) => onUpdateOrder({ deposits })}
-        alreadyHeld={alreadyHeld}
-      />
-
-
+          {/*
+            THE DEPOSIT, COMPOSED THE SAME WAY AND KEPT PLAINLY APART: a charge is the shop's money, a
+            deposit is the customer's and the shop is only holding it. What is already held is said,
+            because the two add up.
+          */}
+          <DepositEditor
+            deposits={order.deposits ?? []}
+            onChange={(deposits) => onUpdateOrder({ deposits })}
+            alreadyHeld={alreadyHeld}
+          />
+        </>
+      )}
 
       <div className={styles.due}>
         <span className={styles.dueLabel}>Total for this sale</span>
@@ -1294,13 +1371,15 @@ export function TakePayment({
         about the sale is the final thing somebody writes before committing it, and sitting among
         the charge fields it read as a note about the charge.
       */}
+      {!compact && (
       <Field
-        label="Note on the whole sale"
-        optional
-        value={order.note}
-        onChange={(e) => onUpdateOrder({ note: e.target.value })}
-        placeholder="Anything to remember about this sale"
-      />
+          label="Note on the whole sale"
+          optional
+          value={order.note}
+          onChange={(e) => onUpdateOrder({ note: e.target.value })}
+          placeholder="Anything to remember about this sale"
+        />
+      )}
 
       {/*
         The one moment a customer is genuinely required. Rather than telling the seller to go

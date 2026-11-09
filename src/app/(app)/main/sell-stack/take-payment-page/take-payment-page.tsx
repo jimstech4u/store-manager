@@ -253,6 +253,8 @@ export default function TakePaymentPage() {
         choices={activeOrder.payChoices ?? null}
         onChoicesChange={(payChoices) => updateOrder(activeOrder.clientUuid, { payChoices })}
         storeId={store.id}
+        // The short form: the order folded, the extras each a "+" (TakePayment `compact`).
+        compact
         total={draftTotal(activeOrder)}
         onNeedCustomer={() => setPicking(true)}
         onOpenLine={(lineKey) =>

@@ -824,7 +824,10 @@ Before saying it is done: `npx tsc --noEmit`, `npx next lint`, `npx next build`,
 for the areas touched.
 
 **The till adds through its one box now** (`QuickAdd`, "3 b/s"), not the "Add an item" sheet, and its
-lines are `TillLine` (compact; the full `SaleLineRow` is the line's own page). Probes that opened the
+lines are `TillLine` (compact; the full `SaleLineRow` is the line's own page).
+The box sits UNDER the lines (the composer: added items above, the box at the foot) and brings
+itself up under the customer bar when tapped, so its results are above the keyboard. The plan these
+steps follow is the canvas https://claude.ai/artifact/3Hy86RgGoTmnjzh4JuF1Ly. Probes that opened the
 sheet from the till need `addOnTill(page, typed, name)` from `scripts/till.mjs`; the delivery screen
 and the Stock "Add an item you sell" button are unchanged. Moved so far: `probe-order-keeps-payments-ui`,
 `probe-product-save-stays-off-till-ui`, `shots-sell-flow`.

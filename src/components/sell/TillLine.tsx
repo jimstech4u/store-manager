@@ -68,7 +68,15 @@ export function TillLine({
         <button type="button" className={styles.name} onClick={onOpen}>
           {line.productName}
         </button>
-        <span className={`${styles.total} ${belowCost ? styles.below : ''}`}>{formatMoney(total)}</span>
+        {/* The line's total opens the line too: a haggle is agreed on the total ("the four for ₦35,000"). */}
+        <button
+          type="button"
+          className={`${styles.total} ${belowCost ? styles.below : ''}`}
+          onClick={onOpen}
+          aria-label={`${formatMoney(total)} for this line — set the whole amount`}
+        >
+          {formatMoney(total)}
+        </button>
         <button
           type="button"
           className={styles.remove}

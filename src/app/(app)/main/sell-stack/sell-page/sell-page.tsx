@@ -191,6 +191,22 @@ export default function SellPage() {
     });
   }, []);
 
+  /*
+   * The box at the foot of the order, brought up under the customer bar when it is tapped — the same
+   * glide as `settlePage`, which follows the bar if it moves — so the keyboard does not cover its
+   * results.
+   */
+  const bringUnderBar = useCallback((el: HTMLElement) => {
+    requestAnimationFrame(() => {
+      void scrollIntoViewBelow(el, {
+        below: () =>
+          el
+            .closest('.navstack-column-body')
+            ?.querySelector<HTMLElement>('[class*="CustomerTabs_bar"]') ?? null,
+      });
+    });
+  }, []);
+
   const customerAction = useAsyncAction();
 
   const clearCustomerDialog = useConfirm();
@@ -889,37 +905,6 @@ export default function SellPage() {
          */
         <div ref={orderTopRef} className={styles.orderBox}>
           {/*
-            THE ONE BOX: type what they are buying ("3 b/s") and it goes on. It replaced "Add an
-            item" (a sheet, a search inside it, rows with no price) and "Scan a barcode", which is
-            the camera in the box now. At the top, under the customer bar, so its results are above
-            the keyboard rather than under it.
-          */}
-          <QuickAdd
-            storeId={store.id}
-            onAdd={(product, qty) => addProductRef.current?.(product, qty)}
-            onScan={() => {
-              setScanProblem(null);
-              setScanning(true);
-            }}
-            /*
-             * THE REAL FORM, PUSHED — offered to whoever may make items. The till is pushed UNDER,
-             * so nothing on the order is lost; the new item comes back on this page's own channel.
-             */
-            onAddNew={
-              canOpen('product_form_page')
-                ? (typed) => {
-                    setScanProblem(null);
-                    void nav.push('product_form_page', {
-                      required: 'minimum',
-                      then: savedChannel,
-                      ...(typed.trim() ? { name: typed.trim() } : {}),
-                    });
-                  }
-                : undefined
-            }
-          />
-
-          {/*
             WHAT IS ON ITS WAY IN.
 
             Outside the `lines.length > 0` guard deliberately: the first item added to an empty
@@ -1018,6 +1003,41 @@ export default function SellPage() {
               ))}
             </div>
           )}
+
+          {/*
+            THE ONE BOX: type what they are buying ("3 b/s") and it goes on. It replaced "Add an
+            item" (a sheet, a search inside it, rows with no price) and "Scan a barcode", which is
+            the camera in the box now.
+
+            UNDER THE ORDER — the composer: what has been added is listed above it, and the box
+            stays at the foot of the list ("the search keeps down"). Tapped, it brings itself up
+            under the customer bar, so its results sit between it and the keyboard.
+          */}
+          <QuickAdd
+            storeId={store.id}
+            onFocus={(el) => bringUnderBar(el)}
+            onAdd={(product, qty) => addProductRef.current?.(product, qty)}
+            onScan={() => {
+              setScanProblem(null);
+              setScanning(true);
+            }}
+            /*
+             * THE REAL FORM, PUSHED — offered to whoever may make items. The till is pushed UNDER,
+             * so nothing on the order is lost; the new item comes back on this page's own channel.
+             */
+            onAddNew={
+              canOpen('product_form_page')
+                ? (typed) => {
+                    setScanProblem(null);
+                    void nav.push('product_form_page', {
+                      required: 'minimum',
+                      then: savedChannel,
+                      ...(typed.trim() ? { name: typed.trim() } : {}),
+                    });
+                  }
+                : undefined
+            }
+          />
 
           {/*
             ALL ITEMS — the order on its own, marked NOT A RECEIPT, to share, print or save before

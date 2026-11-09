@@ -31,8 +31,11 @@ export function QuickAdd({
   onAdd,
   onScan,
   onAddNew,
+  onFocus,
 }: {
   storeId: string;
+  /** Told when the box is tapped, with the box, so the page can bring it into view above the keyboard. */
+  onFocus?: (box: HTMLElement) => void;
   /** Put it on the order. `qty` is what was typed in front of it, or null when nothing was. */
   onAdd: (product: Product, qty: number | null) => Promise<void> | void;
   onScan: () => void;
@@ -41,6 +44,7 @@ export function QuickAdd({
 }) {
   const id = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const boxRef = useRef<HTMLDivElement | null>(null);
   const [text, setText] = useState('');
   const { qty, term } = parseQuickAdd(text);
   const debounced = useDebounced(term.trim());
@@ -62,8 +66,10 @@ export function QuickAdd({
   const add = async (product: Product) => {
     setText('');
     await onAdd(product, qty);
-    // The keyboard stays up for the next thing they ask for.
+    // The keyboard stays up for the next thing they ask for, and the box, now a line further down,
+    // comes back under the bar.
     inputRef.current?.focus();
+    if (boxRef.current) onFocus?.(boxRef.current);
   };
 
   /** "3 crates", "½ crate" — what the first result's Add will put on, in the item's own shape. */
@@ -77,7 +83,7 @@ export function QuickAdd({
   };
 
   return (
-    <div className={styles.box}>
+    <div ref={boxRef} className={styles.box}>
       <div className={styles.field}>
         <span className={styles.icon} aria-hidden="true">
           <SearchIcon />
@@ -91,6 +97,7 @@ export function QuickAdd({
           enterKeyHint="go"
           value={text}
           onChange={(e) => setText(e.target.value)}
+          onFocus={() => boxRef.current && onFocus?.(boxRef.current)}
           onKeyDown={(e) => {
             if (e.key !== 'Enter') return;
             e.preventDefault();
