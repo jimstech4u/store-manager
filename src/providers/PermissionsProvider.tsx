@@ -19,6 +19,8 @@ import { getSupabase } from '@/lib/supabase/client';
  * a screen does not flicker between hidden and shown; the server's answer then replaces it.
  */
 const PermissionsContext = createContext<ReadonlySet<string> | null>(null);
+/** Whether there is an answer to go on: read, failed, or nothing to ask (no shop or no person). */
+const SettledContext = createContext(true);
 
 export function PermissionsProvider({ children }: { children: ReactNode }) {
   const { store, user } = useAuth();
@@ -42,10 +44,23 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
   });
 
   const allowed = useMemo(() => (res.data ? new Set(res.data) : null), [res.data]);
-  return <PermissionsContext.Provider value={allowed}>{children}</PermissionsContext.Provider>;
+  const settled = !storeId || !userId || res.data != null || Boolean(res.error);
+  return (
+    <SettledContext.Provider value={settled}>
+      <PermissionsContext.Provider value={allowed}>{children}</PermissionsContext.Provider>
+    </SettledContext.Provider>
+  );
 }
 
 /** The server's answer, or null before it has arrived (the role stands in until then). */
 export function useGrantedPermissions(): ReadonlySet<string> | null {
   return useContext(PermissionsContext);
+}
+
+/**
+ * True once the server has answered, or failed to — so a screen that decides something ONCE from the
+ * permissions (the shell's first tab) can wait for the real answer instead of the role's stand-in.
+ */
+export function usePermissionsSettled(): boolean {
+  return useContext(SettledContext);
 }

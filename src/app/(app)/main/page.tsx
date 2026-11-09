@@ -15,6 +15,8 @@ import { useTheme } from '@/context/ThemeContext';
 import { reportNavBarState } from '@/providers/NavBarState';
 import { usePermission } from '@/hooks/usePermission';
 import { useAuth } from '@/providers/AuthProvider';
+import { usePermissionsSettled } from '@/providers/PermissionsProvider';
+import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { useLiveShop } from '@/lib/stacks/live-shop';
 import { TABS, defaultTabFor } from './nav-config';
 import { SellStack } from './sell-stack/sell-stack';
@@ -51,7 +53,21 @@ const STACK_COMPONENTS: Record<string, React.ReactElement> = {
   'settings-stack': <SettingsStack />,
 };
 
-export default function MainShell() {
+/**
+ * NOT DRAWN UNTIL THE PERMISSIONS HAVE ANSWERED (or failed — a dead network still opens the app).
+ *
+ * The shell picks its first tab once, from the tabs the person may open. Drawn before the server's
+ * answer, it picked from the role's stand-in, which can lack `sales.record`: the shop then opened on
+ * Stock instead of Sell whenever the answer lost the race (a fresh sign-in, 9 Nov). A cached answer
+ * is there at once, so this waits only when there is genuinely nothing to go on.
+ */
+export default function MainPage() {
+  const settled = usePermissionsSettled();
+  if (!settled) return <FullPageMessage title="Opening your shop" tone="loading" />;
+  return <MainShell />;
+}
+
+function MainShell() {
   const { theme } = useTheme();
   const { can } = usePermission();
   const { store, user, session, stores } = useAuth();
@@ -76,6 +92,12 @@ export default function MainShell() {
   useLiveShop(isShopper ? null : store?.id ?? null, user?.id ?? null);
 
   const tabs = useMemo(() => TABS.filter((t) => !t.requires || can(t.requires)), [can]);
+  /*
+   * The first tab is decided once, here — so the shell is not drawn until the permissions have
+   * answered (below). On a fresh sign-in they had not: Sell needs `sales.record`, the role stood in
+   * without it, the default fell to Stock, and the shop opened on Stock whenever the answer lost
+   * the race.
+   */
   const [active, setActive] = useState(() => defaultTabFor(tabs));
 
   // A permission change (or a store switch into a lesser role) can remove the tab currently
