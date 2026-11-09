@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import styles from './Receipt.module.css';
 import { useNav } from '@academix-admin/navigation-stack';
 import { Button } from '@/components/ui/Button';
@@ -37,6 +37,7 @@ import { appUrl } from '@/lib/app-url';
 import { EmptiesBroughtBack } from '@/components/empties/EmptiesBroughtBack';
 import { receiptDocument, type SaleDetail } from '@/lib/receipt-document';
 import { ChangeOwed } from '@/components/sell/ChangeOwed';
+import { autoPrintOn, useAutoPrint } from '@/lib/auto-print';
 
 /**
  * The printable receipt.
@@ -54,6 +55,8 @@ export function Receipt({
   storeId,
   after,
   emptiesAtCounter = false,
+  autoPrint = false,
+  onAutoPrinted,
 }: {
   saleId: string;
   storeId: string;
@@ -67,6 +70,13 @@ export function Receipt({
    * under a loader acting on a receipt nobody can see yet.
    */
   after?: ReactNode;
+  /**
+   * The sale was just saved at the counter: print it by itself after this device's countdown, when
+   * this device is set to (`useAutoPrint`), once the empties question is answered.
+   */
+  autoPrint?: boolean;
+  /** Printed by itself and this device wants the till back next ("then the next customer"). */
+  onAutoPrinted?: () => void;
 }) {
   /*
    * A settled receipt in state-stack, keyed by sale.
@@ -160,6 +170,64 @@ export function Receipt({
   const [printing, setPrinting] = useState(false);
 
   /*
+   * ── PRINTING BY ITSELF, after a countdown that can be cancelled ─────────────────────────
+   *
+   * "after saving order we remember the last printer connected and print to it after the countdown
+   * but can cancel within the time." The printer is this device's saved one (`useThisPrinter`);
+   * whether, and after how long, is this device's setting (`useAutoPrint`, Receipt and printer).
+   *
+   * IT WAITS FOR THE EMPTIES QUESTION. A sale that sent crates out asks whether any came back before
+   * the paper goes, so "still with you" is the answer rather than the question. Until it is answered
+   * the banner says so, with "None came back" to go on at once.
+   *
+   * `printRef` is the Print button's own routine, set further down where the receipt exists: the
+   * timer runs above the early returns (hooks cannot live below them) and calls it when it is due.
+   */
+  const { setting: auto } = useAutoPrint();
+  const [emptiesAsking, setEmptiesAsking] = useState<number | null>(null);
+  const [autoPhase, setAutoPhase] = useState<'idle' | 'waiting' | 'counting' | 'done' | 'off'>('idle');
+  const [left, setLeft] = useState(0);
+  const printRef = useRef<(() => Promise<boolean>) | null>(null);
+  const autoPrintedRef = useRef(onAutoPrinted);
+  autoPrintedRef.current = onAutoPrinted;
+
+  const hasCustomer = Boolean(detail?.customer);
+  const autoWanted =
+    autoPrint &&
+    Boolean(detail) &&
+    printer.loaded &&
+    !printer.reconnecting &&
+    detail?.sale.status !== 'voided' &&
+    autoPrintOn(auto, route);
+  const emptiesOpen = emptiesAtCounter && hasCustomer && emptiesAsking !== 0;
+
+  useEffect(() => {
+    if (!autoWanted) return;
+    if (autoPhase === 'idle' || autoPhase === 'waiting') {
+      if (emptiesOpen) {
+        if (autoPhase !== 'waiting') setAutoPhase('waiting');
+        return;
+      }
+      setLeft(auto.wait);
+      setAutoPhase('counting');
+    }
+  }, [autoWanted, emptiesOpen, autoPhase, auto.wait]);
+
+  useEffect(() => {
+    if (autoPhase !== 'counting') return;
+    if (left <= 0) {
+      setAutoPhase('done');
+      void (async () => {
+        const went = await printRef.current?.();
+        if (went && auto.thenTill) autoPrintedRef.current?.();
+      })();
+      return;
+    }
+    const t = setTimeout(() => setLeft((n) => n - 1), 1000);
+    return () => clearTimeout(t);
+  }, [autoPhase, left, auto.thenTill]);
+
+  /*
    * REOPENING A CANCELLATION — offered here because this is the screen somebody is looking at when
    * they realise. The permission is the same one that cancels and corrects: undoing a cancellation
    * is the same kind of act, and gating it more tightly would mean the person who made the mistake
@@ -227,38 +295,66 @@ export function Receipt({
   );
 
 
-  return (
+  /*
+   * PRINT, by whatever this device can do (see the Print button below for the routes). Shared by the
+   * button and the countdown; true when something went to a printer or a print window.
+   */
+  const printNow = async (): Promise<boolean> => {
+    setShareNote(null);
+
+    if (route === 'browser') {
+      window.print();
+      return true;
+    }
+
+    setPrinting(true);
+    try {
+      if (route === 'direct') {
+        const canvas = await renderReceiptCanvas(receiptPayload(), width, printer.layout);
+        if (!canvas) throw new Error('Could not draw the receipt');
+        await printer.print(canvas);
+        setShareNote('Sent to the printer.');
+        return true;
+      }
+
+      /*
+       * IOS: THE RECEIPT IN THE PRINTER'S OWN LETTERS, as ESC/POS text — sharp, because the glyphs
+       * live in the printer's ROM at the head's dot pitch, where a browser bitmap prints thin and
+       * smudged. ₦ becomes N (escpos-text.ts); no upload, no public URL. The share sheet when no
+       * printer app answers.
+       */
+      const went = await openPrinterAppWith(asInstruction(printedLines));
+      if (went) return true;
+      setShareNote('No printer app answered. Pick your printer’s own app in the share sheet.');
+
+      const blob = await renderReceiptImage(receiptPayload(), width, printer.layout);
+      if (!blob) throw new Error('Could not draw the receipt');
+      const result = await shareImage(
+        blob,
+        `receipt-${sale.id.slice(0, 8)}.png`,
+        `Receipt from ${shopName}`,
+      );
+      if (result === 'downloaded') {
+        setShareNote('Saved to your downloads — open it to print.');
+      }
+      return false;
+    } catch (e: unknown) {
+      setShareNote(messageOf(e, 'Could not print this receipt'));
+      return false;
+    } finally {
+      setPrinting(false);
+    }
+  };
+  printRef.current = printNow;
+
+  /*
+   * THE QUESTIONS THAT CHANGE THE PAPER — change still owed to them, and the empties they brought
+   * back. At the counter they come FIRST, straight under the print banner and above the receipt:
+   * below it, a fifteen-line receipt had to be scrolled past to answer them, while the customer
+   * waited for the paper. Anywhere else (a receipt opened later) they stay under it.
+   */
+  const counterQuestions = (
     <>
-      {/*
-        THE RECEIPT, DRAWN FROM THE LINES THE PRINTER IS SENT.
-
-        This screen used to lay the receipt out in its own markup — a head, a meta block, a list of
-        lines, a totals table. It looked like a receipt and it was not the one that came out of the
-        printer: different wrapping, different rounding of where things sat, the unit price shown
-        here and not there. A shop comparing the screen with the paper found two documents, and
-        could not tell which was wrong.
-
-        So it renders `receiptLines`, the exact array `asInstruction` tags and sends. Monospaced,
-        at the same characters-per-line, because that is what a printer's built-in font is. There
-        is no second layout left to drift.
-
-        `data-print-root` stays: the browser's own print still reveals exactly this, so a shop on a
-        laptop prints the same document too.
-      */}
-      <div
-        className={styles.receipt}
-        data-print-root
-        style={{ ['--receipt-width' as string]: `${width}mm` }}
-      >
-        <PrintPreview lines={printedLines} layout={printer.layout} />
-      </div>
-
-      {shareNote && (
-        <p className={styles.shareNote} role="status">
-          {shareNote}
-        </p>
-      )}
-
       {/*
         EMPTIES THEY CARRIED IN, settled before the paper goes out.
 
@@ -291,9 +387,81 @@ export function Receipt({
             }}
             title={emptiesAtCounter ? 'Did they bring any empties back?' : 'Empties from this receipt'}
             onRecorded={() => void res.reload()}
+            onAsking={setEmptiesAsking}
           />
         </div>
       )}
+    </>
+  );
+
+  return (
+    <>
+      {/*
+        THE RECEIPT, DRAWN FROM THE LINES THE PRINTER IS SENT.
+
+        This screen used to lay the receipt out in its own markup — a head, a meta block, a list of
+        lines, a totals table. It looked like a receipt and it was not the one that came out of the
+        printer: different wrapping, different rounding of where things sat, the unit price shown
+        here and not there. A shop comparing the screen with the paper found two documents, and
+        could not tell which was wrong.
+
+        So it renders `receiptLines`, the exact array `asInstruction` tags and sends. Monospaced,
+        at the same characters-per-line, because that is what a printer's built-in font is. There
+        is no second layout left to drift.
+
+        `data-print-root` stays: the browser's own print still reveals exactly this, so a shop on a
+        laptop prints the same document too.
+      */}
+      {/*
+        PRINTING BY ITSELF — the countdown, and the empties question it waits on. Above the receipt,
+        where the eye already is when the sale is saved.
+      */}
+      {autoPhase === 'waiting' && (
+        <div className={`${styles.auto} ${styles.autoAsk}`} role="status" data-print-no-print>
+          <span className={styles.autoText}>
+            <strong>Say what empties came back, and it prints</strong>
+            <span>Just below. Nothing came back? Print now.</span>
+          </span>
+          <span className={styles.autoActions}>
+            <Button size="small" onClick={() => { setLeft(auto.wait); setAutoPhase('counting'); }}>
+              None came back — print
+            </Button>
+            <Button size="small" variant="secondary" onClick={() => setAutoPhase('off')}>
+              Don&rsquo;t print
+            </Button>
+          </span>
+        </div>
+      )}
+      {autoPhase === 'counting' && (
+        <div className={styles.auto} role="status" data-print-no-print>
+          <span className={styles.autoCount} aria-hidden="true">{left}</span>
+          <span className={styles.autoText}>
+            <strong>Printing{printer.printerName ? ` on ${printer.printerName}` : ''}</strong>
+            <span>in {left} {left === 1 ? 'second' : 'seconds'}</span>
+          </span>
+          <Button size="small" variant="secondary" onClick={() => setAutoPhase('off')}>
+            Cancel
+          </Button>
+        </div>
+      )}
+
+      {emptiesAtCounter && counterQuestions}
+
+      <div
+        className={styles.receipt}
+        data-print-root
+        style={{ ['--receipt-width' as string]: `${width}mm` }}
+      >
+        <PrintPreview lines={printedLines} layout={printer.layout} />
+      </div>
+
+      {shareNote && (
+        <p className={styles.shareNote} role="status">
+          {shareNote}
+        </p>
+      )}
+
+      {!emptiesAtCounter && counterQuestions}
 
       {/*
         TAKING IT BACK.
@@ -535,62 +703,7 @@ export function Receipt({
           fullWidth
           busy={printing}
           busyLabel="Printing"
-          onClick={async () => {
-            setShareNote(null);
-
-            if (route === 'browser') {
-              window.print();
-              return;
-            }
-
-            setPrinting(true);
-            try {
-              if (route === 'direct') {
-                const canvas = await renderReceiptCanvas(receiptPayload(), width, printer.layout);
-                if (!canvas) throw new Error('Could not draw the receipt');
-                await printer.print(canvas);
-                setShareNote('Sent to the printer.');
-                return;
-              }
-
-              /*
-               * ── IOS: THE RECEIPT IN THE PRINTER'S OWN LETTERS ──────────────
-               *
-               * It went as an IMAGE first, uploaded to a public path for the app to fetch, because
-               * an image can draw ₦ and no code page on this class of printer can. The paper that
-               * came back settled it: a 203dpi head printing a browser-rendered bitmap gives thin,
-               * smudged text, while the printer's built-in font is sharp because its glyphs live in
-               * ROM at exactly the head's dot pitch. The shop compared the two and chose sharp.
-               *
-               * So it goes as ESC/POS text now. ₦ becomes N — see escpos-text.ts — and in exchange
-               * there is no upload, no public URL, no download, and nothing for an intermittent
-               * connection to half-finish. The receipt is a few hundred bytes instead of fifty
-               * thousand, and most of the ways the image route could break simply do not exist.
-               */
-              const went = await openPrinterAppWith(
-                asInstruction(printedLines),
-              );
-              if (went) return;
-              setShareNote(
-                'No printer app answered. Pick your printer’s own app in the share sheet.',
-              );
-
-              const blob = await renderReceiptImage(receiptPayload(), width, printer.layout);
-              if (!blob) throw new Error('Could not draw the receipt');
-              const result = await shareImage(
-                blob,
-                `receipt-${sale.id.slice(0, 8)}.png`,
-                `Receipt from ${shopName}`,
-              );
-              if (result === 'downloaded') {
-                setShareNote('Saved to your downloads \u2014 open it to print.');
-              }
-            } catch (e: unknown) {
-              setShareNote(messageOf(e, 'Could not print this receipt'));
-            } finally {
-              setPrinting(false);
-            }
-          }}
+          onClick={() => void printNow()}
         >
           Print
         </Button>

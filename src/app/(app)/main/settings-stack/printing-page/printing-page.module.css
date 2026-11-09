@@ -320,3 +320,16 @@
   font-weight: 600;
   cursor: pointer;
 }
+
+/* How long to wait before printing by itself: four short choices on one row. */
+.waits {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.waits .option {
+  align-items: center;
+  justify-content: center;
+}

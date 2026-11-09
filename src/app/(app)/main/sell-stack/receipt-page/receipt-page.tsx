@@ -75,6 +75,12 @@ export default function ReceiptPage() {
         saleId={saleId}
         storeId={store.id}
         emptiesAtCounter={fresh}
+        /*
+         * A SALE JUST SAVED prints by itself when this device is set to (Receipt and printer), after
+         * its countdown — and, if the device says so, goes back to the till for the next customer.
+         */
+        autoPrint={fresh}
+        onAutoPrinted={goBack}
         after={
           <>
             {/*

@@ -832,6 +832,17 @@ sheet from the till need `addOnTill(page, typed, name)` from `scripts/till.mjs`;
 and the Stock "Add an item you sell" button are unchanged. Moved so far: `probe-order-keeps-payments-ui`,
 `probe-product-save-stays-off-till-ui`, `shots-sell-flow`.
 
+**After a sale (the receipt, `fresh`)** the questions that change the paper — change owed, empties
+back — come BEFORE the receipt, then it prints by itself after this device's countdown
+(`lib/auto-print.ts`, set in Receipt and printer: on/off, wait 0/3/5/10, back to the till). It waits
+while the empties question is open; "None came back — print" answers it. Default: on, 3s, where the
+device prints in one step (a paired roll, the iPhone printer app); off where it would open the
+browser's print window. `probe-auto-print-ui` checks it without recording anything.
+
+**Take payment's customer gate** is one amber "Recording for" row with the reason, and the commit
+button becomes "Choose who this is for" — the rule (credit, crates, a deposit need a name) is
+unchanged; it is asked where the seller is looking, and one tap answers it.
+
 **Chrome is not the iPhone.** Safari drops a hidden element's scroll offset; Chrome keeps it. Every
 page went back to the top on iPhone after a push and Back while Chrome showed nothing wrong
 (navigation-stack 1.10.1 fixed it). Anything about scroll, layout or the keyboard is checked in

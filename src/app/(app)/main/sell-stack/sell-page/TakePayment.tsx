@@ -617,6 +617,25 @@ export function TakePayment({
     return out;
   }, [order.lines, byProduct]);
 
+  /*
+   * WHY THIS SALE NEEDS A NAME, said once, in a line — not three warning panels at the foot.
+   *
+   * The rule stays exactly as it was (credit, containers and a deposit each open a ledger against a
+   * person). What changed is where it is said and how it is fixed: the "Recording for" row at the top
+   * says it as soon as it is true, and the button that would have been grey becomes "Choose who this
+   * is for", one tap to the picker.
+   */
+  const needsCustomer =
+    !order.customerId && (remaining > 0 || comingBack.length > 0 || depositTaken > 0);
+  const whyCustomer = [
+    // Counted, not listed: the items are one tap away, and three long names made the row a paragraph.
+    comingBack.length > 0
+      ? `${comingBack.length === 1 ? comingBack[0] : `${comingBack.length} kinds of crate`} go out with them`
+      : null,
+    remaining > 0 ? `${formatMoney(remaining)} goes on account` : null,
+    depositTaken > 0 ? `a ${formatMoney(depositTaken)} deposit is held for them` : null,
+  ].filter(Boolean) as string[];
+
   const settle = async () => {
     setBusy(true);
     try {
@@ -754,7 +773,11 @@ export function TakePayment({
         the order a seller is asked them at a counter: who is this for, what are they taking, what
         was added, what do they already owe, what does it come to, how are they paying.
       */}
-      <button type="button" className={styles.forRow} onClick={onNeedCustomer}>
+      <button
+        type="button"
+        className={`${styles.forRow} ${needsCustomer ? styles.forNeeded : ''}`}
+        onClick={onNeedCustomer}
+      >
         {/*
           The label over the name, not beside it.
 
@@ -766,8 +789,13 @@ export function TakePayment({
         <span className={styles.forBody}>
           <span className={styles.forLabel}>Recording for</span>
           <span className={styles.forValue}>
-            {order.customerId ? order.customerName : 'Anonymous walk-in'}
+            {order.customerId
+              ? order.customerName
+              : needsCustomer
+                ? 'Who is this for? Needed'
+                : 'Anonymous walk-in'}
           </span>
+          {needsCustomer && <span className={styles.forWhy}>{whyCustomer.join(' · ')}</span>}
         </span>
         <span className={styles.forAction}>
           {order.customerId ? 'Change' : 'Add customer'}
@@ -1451,40 +1479,7 @@ export function TakePayment({
         </>
       )}
 
-      {!order.customerId && comingBack.length > 0 && (
-        <InfoPanel tone="warning" title="Who is taking the containers?">
-          {comingBack.join(', ')} {comingBack.length === 1 ? 'comes' : 'come'} back empty, so this
-          sale needs a customer to owe {comingBack.length === 1 ? 'it' : 'them'}.
-        </InfoPanel>
-      )}
 
-      {!order.customerId && remaining > 0 && (
-        <InfoPanel tone="warning" title="Who is taking this on credit?">
-          {formatMoney(remaining)} is unpaid, so it needs an account to sit in.
-        </InfoPanel>
-      )}
-
-      {/*
-        A DEPOSIT IS MONEY HELD FOR SOMEBODY, so there has to be a somebody.
-
-        It comes back to them when the containers do, or the shop keeps it and says why — and
-        neither sentence can be written about a walk-in. Said here as a condition to fix rather
-        than left to the server, which refused it correctly and was never reached: the till used
-        to replace the figure with zero and settle without it.
-      */}
-      {!order.customerId && depositTaken > 0 && (
-        <InfoPanel tone="warning" title="Who is this deposit being held for?">
-          {formatMoney(depositTaken)} is being held against the containers, so it needs somebody
-          to give it back to.
-        </InfoPanel>
-      )}
-
-      {!order.customerId &&
-        (remaining > 0 || comingBack.length > 0 || depositTaken > 0) && (
-        <Button variant="secondary" size="large" fullWidth onClick={onNeedCustomer}>
-          Choose a customer
-        </Button>
-      )}
       {/*
         The action ends the page rather than being pinned to its foot.
 
@@ -1506,17 +1501,18 @@ export function TakePayment({
             unpriced.length > 0 ||
             // Paid more than the sale while what they owed is still unknown: the extra might be for
             // the old debt rather than change, and nobody can say which until the balance arrives.
-            (balanceUnknown && paid > owed) ||
-            (!order.customerId &&
-              (paid < owed || comingBack.length > 0 || depositTaken > 0))
+            (balanceUnknown && paid > owed)
           }
-          onClick={settle}
+          // Needing a name is not a dead end: the button asks for it.
+          onClick={needsCustomer ? onNeedCustomer : settle}
         >
-          {paid >= owed
-            ? settledLabel
-            : paid > 0
-              ? `Take ${formatMoney(paid)}, rest on account`
-              : 'Put it all on account'}
+          {needsCustomer
+            ? 'Choose who this is for'
+            : paid >= owed
+              ? settledLabel
+              : paid > 0
+                ? `Take ${formatMoney(paid)}, rest on account`
+                : 'Put it all on account'}
         </Button>
       </div>
     </>

@@ -194,55 +194,14 @@ export function CustomerTabs({
         with the "+" already scrolled out of sight. The tabs are the part that grows, so they get
         the full width, and the fixed furniture sits above and below them.
       */}
-      <div className={styles.top}>
-        {/*
-          The same customers, as a searchable list.
-
-          The strip is right for three tabs and useless for twenty — the person wanted is off the
-          edge and you are dragging sideways hunting a name.
-        */}
-        {/*
-          The menu and the word it belongs to, together on the left.
-
-          "Customer" was floating between the menu and the code, reading as a heading for the row
-          rather than a label for the button next to it.
-        */}
-        <span className={styles.lead}>
-          <CustomerMenu tabs={tabs} activeId={activeId} onPick={onSelect} />
-          <span className={styles.label}>Customer</span>
-        </span>
-
-        {/*
-          The order code, on the same line as the label rather than in a row of its own further
-          down the page.
-
-          It is the handover: a seller reads it out and a colleague picks the same order up on
-          their own phone. It belongs beside the customer it identifies. The dots hold its place
-          while the shop is still assigning one, so the bar does not change height the moment it
-          arrives — the page used to visibly jump while somebody was already reading it.
-        */}
-        {/*
-          The code and the share are ONE control.
-
-          The code is what a colleague is told; the share is how the customer gets it. Tapping
-          either meant the same thing to everybody who tried it, so a separate icon with its own
-          small target would have been a distinction only the code knew about.
-        */}
-        <button
-          type="button"
-          className={styles.codeButton}
-          onClick={onShare}
-          disabled={!orderCode}
-          aria-label={orderCode ? `Share order ${orderCode}` : 'No order code yet'}
-        >
-          <span className={`${styles.code} ${orderCode ? '' : styles.codePending}`}>
-            {orderCode ?? '·····'}
-          </span>
-          {orderCode && <ShareIcon size="1.1em" />}
-        </button>
-      </div>
-
+      {/*
+        TWO ROWS, NOT THREE (9 Nov). The bar is sticky, and at 196px it was a quarter of a phone's
+        screen over the order being built. The row that held the menu, the word "Customer" and the
+        order code is gone: the menu (every customer, as a list) leads the tabs it lists, and the
+        code — the handover, read out to a colleague — sits at their end beside "+".
+      */}
       <div className={styles.tabsRow}>
+        <CustomerMenu tabs={tabs} activeId={activeId} onPick={onSelect} />
       {/* `data-no-reveal`: this row centres its active tab itself (see `showActiveTab`). */}
       <div ref={rowRef} className={styles.tabs} role="tablist" aria-label="Customers being served" data-no-reveal>
         {tabs.map((tab) => (
@@ -270,6 +229,19 @@ export function CustomerTabs({
         has time to scroll. It is fixed furniture, like the four actions, and only the tabs
         themselves grow.
       */}
+      {/* The order code and its share, as one control (see codeButton). */}
+        <button
+        type="button"
+        className={styles.codeButton}
+        onClick={onShare}
+        disabled={!orderCode}
+        aria-label={orderCode ? `Share order ${orderCode}` : 'No order code yet'}
+      >
+        <span className={`${styles.code} ${orderCode ? '' : styles.codePending}`}>
+          {orderCode ?? '·····'}
+        </span>
+        {orderCode && <ShareIcon size="1.1em" />}
+      </button>
       <button type="button" className={styles.add} onClick={() => { onAdd(); onSettlePage?.(); }} aria-label="Start another customer">
         <PlusIcon />
       </button>

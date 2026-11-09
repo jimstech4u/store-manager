@@ -298,6 +298,8 @@
 /* The commit button ends the page rather than being pinned to its foot — see TakePayment. */
 .pageActions {
   margin-top: var(--space-5);
+  /* Room under the last button for the floating pill, which otherwise sits on top of it. */
+  margin-bottom: calc(var(--touch-comfortable) + var(--space-6));
 }
 
 /* ── The items behind the total ─────────────────────────────────────────────────────── */
@@ -695,4 +697,16 @@
   background: var(--surface);
   color: var(--primary);
   font-weight: 600;
+}
+
+/* A name is needed: the row says so where the eye starts, in the warning colour, with why. */
+.forNeeded {
+  border: 2px solid var(--warning);
+  background: var(--warning-subtle);
+}
+
+.forWhy {
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--text);
 }

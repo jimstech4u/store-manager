@@ -19,29 +19,8 @@
   border-bottom: 1px solid var(--border);
 }
 
-.top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
 
-/* The menu button and its label read as one control. */
-.lead {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  min-width: 0;
-}
 
-.label {
-  flex: none;
-  font-size: var(--text-sm);
-  font-weight: 700;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
 
 /*
  * The tabs scroll on their own.
@@ -306,4 +285,33 @@
 
 .codeButton:not(:disabled):hover {
   background: var(--surface-sunken);
+}
+
+/*
+  THE COMPACT BAR (9 Nov): two rows instead of three, and the actions one slim line — icon and word
+  side by side — so the order being built keeps most of the screen. Every control is still here.
+*/
+.action {
+  flex-direction: row;
+  gap: var(--space-1);
+  min-height: 40px;
+  padding: 0 var(--space-1);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.action svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.tab {
+  padding: 6px var(--space-3);
+}
+
+.tabsRow .codeButton {
+  flex: none;
+  margin-right: 0;
+  padding: 0 var(--space-1);
 }

@@ -265,3 +265,64 @@
   font-size: var(--text-sm);
   color: var(--text-muted);
 }
+
+/*
+  PRINTING BY ITSELF: the countdown with its Cancel, and the empties question it waits on. Filled in
+  the primary colour so it reads as the next thing happening, not as a warning.
+*/
+.auto {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius);
+  background: var(--primary-subtle);
+  border: 2px solid var(--primary);
+}
+
+.autoCount {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-full);
+  background: var(--primary);
+  color: var(--primary-text);
+  font-size: var(--text-lg);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.autoText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--text-sm);
+}
+
+.autoText strong {
+  font-size: var(--text-base);
+}
+
+.autoActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+/* The empties question's banner: words, then its two answers under them — side by side squeezed the
+   words into a column one word wide on a phone. */
+.autoAsk {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.autoAsk .autoActions {
+  justify-content: flex-start;
+}

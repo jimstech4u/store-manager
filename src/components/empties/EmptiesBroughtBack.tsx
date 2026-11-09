@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNav } from '@academix-admin/navigation-stack';
 import { Button } from '@/components/ui/Button';
 import { Qty } from '@/components/ui/Qty';
@@ -43,6 +43,7 @@ export function EmptiesBroughtBack({
   forSale = null,
   title = 'Did they bring any back?',
   onRecorded,
+  onAsking,
 }: {
   storeId: string;
   customerId: string;
@@ -60,6 +61,12 @@ export function EmptiesBroughtBack({
   title?: string;
   /** After anything is recorded — the receipt re-reads, so the paper says the new figure. */
   onRecorded?: () => void;
+  /**
+   * Told how many kinds of container the question is still about — 0 once they are all back, null
+   * until it is known. The receipt waits on it before printing by itself, so "still with you" on
+   * the paper is the answer, not the question.
+   */
+  onAsking?: (kinds: number | null) => void;
 }) {
   const nav = useNav();
   const problem = useProblem();
@@ -107,6 +114,12 @@ export function EmptiesBroughtBack({
   );
   const hasOlder = Boolean(forSale) && (withOlder || heldInAll - heldBySale > 1e-6);
   const lines = useMemo(() => rollUpOwed(rows), [rows]);
+  const askingRef = useRef(onAsking);
+  askingRef.current = onAsking;
+  const asked = area.data === null ? null : lines.length;
+  useEffect(() => {
+    askingRef.current?.(asked);
+  }, [asked]);
 
   /* Mounted means asked — see ConfirmDialog. Which question: one line, or everything. */
   const [asking, setAsking] = useState<{ line: OwedLine | null } | null>(null);

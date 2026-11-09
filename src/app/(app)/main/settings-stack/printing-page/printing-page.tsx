@@ -39,6 +39,8 @@ import { getSupabase } from '@/lib/supabase/client';
 import { LogoRejected, normaliseReceiptLogo } from '@/lib/image-pipeline';
 import { useBankAccounts } from '@/lib/stacks/bank-accounts';
 import { usePermission } from '@/hooks/usePermission';
+import { autoPrintOn, useAutoPrint } from '@/lib/auto-print';
+import { printRouteOf } from '@/lib/print-document';
 import styles from './printing-page.module.css';
 
 /**
@@ -96,6 +98,9 @@ export default function PrintingPage() {
 
   const paperMm = Number(settings.data?.printer_width_mm) || 80;
   const printer = useThisPrinter(store?.id ?? null, paperMm);
+  // Printing a sale by itself after a countdown — this device's choice (lib/auto-print).
+  const { setting: auto, change: changeAuto } = useAutoPrint();
+  const autoOn = autoPrintOn(auto, printRouteOf(printer));
   const printers = usePrinters(store?.id ?? null);
 
   const [kinds, setKinds] = useState<PrinterKind[]>([]);
@@ -314,6 +319,69 @@ export default function PrintingPage() {
                   : printer.ready
                     ? 'Connected — one tap prints.'
                     : 'Not answering right now.'}
+              </p>
+            )}
+
+            {/* ── After a sale: printing by itself ─────────────────────────── */}
+            <h2 className={styles.section}>After a sale is saved</h2>
+            <p className={styles.note}>
+              On this device only. A counter beside its printer can print every sale; a phone in a
+              pocket can print none.
+            </p>
+            <div className={styles.grid} role="group" aria-label="Print the receipt by itself">
+              {[true, false].map((on) => (
+                <button
+                  key={String(on)}
+                  type="button"
+                  className={`${styles.option} ${autoOn === on ? styles.optionOn : ''}`}
+                  aria-pressed={autoOn === on}
+                  onClick={() => changeAuto({ on })}
+                >
+                  <span className={styles.optionName}>{on ? 'Print it by itself' : 'Only when I tap Print'}</span>
+                  <span className={styles.optionWhat}>
+                    {on ? 'After a short wait you can cancel.' : 'The receipt waits on the screen.'}
+                  </span>
+                </button>
+              ))}
+            </div>
+            {autoOn && (
+              <>
+                <p className={styles.note}>Wait before printing</p>
+                <div className={styles.waits} role="group" aria-label="Wait before printing">
+                  {([0, 3, 5, 10] as const).map((w) => (
+                    <button
+                      key={w}
+                      type="button"
+                      className={`${styles.option} ${auto.wait === w ? styles.optionOn : ''}`}
+                      aria-pressed={auto.wait === w}
+                      onClick={() => changeAuto({ wait: w })}
+                    >
+                      <span className={styles.optionName}>{w === 0 ? 'None' : `${w} s`}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className={styles.grid} role="group" aria-label="After it prints">
+                  {[false, true].map((till) => (
+                    <button
+                      key={String(till)}
+                      type="button"
+                      className={`${styles.option} ${auto.thenTill === till ? styles.optionOn : ''}`}
+                      aria-pressed={auto.thenTill === till}
+                      onClick={() => changeAuto({ thenTill: till })}
+                    >
+                      <span className={styles.optionName}>{till ? 'Back to the till' : 'Stay on the receipt'}</span>
+                      <span className={styles.optionWhat}>
+                        {till ? 'Ready for the next customer.' : 'To share it or send it too.'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+            {!autoOn && printRouteOf(printer) === 'browser' && auto.on === undefined && (
+              <p className={styles.note}>
+                Off for now: this device prints through its own print window, which would open after
+                every sale. Choose a printer above, or turn it on if you want that.
               </p>
             )}
 
