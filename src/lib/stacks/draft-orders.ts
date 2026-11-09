@@ -84,6 +84,40 @@ export interface DraftDeposit {
   note?: string;
 }
 
+/**
+ * A payment being taken on this order — typed on Take payment, not yet money the shop has.
+ *
+ * ON THE ORDER, and saved with it (0276), like the charges and deposits. It lived in the payment
+ * page's own state, so serving the next customer, a reload or a dead phone lost ₦30,000 cash and
+ * ₦14,400 by transfer that had been counted once already.
+ */
+export interface DraftPayment {
+  key: string;
+  method: 'cash' | 'transfer' | 'pos';
+  amount: string;
+  reference: string;
+  bankAccountId: string | null;
+}
+
+/**
+ * The rest of what was decided on Take payment, and the amount still in its box (0276). Every part
+ * optional: absent is the page's own default.
+ */
+export interface PayChoices {
+  /** An overpayment clears their old balance first (the box, ticked by default). */
+  toOldDebt?: boolean;
+  /** The change is given now, or owed to them on the receipt. */
+  changeHow?: 'now' | 'owe';
+  changeMethod?: 'cash' | 'transfer' | 'pos';
+  /** The payment still being composed — it counts, so it is kept like one. */
+  composing?: {
+    method: 'cash' | 'transfer' | 'pos';
+    amount: string;
+    reference: string;
+    bankAccountId: string | null;
+  };
+}
+
 export interface DraftCharge {
   key: string;
   /** What this charge was for, in the seller's words. One note per charge, not one per sale. */
@@ -156,9 +190,18 @@ export interface DraftOrder {
   charges: DraftCharge[];
   /** Deposits taken on this sale. Added to whatever the shop already holds, never replacing it. */
   deposits: DraftDeposit[];
+  /** Payments being taken on it, kept with it (0276). */
+  payments?: DraftPayment[];
+  payChoices?: PayChoices | null;
   note: string;
   /** False while there are edits the server has not accepted yet. */
   synced: boolean;
+  /**
+   * Counts every edit on this device. A save marks the order saved only if nothing was edited while
+   * it was in the air: it used to mark whatever the order had become, so a + tapped during a save
+   * was called saved, never sent, and undone by the next read from the shop.
+   */
+  rev?: number;
 }
 
 interface DraftRow {
@@ -188,6 +231,7 @@ export function isUntouchedProvisional(o: DraftOrder): boolean {
     !o.customerName.trim() &&
     (o.charges ?? []).length === 0 &&
     (o.deposits ?? []).length === 0 &&
+    (o.payments ?? []).length === 0 &&
     !o.note.trim()
   );
 }
@@ -206,6 +250,8 @@ export function makeDraft(): DraftOrder {
     feeLabel: '',
     charges: [],
     deposits: [],
+    payments: [],
+    payChoices: null,
     note: '',
     synced: false,
   };
@@ -431,6 +477,18 @@ export function useDraftOrders(storeId: string | null) {
           p_deposits: (order.deposits ?? [])
             .filter((d) => Number(d.amount) > 0)
             .map((d) => ({ amount: Number(d.amount), note: d.note?.trim() || null })),
+          /*
+           * THE PAYMENTS BEING TAKEN (0276), on the deposits' terms: an empty array clears them.
+           */
+          p_payments: (order.payments ?? [])
+            .filter((p) => Number(p.amount) > 0)
+            .map((p) => ({
+              method: p.method,
+              amount: Number(p.amount),
+              reference: p.reference.trim() || null,
+              bank_account_id: p.bankAccountId,
+            })),
+          p_pay_choices: order.payChoices ?? {},
           p_note: order.note || null,
           p_client_uuid: order.clientUuid,
           p_lines: order.lines
@@ -475,7 +533,14 @@ export function useDraftOrders(storeId: string | null) {
         setOrders((prev) =>
           prev.map((o) =>
             o.clientUuid === order.clientUuid
-              ? { ...o, id: savedId, code, shareToken, synced: true }
+              ? {
+                  ...o,
+                  id: savedId,
+                  code,
+                  shareToken,
+                  // Edited while this save was in the air: still not saved, and the next save sends it.
+                  synced: (o.rev ?? 0) === (order.rev ?? 0),
+                }
               : o,
           ),
         );
@@ -574,7 +639,11 @@ export function useDraftOrders(storeId: string | null) {
   const updateOrder = useCallback(
     (clientUuid: string, patch: Partial<DraftOrder>) => {
       setOrders((prev) =>
-        prev.map((o) => (o.clientUuid === clientUuid ? { ...o, ...patch, synced: false } : o)),
+        prev.map((o) =>
+          o.clientUuid === clientUuid
+            ? { ...o, ...patch, synced: false, rev: (o.rev ?? 0) + 1 }
+            : o,
+        ),
       );
     },
     [setOrders],
@@ -704,7 +773,9 @@ export function useDraftOrders(storeId: string | null) {
     (clientUuid: string, line: DraftLine) => {
       setOrders((prev) =>
         prev.map((o) =>
-          o.clientUuid === clientUuid ? { ...o, lines: [...o.lines, line], synced: false } : o,
+          o.clientUuid === clientUuid
+            ? { ...o, lines: [...o.lines, line], synced: false, rev: (o.rev ?? 0) + 1 }
+            : o,
         ),
       );
     },
@@ -719,6 +790,7 @@ export function useDraftOrders(storeId: string | null) {
             ? {
                 ...o,
                 synced: false,
+                rev: (o.rev ?? 0) + 1,
                 lines: o.lines.map((l) => (l.key === lineKey ? { ...l, ...patch } : l)),
               }
             : o,
@@ -747,11 +819,12 @@ export function useDraftOrders(storeId: string | null) {
            * Only when the LAST one goes. Removing one item from five changes nothing about the
            * transport for the load, and clearing it then would be the app overruling the shop.
            */
-          if (lines.length > 0) return { ...o, synced: false, lines };
+          if (lines.length > 0) return { ...o, synced: false, rev: (o.rev ?? 0) + 1, lines };
 
           return {
             ...o,
             synced: false,
+            rev: (o.rev ?? 0) + 1,
             lines,
             charges: [],
             deposits: [],
@@ -832,6 +905,13 @@ export function useDraftOrders(storeId: string | null) {
           .eq('draft_order_id', draftId)
           .order('sort_order');
 
+        // And the payments a colleague had started taking on it (0276).
+        const { data: paymentRows } = await supabase
+          .from('draft_order_payments')
+          .select('method, amount, reference, bank_account_id')
+          .eq('draft_order_id', draftId)
+          .order('sort_order');
+
         type LineRow = {
           id: string;
           product_id: string;
@@ -869,6 +949,20 @@ export function useDraftOrders(storeId: string | null) {
             key: newId(),
             amount: String(d.amount),
             note: d.note ?? '',
+          })),
+          payments: (
+            (paymentRows ?? []) as {
+              method: DraftPayment['method'];
+              amount: string;
+              reference: string | null;
+              bank_account_id: string | null;
+            }[]
+          ).map((p) => ({
+            key: newId(),
+            method: p.method,
+            amount: String(p.amount),
+            reference: p.reference ?? '',
+            bankAccountId: p.bank_account_id,
           })),
           note: '',
           synced: true,
@@ -1005,6 +1099,17 @@ export function useDraftOrders(storeId: string | null) {
             amount: String(d.amount ?? ''),
             note: (d.note as string | null) ?? '',
           })),
+          // And the payments being taken, and what was decided about the change (0276).
+          payments: ((row.payments ?? []) as Record<string, unknown>[]).map((p) => ({
+            key: newId(),
+            method: (['cash', 'transfer', 'pos'].includes(String(p.method))
+              ? String(p.method)
+              : 'cash') as DraftPayment['method'],
+            amount: String(p.amount ?? ''),
+            reference: (p.reference as string | null) ?? '',
+            bankAccountId: (p.bank_account_id as string | null) ?? null,
+          })),
+          payChoices: (row.pay_choices as PayChoices | null) ?? null,
           // Already the shop's own copy, so nothing to push back.
           synced: true,
           /*
@@ -1165,7 +1270,21 @@ export function useDraftOrders(storeId: string | null) {
     const t = setTimeout(() => {
       unsynced.forEach((o) => void push(o));
     }, 1200);
-    return () => clearTimeout(t);
+    /*
+     * AND AT ONCE WHEN THE APP IS PUT AWAY. A phone freezes a backgrounded page, so a + tapped just
+     * before switching to WhatsApp waited for a timer that never ran — and a reload from the shop
+     * later brought back the quantity before it.
+     */
+    const now = () => {
+      if (document.visibilityState !== 'hidden') return;
+      clearTimeout(t);
+      unsynced.forEach((o) => void push(o));
+    };
+    document.addEventListener('visibilitychange', now);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener('visibilitychange', now);
+    };
   }, [orders, push]);
 
   return {

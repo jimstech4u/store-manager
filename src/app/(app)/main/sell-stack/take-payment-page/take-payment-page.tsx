@@ -229,6 +229,29 @@ export default function TakePaymentPage() {
       <TakePayment
         order={activeOrder}
         onUpdateOrder={(patch) => updateOrder(activeOrder.clientUuid, patch)}
+        /*
+         * THE PAYMENTS AND CHOICES LIVE ON THE ORDER (0276), saved with it like the charges — so
+         * serving the next customer, a reload or another phone finds them as they were left.
+         */
+        entered={(activeOrder.payments ?? []).map((p) => ({
+          amount: Number(p.amount),
+          method: p.method,
+          reference: p.reference || null,
+          bankAccountId: p.bankAccountId ?? null,
+        }))}
+        onEnteredChange={(next) =>
+          updateOrder(activeOrder.clientUuid, {
+            payments: next.map((p, i) => ({
+              key: `p${i}`,
+              method: p.method as 'cash' | 'transfer' | 'pos',
+              amount: String(p.amount),
+              reference: p.reference ?? '',
+              bankAccountId: p.bankAccountId,
+            })),
+          })
+        }
+        choices={activeOrder.payChoices ?? null}
+        onChoicesChange={(payChoices) => updateOrder(activeOrder.clientUuid, { payChoices })}
         storeId={store.id}
         total={draftTotal(activeOrder)}
         onNeedCustomer={() => setPicking(true)}

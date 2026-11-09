@@ -29,6 +29,7 @@ import {
   depositTotal,
   lineTotal,
   type DraftOrder,
+  type PayChoices,
 } from '@/lib/stacks/draft-orders';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 import { ChargesEditor, DepositEditor } from '@/components/sell/OrderExtras';
@@ -46,6 +47,34 @@ interface PaymentRow {
 }
 
 const newKey = () => Math.random().toString(36).slice(2);
+
+/**
+ * The choices with every default filled in, and the box left out when nothing is in it — the one
+ * form they are compared and kept in.
+ */
+function normalChoices(c: PayChoices | null | undefined) {
+  const composing = c?.composing;
+  const started =
+    composing &&
+    (composing.amount.trim() !== '' || composing.reference.trim() !== '' || composing.method !== 'cash');
+  return {
+    toOldDebt: c?.toOldDebt ?? true,
+    changeHow: c?.changeHow ?? ('now' as const),
+    changeMethod: c?.changeMethod ?? ('cash' as Method),
+    // Rebuilt rather than spread: the shop hands jsonb back with its keys sorted, and the same box
+    // must compare equal however its keys arrived.
+    ...(started
+      ? {
+          composing: {
+            method: composing.method,
+            amount: composing.amount,
+            reference: composing.reference,
+            bankAccountId: composing.bankAccountId ?? null,
+          },
+        }
+      : {}),
+  };
+}
 
 /**
  * Taking payment.
@@ -72,6 +101,8 @@ export function TakePayment({
   onNeedCustomer,
   entered,
   onEnteredChange,
+  choices,
+  onChoicesChange,
   commit,
   settledLabel = 'Mark as paid',
   onUpdateOrder,
@@ -158,6 +189,9 @@ export function TakePayment({
   onEnteredChange?: (
     next: { amount: number; method: string; reference: string | null; bankAccountId: string | null }[],
   ) => void;
+  /** What was decided about the change, and the amount still being typed — kept like the payments. */
+  choices?: PayChoices | null;
+  onChoicesChange?: (next: PayChoices) => void;
   /**
    * What the button says when the money covers the total.
    *
@@ -245,24 +279,54 @@ export function TakePayment({
    */
   const reportRef = useRef(onEnteredChange);
   reportRef.current = onEnteredChange;
+  /*
+   * WHAT WAS LAST SAID EITHER WAY, so an echo is not news.
+   *
+   * The till keeps these on the order and saves them (0276), so they can also change from OUTSIDE —
+   * the order read back from the shop after another phone took a payment on it. A list that differs
+   * from the last one reported came from there and replaces what is shown; one that matches is this
+   * screen's own report coming back, and reporting it again would save an unchanged order.
+   */
+  const enteredJson = JSON.stringify(entered ?? []);
+  const lastEntered = useRef(enteredJson);
   useEffect(() => {
-    reportRef.current?.(
-      rows
-        .filter((r) => Number(r.amount) > 0)
-        .map((r) => ({
-          amount: Number(r.amount),
-          method: r.method,
-          reference: r.reference || null,
-          bankAccountId: r.bankAccountId ?? null,
-        })),
+    if (enteredJson === lastEntered.current) return;
+    lastEntered.current = enteredJson;
+    setRows(
+      (entered ?? []).map((p, i) => ({
+        key: `kept-${i}-${newKey()}`,
+        method: p.method as Method,
+        amount: String(p.amount),
+        reference: p.reference ?? '',
+        bankAccountId: p.bankAccountId ?? null,
+      })),
     );
+    // `entered` is read through its JSON, which is the dependency that means something.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enteredJson]);
+  useEffect(() => {
+    const next = rows
+      .filter((r) => Number(r.amount) > 0)
+      .map((r) => ({
+        amount: Number(r.amount),
+        method: r.method,
+        reference: r.reference || null,
+        bankAccountId: r.bankAccountId ?? null,
+      }));
+    const json = JSON.stringify(next);
+    if (json === lastEntered.current) return;
+    lastEntered.current = json;
+    reportRef.current?.(next);
   }, [rows]);
 
-  // The payment being composed.
-  const [draftMethod, setDraftMethod] = useState<Method>('cash');
-  const [draftAmount, setDraftAmount] = useState('');
-  const [draftReference, setDraftReference] = useState('');
-  const [draftAccount, setDraftAccount] = useState<string | null>(null);
+  // The payment being composed — and the decisions about the change, below — start from what the
+  // order kept (`choices`), so the next customer does not cost this one what was typed.
+  const [draftMethod, setDraftMethod] = useState<Method>(choices?.composing?.method ?? 'cash');
+  const [draftAmount, setDraftAmount] = useState(choices?.composing?.amount ?? '');
+  const [draftReference, setDraftReference] = useState(choices?.composing?.reference ?? '');
+  const [draftAccount, setDraftAccount] = useState<string | null>(
+    choices?.composing?.bankAccountId ?? null,
+  );
   const [busy, setBusy] = useState(false);
   const error = useProblem();
 
@@ -435,16 +499,55 @@ export function TakePayment({
    * old balance; unticked, it is change." Ticked by default, because money handed over by somebody
    * who owes is most often meant for the debt.
    */
-  const [clearOld, setClearOld] = useState(true);
+  const [clearOld, setClearOld] = useState(choices?.toOldDebt ?? true);
   const towardsOldDebt = clearOld ? Math.min(over, owedBefore) : 0;
   const change = Math.max(over - towardsOldDebt, 0);
   /*
    * THE CHANGE: given now, by whatever it went back in, or owed on the receipt so they bring it back
    * for it. Owing needs a name — there has to be somebody to give it to.
    */
-  const [changeHow, setChangeHow] = useState<'now' | 'owe'>('now');
-  const [changeMethod, setChangeMethod] = useState<Method>('cash');
+  const [changeHow, setChangeHow] = useState<'now' | 'owe'>(choices?.changeHow ?? 'now');
+  const [changeMethod, setChangeMethod] = useState<Method>(choices?.changeMethod ?? 'cash');
   const owingChange = changeHow === 'owe' && Boolean(order.customerId);
+
+  /*
+   * EVERYTHING DECIDED HERE IS KEPT ON THE ORDER, both ways — the same echo rule as the payments.
+   * Compared in its settled form (defaults filled in), so opening the page saves nothing.
+   */
+  const choicesJson = JSON.stringify(normalChoices(choices));
+  const lastChoices = useRef(choicesJson);
+  const choicesRef = useRef(onChoicesChange);
+  choicesRef.current = onChoicesChange;
+  useEffect(() => {
+    if (choicesJson === lastChoices.current) return;
+    lastChoices.current = choicesJson;
+    const c = normalChoices(choices);
+    setClearOld(c.toOldDebt);
+    setChangeHow(c.changeHow);
+    setChangeMethod(c.changeMethod);
+    setDraftMethod(c.composing?.method ?? 'cash');
+    setDraftAmount(c.composing?.amount ?? '');
+    setDraftReference(c.composing?.reference ?? '');
+    setDraftAccount(c.composing?.bankAccountId ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [choicesJson]);
+  useEffect(() => {
+    const next = normalChoices({
+      toOldDebt: clearOld,
+      changeHow,
+      changeMethod,
+      composing: {
+        method: draftMethod,
+        amount: draftAmount,
+        reference: draftReference,
+        bankAccountId: draftAccount,
+      },
+    });
+    const json = JSON.stringify(next);
+    if (json === lastChoices.current) return;
+    lastChoices.current = json;
+    choicesRef.current?.(next);
+  }, [clearOld, changeHow, changeMethod, draftMethod, draftAmount, draftReference, draftAccount]);
 
 
   /*
