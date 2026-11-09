@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import styles from './sell-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -113,10 +113,14 @@ export default function SellPage() {
    *
    * Global rather than page-scoped because the form lives in a different stack, and a page-scoped
    * object is addressed by its provider's uid — unfindable from there.
+   *
+   * ON THIS PAGE'S OWN CHANNEL, named in the push. It was the shared key 'onProductSaved', and the
+   * till is always open, so an item made or edited from Stock landed on the open order too.
    */
+  const savedChannel = `onProductSaved:till:${useId()}`;
   useEffect(() => {
     const cleanup = nav.provideObject(
-      'onProductSaved',
+      savedChannel,
       () => async (created: ProductFormResult) => {
         /*
          * Read the product back before putting it on the receipt.
@@ -132,7 +136,7 @@ export default function SellPage() {
       { global: true, scope: 'catalog' },
     );
     return cleanup;
-  }, [nav]);
+  }, [nav, savedChannel]);
 
   /*
    * Whether the item picker is up — a plain flag, not a second SelectionViewer controller.
@@ -1077,6 +1081,7 @@ export default function SellPage() {
             setScanProblem(null);
             void nav.push('product_form_page', {
               required: 'minimum',
+              then: savedChannel,
               ...(typed?.trim() ? { name: typed.trim() } : {}),
             });
           }}

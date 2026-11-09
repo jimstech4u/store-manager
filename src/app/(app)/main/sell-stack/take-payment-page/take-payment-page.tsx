@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useLocation, useNav, useObject } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
@@ -114,6 +114,26 @@ export default function TakePaymentPage() {
       off?.();
     };
   }, [nav]);
+
+  /*
+   * An item made from "What are they buying" goes on THIS order, opened on its line like any item
+   * picked here. Its own channel, named in the push — it used to ride the till's shared key, which
+   * also caught items made anywhere else in the app.
+   */
+  const savedChannel = `onProductSaved:payment:${useId()}`;
+  const orderIdRef = useRef<string | null>(null);
+  orderIdRef.current = activeOrder?.id ?? null;
+  useEffect(
+    () =>
+      nav.provideObject(
+        savedChannel,
+        () => (created: { id: string }) => {
+          void nav.push('sale_line_page', { id: orderIdRef.current ?? '', product: created.id });
+        },
+        { global: true, scope: 'catalog' },
+      ),
+    [nav, savedChannel],
+  );
 
   const settled = useObject<(saleId: string) => void>('onSaleSettled', {
     global: true,
@@ -478,6 +498,7 @@ export default function TakePaymentPage() {
           setPickingItem(false);
           void nav.push('product_form_page', {
             required: 'minimum',
+            then: savedChannel,
             ...(typed?.trim() ? { name: typed.trim() } : {}),
           });
         }}

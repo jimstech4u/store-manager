@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import styles from './receive-page.module.css';
 import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
@@ -232,9 +232,11 @@ export default function ReceivePage() {
    * a callback left published is found by whoever pushes the form next, which is how a customer
    * created from the People tab once attached itself to an open sale.
    */
+  // On this screen's own channel, named in the push — see product-form-page.
+  const savedChannel = `onProductSaved:delivery:${useId()}`;
   useEffect(() => {
     const cleanup = nav.provideObject(
-      'onProductSaved',
+      savedChannel,
       () => async (created: { id: string }) => {
         const fresh = await fetchProduct(created.id);
         if (fresh) addProductRef.current?.(fresh);
@@ -242,7 +244,7 @@ export default function ReceivePage() {
       { global: true, scope: 'catalog' },
     );
     return cleanup;
-  }, [nav]);
+  }, [nav, savedChannel]);
 
   const addProduct = (p: Product) => {
     const options = buyUnits.get(p.id) ?? [];
@@ -963,6 +965,7 @@ export default function ReceivePage() {
           setPicking(false);
           void nav.push('product_form_page', {
             required: 'minimum',
+            then: savedChannel,
             ...(typed?.trim() ? { name: typed.trim() } : {}),
           });
         }}

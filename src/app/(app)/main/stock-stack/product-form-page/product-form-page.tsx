@@ -20,10 +20,10 @@ import { useProduct, type Product } from '@/lib/stacks/catalog-stack';
  * anybody edits it, and that a person can hand-edit into a form claiming to be a product it is not.
  *
  * HANDING THE RESULT BACK. A pushed page has no return value: `nav.push` resolves when the page is
- * shown, not when it is finished with. The caller that needs the result — the sell screen, which
- * asked for an item mid-receipt — publishes a callback with `nav.provideObject('onProductSaved')`
- * and this page picks it up with `useObject`. Nothing else needs it: the stock list and the
- * product page just re-read the catalogue, which `catalogChanged()` already makes them do.
+ * shown, not when it is finished with. The caller that needs the result — the till, take payment or
+ * a delivery, asking for an item mid-way — publishes a callback under a channel of ITS OWN and names
+ * it in the push (`then`); this page answers that channel and no other. Nothing else needs it: the
+ * stock list and the product page are told through `useListNotifier`.
  */
 export default function ProductFormPage() {
   const nav = useNav();
@@ -47,16 +47,23 @@ export default function ProductFormPage() {
   const { product, settled } = useProduct(productId);
 
   /*
-   * The caller's "I want the result" hook, if there is one.
+   * The caller's "I want the result" hook — ONLY if this caller asked for one.
    *
-   * Global scope rather than page scope: the provider is the sell page, which is in a DIFFERENT
-   * stack from this one when the form is opened mid-sale. A page-scoped object is addressed by the
-   * providing page's uid and would never be found from here.
+   * It was one key, 'onProductSaved', that the till published for as long as it was open. The till
+   * is always open in its tab, so EVERY item made or edited anywhere — Stock's +, an item's own
+   * edit, a delivery — found the till's callback and landed on whatever order was open ("when we
+   * make new products, edit or any operation in stock, it adds that product to the sell page draft
+   * order"). The same fault once attached customers made from People to an open sale.
+   *
+   * Now the caller names its own channel in the push (`then`), so the answer goes to the page that
+   * asked and nowhere else; a push that names none gets none. Global scope, because the caller is
+   * often in a different stack.
    */
-  const onSavedObj = useObject<(result: ProductFormResult) => void>('onProductSaved', {
-    global: true,
-    scope: 'catalog',
-  });
+  const savedChannel = String(location?.params?.then ?? '');
+  const onSavedObj = useObject<(result: ProductFormResult) => void>(
+    savedChannel || 'onProductSaved:nobody-asked',
+    { global: true, scope: 'catalog' },
+  );
 
   if (!store) return null;
 
@@ -127,7 +134,7 @@ export default function ProductFormPage() {
            * receipt. `getter()` unwraps to the callback; it is checked rather than assumed
            * because most callers do not publish one.
            */
-          if (onSavedObj.isProvided) {
+          if (savedChannel && onSavedObj.isProvided) {
             const notify = onSavedObj.getter();
             if (notify) notify(result);
           }
