@@ -144,7 +144,14 @@ export default function ReceivePage() {
    * the same visit the new load arrives, counted by the same person against the same note — so it
    * belongs on this screen and not on one somebody has to remember to open.
    */
-  const [wentBack, setWentBack] = useState<Record<string, string>>({});
+  /*
+   * WHAT WENT BACK, as a list the shop adds to — one container and a count at a time (the composer
+   * the fees above use). It was a box for every returnable shape of every item on the load: an NBL
+   * delivery of ten beers drew twenty empty boxes for the two or three kinds that actually went.
+   */
+  const [wentBack, setWentBack] = useState<{ key: string; productUnitId: string; qty: string }[]>([]);
+  const [backShape, setBackShape] = useState('');
+  const [backQty, setBackQty] = useState('');
   /*
    * What each product can arrive in.
    *
@@ -393,7 +400,10 @@ export default function ReceivePage() {
        * obligations against separate makers and settling one says nothing about another.
        */
       for (const sh of canGoBack) {
-        const qty = Number(wentBack[sh.productUnitId]);
+        // The same container added twice is one return of the two counts together.
+        const qty = wentBack
+          .filter((w) => w.productUnitId === sh.productUnitId)
+          .reduce((sum, w) => sum + (Number(w.qty) || 0), 0);
         if (!(qty > 0)) continue;
         const { error: backErr } = await getSupabase().rpc('record_supplier_empties', {
           p_store_id: store.id,
@@ -566,7 +576,7 @@ export default function ReceivePage() {
                 setRebate('');
                 setInvoiceRef('');
                 setSupplier(null);
-                setWentBack({});
+                setWentBack([]);
                 setRecorded(null);
                 setDone(false);
               }}
@@ -1013,23 +1023,73 @@ export default function ReceivePage() {
         <section className={styles.wentBack}>
           <span className={styles.chargesLabel}>Empties that went back</span>
           <p className={styles.wentBackWhy}>
-            Crates and bottles you handed over when this load came. Leave them blank if none did.
+            Crates and bottles you handed over when this load came. Add each kind that went; skip
+            this if none did.
           </p>
 
-          <div className={styles.wentBackBoxes}>
-            {canGoBack.map((sh) => (
-              <Field
-                key={sh.productUnitId}
-                label={`${sh.product} ${sh.plural.toLowerCase()}`}
-                numeric
-                value={wentBack[sh.productUnitId] ?? ''}
-                onChange={(e) =>
-                  setWentBack((prev) => ({ ...prev, [sh.productUnitId]: e.target.value }))
-                }
-                placeholder="0"
-              />
-            ))}
+          {/* ONE SET OF BOXES, and a list of what has been added — as the fees above. */}
+          {wentBack.length > 0 && (
+            <ul className={styles.chargeList}>
+              {wentBack.map((w) => {
+                const sh = canGoBack.find((x) => x.productUnitId === w.productUnitId);
+                const what = sh ? `${sh.product} ${sh.plural.toLowerCase()}` : 'Containers';
+                return (
+                  <li key={w.key} className={styles.chargeItem}>
+                    <span>{what}</span>
+                    <span className={styles.chargeAmount}>{w.qty}</span>
+                    <button
+                      type="button"
+                      className={styles.chargeRemove}
+                      aria-label={`Remove ${what}`}
+                      onClick={() => setWentBack((prev) => prev.filter((x) => x.key !== w.key))}
+                    >
+                      <CloseIcon />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          <div className={styles.grid}>
+            <div className={styles.backPick}>
+              <label className={styles.backLabel} htmlFor="went-back-shape">
+                Which
+              </label>
+              <select
+                id="went-back-shape"
+                className={styles.backSelect}
+                value={backShape}
+                onChange={(e) => setBackShape(e.target.value)}
+              >
+                <option value="">Choose…</option>
+                {canGoBack.map((sh) => (
+                  <option key={sh.productUnitId} value={sh.productUnitId}>
+                    {sh.product} {sh.plural.toLowerCase()}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Field
+              label="How many"
+              numeric
+              value={backQty}
+              onChange={(e) => setBackQty(e.target.value)}
+              placeholder="0"
+            />
           </div>
+          <Button
+            fullWidth
+            variant="secondary"
+            disabled={!backShape || !(Number(backQty) > 0)}
+            onClick={() => {
+              setWentBack((prev) => [...prev, { key: newKey(), productUnitId: backShape, qty: backQty }]);
+              setBackShape('');
+              setBackQty('');
+            }}
+          >
+            <PlusIcon /> Add what went back
+          </Button>
         </section>
       )}
 

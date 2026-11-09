@@ -15,7 +15,12 @@ import { ActionTiles } from '@/components/ui/ActionTiles';
 import { FloatingAction } from '@/components/ui/FloatingAction';
 import { usePermission } from '@/hooks/usePermission';
 import { customPeriod, resolvePeriod, usePeriod } from '@/lib/stacks/periods';
-import { salesSummary, type SalesSummary } from '@/lib/stacks/report-readers';
+import {
+  salesSummary,
+  takingsByDay,
+  type DayTakings,
+  type SalesSummary,
+} from '@/lib/stacks/report-readers';
 import { CashIcon, ChartIcon, ChevronRightIcon, ReceiptIcon, ShareIcon } from '@/components/ui/Icon';
 import { useAuth } from '@/providers/AuthProvider';
 import { useStackBack } from '@/hooks/useStackBack';
@@ -47,6 +52,16 @@ function balanceSaid(balance: number): { text: string; tone: 'owing' | 'credit' 
   if (balance > 0.005) return { text: formatMoney(balance), tone: 'owing' };
   if (balance < -0.005) return { text: `${formatMoney(-balance)} credit`, tone: 'credit' };
   return { text: 'Clear', tone: 'clear' };
+}
+
+/** A day of the shop's calendar as it is said: "Mon 9 Nov". */
+function dayName(day: string): string {
+  return new Date(`${day}T00:00:00Z`).toLocaleDateString('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  });
 }
 
 /** Two letters to find a name by before it is read. */
@@ -229,6 +244,21 @@ export default function MoneyPage() {
   });
   // A payment recorded anywhere in the app changes this figure, so it re-reads rather than sitting
   // on a total that was true when the screen was opened.
+
+  /*
+   * EACH DAY OF THE PERIOD, BY HOW IT WAS PAID — "each day's breakdown in money for cash, transfer,
+   * POS and other". Net of what went back out the same way (a payment taken back in a correction,
+   * change handed over), because it is checked against a drawer and a bank app. For whoever may read
+   * reports, as the server decides (`takings_by_day`, 0275).
+   */
+  const canSeeDays = can('reports.view');
+  const days = useResource<DayTakings[]>({
+    key: `money-days:${store?.id ?? 'none'}:${period?.fromAt ?? ''}:${period?.toAt ?? ''}`,
+    scope: ACCOUNT_DERIVED_SCOPE,
+    enabled: Boolean(store && period && canSeeDays),
+    read: () => takingsByDay({ storeId: store!.id, from: period!.fromAt, to: period!.toAt }),
+  });
+  const [allDays, setAllDays] = useState(false);
 
   const owed = owedRow ? Number(owedRow.owed) : null;
 
@@ -442,6 +472,46 @@ export default function MoneyPage() {
                   ` · ${trading.data.customers} ${trading.data.customers === 1 ? 'customer' : 'customers'}`}
               </span>
             </div>
+          )}
+
+          {canSeeDays && days.data && days.data.length > 0 && (
+            <section className={styles.days} aria-label="Each day, by how it was paid">
+              <div className={styles.daysHead}>
+                <span className={styles.daysTitle}>Each day</span>
+                <span className={styles.daysNote}>after corrections and change given</span>
+              </div>
+              <ul className={styles.dayList}>
+                {(allDays ? days.data : days.data.slice(0, 7)).map((d) => (
+                  <li key={d.day} className={styles.dayRow}>
+                    <div className={styles.dayTop}>
+                      <span className={styles.dayName}>{dayName(d.day)}</span>
+                      <span className={styles.dayTotal}>{formatMoney(d.total)}</span>
+                    </div>
+                    <div className={styles.dayMethods}>
+                      {(
+                        [
+                          ['Cash', d.cash],
+                          ['Transfer', d.transfer],
+                          ['POS', d.pos],
+                          ['Other', d.other],
+                        ] as const
+                      )
+                        .filter(([, amount]) => amount !== 0)
+                        .map(([label, amount]) => (
+                          <span key={label} className={styles.dayMethod}>
+                            {label} <strong>{formatMoney(amount)}</strong>
+                          </span>
+                        ))}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              {days.data.length > 7 && (
+                <button type="button" className={styles.daysMore} onClick={() => setAllDays((v) => !v)}>
+                  {allDays ? 'Show the last 7 days' : `Show all ${days.data.length} days`}
+                </button>
+              )}
+            </section>
           )}
         </>
       )}

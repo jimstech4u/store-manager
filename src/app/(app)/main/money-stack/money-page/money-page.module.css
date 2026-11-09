@@ -388,3 +388,90 @@
     background: var(--surface);
   }
 }
+
+/* ── Each day, by how it was paid ─────────────────────────────────────────────────── */
+
+.days {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.daysHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+}
+
+.daysTitle {
+  font-weight: 700;
+}
+
+.daysNote {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.dayList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dayRow {
+  padding: var(--space-2) 0;
+}
+
+.dayRow + .dayRow {
+  border-top: 1px solid var(--border);
+}
+
+.dayTop {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.dayName {
+  font-weight: 600;
+}
+
+.dayTotal {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.dayMethods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.dayMethod {
+  white-space: nowrap;
+}
+
+.dayMethod strong {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.daysMore {
+  width: 100%;
+  min-height: 44px;
+  margin-top: var(--space-1);
+  border: 0;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}

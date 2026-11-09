@@ -140,6 +140,38 @@ export async function takingsByMethod(args: {
   }));
 }
 
+/** One day of the shop's calendar: what came in, net, by how it was paid (`takings_by_day`, 0275). */
+export interface DayTakings {
+  day: string;
+  cash: number;
+  transfer: number;
+  pos: number;
+  other: number;
+  total: number;
+  payments: number;
+}
+
+export async function takingsByDay(args: {
+  storeId: string;
+  from: string | null;
+  to: string | null;
+}): Promise<DayTakings[]> {
+  const rows = await rpc<Record<string, unknown>>('takings_by_day', {
+    p_store_id: args.storeId,
+    p_from: args.from,
+    p_to: args.to,
+  });
+  return rows.map((r) => ({
+    day: String(r.day),
+    cash: Number(r.cash) || 0,
+    transfer: Number(r.transfer) || 0,
+    pos: Number(r.pos) || 0,
+    other: Number(r.other) || 0,
+    total: Number(r.total) || 0,
+    payments: Number(r.payments) || 0,
+  }));
+}
+
 export interface AgedRow {
   storeCustomerId: string;
   customerName: string;
