@@ -131,3 +131,85 @@ export function patchCached<T>(
   if (prev === null || prev === undefined) return;
   void core.setState(scope, key, patch(prev), true, getDefaultStorage());
 }
+
+/**
+ * A RECORD CHANGED, SO EVERY CACHE ON THIS DEVICE THAT HOLDS IT SAYS SO.
+ *
+ * "renaming a product or customer and any changes to data does not get updated in some lists like
+ * pickers and pages." `patchCached` corrects the keys a writer knows about, and a writer knows about
+ * four or five. A product's name is also in every picker search, the till's open orders, low stock,
+ * what is expiring, the supplier's deliveries; a customer's in the sales list, the till's tabs, the
+ * picker. Each was right only after it happened to read again.
+ *
+ * So the change is applied by IDENTITY, wherever it is held: every cached object whose `id` is this
+ * record takes the changed fields it already has (never a field it did not have — a copy keeps its
+ * own shape), and every object that refers to it (`productId` beside `productName`, `customer_id`
+ * beside `customer_name`, as `refs` says) takes the new name. Ids are uuids, so an id that matches is
+ * this record and nothing else. Only what changed is written, and the server's next read has the
+ * last word.
+ *
+ * Values in memory only: a key nobody has read this session is re-read when it is.
+ */
+export function patchRecordEverywhere(change: {
+  id: string;
+  /** The record's changed fields, under the names its cached copies use. */
+  fields: Record<string, unknown>;
+  /** Where another record refers to this one: the id field and the name field beside it. */
+  refs?: [idField: string, nameField: string][];
+  /** The name those references take. */
+  name?: string;
+}): void {
+  const { id, fields, refs = [], name } = change;
+  const walk = (v: unknown, depth: number): unknown => {
+    if (depth > 10 || v === null || typeof v !== 'object') return v;
+    if (Array.isArray(v)) {
+      let changed = false;
+      const out = v.map((x) => {
+        const y = walk(x, depth + 1);
+        if (y !== x) changed = true;
+        return y;
+      });
+      return changed ? out : v;
+    }
+    // Plain objects only: a Map or a Date is left exactly as it is.
+    const proto = Object.getPrototypeOf(v);
+    if (proto !== Object.prototype && proto !== null) return v;
+    const o = v as Record<string, unknown>;
+    let next: Record<string, unknown> | null = null;
+    const set = (k: string, value: unknown) => {
+      if (o[k] === value) return;
+      (next ??= { ...o })[k] = value;
+    };
+    if (o.id === id) {
+      for (const [k, value] of Object.entries(fields)) if (value !== undefined && k in o) set(k, value);
+    }
+    if (name !== undefined) {
+      for (const [idField, nameField] of refs) if (o[idField] === id && nameField in o) set(nameField, name);
+    }
+    for (const [k, child] of Object.entries(o)) {
+      if (child === null || typeof child !== 'object') continue;
+      const w = walk(child, depth + 1);
+      if (w !== child) (next ??= { ...o })[k] = w;
+    }
+    return next ?? o;
+  };
+
+  const core = StateStack.core;
+  for (const [scope, keys] of Object.entries(core.dehydrate())) {
+    for (const [key, value] of Object.entries(keys)) {
+      const next = walk(value, 0);
+      if (next !== value) void core.setState(scope, key, next, true, getDefaultStorage());
+    }
+  }
+}
+
+/** How other records name a product or a customer beside its id. */
+export const PRODUCT_REFS: [string, string][] = [
+  ['productId', 'productName'],
+  ['product_id', 'product_name'],
+];
+export const CUSTOMER_REFS: [string, string][] = [
+  ['customerId', 'customerName'],
+  ['customer_id', 'customer_name'],
+  ['store_customer_id', 'customer_name'],
+];

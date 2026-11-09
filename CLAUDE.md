@@ -79,6 +79,15 @@ The rule:
 fails if a list-read RPC fires after an add, a rename or a new unit. "It appeared" is not the
 claim; "it appeared without asking" is.
 
+**A record is renamed EVERYWHERE this device holds it** — `patchRecordEverywhere` (resource.ts),
+called by `applyProductLocally` and `applyCustomerLocally`. It walks every cached value in memory:
+an object whose `id` is the record takes the changed fields it already has; an object that refers to
+it (`PRODUCT_REFS`, `CUSTOMER_REFS`: `productId` beside `productName`, `customer_id` beside
+`customer_name`) takes the new name. The writer knew four or five keys; the name was also in the
+picker, the till's open tabs, the sales list. A writer that changes a record calls the apply function
+— the customer edit page did not, so a corrected name stayed old on the tab being served
+(`probe-rename-everywhere-ui`).
+
 ## A screen for everything the shop can do, and nothing it cannot
 
 The database is ahead of the screens, and silently. A shop can invite staff, hold deposits, agree a
@@ -814,6 +823,17 @@ free, then start.
 Before saying it is done: `npx tsc --noEmit`, `npx next lint`, `npx next build`, and the probes
 for the areas touched.
 
+**Chrome is not the iPhone.** Safari drops a hidden element's scroll offset; Chrome keeps it. Every
+page went back to the top on iPhone after a push and Back while Chrome showed nothing wrong
+(navigation-stack 1.10.1 fixed it). Anything about scroll, layout or the keyboard is checked in
+WebKit too: `ENGINE=webkit node scripts/probe-scroll-kept-ui.mjs`. Mobile WebKit has no wheel —
+scroll the page's own scroller with `scrollBy`.
+
+**A library tried locally needs the build cache cleared.** Webpack treats a `node_modules` package
+as unchanged while its version is, so a `dist` copied over 1.10.0 is NOT in the next build — every
+"still failing" for an hour was the old library. `rm -rf .next/cache` before `next build`, and grep
+`.next/static/chunks` for something only the new code has.
+
 ### Known stale probes, and one thing unverified (2026-09-23)
 
 Two probes fail for reasons that have nothing to do with what they test. A probe that fails for a
@@ -826,6 +846,7 @@ failing.
 | `probe-account-history.mjs` | Ignores the base-URL argument and goes to port 3100 regardless. | Take `process.argv[2]`, as the other probes do. |
 | `probe-ledgers.mjs` | **Fails on main, cause not investigated** (checked 2026-09-23 with a control build): "a shape with one product is named by the product, not the maker" finds nothing, then the walk times out on a `fill`. Not staleness as far as anyone has looked — it may be a real defect. | Investigate before trusting the empties naming rules. |
 | `probe-loading-states.mjs` | **Fails on main** (same control): its walk drifts — `[account-page]` shows the People list, `[deposit-customer]` shows Settings — then four screens come back empty and it times out. Most likely it predates People moving into `settings-stack` on 2026-09-11. | Re-target the walk at where those pages live now. |
+| `probe-no-round-trip.mjs` | **Do not run against the live shop: its last step SETTLES A SALE.** Fails on main too (9 Nov control against the live site): adding a unit re-reads `store_units_for`/`list_products`, and the item price field (`UnitsEditor_card` › "Price for one") is no longer found, so it times out there. Its clean-up was at the end of the walk and left an `RKeg…` unit on every run; it is in `finally` now. | Retarget the price step, decide whether the unit re-read is a real regression, and settle nothing — check the customer list is not re-read some other way. |
 | `probe-after-sale.mjs` | Waits for a button reading **Take payment**. That label is conditional: it reads `Count N items first` whenever anything on the till needs counting, which the count-gate flow introduced on 2026-09-16. Probe last touched 2026-09-09. | Either clear the count gate first, or match the label the till actually shows. |
 
 **UNVERIFIED, and it undercuts the offline promise if it is true.** iOS evicts IndexedDB for sites

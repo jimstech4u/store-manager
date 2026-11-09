@@ -47,6 +47,8 @@ const check = (what, ok, detail = '') => {
 const stamp = Date.now().toString().slice(-6);
 const NAME = `AAA Round Trip ${stamp}`;
 const RENAMED = `AAA Renamed ${stamp}`;
+// Named up here so the clean-up in `finally` can find it however far the walk got.
+const NEWUNIT = `RKeg${stamp}`;
 /*
  * THE SHOP THE BROWSER WILL SIGN INTO, asked of the membership.
  *
@@ -124,7 +126,6 @@ try {
   await p.getByRole('button', { name: /Add a shape/i }).first().click();
   await p.waitForTimeout(3000);
 
-  const NEWUNIT = `RKeg${stamp}`;
   await p.locator('[class*="UnitPicker_addRow"]').first().click();
   await p.waitForTimeout(4000);
   await p.getByLabel(/What is one of them called/i).fill(NEWUNIT);
@@ -271,7 +272,12 @@ try {
     reads.join(', ') || 'no list reads',
   );
 
-  // ── Clean up ──────────────────────────────────────────────────────────────────────
+} finally {
+  await browser.close();
+  /*
+   * IN `finally`, however far the walk got. It sat at the end of the walk, so a step that timed out
+   * left the probe's unit — and its item — in the shop on every run (found 9 Nov: RKeg rows).
+   */
   const { data: made } = await admin
     .from('products')
     .select('id')
@@ -284,8 +290,6 @@ try {
     if (gone.error) await admin.from('products').update({ status: 'archived' }).eq('id', row.id);
   }
   await admin.from('store_units').delete().eq('store_id', storeId).eq('name', NEWUNIT);
-} finally {
-  await browser.close();
   await admin.from('store_units').delete().eq('id', crate);
 }
 

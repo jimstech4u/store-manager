@@ -18,6 +18,7 @@ import {
   type AccountEmpties,
 } from '@/lib/stacks/customer-account';
 import { formatQtySpoken, messageOf } from '@/lib/format';
+import { applyCustomerLocally } from '@/lib/stacks/local-effects';
 import styles from './customer-edit-page.module.css';
 
 /**
@@ -235,6 +236,20 @@ export default function CustomerEditPage() {
         },
       });
       notifyDebtors({ type: 'patch', id: customerId, patch: { balance } });
+      /*
+       * AND EVERY OTHER PLACE THAT NAMES THEM — their account page, Empties, Deposits, the picker,
+       * the till's tabs, the sales list. Only the two lists above were told, so a corrected name was
+       * still the old one in the picker and on the tab being served.
+       */
+      if (store) {
+        applyCustomerLocally({
+          id: customerId,
+          storeId: store.id,
+          name: name.trim(),
+          phone: phone.trim() || undefined,
+          business: business.trim() || null,
+        });
+      }
 
       accountsChanged();
       await nav.pop();

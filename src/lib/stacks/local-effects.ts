@@ -1,6 +1,11 @@
 'use client';
 
-import { patchCached } from '@/lib/stacks/resource';
+import {
+  CUSTOMER_REFS,
+  PRODUCT_REFS,
+  patchCached,
+  patchRecordEverywhere,
+} from '@/lib/stacks/resource';
 import type { Product } from '@/lib/stacks/catalog-stack';
 import type { CustomerAccount } from '@/lib/stacks/customer-account';
 import type { DepositCustomer, DepositMove, EmptiesCustomer } from '@/lib/stacks/customer-ledgers';
@@ -210,6 +215,13 @@ export function applyProductLocally(row: Product): void {
     `product:${row.id}`,
     (st) => ({ ...st, product: st.product ? { ...st.product, ...row } : row }),
   );
+  // And everywhere else it is held — pickers, the till's open orders, low stock, what is expiring.
+  patchRecordEverywhere({
+    id: row.id,
+    fields: row as unknown as Record<string, unknown>,
+    refs: PRODUCT_REFS,
+    name: row.name,
+  });
 }
 
 /* ═══ A customer added or changed ═════════════════════════════════════════════════════ */
@@ -309,4 +321,12 @@ export function applyCustomerLocally(c: CustomerChange): void {
   patchCached<DepositCustomer[]>('customer_ledgers', `deposit-customers:${c.storeId}`, (rows) =>
     rows.map((r) => (r.customerId === c.id ? { ...r, ...namePatch } : r)),
   );
+
+  // And everywhere else — the picker, the till's tabs, the sales list, their statement.
+  patchRecordEverywhere({
+    id: c.id,
+    fields: { ...rowPatch, ...namePatch },
+    refs: CUSTOMER_REFS,
+    name: c.name,
+  });
 }
