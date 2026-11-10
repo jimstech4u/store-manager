@@ -19,6 +19,7 @@ import { usePermission } from '@/hooks/usePermission';
 import { Field } from '@/components/ui/Field';
 import { useAuth } from '@/providers/AuthProvider';
 import { useDraftOrders } from '@/lib/stacks/draft-orders';
+import { useSayInShapes, useSellingUnits } from '@/lib/stacks/selling-units';
 import styles from './order-page.module.css';
 
 /**
@@ -46,6 +47,8 @@ export default function OrderPage() {
 
   const { store } = useAuth();
   const { claimByCode } = useDraftOrders(store?.id ?? null);
+  const { byProduct } = useSellingUnits(store?.id ?? null);
+  const say = useSayInShapes(store?.id ?? null);
   const order = useOnlineOrder(id);
   const history = useOrderHistory(id);
   const { can } = usePermission();
@@ -178,7 +181,15 @@ export default function OrderPage() {
 
               <ul className={styles.lines}>
                 {data.lines.map((line) => {
-                  const short = line.in_stock < line.qty;
+                  /*
+                   * LIKE FOR LIKE. `in_stock` is in the item's smallest unit (bottles) and `qty` in
+                   * the shape ordered (crates); compared as they came, two crates against 1,196
+                   * bottles was never short and thirty crates against twenty bottles always was.
+                   */
+                  const shape = byProduct
+                    .get(line.product_id)
+                    ?.find((u) => u.name.toLowerCase() === line.unit.toLowerCase());
+                  const short = line.in_stock < line.qty * (shape?.baseQty ?? 1);
                   return (
                     <li key={line.product_id} className={styles.line}>
                       <div className={styles.lineTop}>
@@ -194,7 +205,7 @@ export default function OrderPage() {
                       */}
                       {short && (
                         <p className={styles.short}>
-                          Your count says {formatQtySpoken(line.in_stock)} in stock.
+                          Your count says {say(line.product_id, line.in_stock, '')} in stock.
                         </p>
                       )}
                     </li>

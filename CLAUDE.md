@@ -875,6 +875,18 @@ writing `customerId`/`customerName` by hand. `push` saves the label as the custo
 a read from the shop the label IS the name; clearing only the customer left the tab named after
 them with Remove grey (10 Nov, "Alimat"). The patch drops a label that only echoed the customer.
 
+**Reports is the one reporting tool** (10 Nov; Export folded in, its page in `_unused/`). Every
+report is a `ReportDoc` from `lib/stacks/export-reports.ts` with `totalsFor(kept)`; the page ticks
+lines in and out and `keepRows` cuts the doc, so the figures, PDF, picture, roll and CSV all carry
+only the ticked lines. Lists read past PostgREST's 1,000-row cap with `rpcAll` — "Payments received"
+for a month was exactly 1,000 before. Stock is said through `useSayInShapes`. `probe-reports-ui`
+walks every report.
+
+**A scroll is remembered only if a person made it** (navigation-stack 1.11.1). Safari fires a
+scroll to 0 when a tab is shown again, before its restore runs; recorded, every tab switch lost its
+place on iPhone. A probe that sets `scrollTop` must fire a wheel (or touch) on the scroller first.
+`probe-tab-scroll-ui` (ENGINE=webkit) covers tab switches.
+
 **The till's box comes up with the last line above it** (`bringUnderBar`), so what was just added is
 never under the pinned customer bar. `probe-sheets-and-customer-ui` checks this, Remove after a
 reload, the stacked picker, and a customer created from All items / Take payment (the create is

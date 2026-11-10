@@ -62,7 +62,11 @@ const scrollTo = async (y) => {
     const page = pages[pages.length - 1];
     const all = [page, ...(page?.querySelectorAll('*') ?? [])];
     const scroller = all.find((el) => el && el.scrollHeight > el.clientHeight + 4 && getComputedStyle(el).overflowY !== 'visible');
-    if (scroller) scroller.scrollTop = y;
+    // A finger first: since navigation-stack 1.11.1 a scroll nobody made is not remembered.
+    if (scroller) {
+      scroller.dispatchEvent(new WheelEvent('wheel', { bubbles: true }));
+      scroller.scrollTop = y;
+    }
   }, y);
   await p.waitForTimeout(900);
 };
@@ -92,10 +96,12 @@ try {
   await p.waitForURL(/\/main/, { timeout: 90000 });
   await p.waitForTimeout(8000);
 
+  console.log('  · More');
   await p.locator('.nav-item').filter({ hasText: /^More$/ }).first().click();
   await p.waitForTimeout(2500);
   await p.getByRole('button', { name: /everyone you sell to/i }).locator('visible=true').first().click();
   await p.waitForTimeout(5000);
+  console.log('  · a customer');
   await p.getByRole('button', { name: /Arewa/ }).locator('visible=true').first().click();
   await p.waitForTimeout(6000);
 

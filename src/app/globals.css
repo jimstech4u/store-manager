@@ -337,6 +337,16 @@ a:focus-visible {
   [data-print-no-print] {
     display: none !important;
   }
+
+  /*
+   * ONE SHEET AT A TIME. The Reports page draws a price list both as the report (`page`) and as the
+   * wall poster; printing would lay one over the other. The poster prints only when it was asked
+   * for (`printPoster` sets `data-print-poster` on <html>), and the report otherwise.
+   */
+  html:not([data-print-poster]) [data-print-root='poster'],
+  html[data-print-poster] [data-print-root='page'] {
+    display: none !important;
+  }
 }
 
 

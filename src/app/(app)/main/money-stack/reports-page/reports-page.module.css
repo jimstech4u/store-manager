@@ -1,126 +1,333 @@
-.picker {
+/* ── 1. Which report ─────────────────────────────────────────────────────────────── */
+.choose {
+  display: grid;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+/* The four kinds, as one segmented control: one tap changes the reports offered under it. */
+.groups {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--radius);
+  background: var(--surface-muted, rgba(0, 0, 0, 0.05));
+}
+
+.group {
+  min-height: 40px;
+  border: none;
+  border-radius: calc(var(--radius) - 4px);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.groupOn {
+  background: var(--surface);
+  color: var(--primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.reports {
+  /* One row that scrolls sideways: a wall of cards pushed the report itself off the first screen. */
   display: flex;
   gap: var(--space-2);
   overflow-x: auto;
-  margin-bottom: var(--space-3);
-  /* Edge-to-edge scroll with the padding inside, so the first and last chip can reach the rail. */
   scrollbar-width: none;
+  margin: 0 calc(-1 * var(--space-1));
+  padding: 2px var(--space-1);
 }
 
-.picker::-webkit-scrollbar {
+.reports::-webkit-scrollbar {
   display: none;
 }
 
-.tab {
+.report {
   flex: none;
-  min-height: var(--touch-min);
-  padding: var(--space-2) var(--space-4);
-  border: 2px solid var(--border-strong);
-  border-radius: var(--radius-full);
+  min-height: 40px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
   background: var(--surface);
   color: var(--text);
-  font-weight: 600;
+  font: inherit;
+  font-size: var(--text-sm);
   white-space: nowrap;
   cursor: pointer;
 }
 
-.tabActive {
+.reportOn {
   border-color: var(--primary);
-  background: var(--primary-subtle);
-  color: var(--primary);
+  background: var(--primary);
+  color: #fff;
 }
 
-.blurb {
+.reportName {
+  font-weight: 600;
+}
+
+.reportHint {
+  margin: 0;
   font-size: var(--text-sm);
   color: var(--text-muted);
+}
+
+/* ── 2. Its window ───────────────────────────────────────────────────────────────── */
+.filters {
+  display: grid;
+  gap: var(--space-3);
   margin-bottom: var(--space-4);
 }
 
+.range {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+/* ── 3. What it comes to ─────────────────────────────────────────────────────────── */
+.figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+}
+
+.figure {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.figure dt {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.figure dd {
+  margin: 0;
+  font-size: var(--text-lg, 1.2rem);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* The last figure is what the report adds up to — said loudest. */
+.figureLead {
+  border-color: var(--primary);
+  background: var(--primary-subtle, var(--surface));
+}
+
+.figureLead dd {
+  color: var(--primary);
+}
+
+/* ── 4. The report, as it prints ─────────────────────────────────────────────────── */
 .sheet {
+  margin: 0 0 var(--space-4);
   padding: var(--space-4);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
-  /* A wide table on a narrow phone scrolls inside its own card rather than pushing the page
-     sideways — the printed version has the full width of the paper and needs no such help. */
-  overflow-x: auto;
 }
 
-.head {
+.sheetHead {
+  padding-bottom: var(--space-3);
   margin-bottom: var(--space-3);
+  border-bottom: 3px solid var(--primary);
 }
 
-.reportTitle {
-  font-size: var(--text-lg);
-  font-weight: 700;
+.sheetShop {
+  margin: 0;
+  font-weight: 800;
+  color: var(--primary);
 }
 
-.reportMeta {
+.sheetTitle {
+  margin: var(--space-1) 0;
+  font-size: var(--text-lg, 1.2rem);
+}
+
+.sheetFilters {
+  margin: 0;
   font-size: var(--text-sm);
   color: var(--text-muted);
+}
+
+.sheetEmpty {
+  margin: var(--space-3) 0;
+  color: var(--text-muted);
+}
+
+/* All / none, and how many are in. */
+.allRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--touch-min);
+  margin-bottom: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.allRow input,
+.tick input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.tableWrap {
+  overflow-x: auto;
+  /* A wide table on a narrow phone scrolls inside its own card rather than pushing the page
+     sideways — the printed version has the full width of the paper and needs no such help. */
 }
 
 .table {
   width: 100%;
   border-collapse: collapse;
   font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
 }
 
 .table th {
-  text-align: start;
-  font-weight: 700;
-  padding: var(--space-2) var(--space-1);
-  border-bottom: 2px solid var(--border-strong);
+  padding: var(--space-2);
+  background: var(--primary);
+  color: #fff;
+  text-align: left;
   white-space: nowrap;
 }
 
 .table td {
-  padding: var(--space-2) var(--space-1);
+  padding: var(--space-2);
   border-bottom: 1px solid var(--border);
   vertical-align: top;
 }
 
-/* Money and quantities right-aligned and tabular, so a column of figures can be read down. */
-.table th:last-child,
-.table td:last-child,
-.table th:nth-child(2),
-.table td:nth-child(2) {
-  text-align: end;
-  font-family: var(--font-numeric);
-  font-variant-numeric: tabular-nums;
+.table tbody tr {
+  cursor: pointer;
+}
+
+.table tbody tr:nth-child(even) td {
+  background: var(--surface-muted, rgba(0, 0, 0, 0.03));
+}
+
+/* A line left out: still there to tick back, plainly not in. */
+.rowOut td {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--border-strong, currentColor);
+}
+
+.rowOut .tick {
+  text-decoration: none;
+}
+
+.tick {
+  width: 36px;
+  padding-right: 0 !important;
+}
+
+.right {
+  text-align: right !important;
   white-space: nowrap;
 }
 
-.dim {
-  color: var(--text-muted);
+.totals {
+  margin: var(--space-3) 0 0;
+  display: grid;
+  gap: var(--space-1);
+  justify-content: end;
 }
 
 .total {
-  margin-top: var(--space-3);
-  font-size: var(--text-base);
+  display: flex;
+  gap: var(--space-4);
+  justify-content: flex-end;
+  font-variant-numeric: tabular-nums;
 }
 
-.footnote {
-  margin-top: var(--space-2);
-  font-size: var(--text-sm);
+.total dt {
   color: var(--text-muted);
 }
 
-/*
-  THE TWO WAYS TO TAKE A REPORT AWAY: print it, or save it.
+.total dd {
+  margin: 0;
+  min-width: 8rem;
+  text-align: right;
+  font-weight: 700;
+}
 
-  It set a margin above itself and nothing between its children, so "Print the poster" and "Save
-  as CSV" sat edge to edge and read as one control with a seam. They are two different decisions —
-  one makes paper, the other makes a file — and nothing about the layout said so.
-*/
-.printRow {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  margin-top: var(--space-4);
-  /*
-    And room before the sheet below it. The two buttons sat directly on top of the report card,
-    so "Save as CSV" looked like the card's own header rather than an action above it.
-  */
-  margin-bottom: var(--space-4);
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ── 5. Take it away ─────────────────────────────────────────────────────────────── */
+.out {
+  display: grid;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.note {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.posterHeading {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.poster {
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  margin-bottom: var(--space-5);
+}
+
+@media print {
+  .sheet,
+  .poster {
+    border: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .table th {
+    background: #fff;
+    color: #000;
+    border-bottom: 0.4mm solid #000;
+  }
+
+  .tableWrap {
+    overflow: visible;
+  }
 }

@@ -1,105 +1,60 @@
 'use client';
 
 import { ACCOUNT_DERIVED_SCOPE } from '@/lib/stacks/customer-account';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { Button } from '@/components/ui/Button';
-import { Explain } from '@/components/ui/Explain';
+import { Field } from '@/components/ui/Field';
 import { PrinterIcon } from '@/components/ui/Icon';
 import { FilterBar } from '@/components/ui/FilterBar';
-import { LoadArea, useLoadArea } from '@/components/ui/LoadArea';
+import { LoadArea } from '@/components/ui/LoadArea';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
+import { DocumentActions } from '@/components/ui/DocumentActions';
+import { useDebounced } from '@/components/ui/SearchField';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
+import { useResource } from '@/lib/stacks/resource';
 import { customPeriod, resolvePeriod, usePeriod, type PeriodKind } from '@/lib/stacks/periods';
+import { useSayInShapes } from '@/lib/stacks/selling-units';
 import {
-  debtorsAged,
-  downloadCsv,
-  priceList,
-  storefront,
-  salesByDay,
-  salesByProduct,
-  salesSummary,
-  staffActivity,
-  takingsByMethod,
-  toCsv,
-  type AgedRow,
-  type DayRow,
-  type MethodRow,
-  type PriceRow,
-  type ProductRow,
-  type SalesSummary,
-  type StaffRow,
-} from '@/lib/stacks/report-readers';
-import { stockReport, type StockReport } from '@/lib/stacks/reports';
-import { formatDateTime, formatMoney, formatQtySpoken } from '@/lib/format';
+  loadReport,
+  REPORT_GROUPS,
+  REPORTS,
+  type LoadedReport,
+  type ReportGroup,
+  type ReportId,
+} from '@/lib/stacks/export-reports';
+import { keepRows, renderReportPages, reportToCsv, reportToRoll } from '@/lib/report-doc';
+import { shareCsv } from '@/lib/export-csv';
+import type { PriceRow } from '@/lib/stacks/report-readers';
+import { formatDateTime, formatMoney } from '@/lib/format';
 import { QrCode } from '@/components/ui/QrCode';
 import { appUrl } from '@/lib/app-url';
-import { listDocument, usePrintShare } from '@/components/ui/PrintShare';
 import styles from './reports-page.module.css';
 
 /**
- * The reports a shop asks for, over a window it chooses, on paper or as a PDF.
+ * THE SHOP'S REPORTING TOOL — choose the question, set its window, pick the lines, take it away.
  *
- * PRINTED THROUGH THE BROWSER'S OWN DIALOG rather than a generated file. That dialog has "Save as
- * PDF" on every platform this runs on, so one action covers both — and the PDF it makes is real
- * text: selectable, searchable, and a fraction of the size of the image-based receipt PDFs, which
- * are images because a thermal receipt genuinely is one.
+ * "report page needs a reconstruction and a well defined, proper professional reporting tool …
+ * we should have a checkbox for a line to exist in the report … stock in its shape, American Cola
+ * is 300 packs 10 pieces, not just pieces" (9 Nov). Laid out the way a bank statement is:
  *
- * THE WINDOW IS RESOLVED ON THE SERVER. This page used to pull a thousand rows and filter them to
- * thirty days in JavaScript — and PostgREST caps a response at 1,000 rows, so a shop with more than
- * a thousand receipts got a document quietly missing the rest. Every report here is aggregated in
- * SQL over the whole period, in the shop's own timezone.
+ *   1. WHICH REPORT — four groups (Money, Stock, People, Team), the reports of one group at a time.
+ *   2. ITS WINDOW — the shop's own days, resolved on the server; only on reports that have one.
+ *   3. WHAT IT COMES TO — the totals, as figures at the top, of the lines ticked.
+ *   4. THE LINES — each with a tick box, and All / None. A line left out is greyed here and absent
+ *      from everything taken away.
+ *   5. TAKE IT AWAY — PDF on A4, a picture, the receipt printer, a page printer, share, or CSV.
  *
- * THREE PAGE SHAPES. A receipt prints on the configured roll; these print on A4; the price list
- * prints as an A1 poster, which is its own layout rather than a scaled A4.
+ * It replaces two pages that each did half: Reports had the figures and printed through the
+ * browser; Export had the lists and every way out. One list of reports now (`export-reports.ts`),
+ * and one way of drawing each (`report-doc.ts`).
+ *
+ * THE WINDOW IS RESOLVED ON THE SERVER, and every report is read whole: PostgREST caps a response
+ * at 1,000 rows, so the lists page through to the end rather than trusting one answer.
  */
-
-type Which =
-  | 'sales'
-  | 'days'
-  | 'products'
-  | 'takings'
-  | 'debtors'
-  | 'stock'
-  | 'staff'
-  | 'prices';
-
-const REPORTS: { id: Which; name: string; blurb: string; windowed: boolean }[] = [
-  { id: 'sales', name: 'What you sold', blurb: 'Receipts, what was billed, what came in, what is still owed.', windowed: true },
-  { id: 'days', name: 'Day by day', blurb: 'Every trading day in the period, with its takings.', windowed: true },
-  { id: 'products', name: 'By item', blurb: 'What sold, what it made, and what it cost you.', windowed: true },
-  { id: 'takings', name: 'How you were paid', blurb: 'Cash, transfer and card, side by side.', windowed: true },
-  { id: 'debtors', name: 'Who owes you', blurb: 'Everyone carrying a balance, oldest debt first.', windowed: false },
-  { id: 'stock', name: 'What is on the shelf', blurb: 'Every item, what is left, and what your stock is worth.', windowed: false },
-  { id: 'staff', name: 'Who did what', blurb: 'Receipts, deliveries, counts and corrections, per person.', windowed: true },
-  { id: 'prices', name: 'Price list', blurb: 'Every item and price — prints as a poster for the wall.', windowed: false },
-];
-
-interface Loaded {
-  /*
-   * WHICH REPORT THIS IS AN ANSWER TO.
-   *
-   * `useLoadArea` keeps the previous value while it refetches — correct for a refresh, because the
-   * rows on screen are the last thing known to be true. Switching REPORT is not a refresh: it is a
-   * different question, and the old object's empty slice for the new one rendered as the new one's
-   * result. The price list showed "Nothing has a price on it yet" over thirty-seven prices that had
-   * already come back down the wire.
-   */
-  for: Which;
-  summary: SalesSummary | null;
-  days: DayRow[];
-  products: ProductRow[];
-  methods: MethodRow[];
-  debtors: AgedRow[];
-  stock: StockReport | null;
-  staff: StaffRow[];
-  prices: PriceRow[];
-  /** Where a scanned poster should land, when the shop is listed at all. */
-  storefront: { code: string | null; isPublic: boolean };
-}
 
 export default function ReportsPage() {
   const goBack = useStackBack();
@@ -107,242 +62,100 @@ export default function ReportsPage() {
   const { can } = usePermission();
   const problem = useProblem();
   const showProblem = problem.show;
+  const say = useSayInShapes(store?.id ?? null);
 
-  const [which, setWhich] = useState<Which>('sales');
-  const { period, setPeriod, error: periodError, reload: reloadPeriod } = usePeriod(
-    store?.id ?? null,
+  const [which, setWhich] = useState<ReportId>('days');
+  const spec = REPORTS.find((r) => r.id === which)!;
+  const [group, setGroup] = useState<ReportGroup>(spec.group);
+  const { period, setPeriod, error: periodError, reload: reloadPeriod } = usePeriod(store?.id ?? null);
+
+  /* An amount range, for the reports that take one — read once the typing stops. */
+  const [minText, setMinText] = useState('');
+  const [maxText, setMaxText] = useState('');
+  const min = useDebounced(minText, 500);
+  const max = useDebounced(maxText, 500);
+
+  const choosePeriod = useCallback(
+    (kind: PeriodKind) => {
+      if (!store) return;
+      void resolvePeriod(store.id, kind)
+        .then(setPeriod)
+        .catch((e) => showProblem(String(e?.message ?? e)));
+    },
+    [store, setPeriod, showProblem],
   );
 
   /*
-   * The window is resolved before anything is read.
-   *
-   * Not defaulted in the browser: "this month" has to mean the shop's calendar month in the shop's
-   * timezone, and a phone that is a day out would silently produce a report for the wrong month.
+   * A report that opens on its own window — today's counts, every unpaid receipt — moves the
+   * window there when it is chosen. The rest keep whatever the shop was looking at.
    */
+  const choose = (next: ReportId) => {
+    setWhich(next);
+    const s = REPORTS.find((r) => r.id === next)!;
+    if (s.period === 'today' && period?.kind !== 'today') choosePeriod('today');
+    if (s.period === 'all' && period?.kind !== 'all') choosePeriod('all');
+  };
 
-  const read = useCallback(async (): Promise<Loaded> => {
-    const w = { storeId: store!.id, from: period!.fromAt, to: period!.toAt };
-    const base = { ...empty, for: which };
-    switch (which) {
-      case 'sales':
-        return { ...base, summary: await salesSummary(w), days: await salesByDay(w) };
-      case 'days':
-        return { ...base, days: await salesByDay(w), summary: await salesSummary(w) };
-      case 'products':
-        return { ...base, products: await salesByProduct(w) };
-      case 'takings':
-        return { ...base, methods: await takingsByMethod(w) };
-      case 'debtors':
-        return { ...base, debtors: await debtorsAged(store!.id) };
-      case 'stock':
-        return { ...base, stock: await stockReport(store!.id) };
-      case 'staff':
-        return { ...base, staff: await staffActivity(w) };
-      case 'prices':
-        return {
-          ...base,
-          prices: await priceList(store!.id),
-          storefront: await storefront(store!.id),
-        };
-    }
-  }, [store, period, which]);
+  const windowed = Boolean(spec.period);
+  const amount = Boolean(spec.amount);
+  const periodKey = windowed ? (period ? `${period.fromAt}:${period.toAt}` : 'pending') : 'now';
+  const amountKey = amount ? `${min}:${max}` : '';
 
-  const area = useLoadArea<Loaded>(read, [store?.id ?? '', which, period?.label ?? ''], {
-    key: `report:${store?.id ?? 'none'}:${which}:${period?.label ?? ''}`,
+  const report = useResource<LoadedReport>({
+    key: `report:${store?.id ?? 'none'}:${which}:${periodKey}:${amountKey}`,
     // A sale, a payment or a delivery changes a report; those writers all notify this scope.
     scope: ACCOUNT_DERIVED_SCOPE,
+    // Never kept on the phone: a report carries the arithmetic for its own totals, which does not
+    // survive being stored, and an old report is not one anybody should be shown.
+    persist: false,
+    enabled: Boolean(store) && (!windowed || Boolean(period)),
+    deps: [store?.id, which, periodKey, amountKey],
     onFail: showProblem,
-    whenNot: !store || !period,
+    read: () =>
+      loadReport(
+        which,
+        store!.id,
+        store!.name,
+        {
+          fromAt: windowed ? (period?.fromAt ?? null) : null,
+          toAt: windowed ? (period?.toAt ?? null) : null,
+          periodLabel: windowed ? (period?.label ?? '') : '',
+          min: amount && min.trim() !== '' ? Number(min) : null,
+          max: amount && max.trim() !== '' ? Number(max) : null,
+        },
+        say,
+      ),
   });
 
-  const active = REPORTS.find((r) => r.id === which)!;
-  const printShare = usePrintShare();
-
   /*
-   * THE REPORT ON THE RECEIPT PRINTER, OR SHARED — "print reports to the printer just like a
-   * receipt, not only PDF or CSV, and share as well, even with prices". The A4 print stays; this is
-   * the same figures as a roll: one line per row, the totals under them.
+   * THE LINES LEFT OUT, by position. Everything is in to begin with, and a new report — or the same
+   * one over a different window — starts with everything in again: a choice made about last
+   * month's rows says nothing about this month's.
    */
-  const rollOf = (data: Loaded) => {
-    const m = formatMoney;
-    const base = { shopName: store?.name ?? '', title: active.name, meta: [active.windowed && period ? period.label : 'As it stands', printedAt] };
-    switch (which) {
-      case 'sales':
-      case 'days':
-        return listDocument({
-          ...base,
-          rows: data.days.map((d) => ({ name: d.day, detail: `${d.receipts} receipts · paid ${m(d.paid)}`, amount: m(d.billed) })),
-          totals: data.summary
-            ? [
-                { label: 'Billed', value: m(data.summary.billed), strong: true },
-                { label: 'Paid', value: m(data.summary.paid) },
-                { label: 'Still owed', value: m(data.summary.owing) },
-                { label: 'Receipts', value: String(data.summary.receipts) },
-              ]
-            : [],
-        });
-      case 'products':
-        return listDocument({
-          ...base,
-          rows: data.products.map((r) => ({
-            name: r.productName,
-            detail: `${r.receipts} receipts · cost ${m(r.cost)} · made ${m(r.margin)}`,
-            amount: m(r.revenue),
-          })),
-          totals: [
-            { label: 'Sold', value: m(data.products.reduce((s, r) => s + r.revenue, 0)), strong: true },
-            { label: 'Made', value: m(data.products.reduce((s, r) => s + r.margin, 0)) },
-          ],
-        });
-      case 'takings':
-        return listDocument({
-          ...base,
-          rows: data.methods.map((r) => ({ name: r.method, detail: `${r.payments} payments`, amount: m(r.amount) })),
-          totals: [{ label: 'Came in', value: m(data.methods.reduce((s, r) => s + r.amount, 0)), strong: true }],
-        });
-      case 'debtors':
-        return listDocument({
-          ...base,
-          rows: data.debtors.map((r) => ({
-            name: r.customerName,
-            detail: [r.phone, r.daysOld != null ? `${r.daysOld} days` : null].filter(Boolean).join(' · '),
-            amount: m(r.balance),
-          })),
-          totals: [{ label: 'Owed to you', value: m(data.debtors.reduce((s, r) => s + r.balance, 0)), strong: true }],
-        });
-      case 'stock':
-        return listDocument({
-          ...base,
-          rows: (data.stock?.lines ?? []).map((l) => ({
-            name: l.name,
-            detail: `${l.onHand} ${l.unit} at ${m(Number(l.unitCost) || 0)}`,
-            amount: m(l.value),
-          })),
-          totals: [{ label: 'Stock is worth', value: m(data.stock?.total ?? 0), strong: true }],
-        });
-      case 'staff':
-        return listDocument({
-          ...base,
-          rows: data.staff.map((r) => ({
-            name: r.who,
-            detail: `${r.receipts} receipts · ${r.corrections} corrections · ${r.deliveries} deliveries · ${r.counts} counts`,
-            amount: m(r.sold),
-          })),
-        });
-      default:
-        return listDocument({
-          ...base,
-          rows: data.prices.map((r) => ({
-            name: r.productName,
-            detail: r.unitName,
-            amount: m(r.price),
-          })),
-        });
-    }
-  };
-  const printedAt = formatDateTime(new Date().toISOString());
+  const [out, setOut] = useState<Set<number>>(() => new Set());
+  const loaded = report.data;
+  const doc = loaded?.doc ?? null;
+  useEffect(() => {
+    setOut(new Set());
+  }, [doc]);
 
-  /**
-   * Print at the right paper size, then put it back.
-   *
-   * Restored in a `finally` AND on `afterprint`, because leaving `--print-size` set would make the
-   * NEXT receipt print on a sheet instead of the roll — a bug that would only ever show up at a
-   * counter with a customer waiting.
-   */
-  const print = (shape: 'a4' | 'poster') => {
-    const root = document.documentElement;
-    root.style.setProperty('--print-size', shape === 'poster' ? 'A1 portrait' : 'A4 portrait');
-    root.style.setProperty('--print-margin', shape === 'poster' ? '18mm' : '12mm');
-    const restore = () => {
-      root.style.removeProperty('--print-size');
-      root.style.removeProperty('--print-margin');
-    };
-    window.addEventListener('afterprint', restore, { once: true });
-    try {
-      window.print();
-    } finally {
-      // `afterprint` does not fire everywhere; this is the belt to its braces.
-      setTimeout(restore, 1500);
-    }
-  };
+  const kept = useMemo(
+    () => (doc ? doc.rows.map((_, i) => i).filter((i) => !out.has(i)) : []),
+    [doc, out],
+  );
+  const chosen = useMemo(() => (doc ? keepRows(doc, kept) : null), [doc, kept]);
 
-  const exportCsv = (data: Loaded) => {
-    const stamp = new Date().toISOString().slice(0, 10);
-    const name = `${active.name.toLowerCase().replace(/\s+/g, '-')}-${stamp}.csv`;
-    switch (which) {
-      case 'days':
-      case 'sales':
-        return downloadCsv(
-          name,
-          toCsv(
-            [
-              { key: 'day', head: 'Day' },
-              { key: 'receipts', head: 'Receipts' },
-              { key: 'billed', head: 'Billed' },
-              { key: 'paid', head: 'Paid' },
-            ],
-            data.days as unknown as Record<string, unknown>[],
-          ),
-        );
-      case 'products':
-        return downloadCsv(
-          name,
-          toCsv(
-            [
-              { key: 'productName', head: 'Item' },
-              { key: 'soldBase', head: 'Sold' },
-              { key: 'receipts', head: 'Receipts' },
-              { key: 'revenue', head: 'Revenue' },
-              { key: 'cost', head: 'Cost' },
-              { key: 'margin', head: 'Margin' },
-            ],
-            data.products as unknown as Record<string, unknown>[],
-          ),
-        );
-      case 'debtors':
-        return downloadCsv(
-          name,
-          toCsv(
-            [
-              { key: 'customerName', head: 'Customer' },
-              { key: 'phone', head: 'Phone' },
-              { key: 'balance', head: 'Balance' },
-              { key: 'daysOld', head: 'Days' },
-              { key: 'bucket', head: 'Age' },
-            ],
-            data.debtors as unknown as Record<string, unknown>[],
-          ),
-        );
-      case 'prices':
-        return downloadCsv(
-          name,
-          toCsv(
-            [
-              { key: 'groupName', head: 'Maker' },
-              { key: 'productName', head: 'Item' },
-              { key: 'unitName', head: 'Sold in' },
-              { key: 'price', head: 'Price' },
-            ],
-            data.prices as unknown as Record<string, unknown>[],
-          ),
-        );
-      default:
-        return downloadCsv(
-          name,
-          toCsv(
-            [
-              { key: 'method', head: 'Method' },
-              { key: 'payments', head: 'Payments' },
-              { key: 'amount', head: 'Amount' },
-            ],
-            (data.methods.length ? data.methods : data.staff) as unknown as Record<
-              string,
-              unknown
-            >[],
-          ),
-        );
-    }
-  };
+  const toggle = (i: number) =>
+    setOut((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  const allIn = doc ? out.size === 0 : false;
+  const setAll = (on: boolean) => setOut(on || !doc ? new Set() : new Set(doc.rows.map((_, i) => i)));
+
+  const [csvNote, setCsvNote] = useState<string | null>(null);
 
   if (!store) return null;
 
@@ -351,150 +164,244 @@ export default function ReportsPage() {
         // Said inside the page's own header — it used to be a second page with a second header.
         state: 'empty',
         title: 'Not part of your job here',
-        body: (
-          <>
-            Reports are for whoever runs the shop. Ask them if you need one.
-          </>
-        ),
+        body: <>Reports are for whoever runs the shop. Ask them if you need one.</>,
       }
     : { state: 'ready' };
 
+  const fileBase = `${spec.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${new Date().toISOString().slice(0, 10)}`;
+
   return (
-    <PageScaffold layout="record" onBack={goBack} title="Reports" subtitle="On paper, or as a PDF">
+    <PageScaffold layout="record" onBack={goBack} title="Reports" subtitle="Choose, pick the lines, take it away">
       <ProblemDialog problem={problem} title="Could not build that report" />
 
       <PageState status={status}>
         {() => (
           <>
-
-      <Explain label="How do I get a PDF?">
-        Press Print and choose &ldquo;Save as PDF&rdquo; in the dialog your device opens. It is real
-        text, so it can be searched and copied — and it is a fraction of the size of a photograph of
-        a receipt.
-      </Explain>
-
-      {/* Which report. A list of eight, so a scrolling row of tabs rather than a wall of cards. */}
-      <div className={styles.picker} role="tablist" aria-label="Which report">
-        {REPORTS.map((r) => (
-          <button
-            key={r.id}
-            type="button"
-            role="tab"
-            aria-selected={which === r.id}
-            className={`${styles.tab} ${which === r.id ? styles.tabActive : ''}`}
-            onClick={() => setWhich(r.id)}
-          >
-            {r.name}
-          </button>
-        ))}
-      </div>
-      <p className={styles.blurb}>{active.blurb}</p>
-
-      {/*
-        THE WINDOW, and only where one means anything.
-
-        "What is on the shelf" and "who owes you" are positions as at NOW — a date range on either
-        would be a control that changes nothing, which is worse than a missing one because it looks
-        answered.
-      */}
-      {active.windowed && period && (
-        <FilterBar
-          period={period}
-          onPeriod={(kind: PeriodKind) => {
-            void resolvePeriod(store.id, kind)
-              .then(setPeriod)
-              .catch((e) => showProblem(String(e?.message ?? e)));
-          }}
-          onCustom={(from, to) => {
-            void customPeriod(store.id, from, to)
-              .then(setPeriod)
-              .catch((e) => showProblem(String(e?.message ?? e)));
-          }}
-        />
-      )}
-
-      {/* The window itself is still being worked out, or could not be — said, with a way back. */}
-      {active.windowed && !period && (
-        <LoadArea
-          area={{ data: null, loading: !periodError, error: periodError, reload: reloadPeriod }}
-          what="the dates"
-        >
-          {() => null}
-        </LoadArea>
-      )}
-
-      <LoadArea area={area} what="this report">
-        {(data) =>
-          /*
-           * The previous report's object is not an answer to this one.
-           *
-           * Shown as "reading" rather than as an empty result, because an empty result is a claim
-           * and this one has not been made yet.
-           */
-          data.for !== which ? (
-            <p className={styles.footnote}>Reading this report…</p>
-          ) : (
-          <>
-            <div className={styles.printRow}>
-              <Button onClick={() => print(which === 'prices' ? 'poster' : 'a4')} fullWidth>
-                <PrinterIcon /> {which === 'prices' ? 'Print the poster' : 'Print'}
-              </Button>
-              <Button variant="secondary" onClick={() => exportCsv(data)} fullWidth>
-                Save as CSV
-              </Button>
-            </div>
-            <Button
-              variant="secondary"
-              fullWidth
-              onClick={() =>
-                printShare({
-                  title: active.name,
-                  filename: `${active.name.toLowerCase().replace(/\s+/g, '-')}-${new Date().toISOString().slice(0, 10)}`,
-                  build: () => rollOf(data),
-                })
-              }
-            >
-              <PrinterIcon /> Receipt printer or share
-            </Button>
-
-            {which === 'prices' ? (
-              <PricePoster
-                rows={data.prices}
-                shopName={store.name}
-                printedAt={printedAt}
-                storefront={data.storefront}
-              />
-            ) : (
-              <div className={styles.sheet} data-print-root="page">
-                <div className={styles.head}>
-                  <p className={styles.reportTitle}>
-                    {store.name} — {active.name}
-                  </p>
-                  {/*
-                    THE DOCUMENT NAMES ITS OWN WINDOW.
-
-                    A report on a desk that cannot say what it covers is not evidence of anything —
-                    and the words come from the server, so the paper and the screen agree.
-                  */}
-                  <p className={styles.reportMeta}>
-                    {active.windowed && period ? `${period.label} · ` : ''}
-                    Printed {printedAt}
-                  </p>
-                </div>
-
-                {which === 'sales' && <SalesReport summary={data.summary} days={data.days} />}
-                {which === 'days' && <DaysReport days={data.days} />}
-                {which === 'products' && <ProductsReport rows={data.products} />}
-                {which === 'takings' && <TakingsReport rows={data.methods} />}
-                {which === 'debtors' && <DebtorsReport rows={data.debtors} />}
-                {which === 'stock' && <StockTable report={data.stock} />}
-                {which === 'staff' && <StaffReport rows={data.staff} />}
+            {/* ── 1. Which report ── */}
+            <section className={styles.choose} aria-label="Which report" data-print-no-print>
+              <div className={styles.groups} role="tablist" aria-label="Kind of report">
+                {REPORT_GROUPS.map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    role="tab"
+                    aria-selected={group === g}
+                    className={`${styles.group} ${group === g ? styles.groupOn : ''}`}
+                    onClick={() => setGroup(g)}
+                  >
+                    {g}
+                  </button>
+                ))}
               </div>
+              <div className={styles.reports}>
+                {REPORTS.filter((r) => r.group === group).map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    aria-pressed={r.id === which}
+                    className={`${styles.report} ${r.id === which ? styles.reportOn : ''}`}
+                    onClick={() => choose(r.id)}
+                  >
+                    <span className={styles.reportName}>{r.label}</span>
+                  </button>
+                ))}
+              </div>
+              {/* What the chosen one answers — one line, so the report itself starts on the first screen. */}
+              <p className={styles.reportHint}>{spec.hint}</p>
+            </section>
+
+            {/* ── 2. Its window, and only where one means anything ── */}
+            {(windowed || amount) && (
+              <section className={styles.filters} aria-label="Filters" data-print-no-print>
+                {windowed && period && (
+                  <FilterBar
+                    period={period}
+                    onPeriod={choosePeriod}
+                    onCustom={(from, to) => {
+                      void customPeriod(store.id, from, to)
+                        .then(setPeriod)
+                        .catch((e) => showProblem(String(e?.message ?? e)));
+                    }}
+                  />
+                )}
+                {windowed && !period && (
+                  <LoadArea
+                    area={{ data: null, loading: !periodError, error: periodError, reload: reloadPeriod }}
+                    what="the dates"
+                  >
+                    {() => null}
+                  </LoadArea>
+                )}
+                {amount && (
+                  <div className={styles.range}>
+                    <Field label="Owing from" numeric whole prefix="₦" optional value={minText} onChange={(e) => setMinText(e.target.value)} placeholder="0" />
+                    <Field label="Up to" numeric whole prefix="₦" optional value={maxText} onChange={(e) => setMaxText(e.target.value)} placeholder="any" />
+                  </div>
+                )}
+              </section>
             )}
-          </>
-          )
-        }
-      </LoadArea>
+
+            <LoadArea area={report} what="this report">
+              {() =>
+                !chosen || !doc || !loaded ? null : (
+                  <>
+                    {/* ── 3. What the lines chosen come to ── */}
+                    {chosen.totals.length > 0 && (
+                      <dl className={styles.figures} aria-label="What it comes to" data-print-no-print>
+                        {chosen.totals.map((t, i) => (
+                          <div
+                            key={t.label}
+                            className={`${styles.figure} ${i === chosen.totals.length - 1 ? styles.figureLead : ''}`}
+                          >
+                            <dt>{t.label}</dt>
+                            <dd>{t.value}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    )}
+
+                    {/* ── 4. The lines, each with its tick box ── */}
+                    <div className={styles.sheet} data-print-root="page">
+                      <div className={styles.sheetHead}>
+                        <p className={styles.sheetShop}>{doc.shop}</p>
+                        <h2 className={styles.sheetTitle}>{doc.title}</h2>
+                        <p className={styles.sheetFilters}>
+                          {chosen.filters} · {formatDateTime(doc.generatedAt.toISOString())}
+                        </p>
+                      </div>
+
+                      {doc.rows.length === 0 ? (
+                        <p className={styles.sheetEmpty}>Nothing matches these filters.</p>
+                      ) : (
+                        <>
+                          <label className={styles.allRow} data-print-no-print>
+                            <input
+                              type="checkbox"
+                              checked={allIn}
+                              ref={(el) => {
+                                if (el) el.indeterminate = !allIn && kept.length > 0;
+                              }}
+                              onChange={(e) => setAll(e.target.checked)}
+                            />
+                            <span>
+                              {allIn
+                                ? `All ${doc.rows.length} lines are in the report`
+                                : `${kept.length} of ${doc.rows.length} lines in the report`}
+                            </span>
+                          </label>
+
+                          <div className={styles.tableWrap}>
+                            <table className={styles.table}>
+                              <thead>
+                                <tr>
+                                  <th className={styles.tick} data-print-no-print>
+                                    <span className={styles.srOnly}>In the report</span>
+                                  </th>
+                                  {doc.columns.map((c) => (
+                                    <th key={c.head} className={c.align === 'right' ? styles.right : undefined}>
+                                      {c.head}
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {doc.rows.map((r, i) => {
+                                  const isIn = !out.has(i);
+                                  return (
+                                    <tr
+                                      key={i}
+                                      className={isIn ? undefined : styles.rowOut}
+                                      {...(isIn ? {} : { 'data-print-no-print': true })}
+                                      onClick={(e) => {
+                                        // The whole line is the target; the box itself handles its own click.
+                                        if ((e.target as HTMLElement).tagName !== 'INPUT') toggle(i);
+                                      }}
+                                    >
+                                      <td className={styles.tick} data-print-no-print>
+                                        <input
+                                          type="checkbox"
+                                          checked={isIn}
+                                          onChange={() => toggle(i)}
+                                          aria-label={`${r[0]} in the report`}
+                                        />
+                                      </td>
+                                      {r.map((cell, ci) => (
+                                        <td key={ci} className={doc.columns[ci]?.align === 'right' ? styles.right : undefined}>
+                                          {cell}
+                                        </td>
+                                      ))}
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </>
+                      )}
+
+                      {chosen.totals.length > 0 && (
+                        <dl className={styles.totals}>
+                          {chosen.totals.map((t) => (
+                            <div key={t.label} className={styles.total}>
+                              <dt>{t.label}</dt>
+                              <dd>{t.value}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      )}
+                      {doc.note && <p className={styles.sheetFilters}>{doc.note}</p>}
+                    </div>
+
+                    {/* ── 5. Take it away ── */}
+                    {kept.length > 0 && (
+                      <section className={styles.out} aria-label="Take it away" data-print-no-print>
+                        {loaded.poster && (
+                          <Button fullWidth onClick={() => printPoster()}>
+                            <PrinterIcon /> Print the poster for the wall
+                          </Button>
+                        )}
+                        <DocumentActions
+                          storeId={store.id}
+                          doc={reportToRoll(chosen)}
+                          pages={() => renderReportPages(chosen)}
+                          a4Print
+                          filename={fileBase}
+                          title={`${chosen.title} — ${chosen.shop}`}
+                          message={`${chosen.shop} · ${chosen.title}\n${chosen.filters}\n${chosen.totals
+                            .map((t) => `${t.label}: ${t.value}`)
+                            .join('\n')}`}
+                        />
+                        <Button
+                          variant="secondary"
+                          fullWidth
+                          onClick={async () => {
+                            const how = await shareCsv(`${fileBase}.csv`, reportToCsv(chosen));
+                            setCsvNote(how === 'downloaded' ? 'CSV saved to your downloads.' : null);
+                          }}
+                        >
+                          Download CSV (for Excel)
+                        </Button>
+                        {csvNote && <p className={styles.note}>{csvNote}</p>}
+                      </section>
+                    )}
+
+                    {loaded.poster && kept.length > 0 && (
+                      <h3 className={styles.posterHeading} data-print-no-print>
+                        On the wall
+                      </h3>
+                    )}
+                    {loaded.poster && (
+                      <PricePoster
+                        rows={loaded.poster.rows.filter((_, i) => !out.has(i))}
+                        shopName={store.name}
+                        printedAt={formatDateTime(doc.generatedAt.toISOString())}
+                        storefront={loaded.poster.storefront}
+                      />
+                    )}
+                  </>
+                )
+              }
+            </LoadArea>
           </>
         )}
       </PageState>
@@ -502,257 +409,30 @@ export default function ReportsPage() {
   );
 }
 
-const empty: Loaded = {
-  for: 'sales',
-  summary: null,
-  days: [],
-  products: [],
-  methods: [],
-  debtors: [],
-  stock: null,
-  staff: [],
-  prices: [],
-  storefront: { code: null, isPublic: false },
-};
-
-/* ── The reports themselves ─────────────────────────────────────────────────────── */
-
-function SalesReport({ summary, days }: { summary: SalesSummary | null; days: DayRow[] }) {
-  if (!summary) return <p className={styles.footnote}>Nothing in this period.</p>;
-  return (
-    <>
-      <table className={styles.table}>
-        <tbody>
-          <tr><td>Receipts</td><td className={styles.total}>{summary.receipts}</td></tr>
-          <tr><td>Customers served</td><td className={styles.total}>{summary.customers}</td></tr>
-          <tr><td>Billed</td><td className={styles.total}>{formatMoney(summary.billed)}</td></tr>
-          <tr><td>Paid</td><td className={styles.total}>{formatMoney(summary.paid)}</td></tr>
-          <tr><td>Still owed</td><td className={styles.total}>{formatMoney(summary.owing)}</td></tr>
-          {summary.busiestDay && (
-            <tr>
-              <td>Best day</td>
-              <td className={styles.total}>
-                {new Date(summary.busiestDay).toLocaleDateString()}
-              </td>
-            </tr>
-          )}
-          {/*
-            CANCELLED AND CORRECTED ARE ON THE FACE OF IT, not buried.
-            A month with forty corrections in it is telling somebody something, and a report that
-            only shows the clean total lets that go unnoticed for as long as it keeps happening.
-          */}
-          {summary.voided > 0 && (
-            <tr><td>Cancelled</td><td className={styles.dim}>{summary.voided}</td></tr>
-          )}
-          {summary.corrected > 0 && (
-            <tr><td>Corrected afterwards</td><td className={styles.dim}>{summary.corrected}</td></tr>
-          )}
-        </tbody>
-      </table>
-      <DaysReport days={days} />
-    </>
-  );
-}
-
-function DaysReport({ days }: { days: DayRow[] }) {
-  if (days.length === 0) return <p className={styles.footnote}>No trading in this period.</p>;
-  const billed = days.reduce((s, d) => s + d.billed, 0);
-  const paid = days.reduce((s, d) => s + d.paid, 0);
-  return (
-    <table className={styles.table}>
-      <thead>
-        <tr><th>Day</th><th>Receipts</th><th>Billed</th><th>Paid</th></tr>
-      </thead>
-      <tbody>
-        {days.map((d) => (
-          <tr key={d.day}>
-            <td>{new Date(d.day).toLocaleDateString()}</td>
-            <td>{d.receipts}</td>
-            <td>{formatMoney(d.billed)}</td>
-            <td>{formatMoney(d.paid)}</td>
-          </tr>
-        ))}
-      </tbody>
-      <tfoot>
-        <tr>
-          <td className={styles.total}>Total</td>
-          <td className={styles.total}>{days.reduce((s, d) => s + d.receipts, 0)}</td>
-          <td className={styles.total}>{formatMoney(billed)}</td>
-          <td className={styles.total}>{formatMoney(paid)}</td>
-        </tr>
-      </tfoot>
-    </table>
-  );
-}
-
-function ProductsReport({ rows }: { rows: ProductRow[] }) {
-  if (rows.length === 0) return <p className={styles.footnote}>Nothing sold in this period.</p>;
-  return (
-    <table className={styles.table}>
-      <thead>
-        <tr><th>Item</th><th>Sold</th><th>Revenue</th><th>Margin</th></tr>
-      </thead>
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r.productId}>
-            <td>{r.productName}</td>
-            <td>{formatQtySpoken(r.soldBase)}</td>
-            <td>{formatMoney(r.revenue)}</td>
-            <td>{formatMoney(r.margin)}</td>
-          </tr>
-        ))}
-      </tbody>
-      <tfoot>
-        <tr>
-          <td className={styles.total}>Total</td>
-          <td />
-          <td className={styles.total}>
-            {formatMoney(rows.reduce((s, r) => s + r.revenue, 0))}
-          </td>
-          <td className={styles.total}>
-            {formatMoney(rows.reduce((s, r) => s + r.margin, 0))}
-          </td>
-        </tr>
-      </tfoot>
-    </table>
-  );
-}
-
-function TakingsReport({ rows }: { rows: MethodRow[] }) {
-  if (rows.length === 0) return <p className={styles.footnote}>No money came in.</p>;
-  return (
-    <table className={styles.table}>
-      <thead>
-        <tr><th>How</th><th>Payments</th><th>Amount</th></tr>
-      </thead>
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r.method}>
-            <td>{r.method === 'pos' ? 'Card' : r.method[0].toUpperCase() + r.method.slice(1)}</td>
-            <td>{r.payments}</td>
-            <td>{formatMoney(r.amount)}</td>
-          </tr>
-        ))}
-      </tbody>
-      <tfoot>
-        <tr>
-          <td className={styles.total}>Total</td>
-          <td className={styles.total}>{rows.reduce((s, r) => s + r.payments, 0)}</td>
-          <td className={styles.total}>
-            {formatMoney(rows.reduce((s, r) => s + r.amount, 0))}
-          </td>
-        </tr>
-      </tfoot>
-    </table>
-  );
-}
-
-function DebtorsReport({ rows }: { rows: AgedRow[] }) {
-  if (rows.length === 0) return <p className={styles.footnote}>Nobody owes you anything.</p>;
-  /*
-   * GROUPED BY AGE, because that is what the report is FOR.
-   *
-   * A list sorted by size answers "who owes most"; a shop chasing debt needs "who has owed longest",
-   * and the buckets are what turn a column of dates into a decision.
-   */
-  const buckets = ['0–7 days', '8–30 days', '31–60 days', 'over 60 days', 'no unpaid receipt'];
-  return (
-    <>
-      {buckets.map((b) => {
-        const inB = rows.filter((r) => r.bucket === b);
-        if (inB.length === 0) return null;
-        return (
-          <div key={b}>
-            <p className={styles.reportTitle}>
-              {b} — {formatMoney(inB.reduce((s, r) => s + r.balance, 0))}
-            </p>
-            <table className={styles.table}>
-              <thead>
-                <tr><th>Customer</th><th>Phone</th><th>Owes</th></tr>
-              </thead>
-              <tbody>
-                {inB.map((r) => (
-                  <tr key={r.storeCustomerId}>
-                    <td>{r.customerName}</td>
-                    <td className={styles.dim}>{r.phone ?? ''}</td>
-                    <td>{formatMoney(r.balance)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        );
-      })}
-      <p className={styles.footnote}>
-        Total outstanding: {formatMoney(rows.reduce((s, r) => s + r.balance, 0))}
-      </p>
-    </>
-  );
-}
-
-function StaffReport({ rows }: { rows: StaffRow[] }) {
-  if (rows.length === 0) return <p className={styles.footnote}>Nothing recorded in this period.</p>;
-  return (
-    <table className={styles.table}>
-      <thead>
-        <tr>
-          <th>Who</th><th>Receipts</th><th>Sold</th><th>Deliveries</th><th>Counts</th>
-          <th>Corrections</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r.userId}>
-            <td>{r.who}</td>
-            <td>{r.receipts}</td>
-            <td>{formatMoney(r.sold)}</td>
-            <td>{r.deliveries}</td>
-            <td>{r.counts}</td>
-            <td>{r.corrections}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-function StockTable({ report }: { report: StockReport | null }) {
-  if (!report) return <p className={styles.footnote}>Nothing on the shelf.</p>;
-  return (
-    <>
-      <table className={styles.table}>
-        <thead>
-          <tr><th>Item</th><th>Left</th><th>Cost each</th><th>Worth</th></tr>
-        </thead>
-        <tbody>
-          {report.lines.map((l) => (
-            // Keyed on the NAME: `StockLine` carries no id, and inventing one from the index would
-            // reorder rows under React on the next read.
-            <tr key={l.name}>
-              <td>{l.name}</td>
-              <td>
-                {formatQtySpoken(l.onHand)} {l.unit}
-              </td>
-              <td>{formatMoney(l.unitCost)}</td>
-              <td>{formatMoney(l.value)}</td>
-            </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr>
-            <td className={styles.total}>Total</td>
-            <td /><td />
-            <td className={styles.total}>{formatMoney(report.total)}</td>
-          </tr>
-        </tfoot>
-      </table>
-      {report.estimatedCount > 0 && (
-        <p className={styles.footnote}>
-          {report.estimatedCount} of these are still carrying an estimated cost.
-        </p>
-      )}
-    </>
-  );
+/**
+ * The poster on A1, then put back.
+ *
+ * Restored in a `finally` AND on `afterprint`, because leaving `--print-size` set would make the
+ * NEXT receipt print on a sheet instead of the roll — a bug that would only ever show up at a
+ * counter with a customer waiting.
+ */
+function printPoster() {
+  const root = document.documentElement;
+  root.style.setProperty('--print-size', 'A1 portrait');
+  root.style.setProperty('--print-margin', '18mm');
+  root.setAttribute('data-print-poster', '');
+  const restore = () => {
+    root.style.removeProperty('--print-size');
+    root.style.removeProperty('--print-margin');
+    root.removeAttribute('data-print-poster');
+  };
+  window.addEventListener('afterprint', restore, { once: true });
+  try {
+    window.print();
+  } finally {
+    // `afterprint` does not fire everywhere; this is the belt to its braces.
+    setTimeout(restore, 1500);
+  }
 }
 
 /**
@@ -761,7 +441,7 @@ function StockTable({ report }: { report: StockReport | null }) {
  * Its own layout rather than a scaled A4: type sized to be read across a shop, balanced columns,
  * and the maker's name repeated at the head of each block. It carries the date it was printed
  * LARGE, because a price list on a wall with no date is how a customer argues a six-month-old
- * price.
+ * price. Only the prices ticked above are on it.
  */
 function PricePoster({
   rows,
@@ -775,17 +455,11 @@ function PricePoster({
   storefront: { code: string | null; isPublic: boolean };
 }) {
   /*
-   * WHAT A CUSTOMER SCANS OFF THE WALL.
-   *
-   * The date says how old the sheet is; this says what is true now. A price list hung up in
-   * February is argued over in August, and the shop's answer has until now been "that one is old"
-   * with nothing to point at.
-   *
-   * Null unless the storefront is actually switched on and has a code — `/s/CODE` 404s otherwise,
-   * and a dead QR on a wall is worse than a bare sheet.
+   * WHAT A CUSTOMER SCANS OFF THE WALL — what is true now, where the date says how old the sheet
+   * is. Null unless the storefront is switched on and has a code: `/s/CODE` 404s otherwise, and a
+   * dead QR on a wall is worse than a bare sheet.
    */
-  const shopUrl =
-    storefront.isPublic && storefront.code ? appUrl(`/s/${storefront.code}`) : null;
+  const shopUrl = storefront.isPublic && storefront.code ? appUrl(`/s/${storefront.code}`) : null;
   const groups = useMemo(() => {
     const out = new Map<string, PriceRow[]>();
     for (const r of rows) {
@@ -795,18 +469,15 @@ function PricePoster({
     return [...out.entries()];
   }, [rows]);
 
-  if (rows.length === 0) {
-    return <p className={styles.footnote}>Nothing has a price on it yet.</p>;
-  }
+  if (rows.length === 0) return null;
 
   return (
-    <div className={styles.sheet} data-print-root="poster">
+    <div className={styles.poster} data-print-root="poster">
       <div className="posterHead">
         <div className="posterTitles">
           <p className="posterShop">{shopName}</p>
           <p className="posterWhen">Prices as at {printedAt}</p>
         </div>
-
         {shopUrl && (
           <div className="posterScan">
             <QrCode value={shopUrl} size={96} title={`Scan for ${shopName}'s current prices`} />
@@ -824,19 +495,11 @@ function PricePoster({
           <h2>{group}</h2>
           {items.map((r) => (
             <div className="posterRow" key={`${r.productId}-${r.unitName}`}>
-              {/*
-                WHAT IT IS AND WHAT SHAPE IT COMES IN ARE TWO FACTS, so they are two spans.
-                They were one — "Coke · crate of 12" as a single run of text at one weight — and on
-                a sheet meant to be read across a shop that is the wrong emphasis twice over: the
-                name is what somebody is looking for and it competed with the shape, while a long
-                name and its shape together pushed the price off to the far edge of the column.
-              */}
+              {/* What it is and what shape it comes in are two facts, so two spans. */}
               <span className="posterItem">
                 <span className="posterName">{r.productName}</span>
                 <span className="posterShape">
-                  {r.baseQty > 1
-                    ? `${r.unitName.toLowerCase()} of ${r.baseQty}`
-                    : r.unitName.toLowerCase()}
+                  {r.baseQty > 1 ? `${r.unitName.toLowerCase()} of ${r.baseQty}` : r.unitName.toLowerCase()}
                 </span>
               </span>
               <span className="posterPrice">{formatMoney(r.price)}</span>

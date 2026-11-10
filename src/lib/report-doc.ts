@@ -28,8 +28,30 @@ export interface ReportDoc {
   columns: ReportColumn[];
   rows: string[][];
   totals: { label: string; value: string }[];
+  /**
+   * The totals of SOME of the rows — the ones ticked to go in (`keepRows`). Given the indexes of
+   * the rows kept, says what they come to. Left out, a report's totals are of every row, and a
+   * report cut down to some of them carries none rather than figures for lines it does not show.
+   */
+  totalsFor?: (kept: number[]) => { label: string; value: string }[];
   /** Said under the table — what the figures mean, where it matters. */
   note?: string;
+}
+
+/**
+ * The report with only the rows ticked to go in it — "a tick box for which lines appear in a
+ * report". Everything drawn from the result (A4, the roll, a picture, CSV) carries those rows,
+ * totals of those rows, and says on its face that it is a selection: a sheet showing six of forty
+ * debtors must not read as the shop's whole book.
+ */
+export function keepRows(doc: ReportDoc, kept: number[]): ReportDoc {
+  if (kept.length === doc.rows.length) return doc;
+  return {
+    ...doc,
+    rows: kept.map((i) => doc.rows[i]),
+    totals: doc.totalsFor ? doc.totalsFor(kept) : [],
+    filters: `${doc.filters} · ${kept.length} of ${doc.rows.length} lines chosen`,
+  };
 }
 
 // ── A4 ───────────────────────────────────────────────────────────────────────────────

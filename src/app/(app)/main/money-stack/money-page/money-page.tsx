@@ -21,7 +21,7 @@ import {
   type DayTakings,
   type SalesSummary,
 } from '@/lib/stacks/report-readers';
-import { CashIcon, ChartIcon, ChevronRightIcon, ReceiptIcon, ShareIcon } from '@/components/ui/Icon';
+import { CashIcon, ChartIcon, ChevronRightIcon, ReceiptIcon } from '@/components/ui/Icon';
 import { useAuth } from '@/providers/AuthProvider';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useListChannel } from '@/hooks/useListChannel';
@@ -368,17 +368,11 @@ export default function MoneyPage() {
                   key: 'reports',
                   icon: <ChartIcon />,
                   label: 'Reports',
-                  ariaLabel: 'Reports you can print or save',
+                  // Every report the shop has — the figures and the lists — with each line ticked in or
+                  // out, and every way out: PDF, a picture, the receipt printer, CSV. (Export was
+                  // folded in, 10 Nov.)
+                  ariaLabel: 'Reports to print, share or save',
                   onClick: () => void nav.push('reports_page'),
-                },
-                {
-                  // Who owes, who paid and when, what was counted, what is in stock — CSV, PDF,
-                  // a picture or on paper.
-                  key: 'export',
-                  icon: <ShareIcon />,
-                  label: 'Export',
-                  ariaLabel: 'Export a report',
-                  onClick: () => void nav.push('export_page'),
                 },
               ]
             : []),
