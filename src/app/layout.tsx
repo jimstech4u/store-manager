@@ -118,7 +118,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           publishes the visible area as CSS variables and flags <html data-ax-keyboard="open"> while
           one is up; the app shell sizes itself to that area and the tab bar steps aside (main/page).
         */}
-        <ViewportInsetsProvider />
+        <ViewportInsetsProvider revealFocusedField />
         <ThemeProvider>
           <AuthProvider>
             <PermissionsProvider>{children}</PermissionsProvider>
