@@ -1,9 +1,15 @@
 /**
- * A FILTER TAPPED BRINGS ITS ROW UP (10 Nov) — "some filter cards do not scroll to view when tapped".
+ * A FILTER TAPPED BRINGS ITS RESULTS INTO VIEW (10 Nov) — and only that far.
  *
- * On Stock and People the filter chips sit low, under a summary, tiles and a search box; tapping one
- * changed a list that was below the screen. Each check taps a chip and expects its row near the top
- * of the page, with the list under it on screen. Read-only.
+ * "Some filter cards do not scroll to view when tapped": on Stock and People the chips sit low, under
+ * a summary, tiles and a search box; tapping one changed a list below the screen. Then the fix went
+ * too far: the chips are in a PINNED bar, which a glide can never put at the top, so it ran to the end
+ * of the page, the list paged on and on, and the first results scrolled away above the bar.
+ *
+ * Each check taps a chip and expects, once the page settles:
+ *   - the START of the results on screen, just under the filter row — not scrolled away above it;
+ *   - no pages loaded by the tap itself beyond what the filter's first answer holds.
+ * Read-only.
  *
  *     node scripts/probe-filter-up-ui.mjs [http://localhost:3100]
  */
@@ -32,17 +38,28 @@ const p = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobil
 const tab = (name) =>
   p.evaluate((name) => [...document.querySelectorAll('.nav-item')].find((n) => n.textContent.trim() === name)?.click(), name);
 
-/** Where the tapped chip's row sits, against the top of the page's scroller. */
-const rowTop = (chip) =>
+/**
+ * Where the filter row is, where the results begin, and how long the list is — measured against the
+ * page's scroller.
+ */
+const measure = (chip) =>
   p.evaluate((chip) => {
     const page = [...document.querySelectorAll('.group-stack-container[data-active="true"] .navstack-page')].pop();
     const el = [...page.querySelectorAll('[role="tab"]')].find((e) => e.textContent.trim() === chip);
     const row = el?.closest('[role="tablist"]')?.parentElement;
     const body = [...page.querySelectorAll('.navstack-column-body')].pop();
     if (!row || !body) return null;
+    let pinned = row;
+    while (pinned && pinned !== body && getComputedStyle(pinned).position !== 'sticky') pinned = pinned.parentElement;
+    const bar = pinned && pinned !== body ? pinned : row;
+    let results = bar.nextElementSibling;
+    while (results && results.offsetHeight === 0) results = results.nextElementSibling;
+    const b = body.getBoundingClientRect();
     return {
-      top: Math.round(row.getBoundingClientRect().top - body.getBoundingClientRect().top),
-      // A list too short to scroll cannot bring its row up; its results are on screen already.
+      rowBottom: Math.round(bar.getBoundingClientRect().bottom - b.top),
+      resultsTop: results ? Math.round(results.getBoundingClientRect().top - b.top) : null,
+      viewport: Math.round(body.clientHeight),
+      items: page.querySelectorAll('li').length,
       atEnd: body.scrollTop >= body.scrollHeight - body.clientHeight - 2,
     };
   }, chip);
@@ -56,7 +73,8 @@ try {
   await p.waitForTimeout(7000);
 
   for (const [where, open, chip] of [
-    ['Stock', null, 'Running low'],
+    ['Stock', null, 'None left'],
+    [null, null, 'Running low'],
     [null, null, 'Everything'],
     ['More', /everyone you sell to/i, 'Owes you'],
     [null, null, 'You owe them'],
@@ -70,13 +88,21 @@ try {
       await p.getByRole('button', { name: open }).locator('visible=true').first().evaluate((el) => el.click());
       await p.waitForTimeout(4000);
     }
-    const before = await rowTop(chip);
     await p.getByRole('tab', { name: chip, exact: true }).locator('visible=true').first().tap();
-    await p.waitForTimeout(2200);
-    const after = await rowTop(chip);
+    await p.waitForTimeout(1200);
+    const settled = await measure(chip);
+    await p.waitForTimeout(2500);
+    const later = await measure(chip);
+    const ok =
+      later !== null &&
+      later.resultsTop !== null &&
+      // The start of the results is on screen, under the filter row — not scrolled away above it.
+      later.resultsTop >= later.rowBottom - 4 &&
+      later.resultsTop < later.viewport - 40;
+    check(ok, `${where ?? '  same page'}: "${chip}" shows the start of its results under the filters (${JSON.stringify(later)})`);
     check(
-      after !== null && (after.top <= 120 || after.atEnd),
-      `${where ?? '  same page'}: tapping "${chip}" brings its row up (${before?.top}px -> ${after?.top}px from the top${after?.atEnd && after.top > 24 ? ', page at its end' : ''})`,
+      later !== null && settled !== null && later.items <= settled.items + 1,
+      `${where ?? '  same page'}: and the tap did not page the list on (${settled?.items} -> ${later?.items} rows)`,
     );
   }
 } catch (e) {
