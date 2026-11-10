@@ -63,7 +63,7 @@ export function TillLine({
   const empty = !(safe > 0);
 
   return (
-    <div className={`${styles.line} ${empty ? styles.lineEmpty : ''}`}>
+    <div className={`${styles.line} ${empty ? styles.lineEmpty : ''}`} data-line-key={line.key}>
       <div className={styles.head}>
         <button type="button" className={styles.name} onClick={onOpen}>
           {line.productName}

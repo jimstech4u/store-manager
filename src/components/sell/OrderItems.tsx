@@ -568,14 +568,12 @@ export function OrderItemsSheet({
       {open && (
         <OrderItems
           orderId={orderId}
-          onChooseCustomer={
-            onChooseCustomer
-              ? () => {
-                  onClose();
-                  onChooseCustomer();
-                }
-              : undefined
-          }
+          /*
+           * THE PICKER OPENS OVER THIS SHEET, which stays (10 Nov: "all items gets closed after
+           * opening customer picker"). Choosing somebody lands back here with their name on the
+           * list; only creating one — a page — puts the sheet away, and the opener brings it back.
+           */
+          onChooseCustomer={onChooseCustomer}
           onLeave={onClose}
           onPay={
             payable

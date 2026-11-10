@@ -6,7 +6,7 @@ import { PageScaffold } from '@/components/ui/PageScaffold';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { useWakeRefresh } from '@/hooks/useWakeRefresh';
-import { useNav, scrollIntoViewBelow } from '@academix-admin/navigation-stack';
+import { useNav, usePageLifecycle, scrollIntoViewBelow } from '@academix-admin/navigation-stack';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
@@ -36,6 +36,7 @@ import {
 } from '@/lib/stacks/catalog-stack';
 import {
   baseUnitsPerSaleUnit,
+  customerPatch,
   draftTotal,
   lineTotal,
   makeDraftLine,
@@ -196,9 +197,19 @@ export default function SellPage() {
    * The box at the foot of the order, brought up under the customer bar when it is tapped — the same
    * glide as `settlePage`, which follows the bar if it moves — so the keyboard does not cover its
    * results.
+   *
+   * WITH THE LAST LINE ABOVE IT. The box went right under the bar, and the line it had just added
+   * sits directly above the box — so every add put that line under the pinned bar, where the seller
+   * could not see what went on or how many (reported 10 Nov, with a photo of half a line peeking
+   * out). Bringing up the last line with the box shows both: what was just added, and where the
+   * next thing is typed, with the results still below.
    */
-  const bringUnderBar = useCallback((el: HTMLElement) => {
+  const bringUnderBar = useCallback((box: HTMLElement) => {
     requestAnimationFrame(() => {
+      const lines = orderTopRef.current?.querySelectorAll<HTMLElement>('[data-line-key]');
+      const last = lines && lines.length > 0 ? lines[lines.length - 1] : null;
+      const el =
+        last && last.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING ? last : box;
       void scrollIntoViewBelow(el, {
         below: () =>
           el
@@ -317,6 +328,22 @@ export default function SellPage() {
   const [pickingCustomer, setPickingCustomer] = useState(false);
   /* All items, in a sheet over the till (`OrderItemsSheet`). */
   const [allItems, setAllItems] = useState(false);
+  /*
+   * Put away for the new-customer form, and brought back when the form is done with — the seller
+   * was in All items, and that is where the customer they just made should be seen landing.
+   */
+  const reopenAllItemsRef = useRef(false);
+  usePageLifecycle(
+    nav,
+    {
+      onResume: () => {
+        if (!reopenAllItemsRef.current) return;
+        reopenAllItemsRef.current = false;
+        setAllItems(true);
+      },
+    },
+    [],
+  );
   // Remembers that the picker was opened mid-payment, so choosing someone returns to the
   // sheet instead of dropping the seller back on the order with the payment half-entered.
   /*
@@ -577,11 +604,7 @@ export default function SellPage() {
 
   onCustomerCreatedRef.current = (customer) => {
     if (!activeOrder) return;
-    updateOrder(activeOrder.clientUuid, {
-      customerId: customer.id,
-      customerName: customer.name,
-      customerPhone: customer.phone,
-    });
+    updateOrder(activeOrder.clientUuid, customerPatch(activeOrder, customer));
   };
 
   onSettledRef.current = (saleId: string) => {
@@ -1144,6 +1167,11 @@ export default function SellPage() {
           initialName={activeOrder.customerName}
           onCreate={(name) => {
             setPickingCustomer(false);
+            // A sheet cannot sit over a page, so All items steps aside and comes back on return.
+            if (allItems) {
+              setAllItems(false);
+              reopenAllItemsRef.current = true;
+            }
             void nav.push('customer_form_page', {
               name,
               then: 'attach-to-sale',
@@ -1152,11 +1180,7 @@ export default function SellPage() {
             });
           }}
           onPick={(c) => {
-            updateOrder(activeOrder.clientUuid, {
-              customerId: c.id,
-              customerName: c.name,
-              customerPhone: c.phone,
-            });
+            updateOrder(activeOrder.clientUuid, customerPatch(activeOrder, c));
             setPickingCustomer(false);
           }}
           onClose={() => setPickingCustomer(false)}
@@ -1191,19 +1215,11 @@ export default function SellPage() {
         onConfirm={() =>
           activeOrder &&
           customerAction.run(async () => {
-            updateOrder(activeOrder.clientUuid, {
-              customerId: null,
-              customerName: '',
-              customerPhone: '',
-            });
+            const off = customerPatch(activeOrder, null);
+            updateOrder(activeOrder.clientUuid, off);
             // Pushed rather than left to the debounce, so the spinner covers the real write and a
             // failure is reported where it was caused.
-            await push({
-              ...activeOrder,
-              customerId: null,
-              customerName: '',
-              customerPhone: '',
-            });
+            await push({ ...activeOrder, ...off });
           })
         }
       />

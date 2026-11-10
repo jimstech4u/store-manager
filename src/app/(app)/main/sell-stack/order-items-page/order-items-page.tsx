@@ -7,7 +7,7 @@ import { OrderItems } from '@/components/sell/OrderItems';
 import { CustomerPicker } from '@/components/customers/CustomerPicker';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
-import { orderById, useDraftOrders } from '@/lib/stacks/draft-orders';
+import { customerPatch, orderById, useDraftOrders } from '@/lib/stacks/draft-orders';
 import { swapTo } from '@/lib/finish-flow';
 
 /**
@@ -44,11 +44,7 @@ export default function OrderItemsPage() {
           storeId={store.id}
           initialName={order.customerName}
           onPick={(customer) => {
-            updateOrder(order.clientUuid, {
-              customerId: customer.id,
-              customerName: customer.name,
-              customerPhone: customer.phone,
-            });
+            updateOrder(order.clientUuid, customerPatch(order, customer));
             setPickingCustomer(false);
           }}
           onCreate={(name) => {

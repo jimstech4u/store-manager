@@ -221,6 +221,29 @@ const newId = () =>
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
+/**
+ * WHO THE ORDER IS FOR, as one patch — or nobody, with `null`.
+ *
+ * An order's `label` is saved as the customer's name when it has none of its own (`push`), so
+ * after a read from the shop the label IS the name. Taking the customer off then left it behind:
+ * the tab went on saying "Alimat" with no customer on the order, and Remove — which asks whether
+ * there is a customer — stayed grey over the name it was meant to remove (10 Nov). A label that
+ * only echoed the customer goes with them; a label of the order's own (an online buyer's name)
+ * stays.
+ */
+export function customerPatch(
+  order: Pick<DraftOrder, 'customerName' | 'label'>,
+  customer: { id: string; name: string; phone: string } | null,
+): Pick<DraftOrder, 'customerId' | 'customerName' | 'customerPhone' | 'label'> {
+  const echoed = order.label.trim() !== '' && order.label.trim() === order.customerName.trim();
+  return {
+    customerId: customer?.id ?? null,
+    customerName: customer?.name ?? '',
+    customerPhone: customer?.phone ?? '',
+    label: echoed ? '' : order.label,
+  };
+}
+
 /** A provisional tab with nothing on it yet — still this phone's alone (see `provisional`). */
 export function isUntouchedProvisional(o: DraftOrder): boolean {
   return (

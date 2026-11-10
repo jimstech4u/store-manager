@@ -67,7 +67,7 @@ export function QuickAdd({
     setText('');
     await onAdd(product, qty);
     // The keyboard stays up for the next thing they ask for, and the box, now a line further down,
-    // comes back under the bar.
+    // comes back up — with the line just added above it, in view (the till's `bringUnderBar`).
     inputRef.current?.focus();
     if (boxRef.current) onFocus?.(boxRef.current);
   };

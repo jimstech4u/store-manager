@@ -863,6 +863,22 @@ saves screenshots (SHOTS).
 `ViewportInsetsProvider` in the root layout, `useResizeToAvoidKeyboard` in the main shell, and
 `.shell` sized to `--ax-vv-height` at `--ax-viewport-offset-top`. While a box has the keyboard
 (`html[data-ax-keyboard="open"]`) the tab bar and the floating pills are not drawn.
+`revealFocusedField` on the provider (navigation-stack 1.11.0) keeps the box being typed in above
+the keyboard.
+
+**Sheets stack.** The customer picker opens OVER All items, which stays; Back closes the top one.
+Only a pushed page (the new-customer form) puts a sheet away, and the opener reopens it in
+`onResume` (`reopenAllItemsRef`). Never close a sheet just to open another over it.
+
+**Who an order is for changes through `customerPatch`** (`lib/stacks/draft-orders.ts`), never by
+writing `customerId`/`customerName` by hand. `push` saves the label as the customer's name, so after
+a read from the shop the label IS the name; clearing only the customer left the tab named after
+them with Remove grey (10 Nov, "Alimat"). The patch drops a label that only echoed the customer.
+
+**The till's box comes up with the last line above it** (`bringUnderBar`), so what was just added is
+never under the pinned customer bar. `probe-sheets-and-customer-ui` checks this, Remove after a
+reload, the stacked picker, and a customer created from All items / Take payment (the create is
+answered in the browser; nothing is written to the book).
 
 **The tab bar's autohide needs ONE broadcast per scroll.** It shows itself whenever the broadcast's
 `pageKey` changes (a new page). navigation-stack 1.10.1 sent each Scaffold scroll twice under two

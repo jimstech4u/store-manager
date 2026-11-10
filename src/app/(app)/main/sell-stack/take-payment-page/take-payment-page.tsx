@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState } from 'react';
-import { useLocation, useNav, useObject } from '@academix-admin/navigation-stack';
+import { useLocation, useNav, useObject, usePageLifecycle } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { FloatingAmount } from '@/components/ui/FloatingAmount';
@@ -18,7 +18,7 @@ import { CustomerPicker } from '@/components/customers/CustomerPicker';
 import { OrderItemsSheet } from '@/components/sell/OrderItems';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
-import { draftTotal, orderById, useDraftOrders } from '@/lib/stacks/draft-orders';
+import { customerPatch, draftTotal, orderById, useDraftOrders } from '@/lib/stacks/draft-orders';
 import { getSupabase } from '@/lib/supabase/client';
 import { messageOf } from '@/lib/format';
 import { applySaleLocally } from '@/lib/stacks/local-effects';
@@ -86,6 +86,19 @@ export default function TakePaymentPage() {
   const [pickingItem, setPickingItem] = useState(false);
   /* All items, in a sheet over this page — no Take payment in it, the money is being taken here. */
   const [allItems, setAllItems] = useState(false);
+  // Put away for the new-customer form and brought back on return — as on the till.
+  const reopenAllItemsRef = useRef(false);
+  usePageLifecycle(
+    nav,
+    {
+      onResume: () => {
+        if (!reopenAllItemsRef.current) return;
+        reopenAllItemsRef.current = false;
+        setAllItems(true);
+      },
+    },
+    [],
+  );
   const finishedGuard = useFinishedGuard();
   const [scanning, setScanning] = useState(false);
   const [scanProblem, setScanProblem] = useState<string | null>(null);
@@ -100,11 +113,7 @@ export default function TakePaymentPage() {
   );
   attachRef.current = (customer) => {
     if (!activeOrder) return;
-    updateOrder(activeOrder.clientUuid, {
-      customerId: customer.id,
-      customerName: customer.name,
-      customerPhone: customer.phone,
-    });
+    updateOrder(activeOrder.clientUuid, customerPatch(activeOrder, customer));
   };
   useEffect(() => {
     const off = nav.provideObject(
@@ -261,7 +270,7 @@ export default function TakePaymentPage() {
         total={draftTotal(activeOrder)}
         onNeedCustomer={() => setPicking(true)}
         onRemoveCustomer={() =>
-          updateOrder(activeOrder.clientUuid, { customerId: null, customerName: '', customerPhone: '' })
+          updateOrder(activeOrder.clientUuid, customerPatch(activeOrder, null))
         }
         onOpenLine={(lineKey) =>
           void nav.push('sale_line_page', { id: activeOrder.id ?? '', line: lineKey })
@@ -565,11 +574,7 @@ export default function TakePaymentPage() {
         storeId={store.id}
         initialName={activeOrder.customerName}
         onPick={(customer) => {
-          updateOrder(activeOrder.clientUuid, {
-            customerId: customer.id,
-            customerName: customer.name,
-            customerPhone: customer.phone,
-          });
+          updateOrder(activeOrder.clientUuid, customerPatch(activeOrder, customer));
           setPicking(false);
         }}
         /*
@@ -582,6 +587,11 @@ export default function TakePaymentPage() {
          */
         onCreate={(name) => {
           setPicking(false);
+          // A sheet cannot sit over a page, so All items steps aside and comes back on return.
+          if (allItems) {
+            setAllItems(false);
+            reopenAllItemsRef.current = true;
+          }
           void nav.push('customer_form_page', {
             ...(name.trim() ? { name } : {}),
             then: 'attach-to-payment',
