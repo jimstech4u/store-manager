@@ -52,3 +52,6 @@ public/sw.js
 public/sw.js.bak
 supabase/.temp/
 probe-shots/
+
+# Screenshots the probes save at the project root (probe-*.png, wide-*.png) — output, not source.
+/*.png
