@@ -31,8 +31,10 @@ import {
  * other with the lists (who owes, payments, counts) as PDF, picture and CSV. A shop asked for "a
  * proper professional reporting tool" (9 Nov); now every report has every way out.
  *
- * EVERY REPORT SAYS WHAT ITS TICKED LINES COME TO (`totalsFor`). A report cut down to some lines
- * carries totals of those lines, never of the whole list it was cut from.
+ * EVERY ROW THE QUESTION MATCHES IS ON IT. Which COLUMNS show is the shop's choice (`keepColumns`);
+ * which rows is not — a list of debtors with the awkward ones ticked out is not a report. A total
+ * names the column it belongs to (`of`) where its label is not that column's head, so it leaves
+ * with its column.
  */
 
 export type ReportId =
@@ -161,13 +163,12 @@ function amountWords(o: ReportOptions): string {
   return 'any amount';
 }
 
-/** A doc whose totals are worked out from the rows kept — all of them to begin with. */
+/** A doc and its totals, worked out over every row. */
 function withTotals(
-  doc: Omit<ReportDoc, 'totals' | 'totalsFor'>,
-  totalsFor: (kept: number[]) => ReportDoc['totals'],
+  doc: Omit<ReportDoc, 'totals'>,
+  totalsOf: (all: number[]) => ReportDoc['totals'],
 ): ReportDoc {
-  const all = doc.rows.map((_, i) => i);
-  return { ...doc, totals: totalsFor(all), totalsFor };
+  return { ...doc, totals: totalsOf(doc.rows.map((_, i) => i)) };
 }
 
 export async function loadReport(
@@ -265,7 +266,7 @@ export async function loadReport(
           { label: 'Transfer', value: formatMoney(sumOf(col('transfer'), kept)) },
           { label: 'POS', value: formatMoney(sumOf(col('pos'), kept)) },
           ...(hasOther ? [{ label: 'Other', value: formatMoney(sumOf(col('other'), kept)) }] : []),
-          { label: 'Came in', value: formatMoney(sumOf(col('total'), kept)) },
+          { label: 'Came in', value: formatMoney(sumOf(col('total'), kept)), of: 'Total' },
         ],
       ),
     };
@@ -289,7 +290,7 @@ export async function loadReport(
         },
         (kept) => [
           { label: 'Payments', value: String(sumOf(payments, kept)) },
-          { label: 'Came in', value: formatMoney(sumOf(amounts, kept)) },
+          { label: 'Came in', value: formatMoney(sumOf(amounts, kept)), of: 'Amount' },
         ],
       ),
     };
@@ -357,7 +358,7 @@ export async function loadReport(
         },
         (kept) => [
           { label: 'Items', value: String(kept.length) },
-          ...(id === 'stock_low' ? [] : [{ label: 'Worth at cost', value: formatMoney(sumOf(worth, kept)) }]),
+          ...(id === 'stock_low' ? [] : [{ label: 'Worth at cost', value: formatMoney(sumOf(worth, kept)), of: 'Worth' }]),
         ],
       ),
     };
@@ -394,7 +395,7 @@ export async function loadReport(
         },
         (kept) => [
           { label: 'Counted', value: String(kept.length) },
-          { label: 'With a difference', value: String(sumOf(off, kept)) },
+          { label: 'With a difference', value: String(sumOf(off, kept)), of: 'Difference' },
         ],
       ),
     };
@@ -455,7 +456,7 @@ export async function loadReport(
         },
         (kept) => [
           { label: 'Customers', value: String(kept.length) },
-          { label: id === 'owes' ? 'Owed to you' : 'You owe', value: formatMoney(sumOf(balances, kept)) },
+          { label: id === 'owes' ? 'Owed to you' : 'You owe', value: formatMoney(sumOf(balances, kept)), of: id === 'owes' ? 'Owes you' : 'You owe' },
         ],
       ),
     };
@@ -492,8 +493,8 @@ export async function loadReport(
           const over60 = rows.map((r) => ((r.daysOld ?? 0) > 60 ? r.balance : 0));
           return [
             { label: 'Customers', value: String(kept.length) },
-            { label: 'Over 60 days', value: formatMoney(sumOf(over60, kept)) },
-            { label: 'Owed to you', value: formatMoney(sumOf(balances, kept)) },
+            { label: 'Over 60 days', value: formatMoney(sumOf(over60, kept)), of: 'Owes' },
+            { label: 'Owed to you', value: formatMoney(sumOf(balances, kept)), of: 'Owes' },
           ];
         },
       ),
@@ -596,8 +597,9 @@ export async function loadReport(
           ...methods.map((m) => ({
             label: `By ${methodName(m).toLowerCase()}`,
             value: formatMoney(sumOf(rows.map((r) => (r.method === m ? Number(r.amount) : 0)), kept)),
+            of: 'Amount',
           })),
-          { label: id === 'payments' ? 'Received' : 'Given back', value: formatMoney(sumOf(amounts, kept)) },
+          { label: id === 'payments' ? 'Received' : 'Given back', value: formatMoney(sumOf(amounts, kept)), of: 'Amount' },
         ],
       ),
     };
@@ -651,14 +653,14 @@ export async function loadReport(
         { label: 'Receipts', value: String(kept.length) },
         ...(unpaidOnly
           ? [
-              { label: 'Billed', value: formatMoney(sumOf(col('total'), kept)) },
+              { label: 'Billed', value: formatMoney(sumOf(col('total'), kept)), of: 'Total' },
               { label: 'Paid', value: formatMoney(sumOf(col('paid'), kept)) },
               { label: 'Still owed', value: formatMoney(sumOf(col('outstanding'), kept)) },
             ]
           : [
               { label: 'Paid', value: formatMoney(sumOf(col('paid'), kept)) },
               { label: 'Still owed', value: formatMoney(sumOf(col('outstanding'), kept)) },
-              { label: 'Sales', value: formatMoney(sumOf(col('total'), kept)) },
+              { label: 'Sales', value: formatMoney(sumOf(col('total'), kept)), of: 'Total' },
             ]),
       ],
     ),

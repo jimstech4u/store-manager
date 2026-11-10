@@ -20,6 +20,7 @@
 import { chromium } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync, mkdirSync } from 'node:fs';
+import { addOnTill } from './till.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3100';
 const SHOTS =
@@ -271,13 +272,8 @@ try {
     await plus.click();
     await p.waitForTimeout(5000);
   }
-  await p.getByRole('button', { name: /Add an item/i }).first().click();
-  await p.waitForTimeout(3000);
-  await searchFor(NAME);
-  await p.locator('[role="dialog"] [class*="ProductPicker_name"]').first().click();
-  await p.waitForTimeout(6000);
-
-  await p.locator('[class*="stepperField"] input').first().fill('2');
+  // The till's one box (10 Nov): "2 <item>" puts two on, as a seller types it.
+  await addOnTill(p, `2 ${NAME}`, NAME);
   await p.waitForTimeout(2500);
   await p.screenshot({ path: `${SHOTS}/5-sell-line.png`, fullPage: true });
 

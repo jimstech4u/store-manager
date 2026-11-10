@@ -171,22 +171,53 @@
   color: var(--text-muted);
 }
 
-/* All / none, and how many are in. */
-.allRow {
+/* Which columns go on the report — a row of tick chips above it. */
+.columns {
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  border: none;
+  min-width: 0;
+}
+
+.columnsHead {
+  margin-bottom: var(--space-2);
+  padding: 0;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.columnChips {
   display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.column {
+  display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  min-height: var(--touch-min);
-  margin-bottom: var(--space-2);
+  min-height: 40px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
   font-size: var(--text-sm);
-  font-weight: 600;
   cursor: pointer;
 }
 
-.allRow input,
-.tick input {
-  width: 20px;
-  height: 20px;
+.columnOn {
+  border-color: var(--primary);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.column input {
+  width: 18px;
+  height: 18px;
   margin: 0;
   accent-color: var(--primary);
   cursor: pointer;
@@ -219,28 +250,8 @@
   vertical-align: top;
 }
 
-.table tbody tr {
-  cursor: pointer;
-}
-
 .table tbody tr:nth-child(even) td {
   background: var(--surface-muted, rgba(0, 0, 0, 0.03));
-}
-
-/* A line left out: still there to tick back, plainly not in. */
-.rowOut td {
-  color: var(--text-muted);
-  text-decoration: line-through;
-  text-decoration-color: var(--border-strong, currentColor);
-}
-
-.rowOut .tick {
-  text-decoration: none;
-}
-
-.tick {
-  width: 36px;
-  padding-right: 0 !important;
 }
 
 .right {
@@ -271,15 +282,6 @@
   min-width: 8rem;
   text-align: right;
   font-weight: 700;
-}
-
-.srOnly {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
 }
 
 /* ── 5. Take it away ─────────────────────────────────────────────────────────────── */

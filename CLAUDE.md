@@ -876,9 +876,11 @@ a read from the shop the label IS the name; clearing only the customer left the 
 them with Remove grey (10 Nov, "Alimat"). The patch drops a label that only echoed the customer.
 
 **Reports is the one reporting tool** (10 Nov; Export folded in, its page in `_unused/`). Every
-report is a `ReportDoc` from `lib/stacks/export-reports.ts` with `totalsFor(kept)`; the page ticks
-lines in and out and `keepRows` cuts the doc, so the figures, PDF, picture, roll and CSV all carry
-only the ticked lines. Lists read past PostgREST's 1,000-row cap with `rpcAll` — "Payments received"
+report is a `ReportDoc` from `lib/stacks/export-reports.ts` with its totals; the page ticks
+COLUMNS on and off (remembered per report on the phone) and `keepColumns` cuts the doc, so the
+figures, PDF, picture, roll and CSV carry only those columns, and a total leaves with its column
+(`of`). ROWS ARE NEVER TICKED OUT — the user's rule (10 Nov): a report that drops lines lets bad
+ones be hidden. A report waits for the shop's shapes before it reads, or stock comes out as pieces. Lists read past PostgREST's 1,000-row cap with `rpcAll` — "Payments received"
 for a month was exactly 1,000 before. Stock is said through `useSayInShapes`. `probe-reports-ui`
 walks every report.
 
@@ -888,7 +890,12 @@ place on iPhone. A probe that sets `scrollTop` must fire a wheel (or touch) on t
 `probe-tab-scroll-ui` (ENGINE=webkit) covers tab switches.
 
 **The till's box comes up with the last line above it** (`bringUnderBar`), so what was just added is
-never under the pinned customer bar. `probe-sheets-and-customer-ui` checks this, Remove after a
+never under the pinned customer bar. (The four probes listed as stale on 10 Nov were retargeted the same
+day: `probe-all-items-extras-ui` now adds the charge and deposit on Take payment and reads them on the
+All items paper; `probe-end-to-end` adds on the till through the one box. The two delivery probes were
+never stale — the delivery form still has its What for / How much composer. `probe-delivery-form`,
+`probe-delivery-summary-ui` and `probe-end-to-end` WRITE deliveries or settle a sale: never run them
+against the live shop.) `probe-sheets-and-customer-ui` checks this, Remove after a
 reload, the stacked picker, and a customer created from All items / Take payment (the create is
 answered in the browser; nothing is written to the book).
 
@@ -921,7 +928,6 @@ failing.
 | `probe-ledgers.mjs` | **Fails on main, cause not investigated** (checked 2026-09-23 with a control build): "a shape with one product is named by the product, not the maker" finds nothing, then the walk times out on a `fill`. Not staleness as far as anyone has looked — it may be a real defect. | Investigate before trusting the empties naming rules. |
 | `probe-loading-states.mjs` | **Fails on main** (same control): its walk drifts — `[account-page]` shows the People list, `[deposit-customer]` shows Settings — then four screens come back empty and it times out. Most likely it predates People moving into `settings-stack` on 2026-09-11. | Re-target the walk at where those pages live now. |
 | `probe-no-round-trip.mjs` | **Do not run against the live shop: its last step SETTLES A SALE.** Fails on main too (9 Nov control against the live site): adding a unit re-reads `store_units_for`/`list_products`, and the item price field (`UnitsEditor_card` › "Price for one") is no longer found, so it times out there. Its clean-up was at the end of the walk and left an `RKeg…` unit on every run; it is in `finally` now. | Retarget the price step, decide whether the unit re-read is a real regression, and settle nothing — check the customer list is not re-read some other way. |
-| `probe-all-items-extras-ui.mjs`, `probe-delivery-form.mjs`, `probe-delivery-summary-ui.mjs`, `probe-end-to-end.mjs` | Fill the old charge form (**What for** / **Add charge**) that Take payment and All items had until 10 Nov. A charge is now one box labelled **The charge** ("Delivery 2000", Enter), on Take payment only; All items has no charges. `probe-end-to-end` also settles a sale. | Type the charge into the one box on Take payment (`probe-take-payment-ui` shows how); drop the All items part of `probe-all-items-extras-ui`. |
 | `probe-after-sale.mjs` | Waits for a button reading **Take payment**. That label is conditional: it reads `Count N items first` whenever anything on the till needs counting, which the count-gate flow introduced on 2026-09-16. Probe last touched 2026-09-09. | Either clear the count gate first, or match the label the till actually shows. |
 
 **UNVERIFIED, and it undercuts the offline promise if it is true.** iOS evicts IndexedDB for sites

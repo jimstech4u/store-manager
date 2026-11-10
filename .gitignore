@@ -51,3 +51,4 @@ public/sw.js
 # A backup the update probe used to make. It writes the worker back itself now.
 public/sw.js.bak
 supabase/.temp/
+probe-shots/

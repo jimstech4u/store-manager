@@ -27,30 +27,35 @@ export interface ReportDoc {
   generatedAt: Date;
   columns: ReportColumn[];
   rows: string[][];
-  totals: { label: string; value: string }[];
   /**
-   * The totals of SOME of the rows — the ones ticked to go in (`keepRows`). Given the indexes of
-   * the rows kept, says what they come to. Left out, a report's totals are of every row, and a
-   * report cut down to some of them carries none rather than figures for lines it does not show.
+   * What the report comes to. `of` names the column a total belongs to, when its label is not that
+   * column's own head — so a total goes with its column when the column is left out (`keepColumns`).
    */
-  totalsFor?: (kept: number[]) => { label: string; value: string }[];
+  totals: { label: string; value: string; of?: string }[];
   /** Said under the table — what the figures mean, where it matters. */
   note?: string;
 }
 
 /**
- * The report with only the rows ticked to go in it — "a tick box for which lines appear in a
- * report". Everything drawn from the result (A4, the roll, a picture, CSV) carries those rows,
- * totals of those rows, and says on its face that it is a selection: a sheet showing six of forty
- * debtors must not read as the shop's whole book.
+ * The report with only the COLUMNS chosen — "product name and quantity and not the price" (10 Nov).
+ *
+ * Columns, never rows. A report that let lines be ticked out would let somebody hand over a list of
+ * debtors, payments or counts with the awkward ones quietly gone; every row the question matches is
+ * on it. What can be chosen is which facts about each row are shown — and a total of a column that
+ * is not shown goes with it, so a sheet without prices does not carry their sum.
  */
-export function keepRows(doc: ReportDoc, kept: number[]): ReportDoc {
-  if (kept.length === doc.rows.length) return doc;
+export function keepColumns(doc: ReportDoc, kept: number[]): ReportDoc {
+  if (kept.length === doc.columns.length) return doc;
+  const shown = new Set(kept.map((i) => doc.columns[i].head));
+  const heads = new Set(doc.columns.map((c) => c.head));
   return {
     ...doc,
-    rows: kept.map((i) => doc.rows[i]),
-    totals: doc.totalsFor ? doc.totalsFor(kept) : [],
-    filters: `${doc.filters} · ${kept.length} of ${doc.rows.length} lines chosen`,
+    columns: kept.map((i) => doc.columns[i]),
+    rows: doc.rows.map((r) => kept.map((i) => r[i])),
+    totals: doc.totals.filter((t) => {
+      const owner = t.of ?? (heads.has(t.label) ? t.label : null);
+      return owner === null || shown.has(owner);
+    }),
   };
 }
 

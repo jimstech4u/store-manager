@@ -54,13 +54,17 @@ try {
   for (const [here, away] of [['Stock', 'Money'], ['Money', 'Stock'], ['Stock', 'Sell']]) {
     await tab(here);
     await p.waitForTimeout(2500);
-    await p.mouse.move(195, 500);
-    for (let i = 0; i < 8; i++) {
-      await p.mouse.wheel(0, 150);
-      await p.waitForTimeout(60);
+    // Wheel steps until the page has moved — a page still loading its list has nothing to scroll.
+    let before = 0;
+    for (let tries = 0; tries < 3 && before <= 200; tries++) {
+      await p.mouse.move(195, 500);
+      for (let i = 0; i < 8; i++) {
+        await p.mouse.wheel(0, 150);
+        await p.waitForTimeout(60);
+      }
+      await p.waitForTimeout(800);
+      before = await top();
     }
-    await p.waitForTimeout(800);
-    const before = await top();
     await tab(away);
     await p.waitForTimeout(1500);
     await tab(here);

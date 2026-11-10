@@ -1,7 +1,7 @@
 'use client';
 
 import { ACCOUNT_DERIVED_SCOPE } from '@/lib/stacks/customer-account';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { Button } from '@/components/ui/Button';
@@ -17,7 +17,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
 import { useResource } from '@/lib/stacks/resource';
 import { customPeriod, resolvePeriod, usePeriod, type PeriodKind } from '@/lib/stacks/periods';
-import { useSayInShapes } from '@/lib/stacks/selling-units';
+import { useSayInShapes, useSellingUnits } from '@/lib/stacks/selling-units';
 import {
   loadReport,
   REPORT_GROUPS,
@@ -26,7 +26,7 @@ import {
   type ReportGroup,
   type ReportId,
 } from '@/lib/stacks/export-reports';
-import { keepRows, renderReportPages, reportToCsv, reportToRoll } from '@/lib/report-doc';
+import { keepColumns, renderReportPages, reportToCsv, reportToRoll } from '@/lib/report-doc';
 import { shareCsv } from '@/lib/export-csv';
 import type { PriceRow } from '@/lib/stacks/report-readers';
 import { formatDateTime, formatMoney } from '@/lib/format';
@@ -43,9 +43,10 @@ import styles from './reports-page.module.css';
  *
  *   1. WHICH REPORT — four groups (Money, Stock, People, Team), the reports of one group at a time.
  *   2. ITS WINDOW — the shop's own days, resolved on the server; only on reports that have one.
- *   3. WHAT IT COMES TO — the totals, as figures at the top, of the lines ticked.
- *   4. THE LINES — each with a tick box, and All / None. A line left out is greyed here and absent
- *      from everything taken away.
+ *   3. WHAT IT COMES TO — the totals, as figures at the top.
+ *   4. ITS COLUMNS — each with a tick box ("product name and quantity and not the price"). Rows are
+ *      NOT chosen: every line the question matches is on it, so nobody can hand over a report with
+ *      the awkward lines left out. A column left out takes its totals with it.
  *   5. TAKE IT AWAY — PDF on A4, a picture, the receipt printer, a page printer, share, or CSV.
  *
  * It replaces two pages that each did half: Reports had the figures and printed through the
@@ -63,6 +64,14 @@ export default function ReportsPage() {
   const problem = useProblem();
   const showProblem = problem.show;
   const say = useSayInShapes(store?.id ?? null);
+  /*
+   * THE SHOP'S SHAPES FIRST. A report read before they arrive says stock in its smallest unit —
+   * "300 pieces" where the shop says "25 packs" — and nothing read it again when they came. So a
+   * report waits for them, and is read again if they change.
+   */
+  const shapes = useSellingUnits(store?.id ?? null);
+  const shapesReady = shapes.loaded || Boolean(shapes.error);
+  const shapesKey = shapes.units.length;
 
   const [which, setWhich] = useState<ReportId>('days');
   const spec = REPORTS.find((r) => r.id === which)!;
@@ -102,14 +111,13 @@ export default function ReportsPage() {
   const amountKey = amount ? `${min}:${max}` : '';
 
   const report = useResource<LoadedReport>({
-    key: `report:${store?.id ?? 'none'}:${which}:${periodKey}:${amountKey}`,
+    key: `report:${store?.id ?? 'none'}:${which}:${periodKey}:${amountKey}:${shapesKey}`,
     // A sale, a payment or a delivery changes a report; those writers all notify this scope.
     scope: ACCOUNT_DERIVED_SCOPE,
-    // Never kept on the phone: a report carries the arithmetic for its own totals, which does not
-    // survive being stored, and an old report is not one anybody should be shown.
+    // Never kept on the phone: an old report is not one anybody should be shown.
     persist: false,
-    enabled: Boolean(store) && (!windowed || Boolean(period)),
-    deps: [store?.id, which, periodKey, amountKey],
+    enabled: Boolean(store) && shapesReady && (!windowed || Boolean(period)),
+    deps: [store?.id, which, periodKey, amountKey, shapesKey, say],
     onFail: showProblem,
     read: () =>
       loadReport(
@@ -128,32 +136,38 @@ export default function ReportsPage() {
   });
 
   /*
-   * THE LINES LEFT OUT, by position. Everything is in to begin with, and a new report — or the same
-   * one over a different window — starts with everything in again: a choice made about last
-   * month's rows says nothing about this month's.
+   * THE COLUMNS LEFT OUT, by heading, per report — and remembered on this phone, because a shop that
+   * sends its price-free stock list every evening should not untick Worth every evening.
    */
-  const [out, setOut] = useState<Set<number>>(() => new Set());
+  const [hiddenBy, setHiddenBy] = useState<Record<string, string[]>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('reports:hidden-columns') ?? '{}') as Record<string, string[]>;
+    } catch {
+      return {};
+    }
+  });
+  const hidden = useMemo(() => new Set(hiddenBy[which] ?? []), [hiddenBy, which]);
   const loaded = report.data;
   const doc = loaded?.doc ?? null;
-  useEffect(() => {
-    setOut(new Set());
-  }, [doc]);
-
-  const kept = useMemo(
-    () => (doc ? doc.rows.map((_, i) => i).filter((i) => !out.has(i)) : []),
-    [doc, out],
+  const keptColumns = useMemo(
+    () => (doc ? doc.columns.map((_, i) => i).filter((i) => !hidden.has(doc.columns[i].head)) : []),
+    [doc, hidden],
   );
-  const chosen = useMemo(() => (doc ? keepRows(doc, kept) : null), [doc, kept]);
+  const chosen = useMemo(() => (doc ? keepColumns(doc, keptColumns) : null), [doc, keptColumns]);
 
-  const toggle = (i: number) =>
-    setOut((prev) => {
-      const next = new Set(prev);
-      if (next.has(i)) next.delete(i);
-      else next.add(i);
+  const toggleColumn = (head: string) =>
+    setHiddenBy((prev) => {
+      const now = new Set(prev[which] ?? []);
+      if (now.has(head)) now.delete(head);
+      else now.add(head);
+      const next = { ...prev, [which]: [...now] };
+      try {
+        localStorage.setItem('reports:hidden-columns', JSON.stringify(next));
+      } catch {
+        // A private window: the choice holds for this visit only.
+      }
       return next;
     });
-  const allIn = doc ? out.size === 0 : false;
-  const setAll = (on: boolean) => setOut(on || !doc ? new Set() : new Set(doc.rows.map((_, i) => i)));
 
   const [csvNote, setCsvNote] = useState<string | null>(null);
 
@@ -171,7 +185,7 @@ export default function ReportsPage() {
   const fileBase = `${spec.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${new Date().toISOString().slice(0, 10)}`;
 
   return (
-    <PageScaffold layout="record" onBack={goBack} title="Reports" subtitle="Choose, pick the lines, take it away">
+    <PageScaffold layout="record" onBack={goBack} title="Reports" subtitle="Choose, pick the columns, take it away">
       <ProblemDialog problem={problem} title="Could not build that report" />
 
       <PageState status={status}>
@@ -245,7 +259,7 @@ export default function ReportsPage() {
               {() =>
                 !chosen || !doc || !loaded ? null : (
                   <>
-                    {/* ── 3. What the lines chosen come to ── */}
+                    {/* ── 3. What it comes to ── */}
                     {chosen.totals.length > 0 && (
                       <dl className={styles.figures} aria-label="What it comes to" data-print-no-print>
                         {chosen.totals.map((t, i) => (
@@ -260,7 +274,34 @@ export default function ReportsPage() {
                       </dl>
                     )}
 
-                    {/* ── 4. The lines, each with its tick box ── */}
+                    {/*
+                      ── 4. Its columns, each with a tick box ──
+                      At least one stays: a report of nothing is not a report.
+                    */}
+                    {doc.columns.length > 1 && (
+                      <fieldset className={styles.columns} data-print-no-print>
+                        <legend className={styles.columnsHead}>Columns on the report</legend>
+                        <div className={styles.columnChips}>
+                          {doc.columns.map((c) => {
+                            const on = !hidden.has(c.head);
+                            const last = on && keptColumns.length === 1;
+                            return (
+                              <label key={c.head} className={`${styles.column} ${on ? styles.columnOn : ''}`}>
+                                <input
+                                  type="checkbox"
+                                  checked={on}
+                                  disabled={last}
+                                  onChange={() => toggleColumn(c.head)}
+                                />
+                                <span>{c.head}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </fieldset>
+                    )}
+
+                    {/* ── The report, as it goes out ── */}
                     <div className={styles.sheet} data-print-root="page">
                       <div className={styles.sheetHead}>
                         <p className={styles.sheetShop}>{doc.shop}</p>
@@ -273,70 +314,30 @@ export default function ReportsPage() {
                       {doc.rows.length === 0 ? (
                         <p className={styles.sheetEmpty}>Nothing matches these filters.</p>
                       ) : (
-                        <>
-                          <label className={styles.allRow} data-print-no-print>
-                            <input
-                              type="checkbox"
-                              checked={allIn}
-                              ref={(el) => {
-                                if (el) el.indeterminate = !allIn && kept.length > 0;
-                              }}
-                              onChange={(e) => setAll(e.target.checked)}
-                            />
-                            <span>
-                              {allIn
-                                ? `All ${doc.rows.length} lines are in the report`
-                                : `${kept.length} of ${doc.rows.length} lines in the report`}
-                            </span>
-                          </label>
-
-                          <div className={styles.tableWrap}>
-                            <table className={styles.table}>
-                              <thead>
-                                <tr>
-                                  <th className={styles.tick} data-print-no-print>
-                                    <span className={styles.srOnly}>In the report</span>
+                        <div className={styles.tableWrap}>
+                          <table className={styles.table}>
+                            <thead>
+                              <tr>
+                                {chosen.columns.map((c) => (
+                                  <th key={c.head} className={c.align === 'right' ? styles.right : undefined}>
+                                    {c.head}
                                   </th>
-                                  {doc.columns.map((c) => (
-                                    <th key={c.head} className={c.align === 'right' ? styles.right : undefined}>
-                                      {c.head}
-                                    </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {chosen.rows.map((r, i) => (
+                                <tr key={i}>
+                                  {r.map((cell, ci) => (
+                                    <td key={ci} className={chosen.columns[ci]?.align === 'right' ? styles.right : undefined}>
+                                      {cell}
+                                    </td>
                                   ))}
                                 </tr>
-                              </thead>
-                              <tbody>
-                                {doc.rows.map((r, i) => {
-                                  const isIn = !out.has(i);
-                                  return (
-                                    <tr
-                                      key={i}
-                                      className={isIn ? undefined : styles.rowOut}
-                                      {...(isIn ? {} : { 'data-print-no-print': true })}
-                                      onClick={(e) => {
-                                        // The whole line is the target; the box itself handles its own click.
-                                        if ((e.target as HTMLElement).tagName !== 'INPUT') toggle(i);
-                                      }}
-                                    >
-                                      <td className={styles.tick} data-print-no-print>
-                                        <input
-                                          type="checkbox"
-                                          checked={isIn}
-                                          onChange={() => toggle(i)}
-                                          aria-label={`${r[0]} in the report`}
-                                        />
-                                      </td>
-                                      {r.map((cell, ci) => (
-                                        <td key={ci} className={doc.columns[ci]?.align === 'right' ? styles.right : undefined}>
-                                          {cell}
-                                        </td>
-                                      ))}
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        </>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       )}
 
                       {chosen.totals.length > 0 && (
@@ -353,7 +354,7 @@ export default function ReportsPage() {
                     </div>
 
                     {/* ── 5. Take it away ── */}
-                    {kept.length > 0 && (
+                    {doc.rows.length > 0 && (
                       <section className={styles.out} aria-label="Take it away" data-print-no-print>
                         {loaded.poster && (
                           <Button fullWidth onClick={() => printPoster()}>
@@ -385,14 +386,14 @@ export default function ReportsPage() {
                       </section>
                     )}
 
-                    {loaded.poster && kept.length > 0 && (
+                    {loaded.poster && doc.rows.length > 0 && (
                       <h3 className={styles.posterHeading} data-print-no-print>
                         On the wall
                       </h3>
                     )}
                     {loaded.poster && (
                       <PricePoster
-                        rows={loaded.poster.rows.filter((_, i) => !out.has(i))}
+                        rows={loaded.poster.rows}
                         shopName={store.name}
                         printedAt={formatDateTime(doc.generatedAt.toISOString())}
                         storefront={loaded.poster.storefront}

@@ -4,11 +4,11 @@
  *
  *   1. Each of the four groups (Money, Stock, People, Team) lists its reports, and every report
  *      either shows lines or says nothing matches — never "Could not build that report".
- *   2. Ticking a line out greys it, says "n of N lines", and the totals at the top change.
+ *   2. Columns tick on and off (remembered); a column off takes its total with it. Lines have no box.
  *   3. Stock is said in shapes ("300 packs 10 pieces"), not one base-unit number.
  *   4. The ways out are there: PDF / picture / printer (DocumentActions) and CSV.
  *
- * Read-only. Screenshots go to SHOTS.
+ * Read-only. Screenshots go to SHOTS. (Lines are never ticked out; columns are, since 10 Nov.)
  *
  *     node scripts/probe-reports-ui.mjs [http://localhost:3100]
  */
@@ -95,28 +95,42 @@ try {
     }
   }
 
-  // ── 2 & 3. Everything in stock: shapes, and a line ticked out ──
+  // ── 2 & 3. Everything in stock: shapes, and a column ticked out ──
   await tap(page().getByRole('tab', { name: 'Stock', exact: true }));
   await tap(page().locator('[aria-pressed]').filter({ hasText: 'Everything in stock' }));
   await p.waitForTimeout(600);
   check((await settled()) === 'lines', 'Everything in stock has lines');
-  const shelf = await page().locator('table tbody tr td:nth-child(4)').allInnerTexts();
+  const shelf = await page().locator('table tbody tr td:nth-child(3)').allInnerTexts();
   console.log('     on the shelf, first few:', shelf.slice(0, 6).join(' | '));
   check(shelf.some((t) => /\d+ \D+ \d+ /.test(t)), 'some stock is said in two shapes ("5 crates 6 bottles")');
 
+  // Rows are never ticked out: every line the question matches is on the report.
+  check((await page().locator('table tbody input[type="checkbox"]').count()) === 0, 'no tick box on any line');
+
+  const heads = () => page().locator('table thead th').allInnerTexts();
   const figures = () => page().getByLabel('What it comes to').innerText();
-  const before = await figures();
-  await tap(page().locator('table tbody tr td input[type="checkbox"]'));
+  check((await heads()).includes('Worth'), 'Worth is a column to begin with');
+  await tap(page().locator('label').filter({ hasText: /^Worth$/ }).locator('input'));
   await p.waitForTimeout(400);
-  const after = await figures();
-  const count = await page().getByText(/lines in the report/).innerText();
-  check(/of \d+ lines/.test(count), `ticking one out says so ("${count}")`);
-  check(before !== after, 'and the figures at the top change');
-  check((await page().locator('tr[class*="rowOut"]').count()) === 1, 'the line left out is greyed');
-  await shot('2-one-line-out');
-  await tap(page().getByText(/lines in the report/));
-  await p.waitForTimeout(300);
-  check(/All \d+ lines/.test(await page().getByText(/lines are in the report/).innerText()), 'All puts every line back');
+  check(!(await heads()).includes('Worth'), 'unticking Worth takes the column off the report');
+  check(!/WORTH AT COST/i.test(await figures()), 'and its total with it');
+  await shot('2-worth-off');
+  await p.reload({ waitUntil: 'networkidle' });
+  await p.waitForTimeout(6000);
+  await p.evaluate(() => [...document.querySelectorAll('.nav-item')].find((n) => n.textContent.trim() === 'Money')?.click());
+  await p.waitForTimeout(2500);
+  if (!(await page().getByRole('tablist', { name: 'Kind of report' }).count())) {
+    await tap(page().getByRole('button', { name: 'Reports to print, share or save' }));
+    await page().getByRole('tablist', { name: 'Kind of report' }).waitFor({ timeout: 20000 });
+  }
+  await tap(page().getByRole('tab', { name: 'Stock', exact: true }));
+  await tap(page().locator('[aria-pressed]').filter({ hasText: 'Everything in stock' }));
+  await p.waitForTimeout(600);
+  await settled();
+  check(!(await heads()).includes('Worth'), 'the choice is remembered on this phone');
+  await tap(page().locator('label').filter({ hasText: /^Worth$/ }).locator('input'));
+  await p.waitForTimeout(400);
+  check((await heads()).includes('Worth'), 'and ticking it puts it back')
 
   // ── 4. The ways out ──
   check(await page().getByRole('button', { name: /CSV/ }).count() > 0, 'CSV is offered');
