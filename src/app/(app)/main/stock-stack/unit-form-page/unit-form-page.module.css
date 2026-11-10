@@ -3,5 +3,12 @@
    two-field form on every phone this runs on, and covers what is being typed once the keyboard is
    up. */
 .actions {
+  display: grid;
+  gap: var(--space-3);
   margin-top: var(--space-7);
+}
+
+/* Putting a word away: quiet, last, and plainly not Save. */
+.retire {
+  color: var(--danger, #b3261e);
 }

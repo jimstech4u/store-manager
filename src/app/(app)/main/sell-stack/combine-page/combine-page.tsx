@@ -81,7 +81,7 @@ export default function CombinePage() {
   const name = merged.data?.customer?.name ?? '';
 
   return (
-    <PageScaffold onBack={goBack} title="Put receipts together" subtitle={name || 'One paper for one customer'}>
+    <PageScaffold layout="record" onBack={goBack} title="Put receipts together" subtitle={name || 'One paper for one customer'}>
       <PageState status={status}>
         {() => (
           <>

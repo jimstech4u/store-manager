@@ -204,3 +204,144 @@
   color: var(--text-muted);
   font-size: var(--text-xs);
 }
+
+/* ── THE CHECKLIST (10 Nov) ──────────────────────────────────────────────────────── */
+
+.progress {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+}
+
+.progressText {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.progressText strong {
+  color: var(--text);
+  font-size: var(--text-lg, 1.2rem);
+}
+
+.progressBar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-muted, rgba(0, 0, 0, 0.06));
+  overflow: hidden;
+}
+
+.progressBar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary);
+  transition: width 240ms ease;
+}
+
+.checklist {
+  list-style: none;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.itemDone,
+.itemOpen {
+  padding: var(--space-3) var(--space-4);
+}
+
+.itemDone {
+  border-color: var(--primary);
+  background: var(--primary-subtle, var(--surface));
+}
+
+.itemOpen {
+  display: block;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary) inset;
+}
+
+.itemRow {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 64px;
+  padding: var(--space-3) var(--space-4);
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.itemDot {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--border-strong, var(--border));
+  border-radius: 50%;
+}
+
+.itemTick {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: 14px;
+}
+
+.itemBody {
+  flex: 1;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.itemName {
+  font-weight: 700;
+}
+
+.itemMeta {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.itemGo {
+  flex: none;
+  padding: var(--space-1) var(--space-3);
+  border-radius: 999px;
+  background: var(--primary);
+  color: #fff;
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.itemAgain {
+  flex: none;
+  min-height: var(--touch-min);
+  padding: 0 var(--space-2);
+  border: none;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  cursor: pointer;
+}

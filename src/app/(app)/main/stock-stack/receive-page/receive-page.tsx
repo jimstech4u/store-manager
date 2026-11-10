@@ -510,7 +510,7 @@ export default function ReceivePage() {
   if (!store) return null;
 
   return (
-    <PageScaffold
+    <PageScaffold layout="record"
       onBack={goBack}
       title="Record a delivery"
       subtitle="What came in, and what it really cost"

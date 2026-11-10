@@ -5,11 +5,10 @@ import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { AsyncAction, type AsyncState } from '@/components/ui/AsyncAction';
-import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
-import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
+import { CheckIcon, CloseIcon } from '@/components/ui/Icon';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { useAuth } from '@/providers/AuthProvider';
@@ -48,10 +47,12 @@ interface Line {
  * the open sale holds something not counted today — when the sale is opened, and whenever an item
  * is added — and Take payment will not settle until nothing is left here.
  *
- * ONE FORM. Pick an item from the ones still to count, say what is on the shelf in its own shapes
- * (crates and loose bottles, the way it is stacked), Add, and move on to the next. What has been
- * counted is listed above until it is recorded. The same composer as the yard and a new customer's
- * empties — never a wall of boxes, one per item.
+ * ONE CHECKLIST (10 Nov). Every item still to count is a row, in the order it is on the sale, with
+ * a bar saying how far along the count is. Tapping a row opens it in place — a box for each shape
+ * the shop names (crates and loose bottles, the way it is stacked) and Add — and a counted row shows
+ * its figure with a tick until it is recorded. It used to be a button that opened a sheet to choose
+ * the item, then a form: two taps per item and never the whole job in view. Only one row is open at
+ * a time, so it is never a wall of boxes, one per item.
  *
  * `focus` in the push names the item just added, so it arrives already chosen.
  */
@@ -129,7 +130,18 @@ export default function CountGatePage() {
     [uncounted, lines, activeOrder?.lines, byProduct],
   );
 
-  const [picking, setPicking] = useState(false);
+  /* EVERY ITEM TO COUNT, counted on this form or not — the checklist's rows. */
+  const toCount = useMemo<Uncounted[]>(
+    () =>
+      uncounted.map((id) => ({
+        productId: id,
+        productName:
+          activeOrder?.lines.find((l) => l.productId === id)?.productName ?? 'This item',
+        shapes: [...(byProduct.get(id) ?? [])].sort((a, b) => b.baseQty - a.baseQty),
+      })),
+    [uncounted, activeOrder?.lines, byProduct],
+  );
+
   const [chosen, setChosen] = useState<Uncounted | null>(null);
   const [byShape, setByShape] = useState<Record<string, string>>({});
   const [state, setState] = useState<AsyncState>('idle');
@@ -171,7 +183,8 @@ export default function CountGatePage() {
       ...prev.filter((l) => l.productId !== chosen.productId),
       { productId: chosen.productId, productName: chosen.productName, base, said: words },
     ]);
-    setChosen(null);
+    // On to the next one still to count, already open — counting a sale is Add, Add, Record.
+    setChosen(remaining.find((r) => r.productId !== chosen.productId) ?? null);
     setByShape({});
   };
 
@@ -275,9 +288,8 @@ export default function CountGatePage() {
       ) : (
         <>
           <p className={styles.lead}>
-            {total === 1 ? 'This item has' : 'These items have'} not been counted today. Count the
-            shelf before {total === 1 ? 'it goes' : 'they go'} out, so the day starts from a figure
-            somebody checked.{' '}
+            Count the shelf before {total === 1 ? 'it goes' : 'they go'} out, so the day starts from
+            a figure somebody checked.{' '}
             {why === 'share'
               ? 'The order can be shared once everything on it is counted.'
               : why === 'pay'
@@ -286,90 +298,132 @@ export default function CountGatePage() {
             Each item is counted once a day — if another till gets there first, its count stands.
           </p>
 
-          {lines.length > 0 && (
-            <ul className={styles.lineList}>
-              {lines.map((l) => (
-                <li key={l.productId} className={styles.lineRow}>
-                  <span>
-                    <strong>{l.productName}</strong> · {l.said}
-                  </span>
+          {/* How far along: the whole job, in one line. */}
+          <div className={styles.progress} aria-label="How far along">
+            <p className={styles.progressText}>
+              <strong>{lines.length}</strong> of {total} counted
+            </p>
+            <div className={styles.progressBar}>
+              <span style={{ width: `${Math.round((lines.length / total) * 100)}%` }} />
+            </div>
+          </div>
+
+          <ol className={styles.checklist}>
+            {toCount.map((item) => {
+              const line = lines.find((l) => l.productId === item.productId);
+              const open = chosen?.productId === item.productId;
+
+              /* Counted on this form, waiting to be recorded. */
+              if (line && !open) {
+                return (
+                  <li key={item.productId} className={`${styles.item} ${styles.itemDone}`}>
+                    <span className={styles.itemTick} aria-hidden="true">
+                      <CheckIcon />
+                    </span>
+                    <span className={styles.itemBody}>
+                      <span className={styles.itemName}>{item.productName}</span>
+                      <span className={styles.itemMeta}>{line.said}</span>
+                    </span>
+                    <button
+                      type="button"
+                      className={styles.itemAgain}
+                      onClick={() => {
+                        setChosen(item);
+                        setByShape({});
+                      }}
+                    >
+                      Change
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.lineRemove}
+                      onClick={() => setLines((prev) => prev.filter((x) => x.productId !== item.productId))}
+                      aria-label={`Take ${item.productName} off the count`}
+                    >
+                      <CloseIcon />
+                    </button>
+                  </li>
+                );
+              }
+
+              /* Open: how many, in the item's own shapes — on the page, never in a sheet. */
+              if (open && chosen) {
+                return (
+                  <li key={item.productId} className={`${styles.item} ${styles.itemOpen}`}>
+                    <div className={styles.composerHead}>
+                      <p className={styles.composerWho}>{chosen.productName}</p>
+                    </div>
+
+                    <div className={styles.shapeBoxes}>
+                      {chosen.shapes.length > 0 ? (
+                        chosen.shapes.map((u) => (
+                          <Field
+                            key={u.productUnitId}
+                            label={u.plural}
+                            numeric
+                            whole={u.wholeDigit}
+                            value={byShape[u.productUnitId] ?? ''}
+                            onChange={(e) =>
+                              setByShape((prev) => ({ ...prev, [u.productUnitId]: e.target.value }))
+                            }
+                            placeholder="0"
+                            hint={u.baseQty > 1 ? `one is ${u.baseQty}` : undefined}
+                          />
+                        ))
+                      ) : (
+                        <Field
+                          label="How many"
+                          numeric
+                          value={byShape.base ?? ''}
+                          onChange={(e) => setByShape({ base: e.target.value })}
+                          placeholder="0"
+                        />
+                      )}
+                    </div>
+
+                    <p className={styles.composerWhy}>
+                      Count every shape you see — full crates and the loose ones. Leave a box blank
+                      only if there are none of that shape.
+                    </p>
+
+                    <div className={styles.composerActions}>
+                      <Button variant="secondary" onClick={() => setChosen(null)}>
+                        Cancel
+                      </Button>
+                      <Button disabled={!canAdd} onClick={addChosen}>
+                        {line ? 'Change the count' : 'Add'}
+                      </Button>
+                    </div>
+                  </li>
+                );
+              }
+
+              /* Still to count: the whole row opens it. */
+              return (
+                <li key={item.productId} className={styles.item}>
                   <button
                     type="button"
-                    className={styles.lineRemove}
-                    onClick={() => setLines((prev) => prev.filter((x) => x.productId !== l.productId))}
-                    aria-label={`Remove ${l.productName}`}
+                    className={styles.itemRow}
+                    onClick={() => {
+                      setChosen(item);
+                      setByShape({});
+                    }}
                   >
-                    <CloseIcon />
+                    <span className={styles.itemDot} aria-hidden="true" />
+                    <span className={styles.itemBody}>
+                      <span className={styles.itemName}>{item.productName}</span>
+                      <span className={styles.itemMeta}>
+                        {item.shapes.length > 0
+                          ? `In ${item.shapes.map((u) => u.plural.toLowerCase()).join(' and ')}`
+                          : 'Not counted today'}
+                      </span>
+                    </span>
+                    <span className={styles.itemGo}>Count</span>
                   </button>
                 </li>
-              ))}
-            </ul>
-          )}
-
-          {remaining.length > 0 && !chosen && (
-            <button type="button" className={styles.addLine} onClick={() => setPicking(true)}>
-              <PlusIcon /> Count an item · {remaining.length} left
-            </button>
-          )}
-
-          {/* HOW MANY, in the item's own shapes — on the page, never in the sheet. */}
-          {chosen && (
-            <div className={styles.composer}>
-              <div className={styles.composerHead}>
-                <p className={styles.composerWho}>{chosen.productName}</p>
-                {remaining.length > 1 && (
-                  <button
-                    type="button"
-                    className={styles.composerSwitch}
-                    onClick={() => setPicking(true)}
-                  >
-                    Another item
-                  </button>
-                )}
-              </div>
-
-              <div className={styles.shapeBoxes}>
-                {chosen.shapes.length > 0 ? (
-                  chosen.shapes.map((u) => (
-                    <Field
-                      key={u.productUnitId}
-                      label={u.plural}
-                      numeric
-                      whole={u.wholeDigit}
-                      value={byShape[u.productUnitId] ?? ''}
-                      onChange={(e) =>
-                        setByShape((prev) => ({ ...prev, [u.productUnitId]: e.target.value }))
-                      }
-                      placeholder="0"
-                      hint={u.baseQty > 1 ? `one is ${u.baseQty}` : undefined}
-                    />
-                  ))
-                ) : (
-                  <Field
-                    label="How many"
-                    numeric
-                    value={byShape.base ?? ''}
-                    onChange={(e) => setByShape({ base: e.target.value })}
-                    placeholder="0"
-                  />
-                )}
-              </div>
-
-              <p className={styles.composerWhy}>
-                Count every shape you see — full crates and the loose ones. Leave a box blank only if
-                there are none of that shape.
-              </p>
-
-              <div className={styles.composerActions}>
-                <Button variant="secondary" onClick={() => setChosen(null)}>
-                  Cancel
-                </Button>
-                <Button disabled={!canAdd} onClick={addChosen}>
-                  Add
-                </Button>
-              </div>
-            </div>
-          )}
+              );
+            })}
+          </ol>
 
           {/* The action ENDS the page rather than being pinned to its foot — see CLAUDE.md. */}
           <div className={styles.pageActions}>
@@ -427,31 +481,6 @@ export default function CountGatePage() {
         )}
       </PageState>
 
-      {/* A CHOICE IS A SHEET: the items still to count, closed the moment one is picked. */}
-      <BottomSheet open={picking} onClose={() => setPicking(false)} title="Which item?">
-        <ul className={styles.pickList}>
-          {remaining.map((r) => (
-            <li key={r.productId}>
-              <button
-                type="button"
-                className={styles.pickRow}
-                onClick={() => {
-                  setChosen(r);
-                  setByShape({});
-                  setPicking(false);
-                }}
-              >
-                <span className={styles.pickName}>{r.productName}</span>
-                <span className={styles.pickMeta}>
-                  {r.shapes.length > 0
-                    ? `Counted in ${r.shapes.map((u) => u.plural.toLowerCase()).join(' and ')}`
-                    : 'Not counted today'}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </BottomSheet>
     </PageScaffold>
   );
 }

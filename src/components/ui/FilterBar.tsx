@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef } from 'react';
 import { useNav } from '@academix-admin/navigation-stack';
 import { QUICK_PERIODS, type Period, type PeriodKind } from '@/lib/stacks/periods';
+import { bringFilterUp } from './bringFilterUp';
 import styles from './FilterBar.module.css';
 
 /**
@@ -34,6 +35,7 @@ export function FilterBar({
 }) {
   const nav = useNav();
   const channel = `onPeriodPicked:${useId()}`;
+  const barRef = useRef<HTMLDivElement | null>(null);
 
   // The latest handler, so the published callback never goes stale between renders.
   const onCustomRef = useRef(onCustom);
@@ -49,7 +51,7 @@ export function FilterBar({
   }, [nav, channel]);
 
   return (
-    <div className={styles.bar}>
+    <div className={styles.bar} ref={barRef}>
       <div className={styles.chips} role="group" aria-label="Which period">
         {QUICK_PERIODS.map((p) => (
           <button
@@ -57,7 +59,10 @@ export function FilterBar({
             type="button"
             aria-pressed={period.kind === p.kind}
             className={`${styles.chip} ${period.kind === p.kind ? styles.chipOn : ''}`}
-            onClick={() => onPeriod(p.kind)}
+            onClick={() => {
+              onPeriod(p.kind);
+              bringFilterUp(barRef.current);
+            }}
           >
             {p.label}
           </button>

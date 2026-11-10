@@ -101,6 +101,13 @@ export default function AccountPage() {
    * `useProblem` returns a fresh object every render, so `show` is bound to a local const — the
    * hook itself is never a safe dependency and a memo over it quietly does nothing.
    */
+  /*
+   * WHICH LIST A PHONE SHOWS (10 Nov). Receipts and "everything that has happened" both grow, and
+   * stacked one after the other the second was only ever reached by scrolling past every receipt the
+   * customer had. A phone shows one at a time behind a switch; a wide screen shows both, side by side.
+   */
+  const [list, setList] = useState<'receipts' | 'history'>('receipts');
+
   const removeDialog = useConfirm();
   const removeProblem = useProblem();
   const showRemoveProblem = removeProblem.show;
@@ -448,116 +455,141 @@ export default function AccountPage() {
         </button>
       </div>
 
-      {/* ── Receipts ─────────────────────────────────────────────────────────── */}
-      {(receipts.data ?? []).length > 0 && (
-        <>
-          <h2 className={styles.section}>Receipts</h2>
-          <ul className={styles.receipts} data-grid>
-            {(receipts.data ?? []).map((r) => (
-              <li key={r.sale_id}>
-                <button
-                  type="button"
-                  className={styles.receipt}
-                  onClick={() => void nav.push('receipt_page', { id: r.sale_id })}
-                >
-                  <span className={styles.receiptMain}>
-                    <span className={styles.receiptWhen}>{new Date(r.occurred_at).toLocaleDateString()}</span>
-                    <span className={styles.receiptMeta}>
-                      {r.line_count} {r.line_count === 1 ? 'item' : 'items'} · {formatMoney(Number(r.total))} ·{' '}
-                      {formatMoney(Number(r.paid))} paid
+      {/* ── Receipts, and everything that has happened ──────────────────────── */}
+      <div className={styles.lists} data-show={list}>
+        <div className={styles.listSwitch} role="tablist" aria-label="Which list">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={list === 'receipts'}
+            className={`${styles.switchTab} ${list === 'receipts' ? styles.switchOn : ''}`}
+            onClick={() => setList('receipts')}
+          >
+            Receipts <span className={styles.switchCount}>{(receipts.data ?? []).length}</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={list === 'history'}
+            className={`${styles.switchTab} ${list === 'history' ? styles.switchOn : ''}`}
+            onClick={() => setList('history')}
+          >
+            Everything <span className={styles.switchCount}>{history.length}</span>
+          </button>
+        </div>
+
+        <section className={styles.listCol} data-list="receipts" aria-label="Receipts">
+          <h2 className={`${styles.section} ${styles.listHead}`}>Receipts</h2>
+          {(receipts.data ?? []).length === 0 ? (
+            <p className={styles.sectionNote}>No receipts yet.</p>
+          ) : (
+              <ul className={styles.receipts} data-grid>
+                {(receipts.data ?? []).map((r) => (
+                  <li key={r.sale_id}>
+                    <button
+                      type="button"
+                      className={styles.receipt}
+                      onClick={() => void nav.push('receipt_page', { id: r.sale_id })}
+                    >
+                      <span className={styles.receiptMain}>
+                        <span className={styles.receiptWhen}>{new Date(r.occurred_at).toLocaleDateString()}</span>
+                        <span className={styles.receiptMeta}>
+                          {r.line_count} {r.line_count === 1 ? 'item' : 'items'} · {formatMoney(Number(r.total))} ·{' '}
+                          {formatMoney(Number(r.paid))} paid
+                        </span>
+                      </span>
+                      <span className={Number(r.outstanding) > 0.005 ? styles.receiptOpen : styles.receiptPaid}>
+                        {Number(r.outstanding) > 0.005 ? `${formatMoney(Number(r.outstanding))} open` : 'Paid'}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+          )}
+        </section>
+
+        <section className={styles.listCol} data-list="history" aria-label="Everything that has happened">
+          <h2 className={`${styles.section} ${styles.listHead}`}>
+            <HistoryIcon size="1em" /> Everything that has happened
+          </h2>
+          {history.length === 0 ? (
+            <p className={styles.sectionNote}>Nothing recorded yet.</p>
+          ) : (
+            <ol className={styles.timeline}>
+              {history.map((h, i) => (
+                <li key={`${h.ref_table}-${h.ref_id}-${i}`} className={styles.event}>
+                  <div className={styles.eventHead}>
+                    <span className={styles.eventLabel}>{h.label}</span>
+                    <span
+                      className={`${styles.eventAmount} ${
+                        // Money that lowers what they owe reads as in; what raises it, as out.
+                        h.kind === 'payment' || h.kind === 'excess'
+                          ? styles.in
+                          : h.kind === 'sale' || h.kind === 'charge' || h.kind === 'opening'
+                            ? styles.out
+                            : ''
+                      }`}
+                    >
+                      {h.amount !== null && Number(h.amount) !== 0
+                        ? formatMoney(Math.abs(Number(h.amount)))
+                        : h.qty_units !== null
+                          ? `${formatQtySpoken(Math.abs(Number(h.qty_units)))}`
+                          : ''}
                     </span>
-                  </span>
-                  <span className={Number(r.outstanding) > 0.005 ? styles.receiptOpen : styles.receiptPaid}>
-                    {Number(r.outstanding) > 0.005 ? `${formatMoney(Number(r.outstanding))} open` : 'Paid'}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-
-      {/* ── History ─────────────────────────────────────────────────────────── */}
-
-      <h2 className={styles.section}>
-        <HistoryIcon size="1em" /> Everything that has happened
-      </h2>
-      {history.length === 0 ? (
-        <p className={styles.sectionNote}>Nothing recorded yet.</p>
-      ) : (
-        <ol className={styles.timeline}>
-          {history.map((h, i) => (
-            <li key={`${h.ref_table}-${h.ref_id}-${i}`} className={styles.event}>
-              <div className={styles.eventHead}>
-                <span className={styles.eventLabel}>{h.label}</span>
-                <span
-                  className={`${styles.eventAmount} ${
-                    // Money that lowers what they owe reads as in; what raises it, as out.
-                    h.kind === 'payment' || h.kind === 'excess'
-                      ? styles.in
-                      : h.kind === 'sale' || h.kind === 'charge' || h.kind === 'opening'
-                        ? styles.out
-                        : ''
-                  }`}
-                >
-                  {h.amount !== null && Number(h.amount) !== 0
-                    ? formatMoney(Math.abs(Number(h.amount)))
-                    : h.qty_units !== null
-                      ? `${formatQtySpoken(Math.abs(Number(h.qty_units)))}`
+                  </div>
+                  <p className={styles.eventMeta}>
+                    {new Date(h.occurred_at).toLocaleString()}
+                    {h.detail ? ` · ${h.detail}` : ''}
+                    {h.qty_units !== null && h.amount !== null && Number(h.amount) !== 0
+                      ? ` · ${formatQtySpoken(Math.abs(Number(h.qty_units)))} containers`
                       : ''}
-                </span>
-              </div>
-              <p className={styles.eventMeta}>
-                {new Date(h.occurred_at).toLocaleString()}
-                {h.detail ? ` · ${h.detail}` : ''}
-                {h.qty_units !== null && h.amount !== null && Number(h.amount) !== 0
-                  ? ` · ${formatQtySpoken(Math.abs(Number(h.qty_units)))} containers`
-                  : ''}
-                {` · ${h.actor}`}
-              </p>
+                    {` · ${h.actor}`}
+                  </p>
 
-              {/*
-                The receipt behind the line.
+                  {/*
+                    The receipt behind the line.
 
-                `customer_history` has returned `ref_table` and `ref_id` all along and the screen
-                used them only to build a React key. "Owes ₦21,500" and then no way to see what
-                for is the point at which somebody rings the shop — the answer is one join away.
-              */}
-              {h.ref_table === 'sales' && h.ref_id && (
-                <button
-                  type="button"
-                  className={styles.eventOpen}
-                  onClick={() => void nav.push('receipt_page', { id: h.ref_id })}
-                >
-                  See the receipt
-                </button>
-              )}
-              {/* A payment opens its receipt, to be sent again (see payment_done_page). */}
-              {h.ref_table === 'payments' && h.ref_id && (
-                <button
-                  type="button"
-                  className={styles.eventOpen}
-                  onClick={() =>
-                    void nav.push('payment_done_page', { id: h.ref_id as string, from: 'history' })
-                  }
-                >
-                  See the payment
-                </button>
-              )}
-              {/* A deposit or containers line opens the ledger it moved (0156). */}
-              {ledgerPageFor(h.kind) && (
-                <button
-                  type="button"
-                  className={styles.eventOpen}
-                  onClick={() => void nav.push(ledgerPageFor(h.kind)!, { id: customerId, from: 'account' })}
-                >
-                  {ledgerPageFor(h.kind) === 'deposit_customer_page' ? 'See the deposit' : 'See the empties'}
-                </button>
-              )}
-            </li>
-          ))}
-        </ol>
-      )}
+                    `customer_history` has returned `ref_table` and `ref_id` all along and the screen
+                    used them only to build a React key. "Owes ₦21,500" and then no way to see what
+                    for is the point at which somebody rings the shop — the answer is one join away.
+                  */}
+                  {h.ref_table === 'sales' && h.ref_id && (
+                    <button
+                      type="button"
+                      className={styles.eventOpen}
+                      onClick={() => void nav.push('receipt_page', { id: h.ref_id })}
+                    >
+                      See the receipt
+                    </button>
+                  )}
+                  {/* A payment opens its receipt, to be sent again (see payment_done_page). */}
+                  {h.ref_table === 'payments' && h.ref_id && (
+                    <button
+                      type="button"
+                      className={styles.eventOpen}
+                      onClick={() =>
+                        void nav.push('payment_done_page', { id: h.ref_id as string, from: 'history' })
+                      }
+                    >
+                      See the payment
+                    </button>
+                  )}
+                  {/* A deposit or containers line opens the ledger it moved (0156). */}
+                  {ledgerPageFor(h.kind) && (
+                    <button
+                      type="button"
+                      className={styles.eventOpen}
+                      onClick={() => void nav.push(ledgerPageFor(h.kind)!, { id: customerId, from: 'account' })}
+                    >
+                      {ledgerPageFor(h.kind) === 'deposit_customer_page' ? 'See the deposit' : 'See the empties'}
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+      </div>
           </>
           )
         }

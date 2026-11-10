@@ -315,3 +315,25 @@
   margin-right: 0;
   padding: 0 var(--space-1);
 }
+
+/* ── 10 Nov: the active tab picks the customer; the code is the fourth action ──────── */
+
+/* The hint that the active tab opens something: a small chevron after the name. */
+.tabName {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tabPick {
+  flex: none;
+  opacity: 0.85;
+}
+
+.codeAction {
+  color: var(--primary);
+}
+
+.codeAction .code {
+  letter-spacing: 0.1em;
+}

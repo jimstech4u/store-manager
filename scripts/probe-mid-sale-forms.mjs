@@ -262,7 +262,7 @@ try {
    * own control says "Say who this sale is for", and asking for it by that name is the difference
    * between testing the journey and testing a guess.
    */
-  const forRow = p.getByRole('button', { name: /Say who this sale is for|Change who this sale is for/i }).first();
+  const forRow = p.getByRole('tab', { name: /Say who this sale is for|Change who this sale is for/i }).first();
   check('the till offers to name a customer', (await forRow.count()) > 0);
   await forRow.click();
   await p.waitForTimeout(4000);

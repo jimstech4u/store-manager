@@ -383,7 +383,7 @@ export default function EmptiesRecordPage() {
   };
 
   return (
-    <PageScaffold
+    <PageScaffold layout="record"
       onBack={goBack}
       title={damaged ? 'Broken or lost' : givingBack ? 'Given back to them' : 'Empties brought back'}
       subtitle={

@@ -88,7 +88,7 @@ try {
   await p.waitForTimeout(7000);
 
   // On the till's tab, through the picker — which caches what it showed.
-  await p.getByRole('button', { name: 'Say who this sale is for' }).locator('visible=true').first().click();
+  await p.getByRole('tab', { name: /Say who this sale is for/ }).locator('visible=true').first().click();
   await p.waitForTimeout(3000);
   await picker().getByText(NAME, { exact: true }).first().click();
   await p.waitForTimeout(3000);
@@ -113,7 +113,7 @@ try {
   const tabText = await tabs().innerText();
   check(tabText.includes(RENAMED) && !tabText.includes(NAME), `the tab being served has the new name (${tabText.replace(/\s+/g, ' ').slice(0, 60)})`);
 
-  await p.getByRole('button', { name: 'Change who this sale is for' }).locator('visible=true').first().click();
+  await p.getByRole('tab', { name: /Change who this sale is for/ }).locator('visible=true').first().click();
   await p.waitForTimeout(1200); // less than a read takes: what is shown is what was cached
   const shown = await picker().innerText();
   check(shown.includes(RENAMED) && !shown.includes(NAME), 'the picker shows the new name at once');

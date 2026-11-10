@@ -53,7 +53,7 @@ export default function UpdatesPage() {
       : { state: 'ready' };
 
   return (
-    <PageScaffold onBack={goBack} title="Updates" subtitle="When a new version asks to come in">
+    <PageScaffold layout="record" onBack={goBack} title="Updates" subtitle="When a new version asks to come in">
       <PageState status={status}>
         {() => (
           <>

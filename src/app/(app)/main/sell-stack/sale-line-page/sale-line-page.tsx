@@ -142,7 +142,7 @@ export default function SaleLinePage() {
         : { state: 'ready' };
 
   return (
-    <PageScaffold
+    <PageScaffold layout="record"
       onBack={goBack}
       title={adding ? 'Add to the sale' : 'Change this line'}
       subtitle={order?.customerName || 'This sale'}

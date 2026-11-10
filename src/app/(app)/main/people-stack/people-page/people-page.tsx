@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ListFilters } from '@/components/ui/ListFilters';
 import { csvName, fetchAllPages, shareCsv, toCsv } from '@/lib/export-csv';
 import { listDocument, usePrintShare } from '@/components/ui/PrintShare';
@@ -9,6 +9,7 @@ import styles from '../../money-stack/money-page/money-page.module.css';
 import { usePermission } from '@/hooks/usePermission';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
+import { LoadArea } from '@/components/ui/LoadArea';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useListChannel } from '@/hooks/useListChannel';
 import { useNav } from '@academix-admin/navigation-stack';
@@ -94,6 +95,8 @@ export default function PeoplePage() {
     deps: [store?.id, filter, minAmount],
     enabled: Boolean(store),
   });
+  // Before any early return: a hook is called on every render (see the status below).
+  const shownRef = useRef(false);
 
   /*
    * Publish these rows so a pushed page can ask for one by id.
@@ -155,8 +158,15 @@ export default function PeoplePage() {
    * has been read it is loading — not "none yet", which is what an empty list drew before the read
    * had even started — and a read that failed says so with a way to try again.
    */
+  /*
+   * ONCE SHOWN, THE PAGE STAYS (10 Nov) — as on Stock. A filter is a new list, empty while it is
+   * read, and that emptiness made the whole page "loading": the totals and the very chips just tapped
+   * went away and came back. The page waits only for its first list; after that the list area says
+   * it is reading.
+   */
+  if (list.items.length > 0) shownRef.current = true;
   const status: PageStatus =
-    list.items.length > 0
+    list.items.length > 0 || shownRef.current
       ? { state: 'ready' }
       : list.error
         ? { state: 'error', what: 'your customers', error: list.error, onRetry: () => list.reload() }
@@ -332,7 +342,11 @@ export default function PeoplePage() {
         )}
       />
 
-      {list.items.length === 0 ? (
+      {list.items.length === 0 && (list.loading || list.hasMore) && !list.error ? (
+        <LoadArea area={{ data: null, loading: true, error: null, reload: () => list.reload() }} what="this list">
+          {() => null}
+        </LoadArea>
+      ) : list.items.length === 0 ? (
         filter !== 'all' ? (
           <InfoPanel tone="info" title="Nobody here">
             {minAmount !== null

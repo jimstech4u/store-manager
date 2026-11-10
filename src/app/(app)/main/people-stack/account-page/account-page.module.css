@@ -316,3 +316,86 @@
   font-weight: 600;
   color: var(--text-muted);
 }
+
+/* ── TWO GROWING LISTS (10 Nov): one at a time on a phone, side by side when wide ─────── */
+
+.lists {
+  margin-top: var(--space-5);
+}
+
+.listSwitch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: var(--space-3);
+  border-radius: var(--radius);
+  background: var(--surface-muted, rgba(0, 0, 0, 0.05));
+}
+
+.switchTab {
+  min-height: 40px;
+  border: none;
+  border-radius: calc(var(--radius) - 4px);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.switchOn {
+  background: var(--surface);
+  color: var(--primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.switchCount {
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--surface-muted, rgba(0, 0, 0, 0.06));
+  font-size: var(--text-xs);
+}
+
+.listCol {
+  min-width: 0;
+}
+
+/* On a phone the switch says which list; the heading would only repeat it. */
+.listHead {
+  display: none;
+}
+
+.lists[data-show='receipts'] [data-list='history'],
+.lists[data-show='history'] [data-list='receipts'] {
+  display: none;
+}
+
+@container page (min-width: 860px) {
+  .lists {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--space-5);
+    align-items: start;
+  }
+
+  .listSwitch {
+    display: none;
+  }
+
+  .listHead {
+    display: flex;
+  }
+
+  .lists[data-show] [data-list] {
+    display: block;
+  }
+
+  /* Each column is one list: the receipts grid would squeeze two cards into half a page. */
+  .listCol :global([data-grid]) {
+    display: flex !important;
+    flex-direction: column;
+  }
+}

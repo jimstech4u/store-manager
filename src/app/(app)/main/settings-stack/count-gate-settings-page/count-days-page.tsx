@@ -48,7 +48,7 @@ export default function CountDaysPage() {
   };
 
   return (
-    <PageScaffold onBack={goBack} title="Repeat" subtitle="The days the shelf is counted">
+    <PageScaffold layout="record" onBack={goBack} title="Repeat" subtitle="The days the shelf is counted">
       <ProblemDialog problem={problem} title="Not saved" />
       <PageState status={status}>
         {() =>

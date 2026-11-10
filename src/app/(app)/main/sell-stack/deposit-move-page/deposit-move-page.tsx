@@ -88,7 +88,7 @@ export default function DepositMovePage() {
     mode === 'take' ? 'Take a deposit' : mode === 'give' ? 'Give some back' : 'Keep some of it';
 
   return (
-    <PageScaffold
+    <PageScaffold layout="record"
       onBack={goBack}
       title={title}
       subtitle={

@@ -41,7 +41,7 @@ export default function StockHistoryPage() {
       : { state: 'loading', what: 'the history' };
 
   return (
-    <PageScaffold onBack={goBack} title="Stock history" subtitle={product?.name}>
+    <PageScaffold layout="wide" onBack={goBack} title="Stock history" subtitle={product?.name}>
       <PageState status={status}>
         {() =>
           product && (

@@ -259,7 +259,7 @@ const run = async () => {
    * under the tabs. What is being checked is unchanged: that the picker it opens covers the page
    * properly rather than letting taps through to the order behind it.
    */
-  await page.getByRole('button', { name: /Say who this sale is for|Change who this sale is for/i })
+  await page.getByRole('tab', { name: /Say who this sale is for|Change who this sale is for/i })
     .first()
     .click();
   await page.waitForTimeout(1200);

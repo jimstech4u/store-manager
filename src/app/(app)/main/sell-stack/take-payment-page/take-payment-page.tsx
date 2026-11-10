@@ -215,7 +215,7 @@ export default function TakePaymentPage() {
         };
 
   return (
-    <PageScaffold
+    <PageScaffold layout="record"
       onBack={goBack}
       title="Take payment"
       subtitle="Cash, transfer, or on account"

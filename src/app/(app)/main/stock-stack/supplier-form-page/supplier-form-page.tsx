@@ -314,7 +314,7 @@ export default function SupplierFormPage() {
   };
 
   return (
-    <PageScaffold onBack={goBack} title="Add a supplier" subtitle="Whoever you buy from">
+    <PageScaffold layout="record" onBack={goBack} title="Add a supplier" subtitle="Whoever you buy from">
       <Explain label="Why keep a supplier?">
         So a delivery and the crates that go back on the same lorry both belong to somebody. Written
         as free text, &ldquo;NBL&rdquo; and &ldquo;Nigerian Breweries&rdquo; are two different

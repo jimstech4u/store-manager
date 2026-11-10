@@ -243,7 +243,7 @@ export default function ClaimPage() {
   );
 
   return (
-    <PageScaffold
+    <PageScaffold layout="record"
       onBack={goBack}
       title="Take over an order"
       subtitle={found ? `Order ${found.code}` : 'Using the code your colleague read out'}

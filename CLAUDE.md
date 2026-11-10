@@ -884,6 +884,21 @@ ones be hidden. A report waits for the shop's shapes before it reads, or stock c
 for a month was exactly 1,000 before. Stock is said through `useSayInShapes`. `probe-reports-ui`
 walks every report.
 
+**Layout rules from 10 Nov (evening):**
+- A page shows its content once and KEEPS it: a filter is a new list that is empty while it reads,
+  and Stock, People, Money and Sales used to drop to a whole-page spinner (chips included) on every
+  filter tap. `shownRef` holds the page; the list area alone says it is reading.
+- A filter tapped brings its row up (`components/ui/bringFilterUp.ts`), retrying while the new list
+  lands and yielding to a touch. `probe-filter-up-ui` checks Stock and People.
+- Two lists that both grow are never stacked: a switch on a phone, side by side when wide (the
+  customer account's Receipts / Everything that has happened).
+- A long document's ways out (share, print) come BEFORE its paper (the statement).
+- Lists of things a shop names (Groups, Words) are rows that open the form page by id; never a
+  wall of input boxes. The form pages take `id` for edit (rename / put away).
+- The till's active customer tab IS the customer picker; the code and share are the fourth action.
+- Records and multi-section pages use `layout="record"`; only short one-question forms stay
+  `column`. Take payment puts the bill beside the payment when wide.
+
 **A scroll is remembered only if a person made it** (navigation-stack 1.11.1). Safari fires a
 scroll to 0 when a tab is shown again, before its restore runs; recorded, every tab switch lost its
 place on iPhone. A probe that sets `scrollTop` must fire a wheel (or touch) on the scroller first.

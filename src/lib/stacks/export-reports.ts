@@ -549,7 +549,7 @@ export async function loadReport(
             { head: 'Corrections', weight: 1.3, align: 'right' },
           ],
           rows: rows.map((r) => [
-            r.who,
+            person(r.who),
             String(r.receipts),
             formatMoney(r.sold),
             String(r.deliveries),

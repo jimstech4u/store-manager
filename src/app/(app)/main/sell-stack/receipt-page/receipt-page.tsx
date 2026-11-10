@@ -47,7 +47,7 @@ export default function ReceiptPage() {
       };
 
   return (
-    <PageScaffold
+    <PageScaffold layout="record"
       onBack={goBack}
       title={fresh ? 'Sale recorded' : 'Receipt'}
       subtitle={store.name}

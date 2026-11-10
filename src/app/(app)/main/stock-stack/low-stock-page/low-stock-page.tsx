@@ -8,13 +8,13 @@ import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { setCountWhenLow, useCountGateSettings } from '@/lib/stacks/count-gate-settings';
-import { Explain, InfoPanel } from '@/components/ui/Explain';
+import { Explain } from '@/components/ui/Explain';
 import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
 import { ProductPicker } from '@/components/catalog/ProductPicker';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
-import { formatQtySpoken, messageOf, pluralUnit } from '@/lib/format';
+import { messageOf } from '@/lib/format';
 import {
   setItemLowStock,
   setShopLowStock,
@@ -139,120 +139,141 @@ export default function LowStockPage() {
             <Explain label="How does this work?">
               One level covers everything you sell. Any item can be given its own instead, and that
               one wins — useful for the few lines you cannot afford to run out of, and for the slow
-              ones you do not want to hear about. Counted in the smallest unit each item is kept in.
+              ones you do not want to hear about.
             </Explain>
 
-            {/* ── The general rule ───────────────────────────────────────────── */}
-            <h2 className={styles.section}>Everything you sell</h2>
-            <Field
-              label="Tell me when an item gets down to"
-              numeric
-              value={general}
-              onChange={(e) => setGeneral(e.target.value)}
-              placeholder="Leave blank for no warning"
-              hint="Leave it blank and nothing is marked as running low. Zero means tell me only when there are none at all."
-            />
-            <Button fullWidth busy={saving} busyLabel="Saving" disabled={!dirty} onClick={() => void saveGeneral()}>
-              {dirty ? 'Save this level' : 'Saved'}
-            </Button>
+            {/*
+              TWO CARDS, SIDE BY SIDE WHERE THERE IS ROOM (10 Nov): the rule that covers everything,
+              and the items that are different. It was one long column — a big box, a full-width
+              "Saved" button, a tick, then the list — read top to bottom as a single form.
+            */}
+            <div className={styles.cards}>
+              {/* ── The general rule ───────────────────────────────────────────── */}
+              <section className={styles.card} aria-label="Everything you sell">
+                <h2 className={styles.cardTitle}>Everything you sell</h2>
+                <p className={styles.cardLead}>
+                  {rule.data?.level == null
+                    ? 'No warning is set, so nothing is marked as running low.'
+                    : `Warns when an item is down to ${rule.data.level} of the smallest unit it is kept in.`}
+                </p>
 
-            {note && (
-              <p className={styles.note} role="status">
-                {note}
-              </p>
-            )}
+                <div className={styles.levelRow}>
+                  <Field
+                    label="Warn at"
+                    numeric
+                    value={general}
+                    onChange={(e) => setGeneral(e.target.value)}
+                    placeholder="Off"
+                    hint="Blank is off. 0 means only when there are none."
+                  />
+                  <Button busy={saving} busyLabel="Saving" disabled={!dirty} onClick={() => void saveGeneral()}>
+                    Save
+                  </Button>
+                </div>
 
-            <label className={styles.countLow}>
-              <input
-                type="checkbox"
-                checked={gate.data?.countWhenLow ?? false}
-                disabled={!gate.data || savingCountLow}
-                onChange={async (e) => {
-                  const on = e.target.checked;
-                  setSavingCountLow(true);
-                  try {
-                    await setCountWhenLow(store.id, on);
-                    gate.reload();
-                    setNote(on ? 'Items are counted when they run low.' : 'Running low no longer asks for a count.');
-                  } catch (err: unknown) {
-                    problem.show(messageOf(err, 'Could not save that'));
-                  } finally {
-                    setSavingCountLow(false);
-                  }
-                }}
-              />
-              <span className={styles.countLowBody}>
-                <span>Count an item when it runs low</span>
-                <span className={styles.countLowNote}>
-                  It must be counted before it sells, on any day — even when the count gate is
-                  Relaxed. Each item follows this unless it is set differently on its own page.
-                </span>
-              </span>
-            </label>
-
-            {rule.data?.level == null && (
-              <InfoPanel tone="info" title="No warnings at the moment">
-                Nothing is marked as running low anywhere in the app until this has a number in it —
-                or until an item is given its own level below.
-              </InfoPanel>
-            )}
-
-            {/* ── The exceptions ─────────────────────────────────────────────── */}
-            <h2 className={styles.section}>Items that are different</h2>
-            <p className={styles.sectionNote}>
-              {(own.data ?? []).length === 0
-                ? 'None yet. Add one for anything that should warn sooner or later than the rest.'
-                : `${(own.data ?? []).length} ${
-                    (own.data ?? []).length === 1 ? 'item has' : 'items have'
-                  } a level of their own.`}
-            </p>
-
-            <ul className={styles.list} data-grid>
-              {(own.data ?? []).map((item) => (
-                <li key={item.productId} className={styles.row}>
-                  <button
-                    type="button"
-                    className={styles.rowMain}
-                    onClick={() => void nav.push('product_page', { id: item.productId })}
-                  >
-                    <span className={styles.rowName}>{item.name}</span>
-                    <span className={styles.rowDetail}>
-                      Warns at {say(item.productId, Number(item.ownLevel), item.baseUnit)}
-                      {/*
-                        Said against the general rule, because "warns at 5" means nothing on its own —
-                        the reason a shop set it is that everything else warns at something different.
-                      */}
-                      {item.shopLevel !== null && item.shopLevel !== item.ownLevel && (
-                        <> · everything else at {say(item.productId, Number(item.shopLevel), item.baseUnit)}</>
-                      )}
-                      {' · '}
-                      {say(item.productId, Number(item.onHand), item.baseUnit)} on hand
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.rowDrop}
-                    aria-label={`Put ${item.name} back under the shop's level`}
-                    onClick={async () => {
-                      setNote(null);
+                <label className={styles.countLow}>
+                  <input
+                    type="checkbox"
+                    checked={gate.data?.countWhenLow ?? false}
+                    disabled={!gate.data || savingCountLow}
+                    onChange={async (e) => {
+                      const on = e.target.checked;
+                      setSavingCountLow(true);
                       try {
-                        await setItemLowStock(item.productId, null);
-                        await own.reload();
-                        setNote(`${item.name} follows the shop's level again.`);
-                      } catch (e: unknown) {
-                        problem.show(messageOf(e, 'Could not clear that'));
+                        await setCountWhenLow(store.id, on);
+                        gate.reload();
+                        setNote(on ? 'Items are counted when they run low.' : 'Running low no longer asks for a count.');
+                      } catch (err: unknown) {
+                        problem.show(messageOf(err, 'Could not save that'));
+                      } finally {
+                        setSavingCountLow(false);
                       }
                     }}
-                  >
-                    <CloseIcon />
-                  </button>
-                </li>
-              ))}
-            </ul>
+                  />
+                  <span className={styles.countLowBody}>
+                    <span>Count an item when it runs low</span>
+                    <span className={styles.countLowNote}>
+                      It must be counted before it sells, on any day — even when the count gate is
+                      Relaxed. Each item follows this unless it is set differently on its own page.
+                    </span>
+                  </span>
+                </label>
 
-            <Button variant="secondary" fullWidth onClick={() => setPicking(true)}>
-              <PlusIcon /> Add an item
-            </Button>
+                {note && (
+                  <p className={styles.note} role="status">
+                    {note}
+                  </p>
+                )}
+              </section>
+
+              {/* ── The exceptions ─────────────────────────────────────────────── */}
+              <section className={styles.card} aria-label="Items with their own level">
+                <div className={styles.cardHead}>
+                  <h2 className={styles.cardTitle}>Items with their own level</h2>
+                  <Button size="small" variant="secondary" onClick={() => setPicking(true)}>
+                    <PlusIcon /> Add
+                  </Button>
+                </div>
+                <p className={styles.cardLead}>
+                  {(own.data ?? []).length === 0
+                    ? 'None yet. Add one for anything that should warn sooner or later than the rest.'
+                    : `${(own.data ?? []).length} ${
+                        (own.data ?? []).length === 1 ? 'item warns' : 'items warn'
+                      } at a level of their own, said in their own shapes.`}
+                </p>
+
+                <ul className={styles.list}>
+                  {(own.data ?? []).map((item) => {
+                    const lowNow = Number(item.onHand) <= Number(item.ownLevel);
+                    return (
+                      <li key={item.productId} className={styles.row}>
+                        <button
+                          type="button"
+                          className={styles.rowMain}
+                          onClick={() => void nav.push('product_page', { id: item.productId })}
+                        >
+                          <span className={styles.rowTop}>
+                            <span className={styles.rowName}>{item.name}</span>
+                            {lowNow && <span className={styles.lowBadge}>Low now</span>}
+                          </span>
+                          <span className={styles.rowDetail}>
+                            Warns at {say(item.productId, Number(item.ownLevel), item.baseUnit)}
+                            {/*
+                              Said against the general rule, because "warns at 5" means nothing on its
+                              own — the reason a shop set it is that everything else warns at something
+                              different.
+                            */}
+                            {item.shopLevel !== null && item.shopLevel !== item.ownLevel && (
+                              <> · the rest at {say(item.productId, Number(item.shopLevel), item.baseUnit)}</>
+                            )}
+                          </span>
+                          <span className={styles.rowDetail}>
+                            {say(item.productId, Number(item.onHand), item.baseUnit)} on the shelf
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.rowDrop}
+                          aria-label={`Put ${item.name} back under the shop's level`}
+                          onClick={async () => {
+                            setNote(null);
+                            try {
+                              await setItemLowStock(item.productId, null);
+                              await own.reload();
+                              setNote(`${item.name} follows the shop's level again.`);
+                            } catch (e: unknown) {
+                              problem.show(messageOf(e, 'Could not clear that'));
+                            }
+                          }}
+                        >
+                          <CloseIcon />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            </div>
           </>
         )}
       </PageState>

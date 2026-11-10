@@ -68,7 +68,7 @@ export default function CountGateSettingsPage() {
   ];
 
   return (
-    <PageScaffold onBack={goBack} title="Count gate" subtitle="When the shelf must be counted before it sells">
+    <PageScaffold layout="record" onBack={goBack} title="Count gate" subtitle="When the shelf must be counted before it sells">
       <ProblemDialog problem={problem} title="Not saved" />
       <PageState status={status}>
         {() =>

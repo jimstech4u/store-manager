@@ -844,7 +844,11 @@ export function TakePayment({
   };
 
   return (
-    <>
+    /*
+      ONE GRID: on a phone, one column as it always was; on a wide page (10 Nov) the bill on the left
+      and everything about paying for it on the right, instead of each card stretched across 1040px.
+    */
+    <div className={styles.layout}>
       {/*
         A FAILURE INTERRUPTS; it does not sit on the page.
 
@@ -1639,6 +1643,6 @@ export function TakePayment({
                 : 'Put it all on account'}
         </Button>
       </div>
-    </>
+    </div>
   );
 }

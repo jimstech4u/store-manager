@@ -69,7 +69,7 @@ export default function ExpensePage() {
   };
 
   return (
-    <PageScaffold onBack={goBack} title="Money going out" subtitle="What the shop spent">
+    <PageScaffold layout="record" onBack={goBack} title="Money going out" subtitle="What the shop spent">
       <Explain label="What counts as this?">
         Anything that leaves the shop and buys no stock — rent, fuel, the generator, transport,
         wages, a levy. Paying a supplier for a delivery is not one of these: that settles their

@@ -157,7 +157,7 @@ export default function ShapePricePage() {
         };
 
   return (
-    <PageScaffold
+    <PageScaffold layout="record"
       onBack={goBack}
       title={shape ? `Price for one ${shape.name.toLowerCase()}` : 'Price'}
       subtitle={

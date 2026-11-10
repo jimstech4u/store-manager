@@ -486,7 +486,7 @@ export default function CustomerFormPage() {
   };
 
   return (
-    <PageScaffold
+    <PageScaffold layout="record"
       onBack={goBack}
       title="Add a customer"
       subtitle="Somebody you sell to more than once"

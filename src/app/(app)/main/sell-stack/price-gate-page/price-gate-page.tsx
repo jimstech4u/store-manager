@@ -127,7 +127,7 @@ export default function PriceGatePage() {
         : `The sale cannot be settled until ${unpriced.length === 1 ? 'it has' : 'they have'} one.`;
 
   return (
-    <PageScaffold onBack={goBack} title="Price before selling" subtitle="What each one sells for">
+    <PageScaffold layout="record" onBack={goBack} title="Price before selling" subtitle="What each one sells for">
       <PageState status={status}>
         {() =>
           unpriced.length === 0 ? (

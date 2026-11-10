@@ -63,7 +63,7 @@ export default function PrintPage() {
         : { state: 'loading', what: 'everything on it' };
 
   return (
-    <PageScaffold onBack={goBack} title={spec?.title ?? 'Print or share'} subtitle={store.name}>
+    <PageScaffold layout="record" onBack={goBack} title={spec?.title ?? 'Print or share'} subtitle={store.name}>
       <PageState status={status}>
         {() =>
           doc.data && (

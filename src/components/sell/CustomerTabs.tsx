@@ -2,8 +2,8 @@
 
 import {
   PlusIcon,
-  PersonPlusIcon,
   PersonMinusIcon,
+  ChevronDownIcon,
   CloseIcon,
   ReturnIcon,
   ChevronLeftIcon,
@@ -183,7 +183,14 @@ export function CustomerTabs({
     // A frame, so the tab that has only just been added is in the DOM to scroll to.
     const frame = requestAnimationFrame(showActiveTab);
     return () => cancelAnimationFrame(frame);
-  }, [activeId, showActiveTab]);
+    /*
+     * AND WHEN THE ROW GAINS OR LOSES A TAB (10 Nov: "when we add a new one, it never gets
+     * scrolled into view"). Starting a customer makes it active before its tab is drawn — the
+     * order arrives a render later — so the scroll found nothing to scroll to, and with the active
+     * id unchanged nothing asked again. The count of tabs changes only when one is added or closed,
+     * never when the row is scrolled by hand, so this still never fights a thumb.
+     */
+  }, [activeId, tabs.length, showActiveTab]);
 
   return (
     <div className={styles.bar}>
@@ -211,10 +218,32 @@ export function CustomerTabs({
             role="tab"
             ref={tab.id === activeId ? activeTabRef : undefined}
             className={`${styles.tab} ${tab.id === activeId ? styles.tabActive : ''}`}
-            onClick={() => { onSelect(tab.id); onSettlePage?.(); }}
+            /*
+             * THE ACTIVE TAB IS WHO THE SALE IS FOR (10 Nov). Tapping it opens the customer picker —
+             * the Add / Change button that used to do this is gone, and the room it took went to the
+             * order code. Tapping any other tab moves to that customer, as before.
+             */
+            onClick={() => {
+              if (tab.id === activeId) {
+                if (!busy) onSetCustomer();
+              } else {
+                onSelect(tab.id);
+              }
+              onSettlePage?.();
+            }}
             aria-selected={tab.id === activeId}
+            aria-label={
+              tab.id === activeId
+                ? `${tab.name}, ${tab.amount}. ${hasCustomer ? 'Change who this sale is for' : 'Say who this sale is for'}`
+                : undefined
+            }
           >
-            <span className={styles.tabName}>{tab.name}</span>
+            <span className={styles.tabName}>
+              {tab.name}
+              {tab.id === activeId && (
+                <ChevronDownIcon size="0.95em" aria-hidden="true" className={styles.tabPick} />
+              )}
+            </span>
             <span className={styles.tabAmount}>{tab.amount}</span>
           </button>
         ))}
@@ -229,19 +258,6 @@ export function CustomerTabs({
         has time to scroll. It is fixed furniture, like the four actions, and only the tabs
         themselves grow.
       */}
-      {/* The order code and its share, as one control (see codeButton). */}
-        <button
-        type="button"
-        className={styles.codeButton}
-        onClick={onShare}
-        disabled={!orderCode}
-        aria-label={orderCode ? `Share order ${orderCode}` : 'No order code yet'}
-      >
-        <span className={`${styles.code} ${orderCode ? '' : styles.codePending}`}>
-          {orderCode ?? '·····'}
-        </span>
-        {orderCode && <ShareIcon size="1.1em" />}
-      </button>
       <button type="button" className={styles.add} onClick={() => { onAdd(); onSettlePage?.(); }} aria-label="Start another customer">
         <PlusIcon />
       </button>
@@ -267,17 +283,6 @@ export function CustomerTabs({
       >
         {activeVisible ? (
           <div className={styles.actions} role="group" aria-label="What to do with this customer">
-            <button
-              type="button"
-              className={`${styles.action} ${styles.attach}`}
-              onClick={() => { onSetCustomer(); onSettlePage?.(); }}
-              disabled={noTab || busy}
-              aria-label={hasCustomer ? 'Change who this sale is for' : 'Say who this sale is for'}
-            >
-              <PersonPlusIcon />
-              <span>{hasCustomer ? 'Change' : 'Add'}</span>
-            </button>
-
             <button
               type="button"
               className={`${styles.action} ${styles.detach}`}
@@ -311,6 +316,23 @@ export function CustomerTabs({
             >
               <ReturnIcon />
               <span>Take over</span>
+            </button>
+
+            {/*
+              THE ORDER CODE AND ITS SHARE, as the fourth action (10 Nov) — off the tab row, where it
+              took the width the tabs need. Read out to a colleague, or tapped to share the list.
+            */}
+            <button
+              type="button"
+              className={`${styles.action} ${styles.codeAction}`}
+              onClick={() => { onShare(); onSettlePage?.(); }}
+              disabled={!orderCode}
+              aria-label={orderCode ? `Share order ${orderCode}` : 'No order code yet'}
+            >
+              <span className={`${styles.code} ${orderCode ? '' : styles.codePending}`}>
+                {orderCode ?? '·····'}
+              </span>
+              {orderCode && <ShareIcon />}
             </button>
           </div>
         ) : (

@@ -117,7 +117,7 @@ export default function UnitsPage() {
   };
 
   return (
-    <PageScaffold onBack={goBack} title="The shapes it comes in" subtitle={product?.name}>
+    <PageScaffold layout="record" onBack={goBack} title="The shapes it comes in" subtitle={product?.name}>
       <PageState status={status}>
         {() =>
           product && (

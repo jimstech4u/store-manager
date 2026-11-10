@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { PrinterIcon, ShareIcon } from '@/components/ui/Icon';
+import { bringFilterUp } from './bringFilterUp';
 import styles from './ListFilters.module.css';
 
 /**
@@ -34,9 +35,10 @@ export function ListFilters<V extends string>({
 }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
 
   return (
-    <div className={styles.wrap}>
+    <div className={styles.wrap} ref={wrapRef}>
       <div className={styles.chips} role="tablist" aria-label="Show">
         {options.map((o) => (
           <button
@@ -48,6 +50,7 @@ export function ListFilters<V extends string>({
             onClick={() => {
               setNote(null);
               onChange(o.value);
+              bringFilterUp(wrapRef.current);
             }}
           >
             {o.label}

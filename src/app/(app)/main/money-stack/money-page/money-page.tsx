@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import styles from './money-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
+import { LoadArea } from '@/components/ui/LoadArea';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
 import { PinnedTools } from '@/components/ui/PinnedTools';
 import { SearchSheet } from '@/components/ui/SearchSheet';
@@ -142,6 +143,8 @@ export default function MoneyPage() {
     deps: [store?.id, who],
     enabled: Boolean(store),
   });
+  // Before any early return: a hook is called on every render (see the status below).
+  const shownRef = useRef(false);
 
   /*
    * Publish these rows so a pushed page can ask for one by id.
@@ -280,8 +283,10 @@ export default function MoneyPage() {
    * has been read it is loading — not "none yet", which is what an empty list drew before the read
    * had even started — and a read that failed says so with a way to try again.
    */
+  // Once shown, the page stays while a filter reads; the list area says it is reading (see Stock).
+  if (list.items.length > 0) shownRef.current = true;
   const status: PageStatus =
-    list.items.length > 0
+    list.items.length > 0 || shownRef.current
       ? { state: 'ready' }
       : list.error
         ? { state: 'error', what: 'who owes you', error: list.error, onRetry: () => list.reload() }
@@ -573,7 +578,11 @@ export default function MoneyPage() {
         )}
       />
 
-      {list.items.length === 0 ? (
+      {list.items.length === 0 && (list.loading || list.hasMore) && !list.error ? (
+        <LoadArea area={{ data: null, loading: true, error: null, reload: () => list.reload() }} what="this list">
+          {() => null}
+        </LoadArea>
+      ) : list.items.length === 0 ? (
         who === 'owes' ? (
           <InfoPanel tone="info" title="Nobody owes you anything">
             Customers appear here when you sell to them on credit.

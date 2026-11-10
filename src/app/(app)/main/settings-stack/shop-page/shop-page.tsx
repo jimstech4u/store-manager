@@ -209,7 +209,7 @@ export default function ShopPage() {
       : { state: 'loading', what: 'this shop' };
 
   return (
-    <PageScaffold onBack={goBack} title="This shop" subtitle={store.name}>
+    <PageScaffold layout="record" onBack={goBack} title="This shop" subtitle={store.name}>
       <ProblemDialog problem={problem} title="Could not change this shop" />
 
       <PageState status={status}>

@@ -275,7 +275,7 @@ export default function CustomerEditPage() {
             };
 
   return (
-    <PageScaffold onBack={goBack} title="Edit customer" subtitle="What this customer is called">
+    <PageScaffold layout="record" onBack={goBack} title="Edit customer" subtitle="What this customer is called">
       <ProblemDialog problem={problem} title="Not saved" />
 
       <PageState status={status}>

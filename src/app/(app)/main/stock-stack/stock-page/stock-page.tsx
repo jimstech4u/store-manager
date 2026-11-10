@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
+import { LoadArea } from '@/components/ui/LoadArea';
 import { InfoPanel } from '@/components/ui/Explain';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
 import { PinnedTools } from '@/components/ui/PinnedTools';
@@ -91,6 +92,8 @@ export default function StockPage() {
    */
   const [filter, setFilter] = useState<StockFilter>('all');
   const browse = useProductList(store?.id ?? null, filter);
+  // Before any early return: a hook is called on every render (see the status below).
+  const shownRef = useRef(false);
   const say = useSayInShapes(store?.id ?? null);
   const printList = usePrintShare();
 
@@ -153,8 +156,16 @@ export default function StockPage() {
    * has been read it is loading — not "none yet", which is what an empty list drew before the read
    * had even started — and a read that failed says so with a way to try again.
    */
+  /*
+   * ONCE SHOWN, THE PAGE STAYS (10 Nov). A filter is a new list, empty while it is read — and that
+   * emptiness made the whole page "loading": the summary, the tiles, the search and the very chips
+   * just tapped went away for half a second and came back, so the tap looked like a reload and the
+   * filter row could not be brought up to its results. The page now waits only for its FIRST list;
+   * after that the list area alone says it is reading.
+   */
+  if (browse.items.length > 0) shownRef.current = true;
   const status: PageStatus =
-    browse.items.length > 0
+    browse.items.length > 0 || shownRef.current
       ? { state: 'ready' }
       : browse.error
         ? { state: 'error', what: 'your stock', error: browse.error, onRetry: () => browse.reload() }
@@ -448,7 +459,11 @@ export default function StockPage() {
         )}
       />
 
-      {products.length === 0 ? (
+      {products.length === 0 && (browse.loading || browse.hasMore) && !browse.error ? (
+        <LoadArea area={{ data: null, loading: true, error: null, reload: () => browse.reload() }} what="this list">
+          {() => null}
+        </LoadArea>
+      ) : products.length === 0 ? (
         filter !== 'all' ? (
           <InfoPanel tone="info" title="Nothing here">
             {filter === 'low'

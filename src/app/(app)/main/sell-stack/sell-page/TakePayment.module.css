@@ -1043,3 +1043,23 @@
 .forRemove {
   color: var(--danger, #c0392b) !important;
 }
+
+/* ── THE BILL BESIDE THE PAYMENT, where there is room (10 Nov) ─────────────────────── */
+@container page (min-width: 900px) {
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: var(--space-6);
+    align-items: start;
+  }
+
+  .layout > * {
+    grid-column: 2;
+  }
+
+  /* The bill holds the left column, beside however many rows the payment side takes. */
+  .layout > .bill {
+    grid-column: 1;
+    grid-row: 1 / span 40;
+  }
+}

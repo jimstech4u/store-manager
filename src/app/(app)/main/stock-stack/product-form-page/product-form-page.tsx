@@ -73,7 +73,7 @@ export default function ProductFormPage() {
     productId && !settled ? { state: 'loading', what: 'this item' } : { state: 'ready' };
 
   return (
-    <PageScaffold
+    <PageScaffold layout="record"
       onBack={goBack}
       title={productId ? 'Edit this item' : 'Add an item you sell'}
       subtitle={

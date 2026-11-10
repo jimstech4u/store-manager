@@ -253,7 +253,7 @@ export default function StaffInvitePage() {
       : { state: 'loading', what: 'the roles' };
 
   return (
-    <PageScaffold
+    <PageScaffold layout="record"
       onBack={goBack}
       title="Add someone to your team"
       subtitle="They sign in with a login this shop owns"

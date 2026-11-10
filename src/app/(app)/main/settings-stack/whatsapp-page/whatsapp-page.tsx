@@ -78,7 +78,7 @@ export default function WhatsAppPage() {
   const chatLink = code && BOT ? `https://wa.me/${BOT}?text=${encodeURIComponent(`Link ${code}`)}` : null;
 
   return (
-    <PageScaffold onBack={goBack} title="WhatsApp" subtitle="Ask the shop questions from WhatsApp">
+    <PageScaffold layout="record" onBack={goBack} title="WhatsApp" subtitle="Ask the shop questions from WhatsApp">
       <ProblemDialog problem={problem} title="Not done" />
       <PageState status={status}>
         {() => (

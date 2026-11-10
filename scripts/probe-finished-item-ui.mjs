@@ -99,7 +99,7 @@ try {
   await plus.scrollIntoViewIfNeeded();
   await plus.click();
   await p.waitForTimeout(4000);
-  await p.getByRole('button', { name: /(Say|Change) who this sale is for/ }).locator('visible=true').first().click();
+  await p.getByRole('tab', { name: /(Say|Change) who this sale is for/ }).locator('visible=true').first().click();
   await p.waitForTimeout(2500);
   await pickInSheet('Christian', /Mr Christian/);
   await p.waitForTimeout(4000);

@@ -169,7 +169,7 @@ export default function CountAgainPage() {
   };
 
   return (
-    <PageScaffold onBack={goBack} title="Count it again" subtitle={product?.name}
+    <PageScaffold layout="record" onBack={goBack} title="Count it again" subtitle={product?.name}
       // UP TO THE RECORD THIS BELONGS TO: the item being counted.
       actions={[
         {

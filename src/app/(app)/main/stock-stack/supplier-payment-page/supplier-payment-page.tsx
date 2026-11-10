@@ -87,7 +87,7 @@ export default function SupplierPaymentPage() {
   };
 
   return (
-    <PageScaffold onBack={goBack} title={TITLES[kind]} subtitle={SUBTITLES[kind]}>
+    <PageScaffold layout="record" onBack={goBack} title={TITLES[kind]} subtitle={SUBTITLES[kind]}>
       <ProblemDialog problem={problem} title="Not recorded" />
 
       {kind === 'credit' && (

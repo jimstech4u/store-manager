@@ -95,7 +95,7 @@ export default function AmendPaymentPage() {
       : { state: 'ready' };
 
   return (
-    <PageScaffold
+    <PageScaffold layout="record"
       onBack={goBack}
       title="Correct payment"
       subtitle="What changed, and what they are paying"

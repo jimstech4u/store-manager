@@ -1,5 +1,6 @@
 'use client';
 
+import { bringFilterUp } from '@/components/ui/bringFilterUp';
 import { DERIVED_SCOPE } from '@/lib/stacks/catalog-stack';
 import { useCallback, useState } from 'react';
 import { useNav } from '@academix-admin/navigation-stack';
@@ -175,7 +176,10 @@ export default function ExpiryPage() {
             role="tab"
             aria-selected={days === w}
             className={`${styles.window} ${days === w ? styles.windowOn : ''}`}
-            onClick={() => setDays(w)}
+            onClick={(e) => {
+              setDays(w);
+              bringFilterUp(e.currentTarget.parentElement);
+            }}
           >
             {w} days
           </button>

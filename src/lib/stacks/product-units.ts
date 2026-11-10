@@ -169,6 +169,29 @@ export async function createStoreUnit(storeId: string, name: string, plural: str
   return data as string;
 }
 
+/**
+ * A word corrected — "Crat" to "Crate". Every product points at the unit, so this one change is the
+ * change everywhere it is shown; the same news as `createStoreUnit` goes out for that reason.
+ */
+export async function renameStoreUnit(id: string, name: string, plural: string | null) {
+  const { error } = await getSupabase().rpc('rename_store_unit', {
+    p_unit_id: id,
+    p_name: name,
+    p_plural: plural,
+  });
+  if (error) throw error;
+  shapesChanged();
+  catalogChanged();
+}
+
+/** A word no longer offered. The server refuses while any product is measured in it, with the count. */
+export async function archiveStoreUnit(id: string) {
+  const { error } = await getSupabase().rpc('archive_store_unit', { p_unit_id: id, p_restore: false });
+  if (error) throw error;
+  shapesChanged();
+  catalogChanged();
+}
+
 const toUnit = (r: ProductUnitRow, byId: Map<string, string>): ProductUnit => ({
   id: r.id,
   storeUnitId: r.store_unit_id,

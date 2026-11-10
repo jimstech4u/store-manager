@@ -117,6 +117,16 @@ export async function setProductGroups(productId: string, groupIds: string[]) {
 }
 
 /** Retire a group, or bring it back. Products keep it; it stops being offered. */
+/** A group's name corrected. Products point at the group, so it changes everywhere at once. */
+export async function renameGroup(id: string, name: string) {
+  const { error } = await getSupabase().rpc('rename_product_group', {
+    p_category_id: id,
+    p_name: name,
+  });
+  if (error) throw error;
+  groupsChanged();
+}
+
 export async function archiveGroup(id: string, restore = false) {
   const { error } = await getSupabase().rpc('archive_product_group', {
     p_category_id: id,

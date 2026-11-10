@@ -137,65 +137,99 @@ export default function AccountStatementPage() {
 
   const name = st?.customer?.name ?? 'Customer';
 
+  /*
+   * LAID OUT AS A TOOL, NOT A SCROLL (10 Nov: "also the statement page"). The paper grows with every
+   * sale and payment in the period, and Share and Print came after it — so on a long statement the
+   * one thing somebody came here to do was at the bottom of everything. Now: what it comes to, the
+   * period and what goes on it (as chips, not a column of tick rows), the ways out, and only then the
+   * paper. Where there is room the paper sits beside the controls instead of under them.
+   */
   return (
     <PageScaffold layout="record" onBack={goBack} title="Statement" subtitle={st?.customer?.name ?? 'Their account'}>
-      <div className={styles.chips} role="tablist" aria-label="Which period">
-        {PERIODS.map((p) => (
-          <button
-            key={p.kind}
-            type="button"
-            role="tab"
-            aria-selected={periodKind === p.kind}
-            className={`${styles.chip} ${periodKind === p.kind ? styles.chipOn : ''}`}
-            onClick={() => setPeriodKind(p.kind)}
-          >
-            {p.label}
-          </button>
-        ))}
-      </div>
-      {periodKind === 'custom' && (
-        <div className={styles.dates}>
-          <Field label="From" type="date" value={fromText} onChange={(e) => setFromText(e.target.value)} />
-          <Field label="To" type="date" value={toText} onChange={(e) => setToText(e.target.value)} />
-        </div>
-      )}
+      <div className={styles.layout}>
+        <div className={styles.controls}>
+          {st && (
+            <dl className={styles.figures} aria-label="What it comes to">
+              {period.from && (
+                <div className={styles.figure}>
+                  <dt>At the start</dt>
+                  <dd>{formatMoney(Math.abs(st.opening))}</dd>
+                  <dd className={styles.figureNote}>{st.opening < -0.005 ? 'you owed them' : 'owed to you'}</dd>
+                </div>
+              )}
+              <div className={`${styles.figure} ${styles.figureLead}`}>
+                <dt>{period.to ? 'At the end' : 'Now'}</dt>
+                <dd>{formatMoney(Math.abs(st.closing))}</dd>
+                <dd className={styles.figureNote}>{st.closing < -0.005 ? 'you owe them' : 'owed to you'}</dd>
+              </div>
+            </dl>
+          )}
 
-      <fieldset className={styles.kinds}>
-        <legend className={styles.legend}>On the statement</legend>
-        {KINDS.map((k) => (
-          <label key={k.kind} className={styles.check}>
-            <input
-              type="checkbox"
-              checked={on.has(k.kind)}
-              disabled={k.kind === 'items' && !on.has('sales')}
-              onChange={() => toggle(k.kind)}
+          <div className={styles.chips} role="tablist" aria-label="Which period">
+            {PERIODS.map((p) => (
+              <button
+                key={p.kind}
+                type="button"
+                role="tab"
+                aria-selected={periodKind === p.kind}
+                className={`${styles.chip} ${periodKind === p.kind ? styles.chipOn : ''}`}
+                onClick={() => setPeriodKind(p.kind)}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          {periodKind === 'custom' && (
+            <div className={styles.dates}>
+              <Field label="From" type="date" value={fromText} onChange={(e) => setFromText(e.target.value)} />
+              <Field label="To" type="date" value={toText} onChange={(e) => setToText(e.target.value)} />
+            </div>
+          )}
+
+          <fieldset className={styles.kinds}>
+            <legend className={styles.legend}>On the statement</legend>
+            <div className={styles.kindChips}>
+              {KINDS.map((k) => {
+                const isOn = on.has(k.kind);
+                return (
+                  <label key={k.kind} className={`${styles.kind} ${isOn ? styles.kindOn : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={isOn}
+                      disabled={k.kind === 'items' && !on.has('sales')}
+                      onChange={() => toggle(k.kind)}
+                    />
+                    <span>{k.label}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+
+          {doc && (
+            <DocumentActions
+              storeId={store.id}
+              doc={doc}
+              filename={`statement-${name.toLowerCase().replace(/\s+/g, '-')}`}
+              title={`Statement for ${name}`}
+              message={`${name}, your statement from ${store.name} (${period.label}): ${
+                st && st.closing < -0.005 ? 'we owe you' : 'owed'
+              } ${formatMoney(Math.abs(st?.closing ?? 0))}.`}
+              whatsapp={{ phone: st?.customer?.phone, customerId: st?.customer?.id, customerName: name }}
             />
-            <span>{k.label}</span>
-          </label>
-        ))}
-      </fieldset>
+          )}
+        </div>
 
-      <PageState status={status}>
-        {() =>
-          doc && (
-            <>
+        <PageState status={status}>
+          {() =>
+            doc && (
               <div className={styles.paper} data-print-root style={{ ['--receipt-width' as string]: `${width}mm` }}>
                 <PrintPreview lines={receiptLines(doc, printer.layout)} layout={printer.layout} />
               </div>
-              <DocumentActions
-                storeId={store.id}
-                doc={doc}
-                filename={`statement-${name.toLowerCase().replace(/\s+/g, '-')}`}
-                title={`Statement for ${name}`}
-                message={`${name}, your statement from ${store.name} (${period.label}): ${
-                  st && st.closing < -0.005 ? 'we owe you' : 'owed'
-                } ${formatMoney(Math.abs(st?.closing ?? 0))}.`}
-                whatsapp={{ phone: st?.customer?.phone, customerId: st?.customer?.id, customerName: name }}
-              />
-            </>
-          )
-        }
-      </PageState>
+            )
+          }
+        </PageState>
+      </div>
     </PageScaffold>
   );
 }

@@ -139,7 +139,7 @@ try {
   await shot('1-after-adding');
 
   // ── 2. Remove, after a read from the shop ──
-  await visible(p.getByRole('button', { name: 'Say who this sale is for' })).click();
+  await visible(p.getByRole('tab', { name: /Say who this sale is for/ })).click();
   await p.getByText('A406 Hotel').first().click();
   await p.waitForTimeout(3500); // saved
   await p.reload({ waitUntil: 'networkidle' });
