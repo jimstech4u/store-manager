@@ -57,6 +57,7 @@ export function DocumentActions({
   whatsapp,
   pages,
   a4Print = false,
+  onLeave,
 }: {
   storeId: string;
   doc: ReceiptImageInput;
@@ -73,6 +74,11 @@ export function DocumentActions({
   pages?: () => HTMLCanvasElement[];
   /** The browser's print uses A4 (the page shows a `data-print-root="page"` table). */
   a4Print?: boolean;
+  /**
+   * Called before a share opens a page of its own (WhatsApp), so a sheet showing these actions
+   * closes rather than staying drawn over the page it opened.
+   */
+  onLeave?: () => void;
 }) {
   const nav = useNav();
   const width = usePrintWidth(storeId);
@@ -148,6 +154,7 @@ export function DocumentActions({
           onClick={() =>
             run('whatsapp', async () => {
               const { text } = await words();
+              onLeave?.();
               void nav.push('share_whatsapp_page', {
                 message: text,
                 phone: whatsapp?.phone ?? '',

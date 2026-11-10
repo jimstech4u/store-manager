@@ -1,7 +1,18 @@
 .shell {
   display: flex;
   flex-direction: column;
+  /*
+   * THE VISIBLE AREA, not the screen (navigation-stack's keyboard-safe shell). With a keyboard up the
+   * shell is exactly what is left above it, wherever iOS has scrolled the viewport to, so the page
+   * header stays in view and the page body ends at the keyboard. Before the variables are set, and
+   * where there is no visualViewport, it is the whole screen as before.
+   */
+  position: fixed;
+  top: var(--ax-viewport-offset-top, 0px);
+  left: 0;
+  right: 0;
   height: 100dvh;
+  height: var(--ax-vv-height, 100dvh);
   overflow: hidden;      /* each stack scrolls its own page; the shell itself never does */
   background: var(--bg);
 }
@@ -54,4 +65,12 @@
   .side {
     display: none;
   }
+}
+
+/*
+ * TYPING: THE TAB BAR STEPS ASIDE. A native keyboard covers the tab bar; on the web the bar rode up
+ * on top of the keyboard and took a fifth of what was left. Flagged by `ViewportInsetsProvider`.
+ */
+:global(html[data-ax-keyboard='open']) .navWrap {
+  display: none;
 }

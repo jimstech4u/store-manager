@@ -19,6 +19,7 @@ import { ConfirmDialog, useConfirm } from '@/components/ui/Dialog';
 import { useAsyncAction } from '@/components/ui/AsyncAction';
 import { QuickAdd } from '@/components/sell/QuickAdd';
 import { TillLine } from '@/components/sell/TillLine';
+import { OrderItemsSheet } from '@/components/sell/OrderItems';
 import { usePermission } from '@/hooks/usePermission';
 import { findByBarcode } from '@/lib/stacks/mid-sale';
 import { useUncountedToday } from '@/lib/stacks/count-gate';
@@ -314,6 +315,8 @@ export default function SellPage() {
   const [totalDraft, setTotalDraft] = useState('');
 
   const [pickingCustomer, setPickingCustomer] = useState(false);
+  /* All items, in a sheet over the till (`OrderItemsSheet`). */
+  const [allItems, setAllItems] = useState(false);
   // Remembers that the picker was opened mid-payment, so choosing someone returns to the
   // sheet instead of dropping the seller back on the order with the payment half-entered.
   /*
@@ -847,11 +850,7 @@ export default function SellPage() {
          * PDF, print) and holds the count and price gates in front of anything with a price on it.
          */
         onShare={() => {
-          if (!activeOrder) return;
-          void (async () => {
-            const saved = await push(activeOrder);
-            void nav.push('order_items_page', { id: saved?.id ?? activeOrder.id ?? '' });
-          })();
+          if (activeOrder) setAllItems(true);
         }}
         hasCustomer={Boolean(activeOrder?.customerId)}
         orderCode={activeOrder?.code ?? null}
@@ -1047,10 +1046,7 @@ export default function SellPage() {
             <button
               type="button"
               className={styles.allItems}
-              onClick={async () => {
-                const saved = await push(activeOrder);
-                void nav.push('order_items_page', { id: saved?.id ?? activeOrder.id ?? '' });
-              }}
+              onClick={() => setAllItems(true)}
             >
               <ReceiptIcon /> All items — share, print or save the list
             </button>
@@ -1133,6 +1129,13 @@ export default function SellPage() {
 
 
 
+
+      <OrderItemsSheet
+        open={allItems}
+        onClose={() => setAllItems(false)}
+        orderId={activeOrder?.id ?? null}
+        onChooseCustomer={() => setPickingCustomer(true)}
+      />
 
       {activeOrder && (
         <CustomerPicker

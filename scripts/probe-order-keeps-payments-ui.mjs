@@ -123,7 +123,7 @@ try {
   await pay.click();
   await p.waitForTimeout(4000);
   await payBox().getByLabel('Amount').fill('1000');
-  await payBox().getByRole('button', { name: /Add payment/ }).click();
+  await payBox().getByRole('button', { name: 'Add', exact: true }).click();
   await payBox().getByLabel('Amount').fill('250');
   await p.waitForTimeout(2500);
 

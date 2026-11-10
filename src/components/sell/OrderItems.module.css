@@ -53,11 +53,17 @@
   margin: var(--space-4) 0;
 }
 
-/* Under the paper: charges, a deposit, their balance, what is still with them. */
+/* Under the paper: what else it shows — their balance, what is still with them, where to pay. */
 .extras {
   display: grid;
-  gap: var(--space-2);
+  gap: var(--space-1);
   margin: var(--space-4) 0 0;
+}
+
+.extrasLabel {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-muted);
 }
 
 .check {
@@ -80,27 +86,43 @@
   color: var(--text-muted);
 }
 
-/* Which account goes on the list — the same select Take payment uses for a transfer. */
-.accountSelect {
-  width: 100%;
+/* Which account goes on the list: one chip each, tapped — nothing to type, nothing to drop down. */
+.accounts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--space-2);
+  padding-left: calc(22px + var(--space-2));
+}
+
+.account {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
   min-height: var(--touch-comfortable);
-  padding: var(--space-3) var(--space-4);
-  font-size: var(--text-base);
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  text-align: left;
   color: var(--text);
   background: var(--surface);
-  border: 2px solid var(--border-strong);
+  border: 1.5px solid var(--border-strong);
   border-radius: var(--radius);
+  cursor: pointer;
 }
 
-.accountSelect:focus {
-  outline: none;
+.accountOn {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px var(--primary-subtle);
+  background: var(--primary-subtle);
 }
 
-/* The floating "Add an item" covers what is under it; this keeps the page's end clear of it. */
-.floatSpacer {
-  height: 88px;
+.accountBank {
+  font-weight: 600;
+}
+
+.accountNumber {
+  font-family: var(--font-numeric);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
 }
 
 /* Who the list is for — Take payment's own "Recording for" row. */

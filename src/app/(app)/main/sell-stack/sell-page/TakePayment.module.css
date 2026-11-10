@@ -710,3 +710,336 @@
   font-size: var(--text-sm);
   color: var(--text);
 }
+
+/* ── The bill: items that fold, what was added, and the total, in one card (10 Nov) ───────── */
+
+.bill {
+  margin-bottom: var(--space-4);
+  padding: 0 var(--space-4) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+/* The head is the toggle: the whole row is the target, and it says Show or Hide either way. */
+.billHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--touch-comfortable);
+  padding: var(--space-3) 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.billHeadText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.billHeadText .itemsLabel {
+  margin-bottom: 2px;
+}
+
+.billCount {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.billToggle {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.billItems .itemActions {
+  margin: var(--space-2) 0 var(--space-3);
+}
+
+/* A note opens its box again when tapped, as a line it reads like the others. */
+.noteBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bill .extras {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  margin: var(--space-3) 0 0;
+}
+
+/* Three across on the narrowest phone: one row of choices, not a second row for "Note". */
+.bill .extra {
+  justify-content: center;
+  padding: 0 var(--space-2);
+  white-space: nowrap;
+}
+
+.billTotal {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 3px double var(--border-strong);
+  font-weight: 700;
+}
+
+.billTotalValue {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-2xl);
+  color: var(--primary);
+  line-height: var(--leading-tight);
+}
+
+/* ── The one box: a charge, a deposit, the note, a payment, a reference ───────────────────── */
+
+.composer {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+}
+
+.payBox .composer {
+  margin-top: 0;
+}
+
+.composerHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.composerHead .payLabel {
+  margin-bottom: 0;
+}
+
+.kinds {
+  display: flex;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.kind {
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.kindOn {
+  border-color: var(--primary);
+  background: var(--primary-subtle);
+  color: var(--primary);
+}
+
+.composerDone {
+  flex: none;
+  min-height: var(--touch-min);
+  padding: 0 var(--space-2);
+  border: none;
+  background: none;
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.boxRow {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
+}
+
+.box {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  min-height: var(--touch-comfortable);
+  padding: var(--space-3) var(--space-4);
+  /* 16px or more: iOS zooms the page into a field with smaller type. */
+  font-size: max(16px, var(--text-base));
+  font-family: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 2px solid var(--border-strong);
+  border-radius: var(--radius);
+}
+
+.box:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-subtle);
+}
+
+.boxNote {
+  display: block;
+  resize: vertical;
+  line-height: 1.4;
+}
+
+.boxAmount {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  padding-left: calc(var(--space-4) + 1.1em);
+}
+
+/* The naira sign sits inside the amount box, not as a second field beside it. */
+.boxPrefix {
+  position: relative;
+  width: 0;
+  z-index: 1;
+  left: var(--space-4);
+  align-self: center;
+  font-weight: 700;
+  color: var(--text-muted);
+  pointer-events: none;
+  /* Zero wide, so the row's gap would push the box off the card's edge: taken back here. */
+  margin-right: calc(-1 * var(--space-2));
+}
+
+.boxAmount::placeholder {
+  font-family: var(--font);
+  font-weight: 400;
+}
+
+.boxAdd {
+  flex: none;
+  min-width: 72px;
+  padding: 0 var(--space-4);
+  border: none;
+  border-radius: var(--radius);
+  background: var(--primary);
+  color: var(--primary-text);
+  font-weight: 700;
+}
+
+.boxAdd:disabled {
+  background: var(--border-strong);
+  color: var(--text-muted);
+}
+
+.boxHint {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* ── The payment card ───────────────────────────────────────────────────────────────────── */
+
+.payBox .payList {
+  margin-bottom: var(--space-3);
+  padding: 0;
+  border: none;
+}
+
+.payBox .methods {
+  margin-bottom: var(--space-3);
+}
+
+/* A transfer's reference, added or changed from its own line. */
+.refLink {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.intoChips {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.into {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: var(--touch-comfortable);
+  padding: var(--space-2) var(--space-3);
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+}
+
+.intoOn {
+  border-color: var(--primary);
+  background: var(--primary-subtle);
+}
+
+.intoBank {
+  font-weight: 600;
+}
+
+.intoNumber {
+  font-family: var(--font-numeric);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.intoOne {
+  display: block;
+  margin-bottom: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* Change and Remove, side by side at the end of the row, once a customer is chosen. */
+.forActions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.forActions .forAction {
+  min-height: var(--touch-min);
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.forRemove {
+  color: var(--danger, #c0392b) !important;
+}

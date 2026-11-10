@@ -4,9 +4,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import styles from './TakePayment.module.css';
 import { Button } from '@/components/ui/Button';
 import { useBankAccounts } from '@/lib/stacks/bank-accounts';
-import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
-import { CloseIcon, PlusIcon } from '@/components/ui/Icon';
+import { ChevronDownIcon, ChevronUpIcon, CloseIcon, PlusIcon } from '@/components/ui/Icon';
 import { getSupabase } from '@/lib/supabase/client';
 import { ACCOUNT_DERIVED_SCOPE, accountsChanged } from '@/lib/stacks/customer-account';
 import {
@@ -32,7 +31,7 @@ import {
   type PayChoices,
 } from '@/lib/stacks/draft-orders';
 import { ProblemDialog, useProblem } from '@/components/ui/Dialog';
-import { ChargesEditor, DepositEditor } from '@/components/sell/OrderExtras';
+import { parseLabelAmount } from '@/lib/label-amount';
 
 type Method = 'cash' | 'transfer' | 'pos';
 
@@ -99,6 +98,7 @@ export function TakePayment({
   total,
   due,
   onNeedCustomer,
+  onRemoveCustomer,
   entered,
   onEnteredChange,
   choices,
@@ -126,6 +126,8 @@ export function TakePayment({
   due?: number;
   /** Asked for only when part of the money is going on account. */
   onNeedCustomer: () => void;
+  /** Takes the customer off the sale. Left out where the name cannot be removed (a correction). */
+  onRemoveCustomer?: () => void;
   /**
    * WHAT TO DO WITH THE MONEY ONCE IT IS COMPOSED.
    *
@@ -255,9 +257,24 @@ export function TakePayment({
   onUpdateOrder: (patch: Partial<DraftOrder>) => void;
 }) {
   const accounts = useBankAccounts(storeId);
-  // The short form's folds (`compact`): the items list, and which extra is being added.
+  /*
+   * WHAT IS SHOWN AND WHAT IS BEING TYPED. The item list folds (closed on the till's short form —
+   * they have just built it), and ONE box at a time is open: the composer under the bill for a
+   * charge, a deposit or the note, or the payment box — whose purpose turns to a transfer's
+   * reference when one is being added (`refFor`). One input, never a wall of them.
+   */
   const [showItems, setShowItems] = useState(!compact);
-  const [extra, setExtra] = useState<'charge' | 'deposit' | 'note' | null>(null);
+  const [composer, setComposer] = useState<'charge' | 'deposit' | 'note' | null>(null);
+  const [composerText, setComposerText] = useState('');
+  /*
+   * WHAT IT IS FOR, when that was typed on its own. "Add never gets active" (10 Nov): typing
+   * "Transport" and waiting for the button left a seller stuck, because the box wanted the amount
+   * too. Now a name alone is a step — Next — and the same box asks how much, with the number pad.
+   * "Transport 2000" in one go still adds at once.
+   */
+  const [forWhat, setForWhat] = useState<string | null>(null);
+  const [refFor, setRefFor] = useState<string | null>(null);
+  const [refText, setRefText] = useState('');
 
   /*
    * Starts empty: a payment exists once it has been added, not before.
@@ -340,8 +357,8 @@ export function TakePayment({
   const [busy, setBusy] = useState(false);
   const error = useProblem();
 
-  // A charge or deposit being typed is held inside its editor (OrderExtras), not as a blank row on
-  // the order, so an abandoned half-typed figure never reaches the shop.
+  // A charge or deposit being typed is held in the composer's own text (`composerText`), not as a
+  // blank row on the order, so an abandoned half-typed figure never reaches the shop.
 
   /*
    * WHAT IS ALREADY HELD FOR THIS CUSTOMER, read from the deposit ledger.
@@ -636,6 +653,68 @@ export function TakePayment({
     depositTaken > 0 ? `a ${formatMoney(depositTaken)} deposit is held for them` : null,
   ].filter(Boolean) as string[];
 
+  /* The composer's text, read as a name and an amount ("Transport 2000") — or, once the name is
+     in (`forWhat`), as the amount alone. */
+  const parsed = parseLabelAmount(composerText);
+  const typed =
+    forWhat !== null ? { label: forWhat, amount: parsed.amount } : parsed;
+  /* A name with no amount yet: the button moves on to ask for the amount instead of adding. */
+  const askAmountNext = forWhat === null && composerText.trim() !== '' && !(typed.amount && typed.amount > 0);
+  const chargeLabel = (label: string) => {
+    const t = label.trim();
+    return t ? t.charAt(0).toUpperCase() + t.slice(1) : 'Charge';
+  };
+  // "deposit 5000 crates" said in full is still a deposit for crates.
+  const depositNote = (label: string) => label.replace(/^deposit\b\s*(for\s+)?/i, '').trim();
+
+  const openComposer = (kind: 'charge' | 'deposit' | 'note') => {
+    setRefFor(null);
+    if (kind !== composer) {
+      setComposerText('');
+      setForWhat(null);
+    }
+    setComposer(kind);
+  };
+  const closeComposer = () => {
+    setComposer(null);
+    setComposerText('');
+    setForWhat(null);
+  };
+  /* Added, and the box stays open and empty: two charges in a row is the common case. */
+  const addExtra = () => {
+    if (askAmountNext) {
+      setForWhat(composerText.trim());
+      setComposerText('');
+      return;
+    }
+    if (!(typed.amount && typed.amount > 0)) return;
+    if (composer === 'charge') {
+      onUpdateOrder({
+        charges: [
+          ...(order.charges ?? []),
+          { key: newKey(), label: chargeLabel(typed.label), amount: String(typed.amount), note: '' },
+        ],
+      });
+    } else if (composer === 'deposit') {
+      onUpdateOrder({
+        deposits: [
+          ...(order.deposits ?? []),
+          { key: newKey(), amount: String(typed.amount), note: depositNote(typed.label) },
+        ],
+      });
+    }
+    setComposerText('');
+    setForWhat(null);
+  };
+
+  const methodName = (m: string) =>
+    m === 'cash' ? 'Cash' : m === 'transfer' ? 'Transfer' : m === 'pos' ? 'POS' : m;
+  const accountName = (id: string | null | undefined) => {
+    if (accounts.length < 2) return null;
+    const a = accounts.find((x) => x.id === id);
+    return a ? a.bank_name : null;
+  };
+
   const settle = async () => {
     setBusy(true);
     try {
@@ -767,42 +846,6 @@ export function TakePayment({
   return (
     <>
       {/*
-        WHO FIRST, then what, then how much, then how.
-
-        The screen used to open on a number. Reading it top to bottom now answers the questions in
-        the order a seller is asked them at a counter: who is this for, what are they taking, what
-        was added, what do they already owe, what does it come to, how are they paying.
-      */}
-      <button
-        type="button"
-        className={`${styles.forRow} ${needsCustomer ? styles.forNeeded : ''}`}
-        onClick={onNeedCustomer}
-      >
-        {/*
-          The label over the name, not beside it.
-
-          All three on one line meant a name of any length wrapped between the label and the
-          action — "Recording for / Anonymous walk- / in / Add customer" — which read as three
-          unrelated fragments. Stacked, the row says one thing and the action stays at the end
-          where a thumb expects it.
-        */}
-        <span className={styles.forBody}>
-          <span className={styles.forLabel}>Recording for</span>
-          <span className={styles.forValue}>
-            {order.customerId
-              ? order.customerName
-              : needsCustomer
-                ? 'Who is this for? Needed'
-                : 'Anonymous walk-in'}
-          </span>
-          {needsCustomer && <span className={styles.forWhy}>{whyCustomer.join(' · ')}</span>}
-        </span>
-        <span className={styles.forAction}>
-          {order.customerId ? 'Change' : 'Add customer'}
-        </span>
-      </button>
-
-      {/*
         A FAILURE INTERRUPTS; it does not sit on the page.
 
         As a panel this was the first thing pushed off the top when a keyboard opened, so an action
@@ -810,78 +853,75 @@ export function TakePayment({
       */}
       <ProblemDialog problem={error} title="Could not record this payment" />
 
-      {compact && !showItems ? (
-        <button type="button" className={styles.itemsFolded} onClick={() => setShowItems(true)}>
-          <span className={styles.itemsFoldedText}>
+      {/*
+        THE BILL — what they are buying, what was added to it, and what it comes to, in one card.
+
+        "There is show and no hide … once a deposit or charge is added I have to open Show to remove
+        it" (10 Nov). Only the item list folds, and its head says Show or Hide either way. What was
+        ADDED to the goods — a charge, a deposit, the note — is always a line in the card with its own
+        cross: it is what gets checked and put right at the counter, and it is never more than a few.
+      */}
+      <section className={styles.bill} aria-label="The bill">
+        <button
+          type="button"
+          className={styles.billHead}
+          aria-expanded={showItems}
+          onClick={() => setShowItems((v) => !v)}
+        >
+          <span className={styles.billHeadText}>
             <span className={styles.itemsLabel}>What they are buying</span>
-            <span>
+            <span className={styles.billCount}>
               {order.lines.length} {order.lines.length === 1 ? 'item' : 'items'} ·{' '}
               {formatMoney(itemsTotal)}
-              {charges > 0 ? ` + ${formatMoney(charges)} charges` : ''}
-              {held > 0 ? ` + ${formatMoney(held)} deposit` : ''}
             </span>
           </span>
-          <span className={styles.itemsShow}>Show</span>
+          <span className={styles.billToggle}>
+            {showItems ? 'Hide' : 'Show'}
+            {showItems ? <ChevronUpIcon /> : <ChevronDownIcon />}
+          </span>
         </button>
-      ) : (
-      <div className={styles.items}>
-        <span className={styles.itemsLabel}>What they are buying</span>
-        {order.lines.map((line) => {
-          const body = (
-            <>
-              <span className={styles.itemName}>{line.productName}</span>
-              <span className={styles.itemQty}>
-                {formatQtySpoken(line.qty || '0')}
-                {line.saleUnitName ? ` ${shapeWord(line.qty, line.saleUnitName)}` : ''} ×{' '}
-                {formatMoney(Number(line.unitPrice) || 0)}
-              </span>
-              <span className={styles.itemTotal}>{formatMoney(lineTotal(line))}</span>
-            </>
-          );
-          /*
-           * A LINE OPENS, where the page allows it — the till's own row on a page of its own, so a
-           * quantity or a price is put right from here without going back to the sell screen.
-           */
-          return onOpenLine ? (
-            <button
-              type="button"
-              className={`${styles.item} ${styles.itemTap}`}
-              key={line.key}
-              onClick={() => onOpenLine(line.key)}
-              aria-label={`Change ${line.productName}`}
-            >
-              {body}
-            </button>
-          ) : (
-            <div className={styles.item} key={line.key}>
-              {body}
-            </div>
-          );
-        })}
+
+        {showItems && (
+          <div className={styles.billItems}>
+            {order.lines.map((line) => {
+              const body = (
+                <>
+                  <span className={styles.itemName}>{line.productName}</span>
+                  <span className={styles.itemQty}>
+                    {formatQtySpoken(line.qty || '0')}
+                    {line.saleUnitName ? ` ${shapeWord(line.qty, line.saleUnitName)}` : ''} ×{' '}
+                    {formatMoney(Number(line.unitPrice) || 0)}
+                  </span>
+                  <span className={styles.itemTotal}>{formatMoney(lineTotal(line))}</span>
+                </>
+              );
+              /*
+               * A LINE OPENS, where the page allows it — the till's own row on a page of its own, so
+               * a quantity or a price is put right from here without going back to the sell screen.
+               */
+              return onOpenLine ? (
+                <button
+                  type="button"
+                  className={`${styles.item} ${styles.itemTap}`}
+                  key={line.key}
+                  onClick={() => onOpenLine(line.key)}
+                  aria-label={`Change ${line.productName}`}
+                >
+                  {body}
+                </button>
+              ) : (
+                <div className={styles.item} key={line.key}>
+                  {body}
+                </div>
+              );
+            })}
+            {itemActions && <div className={styles.itemActions}>{itemActions}</div>}
+          </div>
+        )}
 
         {/*
-          The goods on their own, under a double rule.
-
-          Kept apart from "Total for this sale" further down, which adds the charges: a customer
-          querying a figure is nearly always querying one of these two, and having them in the same
-          place made it impossible to say which was which.
-        */}
-        <div className={styles.itemsTotal}>
-          <span>Items</span>
-          <span>{formatMoney(itemsTotal)}</span>
-        </div>
-
-        {/*
-          THE DEPOSIT, on its own line in the total because the customer hands it over.
-
-          A READOUT NOW, not a box. It used to be typed here and SPREAD across the lines sending
-          containers out, in proportion to whatever each already held — a hundred lines of
-          arithmetic to turn one figure into per-line `deposit_charged` values, so that a deposit
-          could be expressed as a quantity of containers at a rate.
-
-          A deposit is not a quantity of containers. It is a round sum two people agree, and it
-          comes back or is kept whatever happens to the crates. It is composed below, beside the
-          charges, and lives in its own ledger.
+          WHAT THE RECEIPT ALREADY HOLDS, on a correction — drawn as the lines below are, with a cross
+          that asks for a reason (the correction's), or struck through with a way to put it back.
         */}
         {already?.deposit && already.deposit.amount > 0.005 && (
           <div className={`${styles.charge} ${already.deposit.removed ? styles.lineGone : ''}`}>
@@ -913,51 +953,12 @@ export function TakePayment({
           </div>
         )}
 
-        {held > 0 && (
-          /*
-            REMOVABLE FROM HERE, where it is read.
-            
-            The deposit was listed with the goods and could only be taken off further down the page,
-            beside the box that composes it — so the one place a seller notices it is wrong is the
-            one place they cannot fix it. A charge has always had its cross here; this is the same
-            line doing the same job.
-            
-            It clears every deposit on the sale, because that is what this line totals — and it is
-            now the ONLY place a deposit is listed. There was a second list further down, repeating
-            each one beside the box that composes them, so a sale with a deposit showed it twice and
-            a seller could not tell whether that meant two deposits.
-          */
-          <div className={styles.charge}>
-            <button
-              type="button"
-              className={styles.chargeRemove}
-              onClick={() => onUpdateOrder({ deposits: [] })}
-              aria-label="Remove the deposit"
-            >
-              <CloseIcon />
-            </button>
-            <span className={styles.chargeBody}>
-              <span className={styles.chargeName}>Deposit held</span>
-            </span>
-            <span className={styles.chargeAmount}>{formatMoney(held)}</span>
-          </div>
-        )}
-
-        {/*
-          Charges sit with the goods, under their total.
-
-          They are part of what this customer is being asked to pay, and a seller reading the list
-          back needs them in the same breath as the items — not in a separate box further down
-          that has to be found and added on.
-        */}
         {(order.charges ?? []).map((c) => (
           <div className={styles.charge} key={c.key}>
             <button
               type="button"
               className={styles.chargeRemove}
-              onClick={() =>
-                onUpdateOrder({ charges: order.charges.filter((x) => x.key !== c.key) })
-              }
+              onClick={() => onUpdateOrder({ charges: order.charges.filter((x) => x.key !== c.key) })}
               aria-label={`Remove ${c.label.trim() || 'this charge'}`}
             >
               <CloseIcon />
@@ -966,125 +967,182 @@ export function TakePayment({
               <span className={styles.chargeName}>{c.label.trim() || 'Charge'}</span>
               {c.note ? <span className={styles.chargeNote}>{c.note}</span> : null}
             </span>
-            <span className={styles.chargeAmount}>{formatMoney(c.amount)}</span>
+            <span className={styles.chargeAmount}>{formatMoney(Number(c.amount) || 0)}</span>
           </div>
         ))}
-      </div>
-      )}
-
-      {itemActions && (!compact || showItems) && (
-        <div className={styles.itemActions}>{itemActions}</div>
-      )}
-
-      {compact ? (
-        <>
-          {/*
-            A CHARGE, A DEPOSIT, A NOTE — each a "+" until it is wanted. Most sales have none, and
-            three open forms between the items and the money were most of this page's length.
-          */}
-          {extra === null && (
-            <div className={styles.extras}>
-              <button type="button" className={styles.extra} onClick={() => setExtra('charge')}>
-                <PlusIcon /> Charge
-              </button>
-              <button type="button" className={styles.extra} onClick={() => setExtra('deposit')}>
-                <PlusIcon /> Deposit
-              </button>
-              {!order.note && (
-                <button type="button" className={styles.extra} onClick={() => setExtra('note')}>
-                  <PlusIcon /> Note
-                </button>
-              )}
-            </div>
-          )}
-          {extra === 'charge' && (
-            <div className={styles.charges}>
-              <ChargesEditor
-                charges={order.charges ?? []}
-                onChange={(next) => onUpdateOrder({ charges: next })}
-                onCancel={() => setExtra(null)}
-              />
-            </div>
-          )}
-          {extra === 'deposit' && (
-            <DepositEditor
-              deposits={order.deposits ?? []}
-              onChange={(deposits) => onUpdateOrder({ deposits })}
-              alreadyHeld={alreadyHeld}
-              onCancel={() => setExtra(null)}
-            />
-          )}
-          {(extra === 'note' || Boolean(order.note)) && (
-            <Field
-              label="Note on the whole sale"
-              optional
-              value={order.note}
-              onChange={(e) => onUpdateOrder({ note: e.target.value })}
-              placeholder="Anything to remember about this sale"
-            />
-          )}
-        </>
-      ) : (
-        <>
-      {/*
-            ONE BOX THAT COMPOSES A CHARGE, and the charges themselves listed above with the items. The
-            same form All items uses (`OrderExtras`), so a charge added while the customer reads the
-            list back is the charge settled here.
-          */}
-          <div className={styles.charges}>
-            <ChargesEditor
-              charges={order.charges ?? []}
-              onChange={(charges) => onUpdateOrder({ charges })}
-            />
-          </div>
-
-          {/*
-            THE DEPOSIT, COMPOSED THE SAME WAY AND KEPT PLAINLY APART: a charge is the shop's money, a
-            deposit is the customer's and the shop is only holding it. What is already held is said,
-            because the two add up.
-          */}
-          <DepositEditor
-            deposits={order.deposits ?? []}
-            onChange={(deposits) => onUpdateOrder({ deposits })}
-            alreadyHeld={alreadyHeld}
-          />
-        </>
-      )}
-
-      <div className={styles.due}>
-        <span className={styles.dueLabel}>Total for this sale</span>
 
         {/*
-          WHAT THE TOTAL IS MADE OF, above the figure rather than scattered up the page.
-
-          A distributor's bill is goods plus transport plus a deposit, and the one number at the
-          bottom is the one a customer queries. Having to scroll back through the items to work out
-          why it is ₦7,700 is how an argument at a counter starts. Only the parts that exist are
-          listed: a sale with no deposit and no charges says nothing extra.
+          EACH DEPOSIT ITS OWN LINE. A deposit is the customer's money the shop holds — it comes back,
+          or the shop keeps it and says why — so it is named as one, never folded into the goods.
         */}
-        {(held > 0 || charges > 0) && (
-          <span className={styles.breakdown}>
-            <span className={styles.breakdownRow}>
-              <span>Items</span>
-              <span>{formatMoney(itemsTotal)}</span>
+        {(order.deposits ?? []).map((d) => (
+          <div className={styles.charge} key={d.key}>
+            <button
+              type="button"
+              className={styles.chargeRemove}
+              onClick={() =>
+                onUpdateOrder({ deposits: (order.deposits ?? []).filter((x) => x.key !== d.key) })
+              }
+              aria-label="Remove this deposit"
+            >
+              <CloseIcon />
+            </button>
+            <span className={styles.chargeBody}>
+              <span className={styles.chargeName}>Deposit held</span>
+              <span className={styles.chargeNote}>
+                {[d.note, alreadyHeld > 0 ? `${formatMoney(alreadyHeld)} already held for them` : null]
+                  .filter(Boolean)
+                  .join(' · ') || 'Theirs — it comes back to them'}
+              </span>
             </span>
-            {charges > 0 && (
-              <span className={styles.breakdownRow}>
-                <span>Charges</span>
-                <span>{formatMoney(charges)}</span>
-              </span>
-            )}
-            {held > 0 && (
-              <span className={styles.breakdownRow}>
-                <span>Deposit</span>
-                <span>{formatMoney(held)}</span>
-              </span>
-            )}
-          </span>
+            <span className={styles.chargeAmount}>{formatMoney(Number(d.amount) || 0)}</span>
+          </div>
+        ))}
+
+        {order.note && composer !== 'note' && (
+          <div className={styles.charge}>
+            <button
+              type="button"
+              className={styles.chargeRemove}
+              onClick={() => onUpdateOrder({ note: '' })}
+              aria-label="Remove the note"
+            >
+              <CloseIcon />
+            </button>
+            <button type="button" className={styles.noteBody} onClick={() => openComposer('note')}>
+              <span className={styles.chargeName}>Note</span>
+              <span className={styles.chargeNote}>{order.note}</span>
+            </button>
+          </div>
         )}
 
-        <span className={styles.dueValue}>{formatMoney(total)}</span>
-      </div>
+        {/*
+          ADDING ONE: a "+" for each, and then ONE box. The kind is a tap away at the top of the box,
+          and Done folds it back — "a proper toggle to show and hide that is very easy and flowing".
+          A charge and a deposit are typed the way they are said: "Transport 2000", "5000 crates".
+        */}
+        {composer === null ? (
+          <div className={styles.extras}>
+            <button type="button" className={styles.extra} onClick={() => openComposer('charge')}>
+              <PlusIcon /> Charge
+            </button>
+            <button type="button" className={styles.extra} onClick={() => openComposer('deposit')}>
+              <PlusIcon /> Deposit
+            </button>
+            {!order.note && (
+              <button type="button" className={styles.extra} onClick={() => openComposer('note')}>
+                <PlusIcon /> Note
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className={styles.composer}>
+            <div className={styles.composerHead}>
+              <div className={styles.kinds} role="group" aria-label="What to add">
+                {(['charge', 'deposit', 'note'] as const).map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    className={`${styles.kind} ${composer === k ? styles.kindOn : ''}`}
+                    aria-pressed={composer === k}
+                    onClick={() => openComposer(k)}
+                  >
+                    {k === 'charge' ? 'Charge' : k === 'deposit' ? 'Deposit' : 'Note'}
+                  </button>
+                ))}
+              </div>
+              <button type="button" className={styles.composerDone} onClick={closeComposer}>
+                Done
+              </button>
+            </div>
+            {composer === 'note' ? (
+              <textarea
+                className={`${styles.box} ${styles.boxNote}`}
+                rows={2}
+                value={order.note}
+                onChange={(e) => onUpdateOrder({ note: e.target.value })}
+                placeholder="Anything to remember about this sale"
+                aria-label="Note on the whole sale"
+                autoFocus
+              />
+            ) : (
+              <form
+                className={styles.boxRow}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  addExtra();
+                }}
+              >
+                <input
+                  className={styles.box}
+                  value={composerText}
+                  onChange={(e) => setComposerText(e.target.value)}
+                  placeholder={
+                    forWhat !== null
+                      ? `How much for ${forWhat}?`
+                      : composer === 'charge'
+                        ? 'e.g. Transport 2000'
+                        : 'e.g. 5000 crates'
+                  }
+                  aria-label={
+                    forWhat !== null
+                      ? `How much for ${forWhat}`
+                      : composer === 'charge'
+                        ? 'The charge'
+                        : 'The deposit'
+                  }
+                  inputMode={forWhat !== null ? 'decimal' : 'text'}
+                  autoComplete="off"
+                  enterKeyHint={askAmountNext ? 'next' : 'done'}
+                  autoFocus
+                />
+                <button
+                  type="submit"
+                  className={styles.boxAdd}
+                  disabled={composerText.trim() === '' || (!askAmountNext && !(typed.amount && typed.amount > 0))}
+                >
+                  {askAmountNext ? 'Next' : 'Add'}
+                </button>
+              </form>
+            )}
+            {composer !== 'note' && (
+              <p className={styles.boxHint} aria-live="polite">
+                {forWhat !== null && !(typed.amount && typed.amount > 0) ? (
+                  <>
+                    {composer === 'charge' ? chargeLabel(forWhat) : `Deposit for ${depositNote(forWhat) || forWhat}`}{' '}
+                    — now the amount.{' '}
+                    <button
+                      type="button"
+                      className={styles.refLink}
+                      onClick={() => {
+                        setComposerText(forWhat);
+                        setForWhat(null);
+                      }}
+                    >
+                      Change the name
+                    </button>
+                  </>
+                ) : typed.amount && typed.amount > 0
+                  ? composer === 'charge'
+                    ? `Adds ${chargeLabel(typed.label)} · ${formatMoney(typed.amount)} to the bill`
+                    : `Holds ${formatMoney(typed.amount)} of theirs${
+                        depositNote(typed.label) ? ` for ${depositNote(typed.label)}` : ''
+                      }${alreadyHeld > 0 ? `, with the ${formatMoney(alreadyHeld)} already held` : ''}`
+                  : askAmountNext
+                    ? 'Next asks how much.'
+                    : composer === 'charge'
+                      ? 'What it is for and how much — or the name first, then Next.'
+                      : 'How much, and what for if you like. It is theirs: it comes back.'}
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className={styles.billTotal}>
+          <span>Total for this sale</span>
+          <span className={styles.billTotalValue}>{formatMoney(total)}</span>
+        </div>
+      </section>
 
       {/*
         NEVER A ZERO THAT WAS NOT READ. Until the balance arrives this says it is checking; if it
@@ -1107,180 +1165,263 @@ export function TakePayment({
 
       {outstanding !== null && outstanding > 0 && (
         <div className={styles.outstanding}>
-          <span>
-            {order.customerName || 'This customer'} already owes
-          </span>
+          <span>{order.customerName || 'This customer'} already owes</span>
           <span className={styles.outstandingValue}>{formatMoney(outstanding)}</span>
         </div>
       )}
 
       {/*
-        THE PAYMENTS THAT WERE ADDED — and a typed figure is not one of them.
-
-        This listed `allRows`, which includes the amount still in the box. So a seller typing "5"
-        on the way to "5,000" watched a ₦5 payment appear in a list of payments they had not made,
-        and had to work out whether it counted. It does count, and that is deliberate — see
-        `pending` above, where NOT counting it once settled sales with no payment recorded at all —
-        but counting towards a total and being listed as a decision somebody made are different
-        things. The total below says what is covered; this list says what was entered.
+        THE MONEY — what was already paid (a correction), the payments added, and ONE box for the
+        next. A typed amount counts towards the totals without being listed (see `pending`); Enter or
+        Add lists it. A transfer's reference is added from its line, in the same box.
       */}
-      {(already?.payments?.length ?? 0) > 0 && (
-        <div className={styles.payList}>
-          <span className={styles.payListLabel}>Already paid on this receipt</span>
-          {(already?.payments ?? []).map((pay) => (
-            <div className={`${styles.payRow} ${pay.removed ? styles.lineGone : ''}`} key={pay.key}>
-              {pay.removed ? (
-                <button type="button" className={styles.putBack} onClick={pay.onRestore}>
-                  Put back
-                </button>
-              ) : pay.onRemove ? (
-                <button
-                  type="button"
-                  className={styles.payRemove}
-                  onClick={pay.onRemove}
-                  aria-label={`Take back the ${formatMoney(pay.amount)} ${pay.method}`}
-                >
-                  <CloseIcon />
-                </button>
-              ) : (
-                <span className={styles.payRemove} aria-hidden="true" />
-              )}
-              <span className={styles.payBody}>
-                <span className={styles.payMethod}>
-                  {pay.method === 'cash' ? 'Cash' : pay.method === 'transfer' ? 'Transfer' : pay.method === 'pos' ? 'POS' : pay.method}
+      <section className={styles.payBox} aria-label="The payment">
+        {(already?.payments?.length ?? 0) > 0 && (
+          <div className={styles.payList}>
+            <span className={styles.payListLabel}>Already paid on this receipt</span>
+            {(already?.payments ?? []).map((pay) => (
+              <div className={`${styles.payRow} ${pay.removed ? styles.lineGone : ''}`} key={pay.key}>
+                {pay.removed ? (
+                  <button type="button" className={styles.putBack} onClick={pay.onRestore}>
+                    Put back
+                  </button>
+                ) : pay.onRemove ? (
+                  <button
+                    type="button"
+                    className={styles.payRemove}
+                    onClick={pay.onRemove}
+                    aria-label={`Take back the ${formatMoney(pay.amount)} ${pay.method}`}
+                  >
+                    <CloseIcon />
+                  </button>
+                ) : (
+                  <span className={styles.payRemove} aria-hidden="true" />
+                )}
+                <span className={styles.payBody}>
+                  <span className={styles.payMethod}>{methodName(pay.method)}</span>
+                  {pay.reference ? <span className={styles.payRef}>{pay.reference}</span> : null}
                 </span>
-                {pay.reference ? <span className={styles.payRef}>{pay.reference}</span> : null}
-              </span>
-              <span className={styles.payAmount}>{formatMoney(pay.amount)}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {rows.length > 0 && (
-        <div className={styles.payList}>
-          <span className={styles.payListLabel}>Paying with</span>
-          {rows.map((row) => (
-            <div className={styles.payRow} key={row.key}>
-              <button
-                type="button"
-                className={styles.payRemove}
-                onClick={() => setRows((prev) => prev.filter((r) => r.key !== row.key))}
-                aria-label={`Remove this ${row.method} payment`}
-              >
-                <CloseIcon />
-              </button>
-              <span className={styles.payBody}>
-                <span className={styles.payMethod}>
-                  {row.method === 'cash' ? 'Cash' : row.method === 'transfer' ? 'Transfer' : 'POS'}
-                </span>
-                {row.reference ? <span className={styles.payRef}>{row.reference}</span> : null}
-              </span>
-              <span className={styles.payAmount}>{formatMoney(row.amount)}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/*
-        ONE BOX THAT COMPOSES A PAYMENT, and the payments listed as lines beneath the total.
-
-        Every payment used to be a full editor — method buttons, an amount, a reference, a bank
-        picker — so a sale split across cash and transfer put two of those on screen and the two
-        numbers that mattered were somewhere inside them. A payment is entered once and read
-        several times while the change is counted, so entering it gets the box and reading it gets
-        a line.
-      */}
-      <section className={styles.payBox}>
-        <span className={styles.payLabel}>How are they paying?</span>
-
-        <div className={styles.methods} role="group" aria-label="Payment method">
-          {(['cash', 'transfer', 'pos'] as Method[]).map((m) => (
-            <button
-              key={m}
-              type="button"
-              className={`${styles.method} ${draftMethod === m ? styles.methodActive : ''}`}
-              onClick={() => setDraftMethod(m)}
-              aria-pressed={draftMethod === m}
-            >
-              {m === 'cash' ? 'Cash' : m === 'transfer' ? 'Transfer' : 'POS'}
-            </button>
-          ))}
-        </div>
-
-        <Field
-          label="Amount"
-          numeric
-          prefix="₦"
-          value={draftAmount}
-          onChange={(e) => setDraftAmount(e.target.value)}
-          placeholder="0"
-        />
-
-        {draftMethod === 'transfer' && accounts.length > 0 && (
-          <div className={styles.accountRow}>
-            <span className={styles.accountLabel}>Into</span>
-            <select
-              className={styles.accountSelect}
-              value={draftAccount ?? accounts[0]?.id ?? ''}
-              onChange={(e) => setDraftAccount(e.target.value)}
-            >
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.bank_name} · {a.account_number}
-                </option>
-              ))}
-            </select>
+                <span className={styles.payAmount}>{formatMoney(pay.amount)}</span>
+              </div>
+            ))}
           </div>
         )}
 
-        {draftMethod !== 'cash' && (
-          <Field
-            label="Reference"
-            optional
-            value={draftReference}
-            onChange={(e) => setDraftReference(e.target.value)}
-            placeholder="Last 4 digits, or a name"
-          />
+        {rows.length > 0 && (
+          <div className={styles.payList}>
+            <span className={styles.payListLabel}>Paying with</span>
+            {rows.map((row) => (
+              <div className={styles.payRow} key={row.key}>
+                <button
+                  type="button"
+                  className={styles.payRemove}
+                  onClick={() => {
+                    setRows((prev) => prev.filter((r) => r.key !== row.key));
+                    if (refFor === row.key) setRefFor(null);
+                  }}
+                  aria-label={`Remove this ${row.method} payment`}
+                >
+                  <CloseIcon />
+                </button>
+                <span className={styles.payBody}>
+                  <span className={styles.payMethod}>
+                    {methodName(row.method)}
+                    {row.method === 'transfer' && accountName(row.bankAccountId) ? (
+                      <span className={styles.payRef}> · {accountName(row.bankAccountId)}</span>
+                    ) : null}
+                  </span>
+                  {row.method !== 'cash' || row.reference ? (
+                    <button
+                      type="button"
+                      className={styles.refLink}
+                      onClick={() => {
+                        setComposer(null);
+                        setRefFor(row.key);
+                        setRefText(row.reference);
+                      }}
+                    >
+                      {row.reference || '+ Reference'}
+                    </button>
+                  ) : null}
+                </span>
+                <span className={styles.payAmount}>{formatMoney(row.amount)}</span>
+              </div>
+            ))}
+          </div>
         )}
 
-        {/*
-          The amounts anybody actually enters. Typing an exact total on a phone keypad with a queue
-          waiting is a common source of mistyped payments — and after a first payment, "the rest"
-          is almost always the second one.
-        */}
-        <Button
-          fullWidth
-          disabled={!(Number(draftAmount) > 0)}
-          onClick={() => addPayment(draftAmount)}
-        >
-          <PlusIcon /> Add payment
-        </Button>
+        {refFor ? (
+          <div className={styles.composer}>
+            <div className={styles.composerHead}>
+              <span className={styles.payLabel}>
+                Reference for the {formatMoney(rows.find((r) => r.key === refFor)?.amount ?? 0)}{' '}
+                {methodName(rows.find((r) => r.key === refFor)?.method ?? 'transfer').toLowerCase()}
+              </span>
+              <button type="button" className={styles.composerDone} onClick={() => setRefFor(null)}>
+                Cancel
+              </button>
+            </div>
+            <form
+              className={styles.boxRow}
+              onSubmit={(e) => {
+                e.preventDefault();
+                setRows((prev) =>
+                  prev.map((r) => (r.key === refFor ? { ...r, reference: refText.trim() } : r)),
+                );
+                setRefFor(null);
+              }}
+            >
+              <input
+                className={styles.box}
+                value={refText}
+                onChange={(e) => setRefText(e.target.value)}
+                placeholder="Last 4 digits, or the sender's name"
+                aria-label="Reference"
+                autoComplete="off"
+                enterKeyHint="done"
+                autoFocus
+              />
+              <button type="submit" className={styles.boxAdd}>
+                Save
+              </button>
+            </form>
+          </div>
+        ) : (
+          <>
+            <span className={styles.payLabel}>
+              {rows.length > 0 ? 'Another payment?' : 'How are they paying?'}
+            </span>
 
-        {/*
-          THE WHOLE REMAINING AMOUNT, IN ONE TAP — and gone once there is nothing left owing.
+            <div className={styles.methods} role="group" aria-label="Payment method">
+              {(['cash', 'transfer', 'pos'] as Method[]).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  className={`${styles.method} ${draftMethod === m ? styles.methodActive : ''}`}
+                  onClick={() => setDraftMethod(m)}
+                  aria-pressed={draftMethod === m}
+                >
+                  {methodName(m)}
+                </button>
+              ))}
+            </div>
 
-          Three things were wrong with it. It sat ABOVE "Add payment", so the order read
-          "shortcut, then the real button", which is backwards: the shortcut is the exception. It
-          only FILLED the box, so "Pay all" still needed a second tap on a button that looked like
-          it was for something else. And it stayed on screen after the sale was paid in full,
-          offering to pay ₦7,700 again on a sale with nothing owing.
+            {/* WHICH ACCOUNT IT LANDED IN — a tap each, the shop's main account chosen to start. */}
+            {draftMethod === 'transfer' && accounts.length > 1 && (
+              <div className={styles.intoChips} role="group" aria-label="Into which account">
+                {accounts.map((a) => {
+                  const on =
+                    (draftAccount ?? accounts.find((x) => x.is_default)?.id ?? accounts[0]?.id) === a.id;
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      className={`${styles.into} ${on ? styles.intoOn : ''}`}
+                      aria-pressed={on}
+                      onClick={() => setDraftAccount(a.id)}
+                    >
+                      <span className={styles.intoBank}>{a.bank_name}</span>
+                      <span className={styles.intoNumber}>{a.account_number}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {draftMethod === 'transfer' && accounts.length === 1 && (
+              <span className={styles.intoOne}>
+                Into {accounts[0].bank_name} · {accounts[0].account_number}
+              </span>
+            )}
 
-          Now it adds the payment itself and disappears when `remaining` reaches zero. After
-          ₦5,000 of ₦7,700 it reads "The rest (₦2,700)"; after that it is gone.
-        */}
-        {remaining > 0 && (
-          <button
-            type="button"
-            className={styles.quick}
-            onClick={() => addPayment(String(remaining))}
-          >
-            {paid > 0 ? `The rest (${formatMoney(remaining)})` : `Pay all (${formatMoney(owed)})`}
-          </button>
+            <form
+              className={styles.boxRow}
+              onSubmit={(e) => {
+                e.preventDefault();
+                addPayment(draftAmount);
+              }}
+            >
+              <span className={styles.boxPrefix} aria-hidden="true">
+                ₦
+              </span>
+              <input
+                className={`${styles.box} ${styles.boxAmount}`}
+                value={draftAmount}
+                onChange={(e) => setDraftAmount(e.target.value.replace(/[^\d.]/g, ''))}
+                placeholder="Amount"
+                aria-label="Amount"
+                inputMode="decimal"
+                autoComplete="off"
+                enterKeyHint="done"
+              />
+              <button type="submit" className={styles.boxAdd} disabled={!(Number(draftAmount) > 0)}>
+                Add
+              </button>
+            </form>
+
+            {/*
+              THE WHOLE REMAINING AMOUNT, IN ONE TAP — and gone once there is nothing left owing.
+              After ₦5,000 of ₦7,700 it reads "The rest (₦2,700)"; after that it is gone.
+            */}
+            {remaining > 0 && (
+              <button
+                type="button"
+                className={styles.quick}
+                onClick={() => addPayment(String(remaining))}
+              >
+                {paid > 0 ? `The rest (${formatMoney(remaining)})` : `Pay all (${formatMoney(owed)})`}
+              </button>
+            )}
+          </>
         )}
       </section>
 
+      {/*
+        WHO IT IS FOR, just above the sums — "move the customer section above the total" (10 Nov).
+        It is the sums that make a name necessary (what goes on account, what they will then owe),
+        so the name sits where those are read, and the button under them asks for it when it is
+        missing. With a customer chosen it can be changed or taken off; without one, the whole row
+        adds one.
 
+        The label over the name, not beside it: on one line a long name wrapped between the label and
+        the action and read as three unrelated fragments.
+      */}
+      {order.customerId ? (
+        <div className={styles.forRow}>
+          <span className={styles.forBody}>
+            <span className={styles.forLabel}>Recording for</span>
+            <span className={styles.forValue}>{order.customerName}</span>
+          </span>
+          <span className={styles.forActions}>
+            <button type="button" className={styles.forAction} onClick={onNeedCustomer}>
+              Change
+            </button>
+            {onRemoveCustomer && (
+              <button
+                type="button"
+                className={`${styles.forAction} ${styles.forRemove}`}
+                onClick={onRemoveCustomer}
+              >
+                Remove
+              </button>
+            )}
+          </span>
+        </div>
+      ) : (
+        <button
+          type="button"
+          className={`${styles.forRow} ${needsCustomer ? styles.forNeeded : ''}`}
+          onClick={onNeedCustomer}
+        >
+          <span className={styles.forBody}>
+            <span className={styles.forLabel}>Recording for</span>
+            <span className={styles.forValue}>
+              {needsCustomer ? 'Who is this for? Needed' : 'Anonymous walk-in'}
+            </span>
+            {needsCustomer && <span className={styles.forWhy}>{whyCustomer.join(' · ')}</span>}
+          </span>
+          <span className={styles.forAction}>Add customer</span>
+        </button>
+      )}
 
       {/* ── Summary ─────────────────────────────────────────────────────────────── */}
       <div className={styles.summary}>
@@ -1391,23 +1532,6 @@ export function TakePayment({
           </div>
         )}
       </div>
-
-      {/*
-        The note on the sale, last.
-
-        It belongs beside the button that files it, not inside the box for adding a charge: a note
-        about the sale is the final thing somebody writes before committing it, and sitting among
-        the charge fields it read as a note about the charge.
-      */}
-      {!compact && (
-      <Field
-          label="Note on the whole sale"
-          optional
-          value={order.note}
-          onChange={(e) => onUpdateOrder({ note: e.target.value })}
-          placeholder="Anything to remember about this sale"
-        />
-      )}
 
       {/*
         The one moment a customer is genuinely required. Rather than telling the seller to go

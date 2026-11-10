@@ -33,6 +33,15 @@
   transition: bottom 0.3s ease, background-color 120ms ease;
 }
 
+/*
+ * NOT WHILE TYPING. A pill floating over the keyboard covered its Done bar and the field being typed
+ * into (iPhone, 9 Nov). The keyboard has the screen's foot until it goes; the pill comes back with
+ * the tab bar. Flagged on <html> by `ViewportInsetsProvider`.
+ */
+:global(html[data-ax-keyboard='open']) .pill {
+  display: none;
+}
+
 .pill:hover:not(:disabled) {
   background: var(--primary-hover);
 }

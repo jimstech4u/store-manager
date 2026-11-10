@@ -6,6 +6,7 @@ import { StateStackRouter } from '@/providers/StateStackRouter';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { AuthProvider } from '@/providers/AuthProvider';
 import { PermissionsProvider } from '@/providers/PermissionsProvider';
+import { ViewportInsetsProvider } from '@academix-admin/navigation-stack';
 
 export const metadata: Metadata = {
   /*
@@ -112,6 +113,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* First, and above everything that reads state: it registers the pathname hook that
             state-stack scopes by, and that has to happen before the first hook renders. */}
         <StateStackRouter />
+        {/*
+          THE KEYBOARD, MEASURED (navigation-stack's keyboard-safe shell, as academix-web has it). It
+          publishes the visible area as CSS variables and flags <html data-ax-keyboard="open"> while
+          one is up; the app shell sizes itself to that area and the tab bar steps aside (main/page).
+        */}
+        <ViewportInsetsProvider />
         <ThemeProvider>
           <AuthProvider>
             <PermissionsProvider>{children}</PermissionsProvider>

@@ -843,6 +843,32 @@ browser's print window. `probe-auto-print-ui` checks it without recording anythi
 button becomes "Choose who this is for" — the rule (credit, crates, a deposit need a name) is
 unchanged; it is asked where the seller is looking, and one tap answers it.
 
+**All items is a sheet** (`OrderItemsSheet` in `components/sell/OrderItems.tsx`, 92dvh, scrolling),
+opened from the till's link, the order code and Take payment. Like every sheet it holds no box to type
+in: it ticks what goes on the paper (balance, empties, the account as chips) and shares, prints or
+goes to payment. The `order_items_page` route stays only for stacks restored from before; it draws
+the same `OrderItems`. **A wrapper that stays mounted on the till must not call `useDraftOrders`** —
+a second copy raced the till's first read and left it on "Opening your till" whenever the shop had
+no open order. Put order state in the part that mounts only when open.
+
+**Take payment is one bill card and one payment card** (10 Nov). The items fold under a head that
+says Show and Hide; charges, each deposit and the note are always lines in the bill with their own
+cross. Adding one is ONE box (`lib/label-amount.ts` reads "Transport 2000", "5000 crates", "5k") with
+the kind as chips and Done to fold it. The payment box is one amount box; a transfer's reference is
+added from its line, turning the same box into the reference box. Accounts are chips. The old
+multi-field forms (`OrderExtras`) are in `_unused/`. `probe-take-payment-ui` walks all of it and
+saves screenshots (SHOTS).
+
+**The keyboard has its own shell** (navigation-stack's, as academix-web has it):
+`ViewportInsetsProvider` in the root layout, `useResizeToAvoidKeyboard` in the main shell, and
+`.shell` sized to `--ax-vv-height` at `--ax-viewport-offset-top`. While a box has the keyboard
+(`html[data-ax-keyboard="open"]`) the tab bar and the floating pills are not drawn.
+
+**The tab bar's autohide needs ONE broadcast per scroll.** It shows itself whenever the broadcast's
+`pageKey` changes (a new page). navigation-stack 1.10.1 sent each Scaffold scroll twice under two
+names and the bar never hid; 1.10.2 leaves broadcasting to the page shell. `probe-navbar-autohide-ui`
+scrolls in wheel steps — one jump can land as a page's first event, which the bar answers by showing.
+
 **Chrome is not the iPhone.** Safari drops a hidden element's scroll offset; Chrome keeps it. Every
 page went back to the top on iPhone after a push and Back while Chrome showed nothing wrong
 (navigation-stack 1.10.1 fixed it). Anything about scroll, layout or the keyboard is checked in
@@ -867,6 +893,7 @@ failing.
 | `probe-ledgers.mjs` | **Fails on main, cause not investigated** (checked 2026-09-23 with a control build): "a shape with one product is named by the product, not the maker" finds nothing, then the walk times out on a `fill`. Not staleness as far as anyone has looked — it may be a real defect. | Investigate before trusting the empties naming rules. |
 | `probe-loading-states.mjs` | **Fails on main** (same control): its walk drifts — `[account-page]` shows the People list, `[deposit-customer]` shows Settings — then four screens come back empty and it times out. Most likely it predates People moving into `settings-stack` on 2026-09-11. | Re-target the walk at where those pages live now. |
 | `probe-no-round-trip.mjs` | **Do not run against the live shop: its last step SETTLES A SALE.** Fails on main too (9 Nov control against the live site): adding a unit re-reads `store_units_for`/`list_products`, and the item price field (`UnitsEditor_card` › "Price for one") is no longer found, so it times out there. Its clean-up was at the end of the walk and left an `RKeg…` unit on every run; it is in `finally` now. | Retarget the price step, decide whether the unit re-read is a real regression, and settle nothing — check the customer list is not re-read some other way. |
+| `probe-all-items-extras-ui.mjs`, `probe-delivery-form.mjs`, `probe-delivery-summary-ui.mjs`, `probe-end-to-end.mjs` | Fill the old charge form (**What for** / **Add charge**) that Take payment and All items had until 10 Nov. A charge is now one box labelled **The charge** ("Delivery 2000", Enter), on Take payment only; All items has no charges. `probe-end-to-end` also settles a sale. | Type the charge into the one box on Take payment (`probe-take-payment-ui` shows how); drop the All items part of `probe-all-items-extras-ui`. |
 | `probe-after-sale.mjs` | Waits for a button reading **Take payment**. That label is conditional: it reads `Count N items first` whenever anything on the till needs counting, which the count-gate flow introduced on 2026-09-16. Probe last touched 2026-09-09. | Either clear the count gate first, or match the label the till actually shows. |
 
 **UNVERIFIED, and it undercuts the offline promise if it is true.** iOS evicts IndexedDB for sites

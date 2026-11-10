@@ -15,6 +15,7 @@ import { findByBarcode } from '@/lib/stacks/mid-sale';
 import { finishInto } from '@/lib/finish-flow';
 import { TakePayment } from '../sell-page/TakePayment';
 import { CustomerPicker } from '@/components/customers/CustomerPicker';
+import { OrderItemsSheet } from '@/components/sell/OrderItems';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { draftTotal, orderById, useDraftOrders } from '@/lib/stacks/draft-orders';
@@ -83,6 +84,8 @@ export default function TakePaymentPage() {
    * is lost, because it is pushed over, not popped.
    */
   const [pickingItem, setPickingItem] = useState(false);
+  /* All items, in a sheet over this page — no Take payment in it, the money is being taken here. */
+  const [allItems, setAllItems] = useState(false);
   const finishedGuard = useFinishedGuard();
   const [scanning, setScanning] = useState(false);
   const [scanProblem, setScanProblem] = useState<string | null>(null);
@@ -257,19 +260,15 @@ export default function TakePaymentPage() {
         compact
         total={draftTotal(activeOrder)}
         onNeedCustomer={() => setPicking(true)}
+        onRemoveCustomer={() =>
+          updateOrder(activeOrder.clientUuid, { customerId: null, customerName: '', customerPhone: '' })
+        }
         onOpenLine={(lineKey) =>
           void nav.push('sale_line_page', { id: activeOrder.id ?? '', line: lineKey })
         }
         itemActions={
           <>
-            <Button
-              variant="secondary"
-              fullWidth
-              onClick={async () => {
-                const saved = await push(activeOrder);
-                void nav.push('order_items_page', { id: saved?.id ?? activeOrder.id ?? '' });
-              }}
-            >
+            <Button variant="secondary" fullWidth onClick={() => setAllItems(true)}>
               <ReceiptIcon /> All items
             </Button>
             <Button variant="secondary" fullWidth onClick={() => setPickingItem(true)}>
@@ -553,6 +552,13 @@ export default function TakePaymentPage() {
         }}
       />
 
+      <OrderItemsSheet
+        open={allItems}
+        onClose={() => setAllItems(false)}
+        orderId={activeOrder?.id ?? null}
+        onChooseCustomer={() => setPicking(true)}
+        payable={false}
+      />
       <CustomerPicker
         open={picking}
         onClose={() => setPicking(false)}

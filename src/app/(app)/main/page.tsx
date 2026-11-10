@@ -6,6 +6,7 @@ import {
   GroupNavigationStack,
   popStackToRoot,
   scrollBroadcaster,
+  useResizeToAvoidKeyboard,
   useRevealTappedInRows,
 } from '@academix-admin/navigation-stack';
 import NavigationBar from '@academix-admin/navigation-bar';
@@ -125,6 +126,16 @@ function MainShell() {
    * the active tab) and opts out with `data-no-reveal`.
    */
   useRevealTappedInRows();
+
+  /*
+   * THE KEYBOARD DOES NOT MOVE THE APP. "When keyboard is up, especially in iOS, it scatters all":
+   * Safari scrolled the whole document to make room, dragging the tab bar and the pills up over the
+   * keyboard and leaving a blank strip below. The document is held still and the shell follows the
+   * visible area instead (`.shell`, `ViewportInsetsProvider` in the root layout), so a page's own
+   * body is what scrolls the field into view — Flutter's `resizeToAvoidBottomInset`, academix-web's
+   * shell. Held for the shop's app only; a shopper's screen keeps the ordinary document scroll.
+   */
+  useResizeToAvoidKeyboard({ enabled: !isShopper });
 
   // Their screen, not the shop's. Returned before the group mounts: five stacks a shopper can
   // reach nothing in is five stacks' worth of work for a screen they will never see.
