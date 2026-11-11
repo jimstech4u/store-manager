@@ -6,7 +6,10 @@ import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { Button } from '@/components/ui/Button';
 import { Explain, InfoPanel } from '@/components/ui/Explain';
 import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/components/ui/Dialog';
-import { WhatsAppIcon } from '@/components/ui/Icon';
+import { ShieldIcon, WhatsAppIcon } from '@/components/ui/Icon';
+import { LinkGroup, LinkRow as PlaceRow } from '@/components/ui/LinkGroup';
+import { useNav } from '@academix-admin/navigation-stack';
+import { usePermission } from '@/hooks/usePermission';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { useResource } from '@/lib/stacks/resource';
@@ -36,6 +39,8 @@ const BOT = (process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ?? '').replace(/[^\d]/g, ''
 
 export default function WhatsAppPage() {
   const goBack = useStackBack();
+  const nav = useNav();
+  const { canOpen } = usePermission();
   const { store } = useAuth();
   const problem = useProblem();
   const ask = useConfirm();
@@ -86,9 +91,21 @@ export default function WhatsAppPage() {
             <Explain label="What can it do?">
               Chat with Store Manager on WhatsApp in plain English: &ldquo;How much Trophy is left?&rdquo;,
               &ldquo;Sales today&rdquo;, &ldquo;Who owes me?&rdquo;, &ldquo;Send Mrs Adeola&rsquo;s statement for
-              this month&rdquo;, &ldquo;Print her last receipt&rdquo;. It answers as you — it sees only what you
-              can see in the app. Recording sales and payments from WhatsApp is coming next.
+              this month&rdquo;, &ldquo;Print her last receipt&rdquo;, a whole order list or a photo of one. It
+              answers as you — it sees and does only what you may in the app — and nothing is recorded until you
+              reply YES.
             </Explain>
+
+            {canOpen('agent_tools_page') && (
+              <LinkGroup>
+                <PlaceRow
+                  icon={<ShieldIcon />}
+                  title="What the agent may do"
+                  note="Everything is on. Switch off what this shop's agent should not do."
+                  onClick={() => void nav.push('agent_tools_page')}
+                />
+              </LinkGroup>
+            )}
 
             {!BOT && (
               <InfoPanel tone="warning" title="The shop’s WhatsApp number is not set up yet">

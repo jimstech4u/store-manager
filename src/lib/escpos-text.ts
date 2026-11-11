@@ -140,6 +140,12 @@ export interface PrintedSpan {
 
 export interface PrintedLine {
   spans: PrintedSpan[];
+  /**
+   * A PICTURE instead of words — the shop's logo, centred at this share of the paper. The screen,
+   * the picture, the PDF and a printer sent pictures draw it; the hand-off to a printer app, which
+   * takes only text, leaves it out.
+   */
+  image?: { url: string; widthPct: number };
 }
 
 function spanDots(span: PrintedSpan, layout: ReceiptLayout, dots: number): number {
@@ -207,6 +213,8 @@ export function receiptLines(input: ReceiptImageInput, layout: ReceiptLayout): P
   const out: PrintedLine[] = [];
   const cols = (size: TextSize) => columnsAt(size, layout);
   const put = (spans: PrintedSpan[]) => out.push({ spans });
+  // The letterhead starts with the shop's logo, when it has one.
+  if (input.logo?.url) out.push({ spans: [], image: input.logo });
   const one = (size: TextSize, text: string) => put([{ size, text }]);
   const blank = () => one('ss', '');
   const rule = () => one('ss', '-'.repeat(cols('ss')));
@@ -443,6 +451,8 @@ export function receiptLines(input: ReceiptImageInput, layout: ReceiptLayout): P
 /** The same lines, tagged for the printer app. */
 export function asInstruction(lines: PrintedLine[]): string {
   const body = lines
+    // A printer app is handed text: the logo is drawn only where pictures go.
+    .filter((l) => !l.image)
     .map((l) => {
       /*
        * The size tag goes on EVERY span. The app treats it as a switch, and relying on it to

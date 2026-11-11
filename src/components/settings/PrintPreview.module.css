@@ -61,3 +61,17 @@
   transform-origin: bottom left;
   color: inherit;
 }
+
+/* The shop's logo at the head of the roll, centred at its share of the paper, as the printer draws it. */
+.logo {
+  display: flex;
+  justify-content: center;
+  padding-bottom: 8px;
+}
+
+.logo img {
+  display: block;
+  height: auto;
+  /* Printed one bit per dot: shown the same way, black on the paper whatever the theme. */
+  filter: grayscale(1) contrast(1.4);
+}

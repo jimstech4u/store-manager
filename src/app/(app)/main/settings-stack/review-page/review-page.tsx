@@ -1,22 +1,22 @@
 'use client';
 
-import { useSayInShapes } from '@/lib/stacks/selling-units';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import styles from './review-page.module.css';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { Button } from '@/components/ui/Button';
-import { Explain, InfoPanel, WorkedExample } from '@/components/ui/Explain';
-import { BoxIcon, CheckIcon, CloseIcon, PeopleIcon } from '@/components/ui/Icon';
+import { Explain, InfoPanel } from '@/components/ui/Explain';
+import { CheckIcon, CloseIcon } from '@/components/ui/Icon';
+import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/components/ui/Dialog';
 import { useResource } from '@/lib/stacks/resource';
 import { SETTINGS_SCOPE } from '@/lib/stacks/bank-accounts';
+import { useSayInShapes } from '@/lib/stacks/selling-units';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermission } from '@/hooks/usePermission';
 import { useNav } from '@academix-admin/navigation-stack';
 import { useStackBack } from '@/hooks/useStackBack';
 import { getSupabase } from '@/lib/supabase/client';
-import { formatDateTime, formatQtySpoken, pluralUnit, messageOf } from '@/lib/format';
-import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/components/ui/Dialog';
+import { formatDateTime, messageOf } from '@/lib/format';
 
 interface PendingProduct {
   id: string;
@@ -24,6 +24,8 @@ interface PendingProduct {
   base_unit: string;
   on_hand: string;
   created_at: string;
+  made_by: string | null;
+  made_by_name: string | null;
 }
 
 interface PendingCustomer {
@@ -31,6 +33,8 @@ interface PendingCustomer {
   name: string;
   phone: string;
   created_at: string;
+  made_by: string | null;
+  made_by_name: string | null;
 }
 
 interface PendingStock {
@@ -41,6 +45,9 @@ interface PendingStock {
   qty: string;
   balance_before: string;
   balance_after: string;
+  note: string | null;
+  created_by: string | null;
+  made_by_name: string | null;
   occurred_at: string;
 }
 
@@ -50,6 +57,24 @@ interface Queue {
   stock_entries: PendingStock[];
 }
 
+type Kind = 'stock' | 'customer' | 'item';
+type Tab = 'all' | Kind;
+
+/** One thing to check, whatever it is: the page lists them side by side. */
+interface Entry {
+  key: string;
+  kind: Kind;
+  id: string;
+  name: string;
+  when: string;
+  /** null: written by Store Manager itself (a fix, a count difference), not by a person. */
+  who: string | null;
+  whoName: string;
+  stock?: PendingStock;
+  product?: PendingProduct;
+  customer?: PendingCustomer;
+}
+
 const KIND_LABEL: Record<string, string> = {
   opening: 'First count',
   adjustment: 'Adjustment',
@@ -57,112 +82,157 @@ const KIND_LABEL: Record<string, string> = {
   repack_loss: 'Lost repacking',
 };
 
+const TAB_LABEL: Record<Tab, string> = { all: 'All', stock: 'Stock', customer: 'Customers', item: 'Items' };
+const SYSTEM = 'system';
+const PAGE = 50;
+
 /**
- * The review queue.
+ * WAITING FOR YOU — what somebody who may not vouch has added, for somebody who may.
  *
- * The other half of "anyone can add what they need". Staff keep the shop moving; a manager
- * confirms afterwards. Without this screen the pending state would just be an invisible label
- * nobody ever cleared.
+ * "Olanike is the admin but it needs the role again to approve what the admin did." The queue sent
+ * every count and customer back to whoever made it, so the owner's own 742 entries waited on the
+ * owner. Since 0278 the server leaves out anything made by a person who may confirm (making it IS
+ * their word) and names the maker of everything else, which is what a checker needs first: whose
+ * work am I looking at.
  *
- * Written to be understood by someone who has never used software like this. Every item says
- * what it is, who is asking, and what confirming will do — because "confirm" on its own is a
- * word people click without knowing what they agreed to.
+ * So the page is an inbox, worked down: by kind and by person, newest first, each row saying what it
+ * is, who made it and when, with its own Confirm — and a selection, because a manager who has looked
+ * at twenty counts from one worker says so once (`confirm_reviews`), not twenty times. "Wrong" stays
+ * one at a time and asks first: it puts stock back.
  */
 export default function ReviewPage() {
-  const sayStore = useAuth().store;
-  const say = useSayInShapes(sayStore?.id ?? null);
+  const { store } = useAuth();
+  const say = useSayInShapes(store?.id ?? null);
   const nav = useNav();
   const goBack = useStackBack();
-  const { store } = useAuth();
   const { can, canOpen } = usePermission();
+  const mayConfirm = can('records.confirm');
 
-  /*
-   * The review queue in state-stack.
-   *
-   * Each item here opens the thing it is about — a sale, a count, a customer — so this page spends
-   * its life being pushed off and returned to. `!queue` renders a full-page "Loading", which meant
-   * every single trip back through the queue put a spinner over a list that was already correct.
-   */
-  /*
-   * A RESOURCE. It kept its error inside the cached value and never re-read on the way back
-   * (`revalidateOnMount: false`), so a queue somebody else had worked down stayed on screen; a first
-   * read that failed left the page on "Loading" for good, because the page only knew ready or
-   * loading. Now: shown at once from cache, re-read on every visit, kept through a failed refresh.
-   */
+  // v3: rows carry who made them (0278).
   const res = useResource<Queue>({
-    key: `review:v2:${store?.id ?? 'none'}`,
+    key: `review:v3:${store?.id ?? 'none'}`,
     scope: SETTINGS_SCOPE,
-    enabled: Boolean(store),
+    enabled: Boolean(store) && mayConfirm,
     read: async () => {
-      const { data, error: err } = await getSupabase().rpc('pending_review', {
-        p_store_id: store!.id,
-      });
-      if (err) throw err;
+      const { data, error } = await getSupabase().rpc('pending_review', { p_store_id: store!.id });
+      if (error) throw error;
       return data as unknown as Queue;
     },
   });
   const queue = res.data;
+
+  const [tab, setTab] = useState<Tab>('all');
+  const [person, setPerson] = useState<string>('all');
+  const [shown, setShown] = useState(PAGE);
+  const [picked, setPicked] = useState<Set<string>>(() => new Set());
   const [busy, setBusy] = useState<string | null>(null);
-  /*
-   * An approval that failed, kept apart from a load that failed.
-   *
-   * Different lifetimes: a failed load belongs to the cached queue and is cleared by the next
-   * successful read, while a failed approval belongs to the tap that caused it and should not
-   * outlive this visit. Sharing one slot meant a stale "could not approve" reappeared, from cache,
-   * over a queue that had since loaded perfectly.
-   */
-  /*
-   * The LOAD error and the ATTEMPT error are different things and get different surfaces.
-   *
-   * A page that could not load has nothing on it and the message is its whole state — it stays.
-   * A save that failed came back from work that was actually done, and a seller who does not
-   * notice it presses the button again.
-   */
-  const actionError = useProblem();
-  const error = res.error;
-  /*
-   * "WRONG" ASKS FIRST. It reverses the entry — an opening count marked wrong takes that stock off
-   * the shelf — and it used to do so on one tap, with nothing to say what it would do.
-   */
+  const problem = useProblem();
   const [rejecting, setRejecting] = useState<PendingStock | null>(null);
   const rejectDialog = useConfirm();
+  const [confirmingMany, setConfirmingMany] = useState<Entry[] | null>(null);
+  const manyDialog = useConfirm();
 
-  /**
-   * Take one row out of the queue, here, without asking for the queue again.
-   *
-   * `load()` re-read every pending record to learn that one had been dealt with — a round trip for
-   * something this device had just done, with the approved row still on screen until it landed,
-   * long enough to tap twice. A queue is exactly the list where that matters: the whole job is
-   * working down it.
-   */
-  const takeOut = (kind: 'products' | 'customers' | 'stock_entries', id: string) => {
-    if (!res.data) return;
-    res.set((current) => ({
-      products: (current?.products ?? []).filter((r) => kind !== 'products' || r.id !== id),
-      customers: (current?.customers ?? []).filter((r) => kind !== 'customers' || r.id !== id),
-      stock_entries: (current?.stock_entries ?? []).filter(
-        (r) => kind !== 'stock_entries' || r.id !== id,
-      ),
+  const entries = useMemo<Entry[]>(() => {
+    if (!queue) return [];
+    const name = (n: string | null, who: string | null) => (who ? (n ?? 'Someone').split('@')[0] : 'Store Manager');
+    const all: Entry[] = [
+      ...queue.stock_entries.map((s) => ({
+        key: `stock:${s.id}`, kind: 'stock' as const, id: s.id, name: s.product, when: s.occurred_at,
+        who: s.created_by, whoName: name(s.made_by_name, s.created_by), stock: s,
+      })),
+      ...queue.customers.map((c) => ({
+        key: `customer:${c.id}`, kind: 'customer' as const, id: c.id, name: c.name, when: c.created_at,
+        who: c.made_by, whoName: name(c.made_by_name, c.made_by), customer: c,
+      })),
+      ...queue.products.map((p) => ({
+        key: `item:${p.id}`, kind: 'item' as const, id: p.id, name: p.name, when: p.created_at,
+        who: p.made_by, whoName: name(p.made_by_name, p.made_by), product: p,
+      })),
+    ];
+    return all.sort((a, b) => b.when.localeCompare(a.when));
+  }, [queue]);
+
+  // Who made what is waiting, with how much: the chips.
+  const people = useMemo(() => {
+    const m = new Map<string, { name: string; count: number }>();
+    for (const e of entries) {
+      const k = e.who ?? SYSTEM;
+      m.set(k, { name: e.whoName, count: (m.get(k)?.count ?? 0) + 1 });
+    }
+    return [...m.entries()].sort((a, b) => b[1].count - a[1].count);
+  }, [entries]);
+
+  const byPerson = entries.filter((e) => person === 'all' || (e.who ?? SYSTEM) === person);
+  const count = (k: Tab) => (k === 'all' ? byPerson.length : byPerson.filter((e) => e.kind === k).length);
+  const visible = byPerson.filter((e) => tab === 'all' || e.kind === tab);
+  const page = visible.slice(0, shown);
+  const pickedHere = visible.filter((e) => picked.has(e.key));
+  const allPicked = visible.length > 0 && pickedHere.length === visible.length;
+
+  /** Off the list here at once; the server's word follows on the next read. */
+  const takeOut = (gone: Entry[]) => {
+    const keys = new Set(gone.map((e) => e.key));
+    res.set((q) => ({
+      products: (q?.products ?? []).filter((r) => !keys.has(`item:${r.id}`)),
+      customers: (q?.customers ?? []).filter((r) => !keys.has(`customer:${r.id}`)),
+      stock_entries: (q?.stock_entries ?? []).filter((r) => !keys.has(`stock:${r.id}`)),
     }));
+    setPicked((p) => {
+      const next = new Set(p);
+      for (const k of keys) next.delete(k);
+      return next;
+    });
   };
 
-  const run = async (key: string, fn: () => Promise<void>) => {
+  const confirm = async (list: Entry[], key: string) => {
+    if (!store || list.length === 0) return;
     setBusy(key);
     try {
-      await fn();
-    } catch (e: unknown) {
-      actionError.show(messageOf(e, 'Could not do that'));
+      const ids = (k: Kind) => list.filter((e) => e.kind === k).map((e) => e.id);
+      const { error } = await getSupabase().rpc('confirm_reviews', {
+        p_store_id: store.id,
+        p_products: ids('item'),
+        p_customers: ids('customer'),
+        p_movements: ids('stock'),
+      });
+      if (error) throw error;
+      takeOut(list);
+    } catch (e) {
+      problem.show(messageOf(e, 'Could not confirm that'));
     } finally {
       setBusy(null);
     }
   };
 
+  const reject = async (s: PendingStock) => {
+    setBusy(`stock:${s.id}`);
+    try {
+      const { error } = await getSupabase().rpc('review_movement', {
+        p_movement_id: s.id,
+        p_accepted: false,
+        p_note: 'not accepted on review',
+      });
+      if (error) throw error;
+      takeOut(entries.filter((e) => e.key === `stock:${s.id}`));
+    } catch (e) {
+      problem.show(messageOf(e, 'Could not undo that'));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const toggle = (key: string) =>
+    setPicked((p) => {
+      const next = new Set(p);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
   if (!store) return null;
 
-  // One header; the body waits for the queue.
-  const status: PageStatus = !can('records.confirm')
+  const status: PageStatus = !mayConfirm
     ? {
-        // Said inside the page's own header — it used to be a second page with a second header.
         state: 'empty',
         title: 'A manager handles this',
         body: (
@@ -173,27 +243,30 @@ export default function ReviewPage() {
         ),
       }
     : queue
-    ? { state: 'ready' }
-    : error
-      ? { state: 'error', what: 'what is waiting', error, onRetry: res.reload }
-      : { state: 'loading', what: 'what is waiting' };
+      ? { state: 'ready' }
+      : res.error
+        ? { state: 'error', what: 'what is waiting', error: res.error, onRetry: res.reload }
+        : { state: 'loading', what: 'what is waiting' };
 
-  const total = queue
-    ? queue.products.length + queue.customers.length + queue.stock_entries.length
-    : 0;
+  const many = (list: Entry[]) => {
+    const n = (k: Kind) => list.filter((e) => e.kind === k).length;
+    return [
+      n('stock') && `${n('stock')} stock ${n('stock') === 1 ? 'entry' : 'entries'}`,
+      n('customer') && `${n('customer')} ${n('customer') === 1 ? 'customer' : 'customers'}`,
+      n('item') && `${n('item')} ${n('item') === 1 ? 'item' : 'items'}`,
+    ]
+      .filter(Boolean)
+      .join(', ');
+  };
 
   return (
     <PageScaffold
-      layout="wide"
+      layout="record"
       onBack={goBack}
       title="Waiting for you"
-      subtitle={!queue ? undefined : total === 0 ? 'Nothing to check' : `${total} to check`}
+      subtitle={!queue ? undefined : entries.length === 0 ? 'Nothing to check' : `${entries.length} to check`}
     >
-      <PageState status={status}>
-        {() =>
-          queue && (
-            <>
-      <ProblemDialog problem={actionError} title="Could not do that" />
+      <ProblemDialog problem={problem} title="Could not do that" />
 
       {rejecting && (
         <ConfirmDialog
@@ -208,261 +281,218 @@ export default function ReviewPage() {
           confirmText="Yes, undo it"
           tone="danger"
           onDismiss={() => setRejecting(null)}
-          onConfirm={() => {
-            const s = rejecting;
-            void run(s.id, async () => {
-              const { error: e } = await getSupabase().rpc('review_movement', {
-                p_movement_id: s.id,
-                p_accepted: false,
-                p_note: 'not accepted on review',
-              });
-              if (e) throw e;
-              takeOut('stock_entries', s.id);
-            });
-          }}
+          onConfirm={() => void reject(rejecting)}
         />
       )}
 
-      {error && (
-        <InfoPanel tone="danger" title="Could not refresh what is waiting">
-          {error}{' '}
-          <Button variant="secondary" size="small" onClick={res.reload}>
-            Try again
-          </Button>
-        </InfoPanel>
+      {confirmingMany && (
+        <ConfirmDialog
+          controller={manyDialog}
+          title={`Confirm ${confirmingMany.length}?`}
+          message={
+            `${many(confirmingMany)}, marked as checked by you. ` +
+            'Nothing about the stock or the money changes: it records that you have looked and agree.'
+          }
+          confirmText={`Confirm ${confirmingMany.length}`}
+          tone="primary"
+          onDismiss={() => setConfirmingMany(null)}
+          onConfirm={() => void confirm(confirmingMany, 'many')}
+        />
       )}
 
-      {total === 0 ? (
-        <InfoPanel tone="success" title="All caught up">
-          When your staff add a product, a customer, or enter stock, it will appear here for you
-          to check.
-        </InfoPanel>
-      ) : (
-        <InfoPanel tone="info" title="What this is">
-          Your staff added these while serving customers, so nobody had to wait. They are already
-          working — checking them just confirms the details are right.
-          <Explain label="What happens when I confirm?">
-            <p>
-              Nothing changes about the sales that already used them. Confirming records that you
-              have seen the item and agree with it, so the entry stops being flagged as unchecked.
-            </p>
-            <p style={{ marginTop: 'var(--space-3)' }}>
-              For stock, saying <strong>the amount is wrong</strong> does not erase what was
-              entered — it adds a correction on top, so the history still shows what was claimed
-              and what you changed it to.
-            </p>
-          </Explain>
-        </InfoPanel>
-      )}
+      <PageState status={status}>
+        {() =>
+          queue && (
+            <>
+              {res.error && (
+                <InfoPanel tone="danger" title="Could not refresh what is waiting">
+                  {res.error}{' '}
+                  <Button variant="secondary" size="small" onClick={res.reload}>
+                    Try again
+                  </Button>
+                </InfoPanel>
+              )}
 
-      {/* ── Products ────────────────────────────────────────────────────────────── */}
-      {queue.products.length > 0 && (
-        <>
-          <h2 className={styles.section}>
-            <BoxIcon /> New products
-          </h2>
-          <p className={styles.sectionNote}>Items your staff started selling.</p>
+              {entries.length === 0 ? (
+                <InfoPanel tone="success" title="All caught up">
+                  When someone who needs a manager&rsquo;s OK adds a customer or an item, or counts or
+                  adjusts stock, it comes here. What you or a manager add is already your word, so it
+                  does not.
+                </InfoPanel>
+              ) : (
+                <>
+                  <section className={styles.filters} aria-label="Which to show">
+                    <div className={styles.tabs} role="tablist" aria-label="Kind">
+                      {/* A kind with nothing waiting is not offered: four tabs did not fit a phone. */}
+                      {(['all', 'stock', 'customer', 'item'] as Tab[])
+                        .filter((t) => t === 'all' || t === tab || entries.some((e) => e.kind === t))
+                        .map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          role="tab"
+                          aria-selected={tab === t}
+                          className={`${styles.tab} ${tab === t ? styles.tabOn : ''}`}
+                          onClick={() => {
+                            setTab(t);
+                            setShown(PAGE);
+                          }}
+                        >
+                          {TAB_LABEL[t]} <span className={styles.tabCount}>{count(t)}</span>
+                        </button>
+                      ))}
+                    </div>
 
-          <ul className={styles.list} data-grid>
-            {queue.products.map((p) => (
-              <li className={styles.card} key={p.id}>
-                <div className={styles.cardMain}>
-                  <p className={styles.cardName}>{p.name}</p>
-                  <p className={styles.cardMeta}>
-                    {say(p.id, Number(p.on_hand), p.base_unit)} in stock ·
-                    added {formatDateTime(p.created_at)}
-                  </p>
+                    {people.length > 1 && (
+                      <div className={styles.people} aria-label="Who made them">
+                        {[['all', { name: 'Everyone', count: entries.length }] as const, ...people].map(([k, p]) => (
+                          <button
+                            key={k}
+                            type="button"
+                            aria-pressed={person === k}
+                            className={`${styles.person} ${person === k ? styles.personOn : ''}`}
+                            onClick={() => {
+                              setPerson(k);
+                              setShown(PAGE);
+                            }}
+                          >
+                            {p.name} <span className={styles.personCount}>{p.count}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </section>
 
-                  {/*
-                    WHAT IS ACTUALLY MISSING, said plainly.
-
-                    Something added at a counter has the three things a seller had time for: a name,
-                    a unit, a price. What it arrives in, what it cost, a cheaper price for buying
-                    more — none of that is known, and approving it without filling any of it in
-                    leaves an item that cannot be received against or costed. "Looks right" alone
-                    invites exactly that, so the gap is named and the way to close it is beside it.
-                  */}
-                  <p className={styles.cardGap}>
-                    Nothing has been recorded about what it costs you, or what it arrives in.
-                  </p>
-                </div>
-
-                <div className={styles.cardActions}>
-                  {canOpen('product_form_page') && (
+                  <div className={styles.bar}>
+                    <label className={styles.pickAll}>
+                      <input
+                        type="checkbox"
+                        checked={allPicked}
+                        onChange={() =>
+                          setPicked((p) => {
+                            const next = new Set(p);
+                            for (const e of visible) {
+                              if (allPicked) next.delete(e.key);
+                              else next.add(e.key);
+                            }
+                            return next;
+                          })
+                        }
+                      />
+                      <span>
+                        {pickedHere.length > 0 ? `${pickedHere.length} picked` : `Pick all ${visible.length}`}
+                      </span>
+                    </label>
                     <Button
                       size="small"
-                      variant="secondary"
-                      onClick={() => void nav.push('product_form_page', { id: p.id })}
+                      disabled={pickedHere.length === 0}
+                      busy={busy === 'many'}
+                      onClick={() => setConfirmingMany(pickedHere)}
                     >
-                      Fill in the rest
+                      <CheckIcon /> Confirm{pickedHere.length > 0 ? ` ${pickedHere.length}` : ''}
                     </Button>
-                  )}
-                  <Button
-                    size="small"
-                    busy={busy === p.id}
-                    onClick={() =>
-                      run(p.id, async () => {
-                        const { error: e } = await getSupabase().rpc('confirm_product', {
-                          p_product_id: p.id,
-                        });
-                        if (e) throw e;
-                        takeOut('products', p.id);
-                      })
-                    }
-                  >
-                    <CheckIcon /> Looks right
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-
-      {/* ── Customers ───────────────────────────────────────────────────────────── */}
-      {queue.customers.length > 0 && (
-        <>
-          <h2 className={styles.section}>
-            <PeopleIcon /> New customers
-          </h2>
-          <p className={styles.sectionNote}>People your staff added, usually to sell on credit.</p>
-
-          <ul className={styles.list} data-grid>
-            {queue.customers.map((c) => (
-              <li className={styles.card} key={c.id}>
-                <div className={styles.cardMain}>
-                  <p className={styles.cardName}>{c.name}</p>
-                  <p className={styles.cardMeta}>
-                    {c.phone} · added {formatDateTime(c.created_at)}
-                  </p>
-                </div>
-
-                <div className={styles.cardActions}>
-                  {/*
-                    THE EDIT PAGE, which loads them. This opened the NEW-customer form with an id it
-                    never reads, so "Check the details" showed an empty form and nothing to check.
-                  */}
-                  {canOpen('customer_edit_page') && (
-                    <Button
-                      size="small"
-                      variant="secondary"
-                      onClick={() => void nav.push('customer_edit_page', { id: c.id })}
-                    >
-                      Check the details
-                    </Button>
-                  )}
-                  <Button
-                    size="small"
-                    busy={busy === c.id}
-                    onClick={() =>
-                      run(c.id, async () => {
-                        const { error: e } = await getSupabase().rpc('confirm_customer', {
-                          p_customer_id: c.id,
-                        });
-                        if (e) throw e;
-                        takeOut('customers', c.id);
-                      })
-                    }
-                  >
-                    <CheckIcon /> Looks right
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-
-      {/* ── Stock ───────────────────────────────────────────────────────────────── */}
-      {queue.stock_entries.length > 0 && (
-        <>
-          <h2 className={styles.section}>Stock entered</h2>
-          <p className={styles.sectionNote}>
-            Counts and changes your staff recorded. Each shows what the stock was before and
-            after.
-          </p>
-
-          <ul className={styles.list} data-grid>
-            {queue.stock_entries.map((s) => (
-              <li className={styles.card} key={s.id}>
-                <div className={styles.cardMain}>
-                  <p className={styles.cardName}>{s.product}</p>
-                  <p className={styles.cardMeta}>
-                    {KIND_LABEL[s.kind] ?? s.kind} · {formatDateTime(s.occurred_at)}
-                  </p>
-
-                  {/* The trace, in words. A signed delta is not something a shop owner should
-                      have to decode. */}
-                  <div className={styles.trace}>
-                    <span className={styles.traceStep}>
-                      {say(s.product_id, Number(s.balance_before), 'piece')}
-                    </span>
-                    <span className={styles.traceArrow} aria-hidden="true">
-                      →
-                    </span>
-                    <span className={styles.traceDelta}>
-                      {Number(s.qty) > 0 ? '+' : '−'}
-                      {say(s.product_id, Math.abs(Number(s.qty)), 'piece')}
-                    </span>
-                    <span className={styles.traceArrow} aria-hidden="true">
-                      →
-                    </span>
-                    <span className={styles.traceStep}>
-                      {say(s.product_id, Number(s.balance_after), 'piece')}
-                    </span>
                   </div>
-                </div>
 
-                <div className={styles.cardActions}>
-                  <Button
-                    size="small"
-                    busy={busy === s.id}
-                    onClick={() =>
-                      run(s.id, async () => {
-                        const { error: e } = await getSupabase().rpc('review_movement', {
-                          p_movement_id: s.id,
-                          p_accepted: true,
-                        });
-                        if (e) throw e;
-                        // Off the list at once — it stayed until the next visit, so a tap looked
-                        // like it had done nothing.
-                        takeOut('stock_entries', s.id);
-                      })
-                    }
-                  >
-                    <CheckIcon /> Correct
-                  </Button>
-                  <Button
-                    size="small"
-                    variant="secondary"
-                    disabled={busy === s.id}
-                    onClick={() => setRejecting(s)}
-                  >
-                    <CloseIcon /> Wrong
-                  </Button>
-                  <Button
-                    size="small"
-                    variant="secondary"
-                    onClick={() => void nav.push('product_page', { id: s.product_id })}
-                  >
-                    Open the item
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
+                  <ul className={styles.list} aria-label="Waiting to be checked">
+                    {page.map((e) => (
+                      <li key={e.key} className={`${styles.row} ${picked.has(e.key) ? styles.rowPicked : ''}`}>
+                        <input
+                          type="checkbox"
+                          className={styles.pick}
+                          aria-label={`Pick ${e.name}`}
+                          checked={picked.has(e.key)}
+                          onChange={() => toggle(e.key)}
+                        />
 
-          <WorkedExample
-            label="What “wrong” does"
-            rows={[
-              { label: 'Staff entered', value: '240 pieces' },
-              { label: 'You mark it wrong', value: 'a correction of −240 is added' },
-              { label: 'History still shows', value: 'both entries', emphasis: true },
-            ]}
-            note="Nothing is deleted, so anyone looking later can see exactly what happened."
-          />
-        </>
-      )}
+                        <div className={styles.main}>
+                          <p className={styles.top}>
+                            <span className={`${styles.kind} ${styles[`kind_${e.kind}`]}`}>
+                              {e.stock ? KIND_LABEL[e.stock.kind] ?? e.stock.kind : e.kind === 'customer' ? 'New customer' : 'New item'}
+                            </span>
+                            <button
+                              type="button"
+                              className={styles.name}
+                              onClick={() => {
+                                if (e.stock) void nav.push('product_page', { id: e.stock.product_id });
+                                else if (e.customer && canOpen('customer_edit_page')) void nav.push('customer_edit_page', { id: e.id });
+                                else if (e.product && canOpen('product_form_page')) void nav.push('product_form_page', { id: e.id });
+                              }}
+                            >
+                              {e.name}
+                            </button>
+                          </p>
+
+                          {e.stock && (
+                            <p className={styles.trace}>
+                              <span>{say(e.stock.product_id, Number(e.stock.balance_before), 'piece')}</span>
+                              <span aria-hidden="true" className={styles.arrow}>→</span>
+                              <span className={Number(e.stock.qty) > 0 ? styles.up : styles.down}>
+                                {Number(e.stock.qty) > 0 ? '+' : '−'}
+                                {say(e.stock.product_id, Math.abs(Number(e.stock.qty)), 'piece')}
+                              </span>
+                              <span aria-hidden="true" className={styles.arrow}>→</span>
+                              <strong>{say(e.stock.product_id, Number(e.stock.balance_after), 'piece')}</strong>
+                            </p>
+                          )}
+                          {e.stock?.note && <p className={styles.note}>{e.stock.note}</p>}
+                          {e.customer && <p className={styles.detail}>{e.customer.phone}</p>}
+                          {e.product && (
+                            <p className={styles.detail}>
+                              {say(e.id, Number(e.product.on_hand), e.product.base_unit)} in stock · what it costs
+                              and what it arrives in are not recorded yet
+                            </p>
+                          )}
+
+                          <p className={styles.meta}>
+                            <span className={styles.who}>{e.whoName}</span> · {formatDateTime(e.when)}
+                          </p>
+                        </div>
+
+                        <div className={styles.actions}>
+                          <Button size="small" busy={busy === e.key} disabled={busy === 'many'} onClick={() => void confirm([e], e.key)}>
+                            <CheckIcon /> Confirm
+                          </Button>
+                          {e.stock && (
+                            <Button
+                              size="small"
+                              variant="secondary"
+                              disabled={busy === e.key}
+                              onClick={() => setRejecting(e.stock!)}
+                            >
+                              <CloseIcon /> Wrong
+                            </Button>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+
+                  {visible.length > shown && (
+                    <div className={styles.more}>
+                      <Button variant="secondary" onClick={() => setShown((n) => n + PAGE)}>
+                        Show {Math.min(PAGE, visible.length - shown)} more of {visible.length - shown}
+                      </Button>
+                    </div>
+                  )}
+
+                  <Explain label="What Confirm and Wrong do">
+                    <p>
+                      <strong>Confirm</strong> records that you have looked and agree. Nothing about the
+                      sales, the stock or the money changes.
+                    </p>
+                    <p style={{ marginTop: 'var(--space-3)' }}>
+                      <strong>Wrong</strong>, on stock, adds a correction that takes the entry back off
+                      (or puts it back on) the shelf. Nothing is deleted: the history shows both what was
+                      entered and that you undid it. If only the figure was off, open the item and count
+                      it again instead.
+                    </p>
+                    <p style={{ marginTop: 'var(--space-3)' }}>
+                      Only what was added by someone who needs a manager&rsquo;s OK comes here. What you
+                      or a manager add is already your word.
+                    </p>
+                  </Explain>
+                </>
+              )}
             </>
           )
         }

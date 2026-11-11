@@ -14,6 +14,7 @@ import { getSupabase } from '@/lib/supabase/client';
 import { formatDateTime, formatMoney } from '@/lib/format';
 import { paymentDocument } from '@/lib/payment-document';
 import styles from './payment-done-page.module.css';
+import { usePrintSettings } from '@/lib/stacks/print-settings';
 
 interface Done {
   customerId: string;
@@ -43,6 +44,8 @@ export default function PaymentDonePage() {
   const goBack = useStackBack();
   const location = useLocation();
   const { store } = useAuth();
+  // The shop's letterhead on the slip: header, footer and logo, as a sale's receipt has them.
+  const paper = usePrintSettings(store?.id ?? null);
   const paymentId = (location?.params?.id as string | undefined) ?? null;
   /*
    * OPENED FROM HISTORY, it is a receipt to send again — not a confirmation of something just done.
@@ -139,7 +142,7 @@ export default function PaymentDonePage() {
           reference: d.reference, direction: d.direction, at: d.at, balance: d.balance,
         },
         store.name,
-        { now: fromHistory },
+        { header: paper.data?.header, footer: paper.data?.footer, logo: paper.data?.logo, now: fromHistory },
       )
     : null;
 

@@ -124,6 +124,8 @@ export const ROUTE_NEEDS: Readonly<Record<string, Permission>> = {
   staff_charges_page: 'staff.charge',
   words_page: 'products.manage',
   shop_page: 'store.settings',
+  // The shop's own switch on what the agent may do (0279: agent_set_capabilities asks for it).
+  agent_tools_page: 'store.settings',
   count_gate_settings_page: 'store.settings',
   count_days_page: 'store.settings',
   bank_form_page: 'store.settings',

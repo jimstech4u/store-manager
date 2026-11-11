@@ -11,6 +11,7 @@ import { receiptDocument, type SaleDetail } from '@/lib/receipt-document';
 import { paymentDocument } from '@/lib/payment-document';
 import { KINDS, statementDocument, type Statement } from '@/lib/statement-document';
 import type { ReceiptImageInput } from '@/lib/share';
+import { paperLogo } from '@/lib/paper-logo';
 
 /**
  * WHAT THE ASSISTANT CAN LOOK UP — each one an RPC the app already calls, made with the MEMBER'S OWN
@@ -266,12 +267,19 @@ const dateBound = (s: unknown, endOfDay = false): string | null => {
 export async function paperOf(db: SupabaseClient, storeId: string) {
   const { data } = await db.rpc('ensure_store_settings', { p_store_id: storeId });
   const row = (Array.isArray(data) ? data[0] : data) as
-    | { printer_width_mm?: string; receipt_header?: string | null; receipt_footer?: string | null }
+    | {
+        printer_width_mm?: string;
+        receipt_header?: string | null;
+        receipt_footer?: string | null;
+        receipt_logo_path?: string | null;
+        receipt_logo_width_pct?: number | null;
+      }
     | null;
   return {
     width: Number(row?.printer_width_mm ?? 80) || 80,
     header: row?.receipt_header ?? null,
     footer: row?.receipt_footer ?? null,
+    logo: paperLogo(row?.receipt_logo_path, row?.receipt_logo_width_pct),
   };
 }
 
@@ -730,7 +738,7 @@ export async function runTool(
       } else if (kind === 'receipt') {
         const d = await rpc<SaleDetail | null>('sale_detail', { p_sale_id: String(args.sale_id ?? '') });
         if (!d) return { error: 'That receipt was not found.' };
-        doc = receiptDocument(d, shopName, { header: paper.header, footer: paper.footer });
+        doc = receiptDocument(d, shopName, { header: paper.header, footer: paper.footer, logo: paper.logo });
         filename = `receipt-${String(args.sale_id).slice(0, 8)}.pdf`;
       } else if (kind === 'payment') {
         // The shop's own payment receipt, as its payment page prints it: never a statement in its place.
@@ -752,14 +760,14 @@ export async function runTool(
             at: pay.occurred_at, balance: bal === null || bal === undefined ? null : Number(bal),
           },
           shopName,
-          { header: paper.header, footer: paper.footer, now: !args.payment_id },
+          { header: paper.header, footer: paper.footer, logo: paper.logo, now: !args.payment_id },
         );
         filename = `payment-${pay.id.slice(0, 8)}.pdf`;
       } else if (kind === 'combined') {
         const ids = Array.isArray(args.sale_ids) ? (args.sale_ids as string[]) : [];
         if (ids.length < 2) return { error: 'Which receipts should go together? Use recent_receipts.' };
         const d = await rpc<SaleDetail>('merged_receipts', { p_sale_ids: ids });
-        doc = receiptDocument(d, shopName, { header: paper.header, footer: paper.footer });
+        doc = receiptDocument(d, shopName, { header: paper.header, footer: paper.footer, logo: paper.logo });
         filename = 'receipts-together.pdf';
       } else if (kind === 'customers') {
         const { filter, amount, rows } = await filtered(args);

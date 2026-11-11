@@ -34,6 +34,8 @@ import { LEDGERS_SCOPE } from '@/lib/stacks/customer-ledgers';
 import { owedRowsFromReceipt, rollUpOwed } from '@/lib/empties-rollup';
 import { formatDateTime, formatMoney, formatQtySpoken, shapeWord } from '@/lib/format';
 import styles from './OrderItems.module.css';
+import { paperLogo } from '@/lib/paper-logo';
+import type { PaperLogo } from '@/lib/share';
 
 /**
  * ALL ITEMS — what is on an open order, on its own, before anything is paid.
@@ -96,8 +98,9 @@ export function OrderItems({
   }, [order, push]);
 
   /* The shop's roll width and letterhead — what the receipt prints with. */
-  const settings = useResource<{ width: number; header: string | null }>({
-    key: `print-settings:${store?.id ?? 'none'}`,
+  // v2: with the logo.
+  const settings = useResource<{ width: number; header: string | null; logo: PaperLogo | null }>({
+    key: `print-settings:v2:${store?.id ?? 'none'}`,
     scope: 'store_settings',
     enabled: Boolean(store),
     read: async () => {
@@ -106,11 +109,12 @@ export function OrderItems({
       });
       if (error) throw error;
       const row = (Array.isArray(data) ? data[0] : data) as
-        | { printer_width_mm: string; receipt_header: string | null }
+        | { printer_width_mm: string; receipt_header: string | null; receipt_logo_path: string | null; receipt_logo_width_pct: number | null }
         | null;
       return {
         width: Number(row?.printer_width_mm ?? 80) || 80,
         header: row?.receipt_header ?? null,
+        logo: paperLogo(row?.receipt_logo_path, row?.receipt_logo_width_pct),
       };
     },
   });
@@ -288,6 +292,7 @@ export function OrderItems({
     return {
       shopName: store.name,
       banner: 'NOT A RECEIPT',
+      logo: settings.data?.logo ?? null,
       header: ['Items on this order - nothing paid yet', settings.data?.header]
         .filter(Boolean)
         .join('. '),

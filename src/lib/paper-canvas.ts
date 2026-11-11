@@ -21,6 +21,34 @@ export interface PaperCanvas {
 export type MakeCanvas = (width: number, height: number) => PaperCanvas;
 
 /**
+ * Pictures the paper needs, LOADED BEFORE it is drawn — the drawing is synchronous, a picture is not.
+ * The browser's `Image` or the server's, by address. One missing is left off the paper.
+ */
+export interface PaperImage {
+  width: number;
+  height: number;
+}
+export type PaperImages = Map<string, PaperImage>;
+
+/** The addresses a document's pictures are at: what to load before `drawDocument`. */
+export function paperImageUrls(input: ReceiptImageInput): string[] {
+  return input.logo?.url ? [input.logo.url] : [];
+}
+
+/** A logo at `pct` of `room`, its height kept in proportion; null when it is not loaded. */
+function logoBox(images: PaperImages | undefined, logo: ReceiptImageInput['logo'], room: number) {
+  const img = logo ? images?.get(logo.url) : undefined;
+  if (!logo || !img || img.width <= 0 || img.height <= 0) return null;
+  const pct = Math.min(100, Math.max(10, Number(logo.widthPct) || 60));
+  const w = Math.round((room * pct) / 100);
+  return { img, w, h: Math.round((img.height * w) / img.width) };
+}
+
+function drawPicture(ctx: CanvasRenderingContext2D, img: PaperImage, x: number, y: number, w: number, h: number) {
+  ctx.drawImage(img as unknown as CanvasImageSource, x, y, w, h);
+}
+
+/**
  * Render a receipt to a PNG blob at printer-ish proportions.
  *
  * Width is in millimetres so the image matches the paper it represents; the pixel width is
@@ -37,6 +65,7 @@ function drawReceipt(
   widthMm: number,
   make: MakeCanvas,
   font: string,
+  images?: PaperImages,
 ): PaperCanvas | null {
 
   const scale = 8;                       // px per mm
@@ -74,7 +103,9 @@ function drawReceipt(
   const boldFont = `bold ${base}px ${font}`;
   const titleFont = `bold ${Math.round(base * 1.5)}px ${font}`;
 
+  const logo = logoBox(images, input.logo, inner);
   let height = pad;
+  if (logo) height += logo.h + Math.round(base * 0.8);
   height += Math.round(base * 1.9);                            // shop name
   if (input.banner) height += wrap(input.banner, titleFont, inner).length * Math.round(base * 1.9);
   if (input.header) height += wrap(input.header, bodyFont, inner).length * lineH;
@@ -156,6 +187,10 @@ function drawReceipt(
     });
   };
 
+  if (logo) {
+    drawPicture(ctx, logo.img, Math.round((width - logo.w) / 2), y, logo.w, logo.h);
+    y += logo.h + Math.round(base * 0.8);
+  }
   centred(input.shopName, titleFont);
   if (input.banner) {
     for (const l of wrap(input.banner, titleFont, inner)) centred(l, titleFont);
@@ -225,7 +260,14 @@ function drawReceipt(
  */
 export const MONO = "ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono', Menlo, Consolas, monospace";
 
-function drawLines(lines: PrintedLine[], layout: ReceiptLayout, widthMm: number, make: MakeCanvas, mono: string): PaperCanvas | null {
+function drawLines(
+  lines: PrintedLine[],
+  layout: ReceiptLayout,
+  widthMm: number,
+  make: MakeCanvas,
+  mono: string,
+  images?: PaperImages,
+): PaperCanvas | null {
   const scale = 8; // px per mm
   const width = Math.round(widthMm * scale);
   const pad = Math.round(3 * scale);
@@ -238,6 +280,10 @@ function drawLines(lines: PrintedLine[], layout: ReceiptLayout, widthMm: number,
   const ratio = measured > 0.3 && measured < 1 ? measured : 0.6;
 
   const sized = lines.map((line) => {
+    if (line.image) {
+      const box = logoBox(images, line.image, paper);
+      return { parts: [], rowH: box ? box.h + scale * 2 : 0, box };
+    }
     const spans = line.spans.length > 0 ? line.spans : [{ size: 'ss' as TextSize, text: ' ' }];
     const parts = spans.map((sp) => {
       const cell = paper / columnsAt(sp.size, layout);
@@ -246,7 +292,7 @@ function drawLines(lines: PrintedLine[], layout: ReceiptLayout, widthMm: number,
       return { sp, cell, font: cell / ratio, scaleY: tall / wide, height: (cell / ratio) * (tall / wide) };
     });
     const rowH = parts.reduce((m, x) => Math.max(m, x.height), 0) * 1.2;
-    return { parts, rowH };
+    return { parts, rowH, box: null };
   });
 
   const height = Math.round(pad * 2 + sized.reduce((sum, l) => sum + l.rowH, 0));
@@ -260,6 +306,11 @@ function drawLines(lines: PrintedLine[], layout: ReceiptLayout, widthMm: number,
 
   let y = pad;
   for (const line of sized) {
+    if (line.box) {
+      drawPicture(ctx, line.box.img, Math.round(pad + (paper - line.box.w) / 2), y, line.box.w, line.box.h);
+      y += line.rowH;
+      continue;
+    }
     let x = pad;
     for (const part of line.parts) {
       ctx.save();
@@ -293,8 +344,10 @@ export function drawDocument(
   layout?: ReceiptLayout,
   /** The monospace family: the app's system stack, or a font the server registered. */
   font?: string,
+  /** The pictures `paperImageUrls` named, already loaded. */
+  images?: PaperImages,
 ): PaperCanvas | null {
   return layout
-    ? drawLines(receiptLines(input, layout), layout, widthMm, make, font ?? MONO)
-    : drawReceipt(input, widthMm, make, font ?? 'ui-monospace, monospace');
+    ? drawLines(receiptLines(input, layout), layout, widthMm, make, font ?? MONO, images)
+    : drawReceipt(input, widthMm, make, font ?? 'ui-monospace, monospace', images);
 }

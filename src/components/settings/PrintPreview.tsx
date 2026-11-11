@@ -112,6 +112,14 @@ export function PrintPreview({
       <div ref={paperRef} className={styles.roll}>
         {width > 0 &&
           lines.map((line, i) => {
+            if (line.image) {
+              return (
+                <div key={i} className={styles.logo}>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- the shop's own picture, drawn as the paper draws it */}
+                  <img src={line.image.url} alt="" style={{ width: `${Math.min(100, Math.max(10, line.image.widthPct || 60))}%` }} />
+                </div>
+              );
+            }
             const spans = line.spans.length > 0 ? line.spans : [{ size: 'ss' as const, text: ' ' }];
 
             /*

@@ -34,6 +34,7 @@ import { printBytes } from '@/lib/bluetooth-print';
 import { printBytesOverUsb } from '@/lib/usb-print';
 import { openPrinterAppWith, textTicket, VENDOR_SAMPLE } from '@/lib/print-handoff';
 import { messageOf } from '@/lib/format';
+import { paperLogo } from '@/lib/paper-logo';
 import { Field } from '@/components/ui/Field';
 import { getSupabase } from '@/lib/supabase/client';
 import { LogoRejected, normaliseReceiptLogo } from '@/lib/image-pipeline';
@@ -44,7 +45,54 @@ import { printRouteOf } from '@/lib/print-document';
 import styles from './printing-page.module.css';
 
 /**
+ * A line of the receipt's words, saved when the person leaves the box — not on every key, which
+ * wrote the row and re-read it per letter and could put back a letter typed while it was saving.
+ */
+function SavedText({
+  label,
+  value,
+  placeholder,
+  disabled,
+  onSave,
+}: {
+  label: string;
+  value: string;
+  placeholder: string;
+  disabled: boolean;
+  onSave: (next: string | null) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const [editing, setEditing] = useState(false);
+  return (
+    <Field
+      label={label}
+      optional
+      value={editing ? draft : value}
+      placeholder={placeholder}
+      disabled={disabled}
+      onFocus={() => {
+        setDraft(value);
+        setEditing(true);
+      }}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        setEditing(false);
+        const next = draft.trim();
+        if (next !== value.trim()) onSave(next === '' ? null : next);
+      }}
+    />
+  );
+}
+
+/**
  * PRINTING — everything about it, on one page.
+ *
+ * "It seems too complex." It read as one long column of nine headings, the receipt's preview at the
+ * very bottom, two rulers and nine sliders in the middle that only a printer engineer needs once.
+ * Now: three cards that answer what a shop asks — which printer, what the receipt says, what
+ * happens after a sale — with the receipt as it will print BESIDE them (under them on a phone),
+ * logo and all. The ruler and the size of each part are folded under "Fine-tune": they still
+ * matter, once, when a new printer arrives.
  *
  * It was spread across the Settings screen in three places: a paper width under the receipt, a
  * second paper width beside the preview, a size picker, a preview, and the printer connection —
@@ -93,7 +141,6 @@ export default function PrintingPage() {
   const nav = useNav();
   const goBack = useStackBack();
   const { store } = useAuth();
-  const shop = store;
   const settings = useReceiptPaper(store?.id ?? null);
 
   const paperMm = Number(settings.data?.printer_width_mm) || 80;
@@ -155,6 +202,8 @@ export default function PrintingPage() {
   const sample = useMemo(
     () => ({
       shopName: store?.name ?? 'Your shop',
+      // The logo as every receipt now carries it — the preview is the paper, so it shows here too.
+      logo: paperLogo(settings.data?.receipt_logo_path, settings.data?.receipt_logo_width_pct),
       header: settings.data?.receipt_header ?? null,
       footer: settings.data?.receipt_footer ?? null,
       meta: [new Date().toLocaleString(), '#2D6AB81C', 'Gabriel'],
@@ -268,490 +317,450 @@ export default function PrintingPage() {
 
   const escpos = printer.kind === 'usb' || printer.kind === 'bluetooth' || printer.kind === 'ios_app';
 
+  const logoUrl = paperLogo(settings.data?.receipt_logo_path, 100)?.url ?? null;
+  const preset = PRESET_WIDTHS.includes(Number(settings.data?.printer_width_mm));
+  const kindName = (kind: PrinterKind) =>
+    kind === 'usb' ? 'USB cable' : kind === 'bluetooth' ? 'Bluetooth' : kind === 'ios_app' ? 'Printer app' : "This device's dialog";
+
   return (
-    <PageScaffold layout="record" onBack={goBack} title="Printing" subtitle="Your printer, and how a receipt is set out">
+    <PageScaffold layout="record" onBack={goBack} title="Printing" subtitle="Your printer and your receipt">
       <PageState status={status}>
         {() => (
-          <>
-            {/* ── How this device reaches the printer ──────────────────────── */}
-            <h2 className={styles.section}>How this device prints</h2>
-            <div className={styles.grid} role="group" aria-label="How this device prints">
-              {(['usb', 'bluetooth', 'ios_app', 'browser'] as PrinterKind[])
-                .filter((k) => kinds.includes(k))
-                .map((kind) => (
-                  <button
-                    key={kind}
-                    type="button"
-                    className={`${styles.option} ${printer.kind === kind ? styles.optionOn : ''}`}
-                    aria-pressed={printer.kind === kind}
-                    disabled={connecting !== null}
-                    onClick={() => void chooseKind(kind)}
+          <div className={styles.layout}>
+            <div className={styles.settings}>
+              {/* ── 1. The printer ─────────────────────────────────────────── */}
+              <section className={styles.card} aria-labelledby="printer-head">
+                <h2 id="printer-head" className={styles.cardTitle}>Printer on this device</h2>
+                <p className={styles.status}>
+                  {printer.printerName ? (
+                    <>
+                      <strong>{printer.printerName}</strong>
+                      {' · '}
+                      {printer.reconnecting ? 'looking for it…' : printer.ready ? 'connected' : 'not answering'}
+                    </>
+                  ) : (
+                    <>Prints with <strong>{kindName(printer.kind)}</strong></>
+                  )}
+                </p>
+                <div className={styles.grid} role="group" aria-label="How this device prints">
+                  {(['usb', 'bluetooth', 'ios_app', 'browser'] as PrinterKind[])
+                    .filter((k) => kinds.includes(k))
+                    .map((kind) => (
+                      <button
+                        key={kind}
+                        type="button"
+                        className={`${styles.option} ${printer.kind === kind ? styles.optionOn : ''}`}
+                        aria-pressed={printer.kind === kind}
+                        disabled={connecting !== null}
+                        onClick={() => void chooseKind(kind)}
+                      >
+                        <span className={styles.optionName}>{connecting === kind ? 'Connecting…' : kindName(kind)}</span>
+                        <span className={styles.optionWhat}>
+                          {kind === 'usb'
+                            ? 'Straight to the roll. Most reliable.'
+                            : kind === 'bluetooth'
+                              ? 'Straight to a paired roll.'
+                              : kind === 'ios_app'
+                                ? 'For iPhone and iPad.'
+                                : 'The normal print window.'}
+                        </span>
+                      </button>
+                    ))}
+                </div>
+                {escpos && (
+                  <Button
+                    variant="secondary"
+                    fullWidth
+                    busy={busy}
+                    busyLabel="Sending"
+                    onClick={() => void send(textTicket(store.name), testTicket(store.name))}
                   >
-                    <span className={styles.optionName}>
-                      {connecting === kind
-                        ? 'Connecting…'
-                        : kind === 'usb'
-                          ? 'USB cable'
-                          : kind === 'bluetooth'
-                            ? 'Bluetooth'
-                            : kind === 'ios_app'
-                              ? 'Printer app'
-                              : "This device's dialog"}
-                    </span>
-                    <span className={styles.optionWhat}>
-                      {kind === 'usb'
-                        ? 'Straight to the roll. Most reliable.'
-                        : kind === 'bluetooth'
-                          ? 'Straight to a paired roll.'
-                          : kind === 'ios_app'
-                            ? 'For iPhone and iPad.'
-                            : 'The normal print window.'}
-                    </span>
-                  </button>
-                ))}
-            </div>
+                    Print a short test
+                  </Button>
+                )}
+                {printer.kind === 'ios_app' && (
+                  <Explain label="Nothing comes out?">
+                    <p>Try these in order. The first one that fails says where the problem is.</p>
+                    <div className={styles.stack}>
+                      <Button variant="secondary" fullWidth onClick={() => void openPrinterAppWith(VENDOR_SAMPLE)}>
+                        1. Print their sample image
+                      </Button>
+                      <Button variant="secondary" fullWidth onClick={() => void openPrinterAppWith(textTicket(store.name))}>
+                        2. Print plain text
+                      </Button>
+                    </div>
+                    <p>The printer app is sent text, so the logo does not print this way.</p>
+                  </Explain>
+                )}
+                {note && (
+                  <p className={styles.note} role="status">
+                    {note}
+                  </p>
+                )}
+              </section>
 
-            {printer.printerName && (
-              <p className={styles.note}>
-                Printing to <strong>{printer.printerName}</strong>.{' '}
-                {printer.reconnecting
-                  ? 'Looking for it…'
-                  : printer.ready
-                    ? 'Connected — one tap prints.'
-                    : 'Not answering right now.'}
-              </p>
-            )}
+              {/* ── 2. The receipt ─────────────────────────────────────────── */}
+              {settings.data && (
+                <section className={styles.card} aria-labelledby="receipt-head">
+                  <h2 id="receipt-head" className={styles.cardTitle}>Your receipt</h2>
+                  {!editable && <p className={styles.note}>Only the owner or a manager can change these.</p>}
 
-            {/* ── After a sale: printing by itself ─────────────────────────── */}
-            <h2 className={styles.section}>After a sale is saved</h2>
-            <p className={styles.note}>
-              On this device only. A counter beside its printer can print every sale; a phone in a
-              pocket can print none.
-            </p>
-            <div className={styles.grid} role="group" aria-label="Print the receipt by itself">
-              {[true, false].map((on) => (
-                <button
-                  key={String(on)}
-                  type="button"
-                  className={`${styles.option} ${autoOn === on ? styles.optionOn : ''}`}
-                  aria-pressed={autoOn === on}
-                  onClick={() => changeAuto({ on })}
-                >
-                  <span className={styles.optionName}>{on ? 'Print it by itself' : 'Only when I tap Print'}</span>
-                  <span className={styles.optionWhat}>
-                    {on ? 'After a short wait you can cancel.' : 'The receipt waits on the screen.'}
-                  </span>
-                </button>
-              ))}
-            </div>
-            {autoOn && (
-              <>
-                <p className={styles.note}>Wait before printing</p>
-                <div className={styles.waits} role="group" aria-label="Wait before printing">
-                  {([0, 3, 5, 10] as const).map((w) => (
-                    <button
-                      key={w}
-                      type="button"
-                      className={`${styles.option} ${auto.wait === w ? styles.optionOn : ''}`}
-                      aria-pressed={auto.wait === w}
-                      onClick={() => changeAuto({ wait: w })}
-                    >
-                      <span className={styles.optionName}>{w === 0 ? 'None' : `${w} s`}</span>
-                    </button>
-                  ))}
-                </div>
-                <div className={styles.grid} role="group" aria-label="After it prints">
-                  {[false, true].map((till) => (
-                    <button
-                      key={String(till)}
-                      type="button"
-                      className={`${styles.option} ${auto.thenTill === till ? styles.optionOn : ''}`}
-                      aria-pressed={auto.thenTill === till}
-                      onClick={() => changeAuto({ thenTill: till })}
-                    >
-                      <span className={styles.optionName}>{till ? 'Back to the till' : 'Stay on the receipt'}</span>
-                      <span className={styles.optionWhat}>
-                        {till ? 'Ready for the next customer.' : 'To share it or send it too.'}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-            {!autoOn && printRouteOf(printer) === 'browser' && auto.on === undefined && (
-              <p className={styles.note}>
-                Off for now: this device prints through its own print window, which would open after
-                every sale. Choose a printer above, or turn it on if you want that.
-              </p>
-            )}
+                  <p className={styles.label}>Paper width</p>
+                  <div className={styles.presets} role="group" aria-label="Paper width">
+                    {PRESET_WIDTHS.map((w: number) => (
+                      <button
+                        key={w}
+                        type="button"
+                        className={`${styles.preset} ${Number(settings.data!.printer_width_mm) === w ? styles.presetActive : ''}`}
+                        onClick={() => editable && void settings.patch({ printer_width_mm: String(w) })}
+                        disabled={!editable}
+                        aria-pressed={Number(settings.data!.printer_width_mm) === w}
+                      >
+                        {w}mm
+                      </button>
+                    ))}
+                  </div>
+                  {!preset && (
+                    <Field
+                      label="Other width"
+                      numeric
+                      suffix="mm"
+                      value={settings.data.printer_width_mm}
+                      onChange={(e) => void settings.patch({ printer_width_mm: e.target.value })}
+                      disabled={!editable}
+                      hint="Between 30 and 250."
+                    />
+                  )}
 
-            {/* ── The ruler, which is what makes the preview true ──────────── */}
-            {escpos && (
-              <>
-                <h2 className={styles.section}>Measure your printer</h2>
-                <Explain label="Why does this matter?">
-                  A receipt reads by its amounts lining up on the right, and lining them up means
-                  padding each label out to the exact width of a line. Guess too wide and the amount
-                  wraps onto the next line. No printer can be asked how wide its letters are, so you
-                  measure it once: print the ruler, read the last number that fitted before the line
-                  wrapped, and set it here.
-                </Explain>
-
-                <Button
-                  variant="secondary"
-                  fullWidth
-                  busy={busy}
-                  busyLabel="Sending"
-                  onClick={() => void send(rulerTicket(), new TextEncoder().encode(''))}
-                >
-                  Print a ruler
-                </Button>
-
-                <div className={styles.measures}>
-                  {(
-                    [
-                      ['charsSmall', 'Small letters', 'The top ruler'],
-                      ['charsLarge', 'Medium letters', 'The second ruler'],
-                    ] as const
-                  ).map(([key, name, which]) => (
-                    <label key={key} className={styles.measure}>
-                      <span className={styles.measureName}>
-                        {name} <span className={styles.measureWhat}>· {which}</span>
-                      </span>
+                  {/* The logo: what is on file, shown, with its size beside it. */}
+                  <p className={styles.label}>Logo</p>
+                  <input
+                    ref={logoInput}
+                    type="file"
+                    accept="image/*"
+                    className={styles.hiddenInput}
+                    tabIndex={-1}
+                    aria-hidden="true"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = '';
+                      if (!file || !store) return;
+                      setLogoBusy(true);
+                      setLogoError(null);
+                      try {
+                        // Prepared at the head's own dots (8 per mm, less a margin): black and white, no resampling later.
+                        const dots = Math.round(Number(settings.data!.printer_width_mm) * 8 * 0.9);
+                        const { blob } = await normaliseReceiptLogo(file, { widthPx: dots });
+                        const path = `${store.id}/store/receipt-logo-${Date.now().toString(36)}.png`;
+                        const up = await getSupabase()
+                          .storage.from('media')
+                          .upload(path, blob, { contentType: 'image/png', upsert: true });
+                        if (up.error) throw new Error(up.error.message);
+                        void settings.patch({ receipt_logo_path: path });
+                      } catch (err: unknown) {
+                        setLogoError(err instanceof LogoRejected ? err.message : messageOf(err, 'That logo could not be used.'));
+                      } finally {
+                        setLogoBusy(false);
+                      }
+                    }}
+                  />
+                  <div className={styles.logoRow}>
+                    <div className={styles.logoThumb}>
+                      {logoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- the shop's own uploaded picture
+                        <img src={logoUrl} alt="Your logo" />
+                      ) : (
+                        <span>No logo</span>
+                      )}
+                    </div>
+                    <div className={styles.logoActions}>
+                      <Button variant="secondary" size="small" busy={logoBusy} disabled={!editable} onClick={() => logoInput.current?.click()}>
+                        {logoUrl ? 'Change' : 'Add a logo'}
+                      </Button>
+                      {logoUrl && (
+                        <Button variant="ghost" size="small" disabled={!editable} onClick={() => void settings.patch({ receipt_logo_path: null })}>
+                          Remove
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  {logoUrl && (
+                    <label className={styles.measure}>
+                      <span className={styles.measureName}>How wide on the paper</span>
                       <span className={styles.measureRow}>
                         <input
                           type="range"
-                          min={16}
-                          max={80}
-                          step={1}
-                          value={live[key]}
-                          onChange={(e) => void keep({ ...live, [key]: Number(e.target.value) })}
+                          min={20}
+                          max={100}
+                          step={5}
+                          defaultValue={settings.data.receipt_logo_width_pct}
+                          disabled={!editable}
+                          // Saved where the thumb is let go, not on every step of the drag.
+                          onPointerUp={(e) => void settings.patch({ receipt_logo_width_pct: Number(e.currentTarget.value) })}
+                          onKeyUp={(e) => void settings.patch({ receipt_logo_width_pct: Number(e.currentTarget.value) })}
                           className={styles.slider}
                         />
-                        <output className={styles.measureValue}>{live[key]}</output>
+                        <output className={styles.measureValue}>{settings.data.receipt_logo_width_pct}%</output>
                       </span>
                     </label>
+                  )}
+                  {!logoUrl && (
+                    <p className={styles.sectionNote}>
+                      A simple, wide mark prints best: it comes out in plain black and white.
+                    </p>
+                  )}
+                  {logoError && (
+                    <InfoPanel tone="warning" title="That picture will not print well">
+                      {logoError}
+                    </InfoPanel>
+                  )}
+
+                  <SavedText
+                    label="Line under the name"
+                    value={settings.data.receipt_header ?? ''}
+                    placeholder="Address and phone number"
+                    disabled={!editable}
+                    onSave={(v) => void settings.patch({ receipt_header: v })}
+                  />
+                  <SavedText
+                    label="Last line"
+                    value={settings.data.receipt_footer ?? ''}
+                    placeholder="Thank you for your patronage"
+                    disabled={!editable}
+                    onSave={(v) => void settings.patch({ receipt_footer: v })}
+                  />
+
+                  <label className={styles.toggle}>
+                    <input
+                      type="checkbox"
+                      checked={settings.data.show_transfer_details}
+                      onChange={(e) => void settings.patch({ show_transfer_details: e.target.checked })}
+                      disabled={!editable}
+                    />
+                    <span>Bank details, for customers paying later</span>
+                  </label>
+                  {settings.data.show_transfer_details &&
+                    (accounts.length === 0 ? (
+                      <InfoPanel tone="warning" title="No accounts yet">
+                        <p>Receipts can only show an account you have added.</p>
+                        {canOpen('bank_form_page') && (
+                          <Button onClick={() => void nav.push('bank_form_page')}>
+                            <PlusIcon /> Add a bank account
+                          </Button>
+                        )}
+                      </InfoPanel>
+                    ) : (
+                      <>
+                        {/* Chosen from the shop's accounts, never typed again (0083). */}
+                        <ul className={styles.accountList}>
+                          {accounts.map((a) => {
+                            const chosen =
+                              settings.data!.receipt_bank_account_id === a.id ||
+                              (!settings.data!.receipt_bank_account_id && a.is_default);
+                            return (
+                              <li key={a.id}>
+                                <button
+                                  type="button"
+                                  className={`${styles.accountRow} ${chosen ? styles.accountChosen : ''}`}
+                                  disabled={!editable}
+                                  onClick={() => void settings.patch({ receipt_bank_account_id: a.id })}
+                                  aria-pressed={chosen}
+                                >
+                                  <span>
+                                    <span className={styles.accountBank}>{a.bank_name}</span>
+                                    <span className={styles.accountNo}>
+                                      {a.account_number} · {a.account_name}
+                                    </span>
+                                  </span>
+                                  {chosen && <CheckIcon />}
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                        {canOpen('bank_form_page') && (
+                          <button type="button" className={styles.accountAdd} onClick={() => void nav.push('bank_form_page')}>
+                            <PlusIcon /> Add another account
+                          </button>
+                        )}
+                        <p className={styles.sectionNote}>Receipts already given keep the account they were printed with.</p>
+                      </>
+                    ))}
+                </section>
+              )}
+
+              {/* ── 3. After a sale ────────────────────────────────────────── */}
+              <section className={styles.card} aria-labelledby="after-head">
+                <h2 id="after-head" className={styles.cardTitle}>After a sale is saved</h2>
+                <p className={styles.note}>This device only: a counter by its printer can print every sale, a phone in a pocket none.</p>
+                <div className={styles.grid} role="group" aria-label="Print the receipt by itself">
+                  {[true, false].map((on) => (
+                    <button
+                      key={String(on)}
+                      type="button"
+                      className={`${styles.option} ${autoOn === on ? styles.optionOn : ''}`}
+                      aria-pressed={autoOn === on}
+                      onClick={() => changeAuto({ on })}
+                    >
+                      <span className={styles.optionName}>{on ? 'Print it by itself' : 'Only when I tap Print'}</span>
+                      <span className={styles.optionWhat}>
+                        {on ? 'After a short wait you can cancel.' : 'The receipt waits on the screen.'}
+                      </span>
+                    </button>
                   ))}
                 </div>
-              </>
-            )}
+                {autoOn && (
+                  <>
+                    <p className={styles.label}>Wait before printing</p>
+                    <div className={styles.waits} role="group" aria-label="Wait before printing">
+                      {([0, 3, 5, 10] as const).map((w) => (
+                        <button
+                          key={w}
+                          type="button"
+                          className={`${styles.option} ${auto.wait === w ? styles.optionOn : ''}`}
+                          aria-pressed={auto.wait === w}
+                          onClick={() => changeAuto({ wait: w })}
+                        >
+                          <span className={styles.optionName}>{w === 0 ? 'None' : `${w} s`}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <div className={styles.grid} role="group" aria-label="After it prints">
+                      {[false, true].map((till) => (
+                        <button
+                          key={String(till)}
+                          type="button"
+                          className={`${styles.option} ${auto.thenTill === till ? styles.optionOn : ''}`}
+                          aria-pressed={auto.thenTill === till}
+                          onClick={() => changeAuto({ thenTill: till })}
+                        >
+                          <span className={styles.optionName}>{till ? 'Back to the till' : 'Stay on the receipt'}</span>
+                          <span className={styles.optionWhat}>{till ? 'Ready for the next customer.' : 'To share it or send it too.'}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+                {!autoOn && printRouteOf(printer) === 'browser' && auto.on === undefined && (
+                  <p className={styles.note}>
+                    Off for now: this device prints through its own print window, which would open after every sale.
+                  </p>
+                )}
+              </section>
 
-            {/* ── The size of each part ─────────────────────────────────────── */}
-            {escpos && (
-              <>
-                <h2 className={styles.section}>How big each part prints</h2>
-                <p className={styles.note}>
-                  A receipt is read by different people looking for different things. The total is
-                  read across a counter; the bank details are copied down. They do not want the same
-                  size.
-                </p>
-
-                <div className={styles.parts}>
-                  {PARTS.map((part) => {
-                    const at = SIZES.findIndex((s) => s.size === live[part.key]);
-                    const index = at < 0 ? 0 : at;
-                    return (
-                      <label key={String(part.key)} className={styles.part}>
-                        <span className={styles.partHead}>
-                          <span className={styles.partName}>{part.name}</span>
-                          <span className={styles.partSize}>
-                            {SIZES[index].name} · {columnsAt(live[part.key] as TextSize, live)} a line
+              {/* ── Fine-tuning, folded: needed once, when a new printer arrives ── */}
+              {escpos && (
+                <details className={styles.fine}>
+                  <summary className={styles.fineSummary}>Fine-tune how it prints</summary>
+                  <div className={styles.fineBody}>
+                    <h3 className={styles.fineTitle}>Measure your printer</h3>
+                    <p className={styles.note}>
+                      Amounts line up on the right only when the app knows how many letters fit a line, and no printer can be
+                      asked. Print the ruler, read the last number before the line wraps, and set it here.
+                    </p>
+                    <Button
+                      variant="secondary"
+                      fullWidth
+                      busy={busy}
+                      busyLabel="Sending"
+                      onClick={() => void send(rulerTicket(), new TextEncoder().encode(''))}
+                    >
+                      Print a ruler
+                    </Button>
+                    <div className={styles.measures}>
+                      {(
+                        [
+                          ['charsSmall', 'Small letters', 'The top ruler'],
+                          ['charsLarge', 'Medium letters', 'The second ruler'],
+                        ] as const
+                      ).map(([key, name, which]) => (
+                        <label key={key} className={styles.measure}>
+                          <span className={styles.measureName}>
+                            {name} <span className={styles.measureWhat}>· {which}</span>
                           </span>
-                        </span>
-                        <span className={styles.partWhat}>{part.what}</span>
-                        <input
-                          type="range"
-                          min={0}
-                          max={SIZES.length - 1}
-                          step={1}
-                          value={index}
-                          onChange={(e) =>
-                            void keep({ ...live, [part.key]: SIZES[Number(e.target.value)].size })
-                          }
-                          className={styles.slider}
-                        />
-                      </label>
-                    );
-                  })}
-                </div>
+                          <span className={styles.measureRow}>
+                            <input
+                              type="range"
+                              min={16}
+                              max={80}
+                              step={1}
+                              value={live[key]}
+                              onChange={(e) => void keep({ ...live, [key]: Number(e.target.value) })}
+                              className={styles.slider}
+                            />
+                            <output className={styles.measureValue}>{live[key]}</output>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
 
-                <Button
-                  variant="secondary"
-                  fullWidth
-                  onClick={() => void keep(defaultLayout(dotsFor(paperMm)))}
-                >
-                  Put the sizes back to normal
-                </Button>
-              </>
-            )}
+                    <h3 className={styles.fineTitle}>How big each part prints</h3>
+                    <div className={styles.parts}>
+                      {PARTS.map((part) => {
+                        const at = SIZES.findIndex((sz) => sz.size === live[part.key]);
+                        const index = at < 0 ? 0 : at;
+                        return (
+                          <label key={String(part.key)} className={styles.part}>
+                            <span className={styles.partHead}>
+                              <span className={styles.partName}>{part.name}</span>
+                              <span className={styles.partSize}>
+                                {SIZES[index].name} · {columnsAt(live[part.key] as TextSize, live)} a line
+                              </span>
+                            </span>
+                            <span className={styles.partWhat}>{part.what}</span>
+                            <input
+                              type="range"
+                              min={0}
+                              max={SIZES.length - 1}
+                              step={1}
+                              value={index}
+                              onChange={(e) => void keep({ ...live, [part.key]: SIZES[Number(e.target.value)].size })}
+                              className={styles.slider}
+                            />
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <Button variant="secondary" fullWidth onClick={() => void keep(defaultLayout(dotsFor(paperMm)))}>
+                      Put the sizes back to normal
+                    </Button>
+                  </div>
+                </details>
+              )}
 
-          {settings.data && (
-            <>
-          <h2 className={styles.section}>What the receipt says</h2>
-
-          <div className={styles.presets}>
-            {PRESET_WIDTHS.map((w: number) => (
-              <button
-                key={w}
-                type="button"
-                className={`${styles.preset} ${
-                  Number(settings.data!.printer_width_mm) === w ? styles.presetActive : ''
-                }`}
-                onClick={() => editable && void settings.patch({ printer_width_mm: String(w) })}
-                disabled={!editable}
-                aria-pressed={Number(settings.data!.printer_width_mm) === w}
-              >
-                {w}mm
-              </button>
-            ))}
-          </div>
-
-          <Field
-            label="Paper width"
-            numeric
-            suffix="mm"
-            value={settings.data!.printer_width_mm}
-            onChange={(e) => void settings.patch({ printer_width_mm: e.target.value })}
-            disabled={!editable}
-            hint="Any width between 30 and 250. Use the buttons above for the common sizes."
-            help={
-              <Explain label="Which one do I have?">
-                It is usually printed on the roll or its packaging. If you are not sure, 80mm is
-                the most common and 58mm is the small handheld kind. Narrow rolls print each item
-                stacked rather than in columns, because there is not enough width for both.
-              </Explain>
-            }
-          />
-
-          <Field
-            label="Line above the receipt"
-            optional
-            value={settings.data!.receipt_header ?? ''}
-            onChange={(e) => void settings.patch({ receipt_header: e.target.value })}
-            disabled={!editable}
-            placeholder="Shop address or phone number"
-          />
-
-          {/*
-            The logo, prepared for the paper it is going on.
-            A receipt printer is one bit per dot and 40mm or 80mm wide, so a colour logo has to be
-            trimmed, scaled and reduced to pure black and white before it means anything. Doing
-            that here, and showing the result, means the shop approves what will actually print
-            rather than what looks good on a phone.
-          */}
-          <div className={styles.logoBlock}>
-            <p className={styles.label}>Logo on the receipt</p>
-
-            <input
-              ref={logoInput}
-              type="file"
-              accept="image/*"
-              className={styles.hiddenInput}
-              tabIndex={-1}
-              aria-hidden="true"
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                e.target.value = '';
-                if (!file || !store) return;
-                setLogoBusy(true);
-                setLogoError(null);
-                try {
-                  // Dots across the paper at the usual 203dpi: 8 dots per millimetre, less a
-                  // little margin. Preparing at the real dot count means no resampling later.
-                  const dots = Math.round(Number(settings.data!.printer_width_mm) * 8 * 0.9);
-                  const { blob } = await normaliseReceiptLogo(file, { widthPx: dots });
-
-                  const path = `${store.id}/store/receipt-logo-${Date.now().toString(36)}.png`;
-                  const up = await getSupabase()
-                    .storage.from('media')
-                    .upload(path, blob, { contentType: 'image/png', upsert: true });
-                  if (up.error) throw new Error(up.error.message);
-
-                  void settings.patch({ receipt_logo_path: path });
-                } catch (err: unknown) {
-                  // A rejection carries an explanation of what is wrong with the picture and what
-                  // would work instead; anything else is a genuine failure.
-                  setLogoError(
-                    err instanceof LogoRejected
-                      ? err.message
-                      : messageOf(err, 'That logo could not be used.'),
-                  );
-                } finally {
-                  setLogoBusy(false);
-                }
-              }}
-            />
-
-            <div className={styles.logoActions}>
-              <Button
-                variant="secondary"
-                busy={logoBusy}
-                disabled={!editable}
-                onClick={() => logoInput.current?.click()}
-              >
-                {settings.data!.receipt_logo_path ? 'Change logo' : 'Add a logo'}
-              </Button>
-              {settings.data!.receipt_logo_path && (
-                <Button
-                  variant="ghost"
-                  disabled={!editable}
-                  onClick={() => void settings.patch({ receipt_logo_path: null })}
-                >
-                  Remove it
-                </Button>
+              {(printers.data ?? []).filter((d) => d.deviceId !== deviceId()).length > 0 && (
+                <section className={styles.card} aria-labelledby="devices-head">
+                  <h2 id="devices-head" className={styles.cardTitle}>Your other devices</h2>
+                  <ul className={styles.devices}>
+                    {(printers.data ?? [])
+                      .filter((d) => d.deviceId !== deviceId())
+                      .map((d) => (
+                        <li key={d.deviceId} className={styles.device}>
+                          {d.deviceLabel ?? 'A device'} —{' '}
+                          {d.kind === 'usb'
+                            ? `USB, ${d.printerName ?? 'a printer'}`
+                            : d.kind === 'bluetooth'
+                              ? `Bluetooth, ${d.printerName ?? 'a printer'}`
+                              : d.kind === 'ios_app'
+                                ? 'a printer app'
+                                : 'its own print dialog'}
+                          {' · '}
+                          {d.widthMm}mm
+                        </li>
+                      ))}
+                  </ul>
+                </section>
               )}
             </div>
 
-            <p className={styles.sectionNote}>
-              A wide picture works best — roughly three times as wide as it is tall, and at least
-              {' '}{Math.round(Number(settings.data!.printer_width_mm) * 8 * 0.45)} pixels across. It is
-              printed in plain black and white, so a simple mark reads better than a photograph.
-            </p>
-
-            {logoError && (
-              <InfoPanel tone="warning" title="That picture will not print well">
-                {logoError}
-              </InfoPanel>
-            )}
-
-            {settings.data!.receipt_logo_path && (
-              <Field
-                label="How wide on the paper"
-                numeric
-                suffix="%"
-                value={String(settings.data!.receipt_logo_width_pct)}
-                onChange={(e) =>
-                  void settings.patch({ receipt_logo_width_pct: Number(e.target.value) || 60 })
-                }
-                disabled={!editable}
-                hint="A share of the paper width, so it stays right if you change printers."
-              />
-            )}
-          </div>
-
-          <Field
-            label="Line at the bottom"
-            optional
-            value={settings.data!.receipt_footer ?? ''}
-            onChange={(e) => void settings.patch({ receipt_footer: e.target.value })}
-            disabled={!editable}
-            placeholder="Thank you for your patronage"
-          />
-
-          {/* Everything above, as it will print. Shown before the bank details so a mistake in
-              the header or the logo is caught here rather than by a customer. */}
-          {/*
-            THE OLD BITMAP PREVIEW IS GONE.
-
-            It drew its own picture of a receipt, beside the one further down this page that
-            renders the lines the printer is actually sent. Two previews that can disagree is
-            exactly what a shop reported — and the one that can disagree is the one that is not
-            built from the instruction.
-          */}
-
-          <h2 className={styles.section}>Bank details on receipts</h2>
-          <p className={styles.sectionNote}>
-            Printed on receipts so a customer paying later knows where to send the money.
-          </p>
-
-          <label className={styles.toggle}>
-            <input
-              type="checkbox"
-              checked={settings.data!.show_transfer_details}
-              onChange={(e) => void settings.patch({ show_transfer_details: e.target.checked })}
-              disabled={!editable}
-            />
-            <span>Show my bank details on receipts</span>
-          </label>
-
-          {settings.data!.show_transfer_details && (
-            <>
-              {/*
-                CHOSEN FROM THE SHOP'S ACCOUNTS, not typed again.
-
-                This was three text boxes — bank, number, name — typed once and checked against
-                nothing. The shop already keeps its accounts under Money, and the payment screen
-                already picks from them when somebody pays by transfer; having a second copy here
-                meant a shop that closed an account had receipts still asking customers to pay into
-                it, with no reason to think anything was wrong because the boxes still had text.
-              */}
-              {accounts.length === 0 ? (
-                <InfoPanel tone="warning" title="No accounts yet">
-                  <p>
-                    Receipts can only show an account you have added. Add one and it will be
-                    offered here.
-                  </p>
-                  {canOpen('bank_form_page') && (
-                    <Button onClick={() => void nav.push('bank_form_page')}>
-                      <PlusIcon /> Add a bank account
-                    </Button>
-                  )}
-                </InfoPanel>
-              ) : (
-                <>
-                  <ul className={styles.accountList}>
-                    {accounts.map((a) => {
-                      const chosen =
-                        settings.data!.receipt_bank_account_id === a.id ||
-                        (!settings.data!.receipt_bank_account_id && a.is_default);
-                      return (
-                        <li key={a.id}>
-                          <button
-                            type="button"
-                            className={`${styles.accountRow} ${chosen ? styles.accountChosen : ''}`}
-                            disabled={!editable}
-                            onClick={() => void settings.patch({ receipt_bank_account_id: a.id })}
-                            aria-pressed={chosen}
-                          >
-                            <span>
-                              <span className={styles.accountBank}>{a.bank_name}</span>
-                              <span className={styles.accountNo}>
-                                {a.account_number} · {a.account_name}
-                              </span>
-                            </span>
-                            {chosen && <CheckIcon />}
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                  {canOpen('bank_form_page') && (
-                    <button
-                      type="button"
-                      className={styles.accountAdd}
-                      onClick={() => void nav.push('bank_form_page')}
-                    >
-                      <PlusIcon /> Add another account
-                    </button>
-                  )}
-                </>
-              )}
-
-              <InfoPanel tone="info" title="Old receipts keep their old details">
-                Changing these does not alter receipts already issued — each one keeps the account
-                it was printed with.
-              </InfoPanel>
-            </>
-          )}
-        </>
-      )}
-
-      {editable && shop && (
-        <>
-            </>
-          )}
-
-            {/* ── And what it will actually say ─────────────────────────────── */}
-            <h2 className={styles.section}>What the roll will say</h2>
-            <PrintPreview lines={lines} layout={live} />
-            <p className={styles.note}>
-              The naira sign prints as <strong>N</strong>, and halves as <strong>1/2</strong>: a
-              thermal printer&apos;s built-in letters have neither ₦ nor ½, and printing a picture
-              instead is what made it come out faint.
-            </p>
-
-            {escpos && (
-              <>
+            {/* ── The receipt as it will print: beside the settings, under them on a phone ── */}
+            <aside className={styles.previewCol} aria-labelledby="preview-head">
+              <h2 id="preview-head" className={styles.cardTitle}>How a receipt comes out</h2>
+              <PrintPreview lines={lines} layout={live} />
+              <p className={styles.note}>
+                ₦ prints as <strong>N</strong> and ½ as <strong>1/2</strong>: a thermal printer&apos;s own letters have neither.
+              </p>
+              {escpos && (
                 <Button
                   fullWidth
                   busy={busy}
@@ -760,78 +769,9 @@ export default function PrintingPage() {
                 >
                   Print this sample
                 </Button>
-                <Button
-                  variant="secondary"
-                  fullWidth
-                  busy={busy}
-                  busyLabel="Sending"
-                  onClick={() =>
-                    void send(textTicket(store.name), testTicket(store.name))
-                  }
-                >
-                  Print a short test
-                </Button>
-              </>
-            )}
-
-            {/* ── When the printer app opens and then refuses ───────────────── */}
-            {printer.kind === 'ios_app' && (
-              <>
-                <h2 className={styles.section}>If nothing comes out</h2>
-                <p className={styles.note}>
-                  Try these in order. The first one that fails says where the problem is.
-                </p>
-                <Button variant="secondary" fullWidth onClick={() => void openPrinterAppWith(VENDOR_SAMPLE)}>
-                  1. Print their sample image
-                </Button>
-                <Button
-                  variant="secondary"
-                  fullWidth
-                  onClick={() => void openPrinterAppWith(textTicket(store.name))}
-                >
-                  2. Print plain text
-                </Button>
-              </>
-            )}
-
-            {note && (
-              <p className={styles.note} role="status">
-                {note}
-              </p>
-            )}
-
-            {/* ── What every other device is set to ─────────────────────────── */}
-            {(printers.data ?? []).filter((d) => d.deviceId !== deviceId()).length > 0 && (
-              <>
-                <h2 className={styles.section}>Your other devices</h2>
-                <ul className={styles.devices}>
-                  {(printers.data ?? [])
-                    .filter((d) => d.deviceId !== deviceId())
-                    .map((d) => (
-                      <li key={d.deviceId} className={styles.device}>
-                        {d.deviceLabel ?? 'A device'} —{' '}
-                        {d.kind === 'usb'
-                          ? `USB, ${d.printerName ?? 'a printer'}`
-                          : d.kind === 'bluetooth'
-                            ? `Bluetooth, ${d.printerName ?? 'a printer'}`
-                            : d.kind === 'ios_app'
-                              ? 'a printer app'
-                              : 'its own print dialog'}
-                        {' · '}
-                        {d.widthMm}mm
-                      </li>
-                    ))}
-                </ul>
-              </>
-            )}
-
-            {!escpos && (
-              <InfoPanel tone="info" title="This device prints through its own dialog">
-                Sizes and the ruler only apply when the receipt goes to a thermal printer as text.
-                A print dialog lays the page out itself.
-              </InfoPanel>
-            )}
-          </>
+              )}
+            </aside>
+          </div>
         )}
       </PageState>
     </PageScaffold>

@@ -1,6 +1,6 @@
 'use client';
 import type { ReceiptLayout } from '@/lib/escpos-text';
-import { drawDocument, type MakeCanvas } from '@/lib/paper-canvas';
+import { drawDocument, paperImageUrls, type MakeCanvas, type PaperImages } from '@/lib/paper-canvas';
 
 /**
  * Getting a receipt or report out of the app and onto WhatsApp.
@@ -43,6 +43,11 @@ export interface ReceiptImageInput {
   banner?: string | null;
   header?: string | null;
   footer?: string | null;
+  /**
+   * THE SHOP'S LOGO, at the head of the paper (`paper-logo.ts`): where the picture is and how much
+   * of the roll's width it takes. Set wherever the header is — the shop's letterhead is both.
+   */
+  logo?: PaperLogo | null;
   meta: string[];
   lines: ShareLine[];
   totals: { label: string; value: string; strong?: boolean }[];
@@ -70,6 +75,12 @@ export interface DocBlock {
   rows?: { label: string; value: string }[];
   /** A heavy rule under the title instead of a light one (the opening balance). */
   heavy?: boolean;
+}
+
+export interface PaperLogo {
+  url: string;
+  /** Of the paper's printable width, 10–100. */
+  widthPct: number;
 }
 
 /** True when this browser can hand files to the OS share sheet. */
@@ -110,7 +121,37 @@ export async function renderReceiptCanvas(
     c.height = h;
     return c;
   };
-  return drawDocument(input, widthMm, browser, layout) as HTMLCanvasElement | null;
+  const images: PaperImages = new Map();
+  for (const url of paperImageUrls(input)) {
+    const img = await loadImage(url);
+    if (img) images.set(url, img);
+  }
+  return drawDocument(input, widthMm, browser, layout, undefined, images) as HTMLCanvasElement | null;
+}
+
+const loading = new Map<string, Promise<HTMLImageElement | null>>();
+
+/**
+ * A picture for the paper, loaded once per address. CORS-clean (`anonymous`), or the canvas it is
+ * drawn on could not be read back for the PNG, the PDF or the printer. One that does not load is
+ * left off: a receipt without its logo still prints, a receipt that fails does not.
+ */
+function loadImage(url: string): Promise<HTMLImageElement | null> {
+  let p = loading.get(url);
+  if (!p) {
+    p = new Promise<HTMLImageElement | null>((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => resolve(img);
+      img.onerror = () => {
+        loading.delete(url);
+        resolve(null);
+      };
+      img.src = url;
+    });
+    loading.set(url, p);
+  }
+  return p;
 }
 
 /** The same receipt as a PNG, for sharing as a picture. */

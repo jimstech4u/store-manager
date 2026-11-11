@@ -1,5 +1,5 @@
 import { formatDateTime, formatMoney } from '@/lib/format';
-import type { ReceiptImageInput } from '@/lib/share';
+import type { PaperLogo, ReceiptImageInput } from '@/lib/share';
 
 /**
  * A PAYMENT AS A SLIP — pure, no screen and no browser, so the payment page and the agent print the
@@ -21,7 +21,7 @@ export interface PaymentSlip {
 export function paymentDocument(
   p: PaymentSlip,
   shopName: string,
-  opts: { header?: string | null; footer?: string | null; now?: boolean } = {},
+  opts: { header?: string | null; footer?: string | null; logo?: PaperLogo | null; now?: boolean } = {},
 ): ReceiptImageInput {
   const gave = p.direction === 'out';
   const now = opts.now ? ' now' : '';
@@ -30,6 +30,7 @@ export function paymentDocument(
     banner: gave ? 'MONEY GIVEN BACK' : 'PAYMENT RECEIPT',
     header: opts.header ?? null,
     footer: opts.footer ?? null,
+    logo: opts.logo ?? null,
     meta: [formatDateTime(p.at), p.customerName, `#${p.paymentId.slice(0, 8).toUpperCase()}`],
     lines: [
       {

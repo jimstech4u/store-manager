@@ -2,9 +2,10 @@
  * THE AGENT'S CRAWLER — Uber's AutoCrawler, for one database.
  *
  * Reads every function the app can call (`agent_catalogue`), and writes each to the registry
- * (`agent_tools`): its arguments, whether it changes anything, and the permission it checks. A new
- * function arrives switched OFF. One is offered to the agent only when `src/lib/agent/tool-review.json`
- * lists it, enabled, with the signature it was reviewed at. A function whose arguments have changed
+ * (`agent_tools`): its arguments, whether it changes anything, and the permission it checks. With the
+ * review file's `default_on` (11 Nov: "switch everything on"), every function is offered except those
+ * under its `never`; one listed under `tools` is REVIEWED — a title, its arguments explained, and the
+ * signature it was reviewed at. A function whose arguments have changed
  * since is switched off and marked stale until somebody reviews it again. Every change to a row is
  * written to `agent_tool_changes`.
  *
@@ -25,7 +26,17 @@ const env = Object.fromEntries(
     }),
 );
 const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
-const review = JSON.parse(readFileSync('src/lib/agent/tool-review.json', 'utf8')).tools;
+const file = JSON.parse(readFileSync('src/lib/agent/tool-review.json', 'utf8'));
+const review = file.tools;
+const DEFAULT_ON = file.default_on === true;
+const NEVER = file.never ?? {};
+const PERMISSION = file.permissions ?? {};
+
+/** "record_supplier_payment" → "Record supplier payment": a title for one nobody has written yet. */
+const titleOf = (name) => {
+  const t = name.replace(/_/g, ' ');
+  return t.charAt(0).toUpperCase() + t.slice(1);
+};
 
 /** Arguments the server supplies itself: the shop from the session, a fresh id for idempotency. */
 const INJECTED = new Set(['p_store_id', 'p_client_uuid']);
@@ -74,12 +85,14 @@ for (const [name, versions] of seen) {
   }));
   const isStale = Boolean(r?.enabled) && r.signature !== f.identity_args;
   if (isStale) stale.push(name);
+  // Ours: reviewed and current, or — with default_on — anything not reviewed and not under never.
+  const on = name in NEVER ? false : r ? Boolean(r.enabled) && !isStale : DEFAULT_ON;
   const row = {
     name,
     effect: f.effect,
-    enabled: Boolean(r?.enabled) && !isStale && versions.length === 1,
-    permission: r?.permission ?? f.permissions?.[0] ?? null,
-    title: r?.title ?? null,
+    enabled: on && versions.length === 1,
+    permission: r?.permission ?? PERMISSION[name] ?? f.permissions?.[0] ?? null,
+    title: r?.title ?? titleOf(name),
     description: r?.description ?? f.note ?? null,
     args,
     signature: f.identity_args,

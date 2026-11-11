@@ -1,6 +1,6 @@
 import { formatDate, formatDateTime, formatMoney, formatQtySpoken, pluralUnit } from '@/lib/format';
 import { owedRowsFromReceipt, rollUpOwed } from '@/lib/empties-rollup';
-import type { ReceiptImageInput } from '@/lib/share';
+import type { PaperLogo, ReceiptImageInput } from '@/lib/share';
 
 /**
  * ONE READING OF A RECEIPT, AND THE PAPER IT MAKES — pure, no screen and no browser, so the receipt
@@ -89,7 +89,7 @@ export interface SaleDetail {
 export function receiptDocument(
   paper: SaleDetail,
   shopName: string,
-  settings: { header: string | null; footer: string | null } | null,
+  settings: { header: string | null; footer: string | null; logo?: PaperLogo | null } | null,
 ): ReceiptImageInput {
   const { sale, customer, lines, payments, charges, corrected } = paper;
   const parts = paper.merged_parts ?? [];
@@ -175,6 +175,7 @@ export function receiptDocument(
     shopName,
     header: settings?.header,
     footer: settings?.footer,
+    logo: settings?.logo ?? null,
     meta: [
     formatDateTime(sale.occurred_at),
     `#${sale.id.slice(0, 8).toUpperCase()}`,

@@ -764,9 +764,16 @@ again. The gateway (`src/lib/agent/gateway.ts`) lets the agent search for a capa
 carry them all, filters by the person's permissions, takes the shop from the session, and sends every
 write through the same YES as everything else, with a summary the server writes in names.
 
-- **A new function is a new capability.** After a migration that adds or changes one, run the
-  crawler; to offer it, add it to the review file with what it is for and what each argument means.
-  `node scripts/agent-crawl.mjs --check` fails when a reviewed tool has gone stale.
+- **Two switches (11 Nov).** OURS: `tool-review.json` has `default_on`, so every crawled function is
+  offered except its `never` list (helpers, the shopper's side, a device's printer, sign-in and
+  onboarding, the agent's own link codes, `close_store`). THE SHOP'S: `store_agent_tools` (0279),
+  Settings → WhatsApp → *What the agent may do*, everything on until an owner switches it off. The
+  gateway applies both, then the person's permissions, then YES for every write.
+- **A new function is a new capability, on at once.** After a migration that adds or changes one,
+  run the crawler. If it is plumbing, put it under `never`; to explain it well, add it under `tools`
+  (a title, what each argument means). `node scripts/agent-crawl.mjs --check` fails when a reviewed
+  tool has gone stale. A write's ids must be nameable by `agent_names` or the proposal is refused —
+  a new kind of record a capability takes goes into `agent_names` too.
 - **The curated tools stay for what needs judgement**: a sale works out prices, shapes, the count
   gate and who owes the rest, which no generic summary can. Simple reads and edits go through the
   registry.
@@ -781,6 +788,17 @@ app (`share.ts`, `pdf.ts`), `@napi-rs/canvas` on the server (`whatsapp/paper.ts`
 own renderer and WhatsApp got a different-looking receipt from the one the app shares; never give a
 new way out its own drawing. Documents themselves are built by the pure builders the screens use:
 `receiptDocument`, `statementDocument`, `paymentDocument`.
+
+**The logo travels with the header** (11 Nov). A document's `logo` (`paperLogo(path, pct)`) is set
+wherever its `header` is; `receiptLines` makes it the first line (`PrintedLine.image`), so the screen
+preview, the browser's print, the picture, the PDF, a paired printer and the agent's server all draw
+it. Pictures are loaded before drawing (`paperImageUrls`; `renderReceiptCanvas` in the browser,
+`whatsapp/paper.ts` on the server), because `drawDocument` is synchronous. The iPhone printer-app
+hand-off is text and leaves it out. A shop's logo was saved and drawn nowhere for weeks: a new reader
+of the header reads the logo with it.
+
+**Waiting for you is what someone who may not confirm made** (0278). A record made by anyone with
+`records.confirm` is their word and never queued back to them; each queued row names its maker.
 
 ## A wide screen is used, not left empty
 

@@ -6,8 +6,10 @@ import type { ToolDef } from '@/lib/whatsapp/llm';
  * THE AGENT'S GATEWAY — Uber's MCP gateway, for one database. Server only.
  *
  * Everything the app can do is a function in the database, and every one of them is in the registry
- * (`agent_tools`, written by `scripts/agent-crawl.mjs`). Only those reviewed and switched on in
- * `tool-review.json` reach the agent, and only those the person asking has the permission for. The
+ * (`agent_tools`, written by `scripts/agent-crawl.mjs`). Two switches decide what reaches the agent:
+ * ours (`tool-review.json` — since 11 Nov everything except its `never` list) and the shop's own
+ * (`store_agent_tools`, Settings → WhatsApp); under both, only what the person asking has the
+ * permission for. The
  * agent does not carry them all in its prompt — at Uber's scale or ours that is context and quota
  * spent for nothing — it SEARCHES for what it needs (`find_capability`) and then uses it
  * (`use_capability`), the progressive discovery Uber's Omni MCP does.
@@ -62,17 +64,27 @@ async function registry(service: SupabaseClient): Promise<AgentTool[]> {
   return cached.tools;
 }
 
-/** What THIS person may use: the registry, less what their role and their own ticks leave out. */
+/**
+ * What THIS person may use, through both switches: ours (the registry), then the shop's own
+ * (`store_agent_tools`, 0279: everything on unless the shop switched it off) — and of that, only what
+ * their role and their own ticks allow.
+ */
 async function allowed(ctx: GatewayCtx): Promise<AgentTool[]> {
   const tools = await registry(ctx.service);
-  const { data } = await ctx.db.rpc('member_permissions', { p_store_id: ctx.storeId, p_user_id: ctx.userId });
+  const [{ data }, { data: off }] = await Promise.all([
+    ctx.db.rpc('member_permissions', { p_store_id: ctx.storeId, p_user_id: ctx.userId }),
+    ctx.service.from('store_agent_tools').select('name').eq('store_id', ctx.storeId).eq('enabled', false),
+  ]);
   const mine = new Set(((data ?? []) as { code: string; allowed: boolean }[]).filter((p) => p.allowed).map((p) => p.code));
-  return tools.filter((t) => !t.permission || mine.has(t.permission));
+  const shopOff = new Set(((off ?? []) as { name: string }[]).map((r) => r.name));
+  return tools.filter((t) => !shopOff.has(t.name) && (!t.permission || mine.has(t.permission)));
 }
 
 const visible = (t: AgentTool) => t.args.filter((a) => !a.injected && !a.hidden);
 
 function jsonType(type: string): string {
+  // Lines, payments, batches: a list or an object, sent as JSON.
+  if (type === 'jsonb' || type === 'json') return 'json';
   if (/\[\]$/.test(type)) return 'array';
   if (/^(integer|bigint|smallint|numeric|money_amt|qty|unit_cost|real|double)/.test(type)) return 'number';
   if (type === 'boolean') return 'boolean';
@@ -85,7 +97,13 @@ const describe = (t: AgentTool) => ({
   title: t.title,
   description: t.description,
   changes_records: t.effect === 'write',
-  args: visible(t).map((a) => ({ name: a.name, type: jsonType(a.type), required: a.required, description: a.description })),
+  args: visible(t).map((a) => ({
+    name: a.name,
+    type: jsonType(a.type),
+    required: a.required,
+    // An argument nobody has explained yet is still said in words: p_customer_id → "customer id".
+    description: a.description ?? a.name.replace(/^p_/, '').replace(/_/g, ' '),
+  })),
 });
 
 const STOP = new Set(['the', 'and', 'for', 'with', 'what', 'who', 'how', 'can', 'you', 'our', 'their', 'from', 'this', 'that', 'want', 'give', 'show']);
@@ -126,7 +144,15 @@ function prepare(ctx: GatewayCtx, t: AgentTool, given: Args): { params: Args } |
       continue;
     }
     const kind = jsonType(a.type);
-    if (kind === 'number') {
+    if (kind === 'json') {
+      if (typeof v === 'string') {
+        try {
+          v = JSON.parse(v);
+        } catch {
+          return { error: `${a.description ?? a.name} must be a list or an object.` };
+        }
+      }
+    } else if (kind === 'number') {
       v = Number(v);
       if (!Number.isFinite(v)) return { error: `${a.description ?? a.name} must be a number.` };
     } else if (kind === 'boolean') {
@@ -157,7 +183,7 @@ export const GATEWAY_TOOLS: ToolDef[] = [
   {
     name: 'find_capability',
     description:
-      'Search everything else the shop can do when none of your other tools fits — renaming items, changing prices, suppliers and paying them, customer details, expenses, staff, expiring stock, online orders and more. Say what they want in plain words. Returns the matching capabilities with what each needs.',
+      'Search everything else the shop can do when none of your other tools fits — any setting (count gate, low-stock levels, shop name, bank accounts), any report or summary with its dates and filters, and adding, changing or removing any record: items, prices, shapes, groups, customers, suppliers and paying them, expenses, deposits and empties, counts, expiring stock, staff, online orders and more. Say what they want in plain words. Returns the matching capabilities with what each needs.',
     parameters: { type: 'object', properties: { need: { type: 'string' } }, required: ['need'] },
   },
   {
@@ -184,7 +210,11 @@ export async function runCapability(
     const found = search(tools, String(args.need ?? ''));
     return found.length > 0
       ? { capabilities: found.map(describe) }
-      : { capabilities: [], note: 'Nothing matches. These are what can be done:', titles: tools.map((t) => t.title ?? t.name) };
+      : {
+          capabilities: [],
+          note: 'Nothing matches those words. Try other words for the same thing; some of what can be done:',
+          titles: tools.slice(0, 60).map((t) => t.title ?? t.name),
+        };
   }
 
   const t = tools.find((x) => x.name === String(args.name ?? ''));

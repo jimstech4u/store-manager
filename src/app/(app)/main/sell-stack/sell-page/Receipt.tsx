@@ -38,6 +38,7 @@ import { EmptiesBroughtBack } from '@/components/empties/EmptiesBroughtBack';
 import { receiptDocument, type SaleDetail } from '@/lib/receipt-document';
 import { ChangeOwed } from '@/components/sell/ChangeOwed';
 import { autoPrintOn, useAutoPrint } from '@/lib/auto-print';
+import { paperLogo } from '@/lib/paper-logo';
 
 /**
  * The printable receipt.
@@ -111,7 +112,13 @@ export function Receipt({
       if (dErr) throw dErr;
 
       const row = (Array.isArray(s) ? s[0] : s) as
-        | { printer_width_mm: string; receipt_header: string | null; receipt_footer: string | null }
+        | {
+            printer_width_mm: string;
+            receipt_header: string | null;
+            receipt_footer: string | null;
+            receipt_logo_path: string | null;
+            receipt_logo_width_pct: number | null;
+          }
         | null;
 
       return {
@@ -121,6 +128,7 @@ export function Receipt({
           width: Number(row?.printer_width_mm ?? 80),
           header: row?.receipt_header ?? null,
           footer: row?.receipt_footer ?? null,
+          logo: paperLogo(row?.receipt_logo_path, row?.receipt_logo_width_pct),
         },
       };
     },

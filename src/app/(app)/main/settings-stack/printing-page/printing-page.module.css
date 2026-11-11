@@ -333,3 +333,127 @@
   align-items: center;
   justify-content: center;
 }
+
+/* ── The page as three cards and the receipt beside them ─────────────────────── */
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+}
+
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.card > .grid,
+.card > .measures,
+.card > .presets {
+  margin: 0;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--text);
+}
+
+.status {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: var(--space-3) 0;
+}
+
+.logoRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* The logo as it is on file: on white, as the paper is, whatever the theme. */
+.logoThumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 140px;
+  height: 72px;
+  flex: none;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #ffffff;
+  color: #6b7a76;
+  font-size: var(--text-xs);
+}
+
+.logoThumb img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.fine {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.fineSummary {
+  padding: var(--space-4);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.fineBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 0 var(--space-4) var(--space-4);
+}
+
+.fineTitle {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-base);
+  font-weight: 700;
+}
+
+.previewCol {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+/* With the room, the receipt sits beside the settings and stays in view while they change. */
+@container page (min-width: 820px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+    align-items: start;
+  }
+
+  .previewCol {
+    position: sticky;
+    top: var(--space-4);
+  }
+}
