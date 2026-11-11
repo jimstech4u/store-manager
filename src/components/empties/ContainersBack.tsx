@@ -1,6 +1,8 @@
 'use client';
 
-import { MinusIcon, PlusIcon } from '@/components/ui/Icon';
+import type { ReactNode } from 'react';
+import { Button } from '@/components/ui/Button';
+import { CheckIcon, MinusIcon, PlusIcon } from '@/components/ui/Icon';
 import { Qty } from '@/components/ui/Qty';
 import styles from './ContainersBack.module.css';
 
@@ -35,12 +37,18 @@ export function ContainersBack({
   onChange,
   onAll,
   disabled = false,
+  saving = false,
+  status,
 }: {
   rows: ContainerRow[];
   onChange: (id: string, back: number) => void;
-  /** All back / None back as one finished answer (the receipt saves it at once); else row by row. */
+  /** All came back / None came back as one finished answer (the receipt saves it at once); else row by row. */
   onAll?: (targets: Record<string, number>) => void;
   disabled?: boolean;
+  /** A save is under way: the buttons say so and wait. */
+  saving?: boolean;
+  /** What was just saved, said under the buttons ("Saved: … · Undo"). */
+  status?: ReactNode;
 }) {
   const setAll = (pick: (r: ContainerRow) => number) => {
     const targets = Object.fromEntries(rows.map((r) => [r.id, pick(r)]));
@@ -53,26 +61,38 @@ export function ContainersBack({
 
   return (
     <div className={styles.box}>
+      {/*
+        TWO BUTTONS THAT SAY WHAT THEY DO (11 Nov). They were a pair of tabs, which read as a switch
+        between two views: a tap saved at once with nothing to say so, and the owner tapped back and
+        forth eleven times on one receipt, saving the opposite each time. Now each is a button naming
+        the answer, the one already recorded is ticked and cannot be pressed again, a save says
+        "Saving…", and what was saved is said under them with Undo.
+      */}
       <div className={styles.quick} role="group" aria-label="All at once">
-        <button
-          type="button"
-          className={`${styles.quickBtn} ${allBack ? styles.quickOn : ''}`}
-          aria-pressed={allBack}
-          disabled={disabled}
+        <Button
+          size="small"
+          variant={allBack ? 'secondary' : 'primary'}
+          disabled={disabled || saving || allBack}
+          busy={saving}
+          busyLabel="Saving"
           onClick={() => setAll((r) => Math.max(r.out, Math.min(r.back, r.max)))}
         >
-          All back
-        </button>
-        <button
-          type="button"
-          className={`${styles.quickBtn} ${noneBack ? styles.quickOn : ''}`}
-          aria-pressed={noneBack}
-          disabled={disabled}
+          {allBack ? <><CheckIcon /> All came back</> : 'All came back'}
+        </Button>
+        <Button
+          size="small"
+          variant="secondary"
+          disabled={disabled || saving || noneBack}
           onClick={() => setAll(() => 0)}
         >
-          None back
-        </button>
+          {noneBack ? <><CheckIcon /> None came back</> : 'None came back'}
+        </Button>
       </div>
+      {status && (
+        <p className={styles.status} role="status">
+          {status}
+        </p>
+      )}
 
       <ul className={styles.list}>
         {rows.map((r) => {

@@ -172,6 +172,8 @@ export function EmptiesBroughtBack({
     onFail: problem.show,
   });
   const [targets, setTargets] = useState<Record<string, number>>({});
+  /** What the last save did, said under the buttons, and what it was before — for its Undo. */
+  const [saved, setSaved] = useState<{ said: string; before: Record<string, number> } | null>(null);
   useEffect(() => setTargets({}), [saleArea.data]);
   const containers = saleArea.data ?? [];
   const rowsBack = containers.map((c) => ({
@@ -194,6 +196,15 @@ export function EmptiesBroughtBack({
     setBusy(true);
     try {
       await setSaleEmptiesBack(forSale.id, units, { atSale: Boolean(forSale.occurredAt) });
+      // Said in words: what came back now, and what is still with them.
+      const after = containers.map((c) => ({ c, back: wanted[c.productUnitId] ?? c.cameBack }));
+      const back = after.reduce((n, x) => n + Math.min(x.back, x.c.wentOut), 0);
+      const left = after.reduce((n, x) => n + Math.max(x.c.wentOut - x.back, 0), 0);
+      const unit = (containers[0]?.unitPlural || 'containers').toLowerCase();
+      setSaved({
+        said: left <= 0 ? `Saved: all came back` : back <= 0 ? `Saved: none came back · ${left} ${unit} still with them` : `Saved: ${back} back · ${left} ${unit} still with them`,
+        before: Object.fromEntries(containers.map((c) => [c.productUnitId, c.cameBack])),
+      });
       saleArea.reload();
       area.reload();
       all.reload();
@@ -225,22 +236,35 @@ export function EmptiesBroughtBack({
               <>
                 <ContainersBack
                   rows={rowsBack}
-                  disabled={busy}
-                  onChange={(id, back) => setTargets((t) => ({ ...t, [id]: back }))}
+                  saving={busy}
+                  onChange={(id, back) => {
+                    setSaved(null);
+                    setTargets((t) => ({ ...t, [id]: back }));
+                  }}
                   onAll={(wanted) => void saveBack(wanted)}
+                  status={
+                    saved && changes.length === 0 ? (
+                      <>
+                        <span>✓ {saved.said}</span>
+                        <button type="button" disabled={busy} onClick={() => void saveBack(saved.before)}>
+                          Undo
+                        </button>
+                      </>
+                    ) : null
+                  }
                 />
                 {changes.length > 0 && (
                   <div className={styles.saveRow}>
                     <Button variant="secondary" size="small" disabled={busy} onClick={() => setTargets({})}>
-                      Undo changes
+                      Cancel
                     </Button>
                     <Button
                       size="small"
                       busy={busy}
-                      busyLabel="Recording"
+                      busyLabel="Saving"
                       onClick={() => void saveBack(Object.fromEntries(rowsBack.map((r) => [r.id, r.back])))}
                     >
-                      Save
+                      Save {changes.length === 1 ? 'this change' : `${changes.length} changes`}
                     </Button>
                   </div>
                 )}

@@ -7,27 +7,33 @@
 .quick {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 4px;
-  padding: 4px;
+  gap: var(--space-2);
+}
+
+/* What was just saved, with its Undo: green, under the buttons, never a popup that goes away. */
+.status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius);
-  background: var(--surface-sunken);
+  background: var(--success-subtle);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 600;
 }
 
-.quickBtn {
-  min-height: 44px;
+.status button {
+  padding: 0;
   border: none;
-  border-radius: calc(var(--radius) - 4px);
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.quickOn {
-  background: var(--surface);
+  background: none;
   color: var(--primary);
-  box-shadow: var(--shadow-sm);
+  font: inherit;
+  font-weight: 800;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .list {

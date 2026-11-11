@@ -103,6 +103,11 @@ try {
   console.log('  paper ends:', paper.split('\n').slice(-14).join(' / '));
   console.log('  buttons:', (await top().getByRole('button').allInnerTexts()).map((t) => t.trim()).filter(Boolean).slice(0, 30).join(' | '));
   await shot('3-receipt');
+  // The receipt's own empties: two buttons saying what they do, the recorded one ticked and shut.
+  const block = top().locator('section').filter({ has: p.getByRole('button', { name: /came back/ }) }).first();
+  await block.screenshot({ path: `${SHOTS}/3-receipt-empties.png` });
+  const ticked = await block.getByRole('button', { name: /came back/ }).evaluateAll((bs) => bs.map((b) => `${b.textContent.trim()}${b.disabled ? ' (shut)' : ''}`));
+  check('the empties are two buttons, the recorded answer ticked and shut', ticked.length === 2 && ticked.some((t) => /shut/.test(t)), ticked.join(' | '));
 
   // ── 4. Correcting it ──
   const correct = top().getByRole('button', { name: 'Something on this is wrong' }).first();
