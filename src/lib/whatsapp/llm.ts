@@ -262,6 +262,49 @@ export async function transcribe(media: { mime: string; base64: string }): Promi
   return text || null;
 }
 
+/**
+ * TOOL CALLS WRITTEN AS WORDS. A model taking over mid-conversation sometimes writes its calls into
+ * the reply — `{"tool": "find_items", "input": {"query": "Goldberg"}}` — instead of making them, and
+ * that text reached the shop as the answer (Arewa's order, 9 Nov). Read back out here, by name, and
+ * only for tools this run actually offers.
+ */
+export function writtenCalls(text: string, known: Set<string>): { name: string; args: Record<string, unknown> }[] {
+  const out: { name: string; args: Record<string, unknown> }[] = [];
+  for (let i = 0; i < text.length; i += 1) {
+    if (text[i] !== '{') continue;
+    let depth = 0;
+    let inString = false;
+    for (let j = i; j < text.length; j += 1) {
+      const c = text[j];
+      if (inString) {
+        if (c === '\\') j += 1;
+        else if (c === '"') inString = false;
+        continue;
+      }
+      if (c === '"') inString = true;
+      else if (c === '{') depth += 1;
+      else if (c === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          try {
+            const o = JSON.parse(text.slice(i, j + 1)) as Record<string, unknown>;
+            const name = String(o.tool ?? o.name ?? o.function ?? '');
+            const args = (o.input ?? o.arguments ?? o.args ?? o.parameters ?? {}) as Record<string, unknown> | string;
+            if (known.has(name)) {
+              out.push({ name, args: typeof args === 'string' ? JSON.parse(args || '{}') : args });
+              i = j;
+            }
+          } catch {
+            // Not a call; braces in ordinary words.
+          }
+          break;
+        }
+      }
+    }
+  }
+  return out;
+}
+
 const MAX_ROUNDS = 8;
 /** From here the model is asked to answer with what it has. */
 const DEADLINE_MS = 35_000;
@@ -281,18 +324,27 @@ export async function runAssistant(
   call: (name: string, args: Record<string, unknown>) => Promise<unknown>,
   /** True once a tool has settled the turn (an action proposed): no more rounds. */
   finished: () => boolean = () => false,
+  /**
+   * Shared with the caller as the run goes: what has been called and which providers answered, so a
+   * run the clock gave up on can still say where its time went — and `stop`, which ends it. A run
+   * left going after its reply was sent changed the order while the next message was being handled.
+   */
+  live: { trace: { tool: string; args: unknown; result: unknown }[]; providers: string[]; skipped: string[]; stop: boolean } = {
+    trace: [], providers: [], skipped: [], stop: false,
+  },
 ): Promise<{
   answer: string;
   trace: { tool: string; args: unknown; result: unknown }[];
   providers: string[];
   skipped: string[];
 }> {
-  const trace: { tool: string; args: unknown; result: unknown }[] = [];
-  const used: string[] = [];
-  const skipped: string[] = [];
+  const trace = live.trace;
+  const used = live.providers;
+  const skipped = live.skipped;
   const convo = [...messages];
   const started = Date.now();
   for (let round = 0; round < MAX_ROUNDS; round += 1) {
+    if (live.stop) return { answer: '', trace, providers: used, skipped };
     const last = round === MAX_ROUNDS - 1 || Date.now() - started > DEADLINE_MS;
     const caller = [...convo].reverse().some((m) => m.tool_calls?.length) ? used[used.length - 1] ?? null : null;
     const { msg: reply, provider } = await complete(convo, last ? [] : tools, skipped, caller, started + HARD_STOP_MS);
@@ -302,12 +354,28 @@ export async function runAssistant(
      */
     if (caller !== null && provider !== caller) convo.splice(0, convo.length, ...asNotes(convo));
     used.push(provider);
+    if (!reply.tool_calls || reply.tool_calls.length === 0) {
+      const text = typeof reply.content === 'string' ? reply.content : '';
+      const written = writtenCalls(text, new Set(tools.map((t) => t.name)));
+      if (written.length > 0) {
+        // On the last round there is no time to run them: nothing of it goes out as an answer.
+        if (last) return { answer: '', trace, providers: used, skipped };
+        reply.content = '';
+        reply.tool_calls = written.map((w, k) => ({
+          id: `written_${round}_${k}`,
+          type: 'function' as const,
+          function: { name: w.name, arguments: JSON.stringify(w.args) },
+        }));
+      }
+    }
     convo.push({ role: 'assistant', content: reply.content ?? '', tool_calls: reply.tool_calls });
     if (!reply.tool_calls || reply.tool_calls.length === 0) {
       const text = typeof reply.content === 'string' ? reply.content : '';
       return { answer: forWhatsApp(text), trace, providers: used, skipped };
     }
     for (const tc of reply.tool_calls) {
+      // Given up on: nothing more is done for this message.
+      if (live.stop) return { answer: '', trace, providers: used, skipped };
       let args: Record<string, unknown> = {};
       try {
         args = JSON.parse(tc.function.arguments || '{}');

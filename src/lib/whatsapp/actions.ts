@@ -27,6 +27,8 @@ export interface Ctx {
   proposed: string | null;
   /** What was just said, both ways: lets a rule check the person decided, not the model. */
   said?: { lastOut: string; now: string; done?: string[] };
+  /** An order this turn opened — closed at the end if nothing reached it (`closeIfEmpty`). */
+  opened?: string | null;
 }
 
 const lineItem = { type: 'object', properties: {

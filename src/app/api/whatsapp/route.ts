@@ -3,6 +3,7 @@ import { downloadMedia, markRead, sendChoices, sendText, signatureValid, whatsap
 import { clientFor, serviceDb } from '@/lib/whatsapp/session';
 import { forWhatsApp, llmConfigured, runAssistant, transcribe, type Content, type Message } from '@/lib/whatsapp/llm';
 import { TOOLS, paperOf, runTool } from '@/lib/whatsapp/tools';
+import { closeIfEmpty, workingSummary } from '@/lib/whatsapp/orders';
 import { execute, type Ctx } from '@/lib/whatsapp/actions';
 
 /**
@@ -97,11 +98,12 @@ export async function POST(request: Request) {
     }
   }
 
-  // Answered now; the reply is worked out after.
+  // Answered now; the reply is worked out after, against the clock this request started.
+  const began = Date.now();
   after(async () => {
     for (const w of work) {
       try {
-        await handle(w.msg, w.name);
+        await handle(w.msg, w.name, began);
       } catch (e) {
         console.error('whatsapp handle failed', e);
         // Kept with the conversation, so a reply that never came can be found afterwards.
@@ -127,7 +129,15 @@ export async function POST(request: Request) {
   return NextResponse.json({ ok: true });
 }
 
-async function handle(msg: WaMessage, profileName: string | null) {
+/**
+ * THE FUNCTION HAS SIXTY SECONDS, and a reply has to be out before them. Valuemart's twenty-four-line
+ * order (7 Nov) ran past and was cut off mid-thought: no answer at all, not even an error, because the
+ * platform ended the function before anything could be said. From here a turn that is still going
+ * stops and says what it has done, so the person is never left with silence.
+ */
+const REPLY_BY_MS = 50_000;
+
+async function handle(msg: WaMessage, profileName: string | null, began = Date.now()) {
   const db = serviceDb();
   const tapped = msg.interactive?.button_reply?.title ??
     (msg.interactive?.list_reply
@@ -313,6 +323,16 @@ async function handle(msg: WaMessage, profileName: string | null) {
     return;
   }
 
+  /*
+   * SAID AT ONCE when it will take a while: a list, a photo, a file. A long silence after sending an
+   * order reads as the agent not working, and the same order was sent again (Arewa's, 9 Nov).
+   */
+  const listLines = text.split(/\n/).map((l) => l.trim()).filter(Boolean).length;
+  const media = msg.type === 'image' ? 'your photo' : msg.type === 'document' ? 'your file' : null;
+  if (!continuing && (media || listLines >= 4)) {
+    await sendText(msg.from, media ? `On it ⏳ reading ${media}…` : `On it ⏳ working through ${listLines} lines…`).catch(() => undefined);
+  }
+
   // The last few turns, so "and yesterday?" means something.
   /*
    * ONLY THE CONVERSATION ITSELF: rows carrying the shop, which the link code and the welcome do not —
@@ -375,7 +395,7 @@ async function handle(msg: WaMessage, profileName: string | null) {
       '- A walk-in, or "no customer", means none: never attach a customer from earlier in the chat to a new sale they did not name one for.\n' +
       '- Never choose a customer, item or supplier for them. When it is unclear which, ask, and offer the names as options.\n' +
       '- An order of several items, or one built over several messages, goes on a working order (order_start, then order_set for each item): it is saved on the till with a code, so quantities and prices are never kept in your memory. Show it with order_show and sell it with order_sell. A single quick sale can still use propose_sale.\n' +
-      '- An order list (a photo, typed, or forwarded from a customer): order_start for the customer, then for each line, if find_items gives exactly one item and the quantity and shape are plain, order_set it with written set to the line; otherwise order_hold it with why. Then order_show, and ask about the held lines one at a time, offering the choices as options. Never guess a name, a quantity or a shape.\n' +
+      '- An order list (a photo, typed, or forwarded from a customer): call order_add_list ONCE, straight away, with customer set to who it is for as they wrote it — for a typed or forwarded list set from_message true and do not copy the lines; for a photo or file pass every line in lines. No find_customer, order_start, find_items or order_set first, and never line by line. It finds the customer, opens their order, places what is plain and holds the rest. Then say how many went on and the total, and ask about the held lines (to_confirm) one at a time, offering the choices as options. Never guess a name, a quantity or a shape.\n' +
       '- When they tell you or correct what a written name means, call name_means so it is found next time (several items when it should always be asked, like Coke). Never teach a choice they made once among several.\n' +
       '- After a count shows a difference, ask what happened to it, using only the reasons count_status gives, then propose_settle_count with parts that add up to the whole difference.\n' +
       '- When less than the whole amount is paid, never decide what happens to the rest: ask whether it goes on the customer\'s account or another payment is coming, as the tool tells you.\n' +
@@ -396,15 +416,37 @@ async function handle(msg: WaMessage, profileName: string | null) {
       '- A photo or PDF of an invoice is a delivery: read the supplier, items, quantities and costs from it, find each item, and propose it. Ask only for what you cannot read.',
   };
 
+  const run = { trace: [] as { tool: string; args: unknown; result: unknown }[], providers: [] as string[], skipped: [] as string[], stop: false };
   const ask = (extra: Message[] = []) =>
     runAssistant(
       [system, ...history, { role: 'user', content }, ...extra],
       TOOLS,
       (name, args) => runTool(userDb, link.store_id, name, args, ctx, mine.store_name),
       () => ctx.proposed !== null,
+      run,
     );
-  const began = Date.now();
-  let { answer, trace, providers, skipped } = await ask();
+  /*
+   * NEVER SILENT. The turn runs against the clock; if it is still going when the reply is due, what it
+   * has done so far is said instead, from the order as saved — never from the model's memory.
+   */
+  const late = Symbol('late');
+  const due = Math.max(5_000, REPLY_BY_MS - (Date.now() - began));
+  const first = await Promise.race([ask(), new Promise<typeof late>((r) => setTimeout(() => r(late), due))]);
+  if (first === late) {
+    // The run stops here: nothing it has not done yet is done after this reply.
+    run.stop = true;
+    await closeIfEmpty(ctx).catch(() => false);
+    const so = await workingSummary(ctx).catch(() => null);
+    await reply(
+      so
+        ? `That is taking me longer than it should, so here is where it stands. ${so}\n\nSend *continue* and I will carry on.`
+        : 'That took me too long and I did not finish it. Please send it again, or in smaller parts.',
+      { store_id: link.store_id, user_id: link.user_id, tools: { late: true, calls: run.trace, providers: run.providers, skipped: run.skipped, ms: Date.now() - began } },
+      so ? ['Continue', 'Show the order'] : [],
+    );
+    return;
+  }
+  let { answer, trace, providers, skipped } = first;
   /*
    * A CONFIRMATION WITH NOTHING BEHIND IT. A model that asks for YES in its own words has proposed
    * nothing, and the person's YES would do nothing while they believed it had. Told once to use the
@@ -432,10 +474,17 @@ async function handle(msg: WaMessage, profileName: string | null) {
    */
   // After a YES with nothing left of the message, the done reply already said all there is.
   if (continuing && !ctx.proposed && /NOTHING_LEFT/.test(answer)) return;
+  // An order opened for this message that nothing reached does not stay on the till.
+  await closeIfEmpty(ctx).catch(() => false);
   const said = splitOptions(answer);
+  // No words from the model (it ran out, or only wrote calls): say where the order stands, if one is open.
+  const fallback = said.words ? null : await workingSummary(ctx).catch(() => null);
   const words = ctx.proposed
     ? `${forWhatsApp(ctx.proposed)}\n\nReply *YES* to record it, or *NO* to cancel.`
-    : said.words || 'I could not work that out — could you ask another way?';
+    : said.words ||
+      (fallback
+        ? `${fallback} Send *show the order* to see it, or tell me what to change.`
+        : 'I could not work that out — could you ask another way?');
   await reply(
     words,
     { store_id: link.store_id, user_id: link.user_id, tools: { calls: trace, providers, skipped } },
