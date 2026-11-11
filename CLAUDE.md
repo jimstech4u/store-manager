@@ -797,6 +797,23 @@ it. Pictures are loaded before drawing (`paperImageUrls`; `renderReceiptCanvas` 
 hand-off is text and leaves it out. A shop's logo was saved and drawn nowhere for weeks: a new reader
 of the header reads the logo with it.
 
+**A receipt knows its own containers, and "came back" is set, not appended** (0280). `sale_empties`
+says per shape what went out with a receipt, what came back with it and what is still out; the ONE
+way to change "came back" is `set_sale_empties_back` (up records a return against the receipt, down
+undoes the newest returns — `undo_empties_move`, a new 'out' row pointing at the return it answers).
+The receipt (`ContainersBack`: All back / None back in one tap, − and +), the correction flow and the
+agent (`receipt_empties`, `propose_receipt_empties_back`) all go through it. A correction carries
+"came back" forward by `correctedBack` (a receipt's own returns are capped at what it now sends out;
+older crates handed in with it stay) — `correct_sale` itself never touched returns recorded against
+the receipt, which is how #D1746E61 kept three Amstel crates back against two out. Whether a shape
+sends containers is `containersGoingOut`, never a line's `containersOut` alone (receipts carry 0 there).
+More back than out is NOT by itself wrong: "include what they had from before" records older crates
+against the new receipt. `sale_empties_mismatches` lists the corrected ones that really are.
+
+**Correcting a receipt is the till with a trace.** The till's own `QuickAdd` and `TillLine`; a line's
+full row opens in place; each line says what it was ("was 3 crates", "new"); what was taken off is
+listed with Put back; the empties are set on the same page and saved with the correction.
+
 **Waiting for you is what someone who may not confirm made** (0278). A record made by anyone with
 `records.confirm` is their word and never queued back to them; each queued row names its maker.
 

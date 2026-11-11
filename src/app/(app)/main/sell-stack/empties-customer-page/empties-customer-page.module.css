@@ -205,3 +205,77 @@
   font-weight: 600;
   cursor: pointer;
 }
+
+/* ── 11 Nov: what they hold and its actions, beside everything that has happened ── */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.card {
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.cardTitle {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+
+@container page (min-width: 760px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    align-items: start;
+  }
+}
+
+/* An undo: its own colour in the history, and the move it took back marked rather than hidden. */
+.undo {
+  background: var(--warning);
+}
+
+.moveUndone .moveWhat {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.undoneTag {
+  display: inline-block;
+  margin-left: var(--space-2);
+  padding: 0 6px;
+  border-radius: var(--radius-full);
+  background: var(--warning-subtle);
+  color: var(--text);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.moveLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.moveUndo {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--danger);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  cursor: pointer;
+}

@@ -69,6 +69,12 @@ export interface AmendDraft {
    */
   takeBack?: string[];
   cancelDeposit?: boolean;
+  /**
+   * WHAT CAME BACK WITH IT, as set by hand on the correction page (0280), per container shape. A
+   * shape not here takes `correctedBack`'s figure; applied with `set_sale_empties_back` after the
+   * correction saves.
+   */
+  emptiesBack?: Record<string, number>;
 }
 
 const empty = (saleId: string): AmendDraft => ({

@@ -39,6 +39,9 @@ import { receiptDocument, type SaleDetail } from '@/lib/receipt-document';
 import { ChangeOwed } from '@/components/sell/ChangeOwed';
 import { autoPrintOn, useAutoPrint } from '@/lib/auto-print';
 import { paperLogo } from '@/lib/paper-logo';
+import { saleEmpties, type SaleContainer } from '@/lib/stacks/sale-empties';
+import { useLoadArea } from '@/components/ui/LoadArea';
+import { LEDGERS_SCOPE } from '@/lib/stacks/customer-ledgers';
 
 /**
  * The printable receipt.
@@ -135,6 +138,14 @@ export function Receipt({
   });
 
   const detail = res.data?.detail ?? null;
+  /*
+   * THIS RECEIPT'S CONTAINERS — the same key the empties block on it reads and re-reads after a
+   * change, so the paper says what the block now says.
+   */
+  const containers = useLoadArea<SaleContainer[]>(() => saleEmpties(saleId), [saleId], {
+    key: `sale-empties:${saleId}`,
+    scope: LEDGERS_SCOPE,
+  });
   const shopName = res.data?.shopName ?? '';
   const settings = res.data?.settings ?? null;
 
@@ -285,7 +296,16 @@ export function Receipt({
 
   const { sale, customer, corrected } = detail;
   const width = settings?.width ?? 80;
-  const receiptPayload = () => receiptDocument(detail, shopName, settings);
+  const receiptPayload = () =>
+    receiptDocument(
+      detail,
+      shopName,
+      settings,
+      // The receipt's own empties, out and back, on the paper (0280).
+      (containers.data ?? [])
+        .filter((c) => c.wentOut > 0 || c.cameBack > 0)
+        .map((c) => ({ name: c.productName, unitName: c.unitName, unitPlural: c.unitPlural, out: c.wentOut, back: c.cameBack })),
+    );
 
   /*
    * THE RECEIPT AS LINES — one description, read by the screen, the preview and the printer.

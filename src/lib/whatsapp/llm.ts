@@ -129,9 +129,12 @@ async function completeWith(
   messages: Message[],
   tools: ToolDef[],
   timeoutMs: number,
+  /** Called off from outside: another provider answered first. */
+  stop?: AbortSignal,
 ): Promise<Message> {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), timeoutMs);
+  stop?.addEventListener('abort', () => ctl.abort(), { once: true });
   try {
     const res = await fetch(`${p.base.replace(/\/$/, '')}/chat/completions`, {
       method: 'POST',
@@ -202,30 +205,73 @@ async function complete(
    * customer's name?" Better the apology below than a confident answer about nothing.
    */
   const able = media && order.some((p) => p.vision !== false) ? order.filter((p) => p.vision !== false) : order;
-  for (const p of able) {
+
+  /** One provider's try; a failure rests it, unless it was called off because another answered. */
+  const attempt = (p: Provider, stop: AbortController) => {
+    const handedOver = caller !== null && p.name !== caller;
+    const budget = Math.min(PROVIDER_MS, stopAt - Date.now());
+    return completeWith(p, handedOver ? asNotes(messages) : messages, tools, budget, stop.signal).then(
+      (msg) => ({ msg, provider: p.name }),
+      (e: unknown) => {
+        if (!stop.signal.aborted) {
+          const { rest = 'failed', restMs } = e as { rest?: 'quota' | 'failed'; restMs?: number };
+          restingUntil.set(p.name, Date.now() + Math.min(restMs ?? REST_MS[rest], REST_CEILING_MS));
+          const said = e instanceof Error ? e.message : String(e);
+          errors.push(said);
+          // Kept with the message's log, so "why was that slow" has an answer.
+          skipped.push(said.slice(0, 160));
+        }
+        throw e;
+      },
+    );
+  };
+
+  let i = 0;
+  while (i < able.length) {
     /*
      * ONLY THE TIME THAT IS LEFT. Each provider had 20 seconds whatever had already been spent, so
      * three slow ones near the end outran the function's 60: it was killed, and the person heard
      * nothing at all. Stopping here means the caller still has time to say sorry.
      */
-    const left = stopAt - Date.now();
-    if (left < 1500) {
+    if (stopAt - Date.now() < 1500) {
       errors.push('out of time');
       break;
     }
+    const p = able[i];
+    i += 1;
+    const firstStop = new AbortController();
+    const first = attempt(p, firstStop);
+    /*
+     * A STALL IS NOT WAITED OUT (11 Nov). NVIDIA sat on New look's third step for its full 18 seconds,
+     * the next model began with ten left, and the owner was told to send it again. So a provider still
+     * silent after HEDGE_MS gets company: the next one is asked the same thing, the first answer wins
+     * and the other is called off — not rested, it did nothing wrong.
+     */
+    const early = await Promise.race([
+      first.then((v) => ({ v }), () => ({ failed: true as const })),
+      new Promise<'hedge'>((r) => setTimeout(() => r('hedge'), HEDGE_MS)),
+    ]);
+    if (early !== 'hedge') {
+      if ('v' in early) return early.v;
+      continue;
+    }
+    if (i >= able.length || stopAt - Date.now() < 3000) {
+      try {
+        return await first;
+      } catch {
+        continue;
+      }
+    }
+    const q = able[i];
+    i += 1;
+    const secondStop = new AbortController();
+    const second = attempt(q, secondStop);
     try {
-      const handedOver = caller !== null && p.name !== caller;
-      return {
-        msg: await completeWith(p, handedOver ? asNotes(messages) : messages, tools, Math.min(PROVIDER_MS, left)),
-        provider: p.name,
-      };
-    } catch (e) {
-      const { rest = 'failed', restMs } = e as { rest?: 'quota' | 'failed'; restMs?: number };
-      restingUntil.set(p.name, Date.now() + Math.min(restMs ?? REST_MS[rest], REST_CEILING_MS));
-      const said = e instanceof Error ? e.message : String(e);
-      errors.push(said);
-      // Kept with the message's log, so "why was that slow" has an answer.
-      skipped.push(said.slice(0, 160));
+      const win = await Promise.any([first, second]);
+      (win.provider === p.name ? secondStop : firstStop).abort();
+      return win;
+    } catch {
+      // Both failed; on to the next.
     }
   }
   throw new Error(`Every assistant is unavailable just now: ${errors.join(' | ')}`);
@@ -312,6 +358,13 @@ const DEADLINE_MS = 35_000;
 const HARD_STOP_MS = 52_000;
 /** A provider that is slow today should cost a moment, not the whole message. */
 const PROVIDER_MS = 18_000;
+/**
+ * Silent this long, and the next provider is asked alongside (see `complete`). Not sooner: NVIDIA takes
+ * 10–12 s on an ordinary step, and at 8 s the faster, weaker next model won most races — it proposed
+ * charging a customer ₦4,100,000 for crates they never had (actions probe, 11 Nov). A real stall
+ * (New look's step hung the full 18 s) is still met.
+ */
+const HEDGE_MS = 14_000;
 
 /**
  * Ask, let it call tools, give it the results, until it answers. A question about a shop is a few
@@ -343,6 +396,7 @@ export async function runAssistant(
   const skipped = live.skipped;
   const convo = [...messages];
   const started = Date.now();
+  let blanks = 0;
   for (let round = 0; round < MAX_ROUNDS; round += 1) {
     if (live.stop) return { answer: '', trace, providers: used, skipped };
     const last = round === MAX_ROUNDS - 1 || Date.now() - started > DEADLINE_MS;
@@ -367,6 +421,24 @@ export async function runAssistant(
           function: { name: w.name, arguments: JSON.stringify(w.args) },
         }));
       }
+    }
+    /*
+     * AN ANSWER OF NOTHING IS NOT AN ANSWER (11 Nov). NVIDIA's backup read New look's empties and
+     * replied with an empty message, so the owner heard "I could not work that out" about a question
+     * the shop had just answered. That provider rests a moment and the next one is asked the same.
+     */
+    if (
+      (!reply.tool_calls || reply.tool_calls.length === 0) &&
+      !String(reply.content ?? '').trim() &&
+      blanks < 2 &&
+      Date.now() < started + HARD_STOP_MS - 6_000
+    ) {
+      blanks += 1;
+      // Briefly: long enough to ask another model, not so long the next messages lose the best one.
+      restingUntil.set(provider, Date.now() + 15_000);
+      skipped.push(`${provider}: answered with nothing`);
+      round -= 1;
+      continue;
     }
     convo.push({ role: 'assistant', content: reply.content ?? '', tool_calls: reply.tool_calls });
     if (!reply.tool_calls || reply.tool_calls.length === 0) {

@@ -5,8 +5,7 @@ import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { usePermission } from '@/hooks/usePermission';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { Button } from '@/components/ui/Button';
-import { InfoPanel } from '@/components/ui/Explain';
-import { PeopleIcon, PlusIcon } from '@/components/ui/Icon';
+import { PeopleIcon } from '@/components/ui/Icon';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { RecordLink } from '@/components/ui/RecordLink';
 import { ConfirmDialog, ProblemDialog, useConfirm, useProblem } from '@/components/ui/Dialog';
@@ -26,6 +25,8 @@ import { formatQtySpoken } from '@/lib/format';
 import { useAuth } from '@/providers/AuthProvider';
 import { messageOf } from '@/lib/format';
 import { rollUpOwed, saidAsPart, settleLine, type OwedLine, type OwedRow } from '@/lib/empties-rollup';
+import { EmptiesBroughtBack } from '@/components/empties/EmptiesBroughtBack';
+import { undoEmptiesMove } from '@/lib/stacks/sale-empties';
 
 import styles from './empties-customer-page.module.css';
 
@@ -117,6 +118,9 @@ export default function EmptiesCustomerPage() {
    * what was entered.
    */
   const giveDialog = useConfirm();
+  // A return taken back (0280): mounted means asked.
+  const undoDialog = useConfirm();
+  const [undoing, setUndoing] = useState<EmptiesMove | null>(null);
   const [giving, setGiving] = useState<OwedLine | null>(null);
   const [givingBusy, setGivingBusy] = useState(false);
   const giveBack = async (line: OwedLine) => {
@@ -167,7 +171,7 @@ export default function EmptiesCustomerPage() {
       layout="record"
       onBack={goBack}
       title="Empties"
-      subtitle="What they are holding, and every move of it"
+      subtitle={account?.customer.name ? `${account.customer.name} — what they hold, and every move` : 'What they are holding, and every move of it'}
       // UP TO THE RECORD THIS BELONGS TO: the customer, with their statement and deposit.
       /*
         UP TO THEIR ACCOUNT — only when this was not opened from it. From the account, Back is the way
@@ -192,216 +196,171 @@ export default function EmptiesCustomerPage() {
         {() => (
           <>
 
-      <h2 className={styles.section}>Still with them</h2>
+      <div className={styles.layout}>
+        <div className={styles.col}>
+          {/*
+            STILL WITH THEM, settled where it is read (EmptiesBroughtBack): All back on a line is one tap
+            and a dialog, Part counts some, and "They brought everything back" clears the lot. It used to
+            be a list to read and a separate button to a page to record on.
+          */}
+          {store && customerId && (
+            <EmptiesBroughtBack
+              storeId={store.id}
+              customerId={customerId}
+              title="Still with them"
+              onRecorded={() => {
+                owedArea.reload();
+                ledgerArea.reload();
+              }}
+            />
+          )}
 
-      <LoadArea area={owedArea} what="what they are holding">
-        {() =>
-          lines.length === 0 ? (
-            <InfoPanel tone="success" title="Everything is back">
-              Nothing of yours is out with them.
-            </InfoPanel>
-          ) : (
-            <>
-              {/*
-                THE SENTENCE, said the way it is said out loud.
-
-                Whole crates add up across the maker — a Goldberg crate settles a Gulder crate,
-                both go back to Nigerian Breweries — and the part-loads stay with their own beer,
-                because half a Goldberg and half a Gulder are not one crate of anything.
-              */}
+          {/* THEIRS, IN OUR YARD — the other direction, said as its own thing (0157). */}
+          {oursWithUs.length > 0 && (
+            <section className={styles.card}>
+              <h2 className={styles.cardTitle}>Theirs, in your yard</h2>
               <ul className={styles.said}>
-                {lines.map((l, i) => (
-                  <li
-                    key={`${l.side}-${l.label}-${l.unit}-${i}`}
-                    className={l.isPart ? styles.part : styles.whole}
-                  >
+                {oursWithUs.map((l, i) => (
+                  <li key={`ours-${l.label}-${l.unit}-${i}`} className={l.isPart ? styles.part : styles.whole}>
                     <span className={styles.saidQty}>{l.said}</span>
                     <span className={styles.saidWhat}>
                       {l.label} {l.unit.toLowerCase()}
                     </span>
-                    {/*
-                      THE WORKING, on the line that needed it.
-
-                      There used to be a second section below repeating every shape separately —
-                      "Counted shape by shape" — which said the same thing twice and made the screen
-                      look like two different answers. What that section was really for is visible
-                      here: which products a rolled-up total came from.
-                    */}
-                    {l.products.length > 1 && (
-                      <span className={styles.saidFrom}>{l.products.join(' + ')}</span>
+                    {l.products.length > 1 && <span className={styles.saidFrom}>{l.products.join(' + ')}</span>}
+                    {canOpen('empties_record_page') && (
+                      <Button size="small" disabled={givingBusy} onClick={() => setGiving(l)}>
+                        Given back
+                      </Button>
                     )}
                   </li>
                 ))}
               </ul>
+              {canOpen('empties_record_page') && (
+                <Button
+                  variant="secondary"
+                  fullWidth
+                  onClick={() => void nav.push('empties_record_page', { id: customerId, direction: 'returned', side: 'we_hold' })}
+                >
+                  Give some of theirs back
+                </Button>
+              )}
+            </section>
+          )}
 
-            </>
-          )
-        }
-      </LoadArea>
+          {giving && (
+            <ConfirmDialog
+              controller={giveDialog}
+              tone="primary"
+              title={`Gave back ${giving.said} ${giving.label} ${giving.unit.toLowerCase()}?`}
+              message="They come off what you are holding of theirs."
+              confirmText="Yes, given back"
+              onDismiss={() => setGiving(null)}
+              onConfirm={() => void giveBack(giving)}
+            />
+          )}
 
-      {/*
-        THEIRS, IN OUR YARD — the other direction, said as its own thing.
+          {/* A write-off is not a return: red, because it closes an obligation without the thing coming back. */}
+          {canOpen('empties_record_page') && theirsOutstanding.length > 0 && (
+            <Button
+              variant="danger"
+              fullWidth
+              onClick={() => void nav.push('empties_record_page', { id: customerId, direction: 'damaged' })}
+            >
+              Broken or lost
+            </Button>
+          )}
+        </div>
 
-        It used to be added into the line above, so a screen that should have read "they hold 55,
-        we hold 65" said "120 still with them". Nothing here settles it: it comes back to them when
-        they collect, or against what they take next — and "Given back" records that.
-      */}
-      {oursWithUs.length > 0 && (
-        <>
-          <h2 className={styles.section}>Theirs, in your yard</h2>
-          <ul className={styles.said}>
-            {oursWithUs.map((l, i) => (
-              <li
-                key={`ours-${l.label}-${l.unit}-${i}`}
-                className={l.isPart ? styles.part : styles.whole}
-              >
-                <span className={styles.saidQty}>{l.said}</span>
-                <span className={styles.saidWhat}>
-                  {l.label} {l.unit.toLowerCase()}
-                </span>
-                {l.products.length > 1 && (
-                  <span className={styles.saidFrom}>{l.products.join(' + ')}</span>
-                )}
-                {canOpen('empties_record_page') && (
-                  <Button
-                    size="small"
-                    disabled={givingBusy}
-                    onClick={() => setGiving(l)}
-                  >
-                    Given back
-                  </Button>
-                )}
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-
-      {giving && (
-        <ConfirmDialog
-          controller={giveDialog}
-          tone="primary"
-          title={`Gave back ${giving.said} ${giving.label} ${giving.unit.toLowerCase()}?`}
-          message="They come off what you are holding of theirs."
-          confirmText="Yes, given back"
-          onDismiss={() => setGiving(null)}
-          onConfirm={() => void giveBack(giving)}
-        />
-      )}
-
-      {/*
-        BOTH PUSH A PAGE. They were a bottom sheet with a select, a quantity and a reason in it,
-        which is a FORM — and the rule here is that a form is a page and a sheet is for choosing
-        from a list. On a phone the keyboard covers half a sheet, dragging to reach a field reads as
-        a dismiss, and nothing typed survives a rotation.
-      */}
-      <div className={styles.actions}>
-        {canOpen('empties_record_page') && (
-          <Button
-            fullWidth
-            disabled={theirsOutstanding.length === 0}
-            onClick={() =>
-              void nav.push('empties_record_page', { id: customerId, direction: 'returned' })
+        <section className={`${styles.col} ${styles.card}`} aria-label="Everything that has happened">
+          <h2 className={styles.cardTitle}>Everything that has happened</h2>
+          <LoadArea area={ledgerArea} what="the history">
+            {(moves) =>
+              moves.length === 0 ? (
+                <p className={styles.none}>Nothing recorded yet.</p>
+              ) : (
+                <ul className={styles.ledger}>
+                  {moves.map((m) => {
+                    const gone = m.undone >= m.qty - 1e-9 && m.undone > 0;
+                    return (
+                      <li key={m.id} className={`${styles.move} ${gone ? styles.moveUndone : ''}`}>
+                        <span className={`${styles.dot} ${styles[m.undoes ? 'undo' : m.direction]}`} aria-hidden="true" />
+                        <span className={styles.moveBody}>
+                          <span className={styles.moveWhat}>
+                            {/* Said from the right direction (0157), and an undo says it is one (0280). */}
+                            {m.undoes
+                              ? 'Undone — not back'
+                              : m.direction === 'damaged'
+                                ? 'Written off'
+                                : m.side === 'we_hold'
+                                  ? m.direction === 'out'
+                                    ? 'Left with you'
+                                    : 'Given back to them'
+                                  : m.direction === 'out'
+                                    ? 'Took'
+                                    : 'Brought back'}{' '}
+                            {saidAsPart(m.qty)} {m.qty === 1 ? m.unitName : m.unitPlural}
+                            {gone && <span className={styles.undoneTag}>undone</span>}
+                            {!gone && m.undone > 0 && <span className={styles.undoneTag}>{saidAsPart(m.undone)} undone</span>}
+                          </span>
+                          {m.productId ? (
+                            <RecordLink route="product_page" id={m.productId} className={styles.moveWho}>
+                              {m.productName}
+                            </RecordLink>
+                          ) : (
+                            <span className={styles.moveWho}>{m.productName}</span>
+                          )}
+                          {m.reason ? <span className={styles.moveWhy}>{m.reason}</span> : null}
+                          <span className={styles.moveLinks}>
+                            {m.saleId && (
+                              <button
+                                type="button"
+                                className={styles.moveOpen}
+                                onClick={() => void nav.push('receipt_page', { id: m.saleId })}
+                              >
+                                See the receipt
+                              </button>
+                            )}
+                            {m.canUndo && canOpen('empties_record_page') && (
+                              <button type="button" className={styles.moveUndo} onClick={() => setUndoing(m)}>
+                                Undo
+                              </button>
+                            )}
+                          </span>
+                        </span>
+                        <span className={styles.moveWhen}>{new Date(m.occurredAt).toLocaleDateString()}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )
             }
-          >
-            <PlusIcon /> They brought some back
-          </Button>
-        )}
-        {/*
-          SOME OF THEIRS GOES BACK — part of a line, or several lines, counted on the page that
-          counts empties, recorded on their side.
-        */}
-        {canOpen('empties_record_page') && oursWithUs.length > 0 && (
-          <Button
-            variant="secondary"
-            fullWidth
-            onClick={() =>
-              void nav.push('empties_record_page', {
-                id: customerId,
-                direction: 'returned',
-                side: 'we_hold',
-              })
-            }
-          >
-            Give some of theirs back
-          </Button>
-        )}
-        {/*
-          A WRITE-OFF IS NOT A RETURN, and it is red because it closes an obligation without the
-          thing coming back. On trust, broken, or paid for at the counter — all ordinary, and all
-          previously impossible to record unless the shop happened to hold a deposit.
-        */}
-        {canOpen('empties_record_page') && (
-          <Button
-            variant="danger"
-            fullWidth
-            disabled={theirsOutstanding.length === 0}
-            onClick={() =>
-              void nav.push('empties_record_page', { id: customerId, direction: 'damaged' })
-            }
-          >
-            Broken or lost
-          </Button>
-        )}
+          </LoadArea>
+        </section>
       </div>
 
-      <h2 className={styles.section}>Everything that has happened</h2>
-      <LoadArea area={ledgerArea} what="the history">
-        {(moves) =>
-          moves.length === 0 ? (
-            <p className={styles.none}>Nothing recorded yet.</p>
-          ) : (
-            <ul className={styles.ledger}>
-              {moves.map((m) => (
-                <li key={m.id} className={styles.move}>
-                  <span className={`${styles.dot} ${styles[m.direction]}`} aria-hidden="true" />
-                  <span className={styles.moveBody}>
-                    <span className={styles.moveWhat}>
-                      {/*
-                        SAID FROM THE RIGHT DIRECTION (0157). A row where the customer left their
-                        own crates with the shop read "Took 3 crates", and the shop handing them
-                        back read "Brought back" — both exactly inverted, because the reader did not
-                        carry the side and the screen assumed the common one.
-                      */}
-                      {m.direction === 'damaged'
-                        ? 'Written off'
-                        : m.side === 'we_hold'
-                          ? m.direction === 'out'
-                            ? 'Left with you'
-                            : 'Given back to them'
-                          : m.direction === 'out'
-                            ? 'Took'
-                            : 'Brought back'}{' '}
-                      {saidAsPart(m.qty)} {m.qty === 1 ? m.unitName : m.unitPlural}
-                    </span>
-                    {/* The item, and the receipt that moved them — each one push away. */}
-                    {m.productId ? (
-                      <RecordLink route="product_page" id={m.productId} className={styles.moveWho}>
-                        {m.productName}
-                      </RecordLink>
-                    ) : (
-                      <span className={styles.moveWho}>{m.productName}</span>
-                    )}
-                    {m.reason ? <span className={styles.moveWhy}>{m.reason}</span> : null}
-                    {m.saleId && (
-                      <button
-                        type="button"
-                        className={styles.moveOpen}
-                        onClick={() => void nav.push('receipt_page', { id: m.saleId })}
-                      >
-                        See the receipt
-                      </button>
-                    )}
-                  </span>
-                  <span className={styles.moveWhen}>
-                    {new Date(m.occurredAt).toLocaleDateString()}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )
-        }
-      </LoadArea>
+      {undoing && (
+        <ConfirmDialog
+          controller={undoDialog}
+          tone="danger"
+          title={`Undo: ${undoing.direction === 'damaged' ? 'written off' : 'brought back'} ${saidAsPart(undoing.qty - undoing.undone)} ${(undoing.qty - undoing.undone === 1 ? undoing.unitName : undoing.unitPlural).toLowerCase()}?`}
+          message={`${undoing.productName}: they go back on what ${account?.customer.name ?? 'the customer'} holds. The return stays in the history, marked undone.`}
+          confirmText="Yes, undo it"
+          onDismiss={() => setUndoing(null)}
+          onConfirm={() => {
+            const m = undoing;
+            setUndoing(null);
+            void (async () => {
+              try {
+                await undoEmptiesMove(m.id);
+                owedArea.reload();
+                ledgerArea.reload();
+              } catch (e) {
+                showProblem(messageOf(e, 'That could not be undone.'));
+              }
+            })();
+          }}
+        />
+      )}
 
             {store && (
               <PrintShareButton

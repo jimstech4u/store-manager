@@ -5,6 +5,7 @@ import type { ToolDef } from '@/lib/whatsapp/llm';
 import { executeCapability } from '@/lib/agent/gateway';
 import { sellOrder } from '@/lib/whatsapp/orders';
 import { countReport, executeStock, proposeStock } from '@/lib/whatsapp/stock-actions';
+import { containersGoingOut, correctedBack, type SaleContainer } from '@/lib/empties-back';
 
 /**
  * THE ASSISTANT PROPOSES; THE PERSON'S "YES" DOES IT. Server only.
@@ -147,6 +148,20 @@ export const ACTION_TOOLS: ToolDef[] = [
       reason: { type: 'string' },
       goods_moved: GOODS_MOVED,
     }, required: ['sale_id', 'changes', 'reason'] },
+  },
+  {
+    name: 'propose_receipt_empties_back',
+    description:
+      'Propose changing what came back with a receipt\'s empties (see receipt_empties): "they did not bring them back after all" is none, all back is all. Give all ("all" or "none") or items with each container\'s product_unit_id and how many came back. For several receipts at once give sale_ids with all, in ONE call; or customer_id and receipts (how many of their latest) with all, with no lookup first. Give a reason when undoing.',
+    parameters: { type: 'object', properties: {
+      sale_id: { type: 'string' },
+      sale_ids: { type: 'array', items: { type: 'string' } },
+      customer_id: { type: 'string' },
+      receipts: { type: 'number' },
+      all: { type: 'string', enum: ['all', 'none'] },
+      items: { type: 'array', items: { type: 'object', properties: { product_unit_id: { type: 'string' }, back: { type: 'number' } }, required: ['product_unit_id', 'back'] } },
+      reason: { type: 'string' },
+    }, required: ['sale_id'] },
   },
   {
     name: 'propose_cancel_receipt',
@@ -634,6 +649,74 @@ export async function propose(ctx: Ctx, name: string, a: Args): Promise<unknown>
       ].join('\n'));
     }
 
+    case 'propose_receipt_empties_back': {
+      /*
+       * SEVERAL RECEIPTS, ONE YES. "The empties haven't been brought back" was about two receipts; each
+       * was proposed alone and the second replaced the first, so only one was ever asked.
+       */
+      // "Their last two receipts": the customer and how many, so nothing has to be looked up first.
+      if (!(Array.isArray(a.sale_ids) && a.sale_ids.length > 0) && a.customer_id && !a.sale_id) {
+        const rows = (await rpc<Record<string, unknown>[] | null>(ctx, 'customer_statement', {
+          p_store_customer_id: String(a.customer_id), p_limit: 20,
+        })) ?? [];
+        a.sale_ids = rows.slice(0, Math.min(Math.max(Number(a.receipts) || 1, 1), 10)).map((r) => String(r.sale_id));
+      }
+      if (Array.isArray(a.sale_ids) && a.sale_ids.length > 0) {
+        if (a.all !== 'all' && a.all !== 'none') return refuse('For several receipts, say all or none.');
+        const receipts: { sale_id: string; units: { product_unit_id: string; qty: number }[] }[] = [];
+        const said: string[] = [];
+        for (const sid of (a.sale_ids as unknown[]).map(String)) {
+          const cs = await containersOf(ctx, sid);
+          const units = cs
+            .map((c) => ({ c, to: a.all === 'none' ? 0 : Math.max(c.wentOut, c.cameBack) }))
+            .filter(({ c, to }) => Math.abs(to - c.cameBack) > 1e-9);
+          if (units.length === 0) continue;
+          receipts.push({ sale_id: sid, units: units.map(({ c, to }) => ({ product_unit_id: c.productUnitId, qty: to })) });
+          said.push(`#${sid.slice(0, 8).toUpperCase()}: ` + units.map(({ c, to }) => `${c.productName} back ${formatQtySpoken(c.cameBack)} → *${formatQtySpoken(to)}*`).join('; '));
+        }
+        if (receipts.length === 0) return refuse('Nothing changes: that is what is recorded already.');
+        return hold(ctx, 'receipt_empties_back', { receipts, reason: String(a.reason ?? '').trim() || null }, [
+          `*Empties on ${receipts.length} receipts?*`,
+          ...said,
+          ...(String(a.reason ?? '').trim() ? [`Why: ${String(a.reason).trim()}`] : []),
+        ].join('\n'));
+      }
+      const id = String(a.sale_id ?? '');
+      const now = await containersOf(ctx, id);
+      if (now.length === 0) return refuse('No empties went out with that receipt. Use receipt_empties first.');
+      const items = Array.isArray(a.items) ? (a.items as { product_unit_id?: string; back?: number }[]) : [];
+      const wanted = new Map<string, number>();
+      for (const c of now) {
+        if (a.all === 'none') wanted.set(c.productUnitId, 0);
+        else if (a.all === 'all') wanted.set(c.productUnitId, Math.max(c.wentOut, c.cameBack));
+      }
+      for (const it of items) {
+        const c = now.find((x) => x.productUnitId === it.product_unit_id);
+        if (!c) return refuse('That container did not go out with this receipt. Use receipt_empties for its product_unit_id.');
+        wanted.set(c.productUnitId, Math.max(0, Number(it.back) || 0));
+      }
+      const changes = now.filter((c) => wanted.has(c.productUnitId) && Math.abs((wanted.get(c.productUnitId) ?? 0) - c.cameBack) > 1e-9);
+      if (changes.length === 0) return refuse('Nothing changes: that is what is recorded already.');
+      for (const c of changes) {
+        if ((wanted.get(c.productUnitId) ?? 0) > Math.max(c.wentOut, c.cameBack)) {
+          return refuse(`Only ${formatQtySpoken(c.wentOut)} ${c.unitPlural.toLowerCase()} of ${c.productName} went out with that receipt.`);
+        }
+      }
+      const word = (c: SaleContainer, n: number) => (n === 1 ? c.unitName : c.unitPlural).toLowerCase();
+      return hold(ctx, 'receipt_empties_back', {
+        sale_id: id,
+        units: changes.map((c) => ({ product_unit_id: c.productUnitId, qty: wanted.get(c.productUnitId) })),
+        reason: String(a.reason ?? '').trim() || null,
+      }, [
+        `*Empties on receipt #${id.slice(0, 8).toUpperCase()}?*`,
+        ...changes.map((c) => {
+          const to = wanted.get(c.productUnitId) ?? 0;
+          return `${c.productName}: ${formatQtySpoken(c.wentOut)} ${word(c, c.wentOut)} out — back ${formatQtySpoken(c.cameBack)} → *${formatQtySpoken(to)}*`;
+        }),
+        ...(String(a.reason ?? '').trim() ? [`Why: ${String(a.reason).trim()}`] : []),
+      ].join('\n'));
+    }
+
     case 'propose_cancel_receipt': {
       const id = String(a.sale_id ?? '');
       const d = await rpc<{ sale?: { total?: string | number }; customer?: { name?: string } | null } | null>(ctx, 'sale_detail', { p_sale_id: id });
@@ -655,6 +738,22 @@ export async function propose(ctx: Ctx, name: string, a: Args): Promise<unknown>
       if (name === 'count_status' || name === 'propose_settle_count' || name === 'propose_empties_written_off') return proposeStock(ctx, name, a);
       return refuse(`No action called ${name}`);
   }
+}
+
+/** One receipt's containers (0280), as the app reads them. */
+async function containersOf(ctx: Ctx, saleId: string): Promise<SaleContainer[]> {
+  const rows = (await rpc<Record<string, unknown>[] | null>(ctx, 'sale_empties', { p_sale_id: saleId })) ?? [];
+  return rows.map((r) => ({
+    productId: String(r.product_id),
+    productName: String(r.product_name ?? ''),
+    productUnitId: String(r.product_unit_id),
+    unitName: String(r.unit_name ?? ''),
+    unitPlural: String(r.unit_plural ?? ''),
+    groupName: (r.group_name as string | null) ?? null,
+    wentOut: Number(r.went_out) || 0,
+    cameBack: Number(r.came_back) || 0,
+    stillOut: Number(r.still_out) || 0,
+  }));
 }
 
 /** The YES: the action as it was shown, as the member, through the app's own functions. */
@@ -759,14 +858,47 @@ export async function execute(ctx: Ctx, action: string, a: Args): Promise<{ text
         p_store_id: s, p_phone: a.phone, p_display_name: a.name, p_business_name: a.business ?? null,
       });
       return { text: 'Added ✅' };
-    case 'edit_receipt':
+    case 'edit_receipt': {
+      // What came back with it, carried through the correction as the app's correction does (0280).
+      const before = await containersOf(ctx, String(a.sale_id)).catch(() => [] as SaleContainer[]);
+      const outNow = containersGoingOut(
+        ((Array.isArray(a.lines) ? a.lines : []) as Record<string, unknown>[]).map((l) => ({
+          saleUnitId: l.sale_unit_id ? String(l.sale_unit_id) : null,
+          qty: Number(l.entered_qty) || 0,
+          containersOut: Number(l.containers_out) || 0,
+        })),
+        before,
+      );
       await rpc(ctx, 'correct_sale', {
         p_take_back: null, p_cancel_deposit: false, p_sale_id: a.sale_id, p_reason: a.reason, p_lines: a.lines,
         p_customer_id: null, p_charges: null,
         p_payments: Array.isArray(a.payments) && a.payments.length > 0 ? a.payments : null,
         p_deposit: null, p_deposit_reason: null, p_goods_moved: a.goods_moved ?? null,
       });
+      if (before.length > 0) {
+        const target = correctedBack(before, outNow);
+        const after = await containersOf(ctx, String(a.sale_id)).catch(() => [] as SaleContainer[]);
+        const units = after
+          .filter((c) => target[c.productUnitId] !== undefined && Math.abs(target[c.productUnitId] - c.cameBack) > 1e-9)
+          .map((c) => ({ product_unit_id: c.productUnitId, qty: Math.min(target[c.productUnitId], Math.max(c.wentOut, c.cameBack)) }));
+        if (units.length > 0) {
+          await rpc(ctx, 'set_sale_empties_back', { p_sale_id: a.sale_id, p_units: units, p_reason: `Receipt corrected: ${String(a.reason ?? '')}`, p_at_sale: false }).catch(() => null);
+        }
+      }
       return { text: `Corrected ✅\nTo print: ${await receiptLink(String(a.sale_id))}`, receipt: String(a.sale_id) };
+    }
+    case 'receipt_empties_back': {
+      const list = Array.isArray(a.receipts)
+        ? (a.receipts as { sale_id: string; units: unknown }[])
+        : [{ sale_id: String(a.sale_id), units: a.units }];
+      for (const r of list) {
+        await rpc(ctx, 'set_sale_empties_back', { p_sale_id: r.sale_id, p_units: r.units, p_reason: a.reason ?? null, p_at_sale: false });
+      }
+      return {
+        text: list.length > 1 ? `Done ✅ The empties on ${list.length} receipts are updated.` : 'Done ✅ The empties on that receipt are updated.',
+        receipt: list[0]?.sale_id,
+      };
+    }
     case 'cancel_receipt':
       await rpc(ctx, 'void_sale', { p_sale_id: a.sale_id, p_reason: a.reason, p_goods_moved: a.goods_moved ?? null });
       return { text: a.goods_moved === false ? 'Cancelled ✅' : 'Cancelled ✅ The stock is back on the shelf.' };

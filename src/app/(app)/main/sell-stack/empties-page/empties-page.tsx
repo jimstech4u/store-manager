@@ -1,10 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import { useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { Qty } from '@/components/ui/Qty';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
-import { InfoPanel } from '@/components/ui/Explain';
 import { SearchLauncher } from '@/components/ui/SearchLauncher';
 import { PinnedTools } from '@/components/ui/PinnedTools';
 import { SearchSheet } from '@/components/ui/SearchSheet';
@@ -54,6 +54,14 @@ export default function EmptiesPage() {
   };
 
   const stillOut = rows.filter((r) => r.stillOut > 0);
+  /*
+   * WHO, AT A GLANCE (11 Nov redesign): those still holding, most first, by default — the list a
+   * shop works from — with the cleared ones a tap away for "did Daniel bring those back?".
+   */
+  const [show, setShow] = useState<'out' | 'back' | 'all'>('out');
+  const shown = (show === 'out' ? stillOut : show === 'back' ? rows.filter((r) => r.stillOut <= 0) : rows)
+    .slice()
+    .sort((a, b) => b.stillOut - a.stillOut || a.name.localeCompare(b.name));
 
   /*
    * NOTHING IS SAID UNTIL IT HAS BEEN READ. Before the first answer this page used to show "Nothing is out" and "no containers have gone out yet" —
@@ -75,22 +83,39 @@ export default function EmptiesPage() {
       <PageState status={status}>
         {() => (
           <>
-      <InfoPanel
-        id="empties.list"
-        tone="info"
-        title={
-          stillOut.length === 0
-            ? 'Nothing is out'
-            : `${stillOut.length} ${stillOut.length === 1 ? 'customer has' : 'customers have'} containers`
-        }
-      >
-        Counted in the shape they left in — crates as crates, bottles as bottles. Open somebody to
-        record what came back, or to write off what will not.
-      </InfoPanel>
+      <dl className={styles.figures}>
+        <div className={`${styles.figure} ${styles.figureLead}`}>
+          <dt>Holding your containers</dt>
+          <dd>{stillOut.length}</dd>
+        </div>
+        <div className={styles.figure}>
+          <dt>All back</dt>
+          <dd>{rows.length - stillOut.length}</dd>
+        </div>
+      </dl>
 
       {/* Search, filters and export stay in reach as the list scrolls — see PinnedTools. */}
       <PinnedTools>
         <SearchLauncher label="Search who is holding your containers" placeholder="Search a name or a number" onOpen={searchOps.open} />
+        <div className={styles.chips} role="group" aria-label="Who to show">
+          {(
+            [
+              ['out', `Still out · ${stillOut.length}`],
+              ['back', 'All back'],
+              ['all', 'Everyone'],
+            ] as const
+          ).map(([k, label]) => (
+            <button
+              key={k}
+              type="button"
+              aria-pressed={show === k}
+              className={`${styles.chip} ${show === k ? styles.chipOn : ''}`}
+              onClick={() => setShow(k)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </PinnedTools>
 
       {/*
@@ -136,9 +161,11 @@ export default function EmptiesPage() {
         <p className={styles.empty}>
           No containers have gone out yet. They will appear here as soon as somebody takes some.
         </p>
+      ) : shown.length === 0 ? (
+        <p className={styles.empty}>{show === 'out' ? 'Nothing is out: every container is back.' : 'Nobody here yet.'}</p>
       ) : (
         <ul className={styles.list} data-grid>
-          {rows.map((r) => (
+          {shown.map((r) => (
             <li key={r.customerId}>
               <button
                 type="button"

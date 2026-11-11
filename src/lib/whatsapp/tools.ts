@@ -12,6 +12,7 @@ import { paymentDocument } from '@/lib/payment-document';
 import { KINDS, statementDocument, type Statement } from '@/lib/statement-document';
 import type { ReceiptImageInput } from '@/lib/share';
 import { paperLogo } from '@/lib/paper-logo';
+import { formatQtySpoken } from '@/lib/format';
 
 /**
  * WHAT THE ASSISTANT CAN LOOK UP — each one an RPC the app already calls, made with the MEMBER'S OWN
@@ -68,6 +69,16 @@ export const TOOLS: ToolDef[] = [
     name: 'recent_receipts',
     description: "A customer's most recent receipts with what is still open on each.",
     parameters: { type: 'object', properties: { customer_id: { type: 'string' } }, required: ['customer_id'] },
+  },
+  {
+    name: 'receipt_empties',
+    description:
+      "A customer's empties (containers): for each of their last receipts, every container with how many went out, came back and are still with them; and what they hold in all, by product group (maker). Use this for any empties or containers question, never the statement, which has no quantities.",
+    parameters: { type: 'object', properties: {
+      customer_id: { type: 'string' },
+      receipts: { type: 'number', description: 'How many of their latest receipts (default 3).' },
+      sale_id: { type: 'string', description: 'Instead, one receipt.' },
+    }, required: ['customer_id'] },
   },
   {
     name: 'receipt_link',
@@ -688,6 +699,55 @@ export async function runTool(
         })),
       };
     }
+    case 'receipt_empties': {
+      const cid = String(args.customer_id ?? '');
+      const n = Math.min(Math.max(Number(args.receipts) || 3, 1), 10);
+      const list = args.sale_id
+        ? [{ sale_id: String(args.sale_id), occurred_at: '' }]
+        : ((await rpc<Record<string, unknown>[] | null>('customer_statement', { p_store_customer_id: cid, p_limit: 20 })) ?? []).slice(0, n);
+      const word = (c: Record<string, unknown>, q: number) => String(q === 1 ? c.unit_name : c.unit_plural).toLowerCase();
+      const receipts = [];
+      for (const r of list) {
+        const id = String(r.sale_id);
+        const rows = (await rpc<Record<string, unknown>[] | null>('sale_empties', { p_sale_id: id })) ?? [];
+        const number = `#${id.slice(0, 8).toUpperCase()}`;
+        const date = String(r.occurred_at ?? '').slice(0, 10);
+        /*
+         * A SENTENCE READY TO SAY, beside the ids a proposal needs. A model given a deep table of every
+         * container answered New look's question with nothing at all (11 Nov); this it can pass on.
+         */
+        receipts.push({
+          sale_id: id,
+          said:
+            `${number}${date ? ` (${date})` : ''}: ` +
+            (rows.length === 0
+              ? 'no empties went out with it'
+              : rows
+                  .map((c) => `${c.product_name} ${formatQtySpoken(Number(c.went_out))} ${word(c, Number(c.went_out))} out, ${formatQtySpoken(Number(c.came_back))} back` +
+                    (Number(c.still_out) > 0 ? `, ${formatQtySpoken(Number(c.still_out))} still with them` : ''))
+                  .join('; ')),
+          containers: rows.map((c) => ({ product_unit_id: c.product_unit_id, item: c.product_name })),
+        });
+      }
+      // What they hold in all, by product group: the way the shop counts crates back to the maker.
+      const held = ((await rpc<Record<string, unknown>[] | null>('customer_empties_owed', { p_store_customer_id: cid })) ?? [])
+        .filter((h) => Number(h.owed) > 0 && (h.side ?? 'they_hold') === 'they_hold');
+      const byGroup = new Map<string, { items: string[]; qty: number; unit: string }>();
+      for (const h of held) {
+        const g = String(h.group_name ?? h.product_name ?? 'Other');
+        const cur = byGroup.get(g) ?? { items: [], qty: 0, unit: String(h.unit_plural ?? '') };
+        cur.qty += Number(h.owed) || 0;
+        cur.items.push(`${h.product_name} ${formatQtySpoken(Number(h.owed))}`);
+        byGroup.set(g, cur);
+      }
+      return {
+        receipts,
+        holding_by_group: byGroup.size === 0
+          ? 'They hold none of your empties.'
+          : [...byGroup.entries()].map(([group, v]) => `${group}: ${formatQtySpoken(v.qty)} ${v.unit.toLowerCase()} (${v.items.join(', ')})`),
+        note: 'To change what came back with a receipt (they did not bring them back, or they did), use propose_receipt_empties_back.',
+      };
+    }
     case 'receipt_link': {
       /*
        * A RECEIPT OF THIS SHOP, first. The share link is made for any id it is given, and a model once
@@ -738,7 +798,22 @@ export async function runTool(
       } else if (kind === 'receipt') {
         const d = await rpc<SaleDetail | null>('sale_detail', { p_sale_id: String(args.sale_id ?? '') });
         if (!d) return { error: 'That receipt was not found.' };
-        doc = receiptDocument(d, shopName, { header: paper.header, footer: paper.footer, logo: paper.logo });
+        // Its own empties, out and back, as the app's paper prints them (0280).
+        const cont = await rpc<Record<string, unknown>[] | null>('sale_empties', { p_sale_id: String(args.sale_id ?? '') }).catch(() => null);
+        doc = receiptDocument(
+          d,
+          shopName,
+          { header: paper.header, footer: paper.footer, logo: paper.logo },
+          (cont ?? [])
+            .filter((c) => Number(c.went_out) > 0 || Number(c.came_back) > 0)
+            .map((c) => ({
+              name: String(c.product_name),
+              unitName: String(c.unit_name),
+              unitPlural: String(c.unit_plural),
+              out: Number(c.went_out) || 0,
+              back: Number(c.came_back) || 0,
+            })),
+        );
         filename = `receipt-${String(args.sale_id).slice(0, 8)}.pdf`;
       } else if (kind === 'payment') {
         // The shop's own payment receipt, as its payment page prints it: never a statement in its place.

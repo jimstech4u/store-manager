@@ -1,47 +1,49 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNav } from '@academix-admin/navigation-stack';
 import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { Button } from '@/components/ui/Button';
 import { Explain, InfoPanel } from '@/components/ui/Explain';
-import { CameraIcon, PlusIcon } from '@/components/ui/Icon';
 import { ConfirmDialog, useConfirm } from '@/components/ui/Dialog';
 import { FloatingAmount } from '@/components/ui/FloatingAmount';
+import { LoadArea, useLoadArea } from '@/components/ui/LoadArea';
 import { ProductPicker } from '@/components/catalog/ProductPicker';
 import { useFinishedGuard } from '@/components/sell/FinishedItem';
 import { BarcodeScanner } from '@/components/catalog/BarcodeScanner';
 import { CustomerPicker } from '@/components/customers/CustomerPicker';
 import { SaleLineRow } from '@/components/sell/SaleLineRow';
+import { TillLine } from '@/components/sell/TillLine';
+import { QuickAdd } from '@/components/sell/QuickAdd';
+import { ContainersBack } from '@/components/empties/ContainersBack';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { useTillShapes } from '@/lib/stacks/till-shapes';
 import { findByBarcode } from '@/lib/stacks/mid-sale';
 import { amendCharges, amendDeposits, amendItems, amendTotal, useAmendDraft } from '@/lib/stacks/amend-draft';
-import { formatMoney } from '@/lib/format';
+import { LEDGERS_SCOPE } from '@/lib/stacks/customer-ledgers';
+import { correctedBack, saleEmpties, type SaleContainer } from '@/lib/stacks/sale-empties';
+import { containersGoingOut } from '@/lib/empties-back';
+import { formatMoney, formatQtySpoken, shapeWord } from '@/lib/format';
+import type { DraftLine } from '@/lib/stacks/draft-orders';
 
 import styles from './amend-page.module.css';
 
 /**
- * CORRECTING A RECEIPT — the till again, for a sale that already happened.
+ * CORRECTING A RECEIPT — the till, for a sale that already happened, with the trace of what it said.
  *
- * It used to be a narrow form: change how many, change the price, on the lines already there. That
- * covers a mis-keyed quantity and nothing else. A crate that went out and never reached the receipt
- * had no path at all, and the last line could be taken off but not the last one — so a sale that
- * never happened could be corrected down to almost nothing and never cancelled.
+ * "Correcting a receipt is just exactly like a normal sale; the difference is that here we have traces
+ * of old changes." So this is the till's own parts: the one box that takes "3 b/s" (QuickAdd), the
+ * compact lines with − and + and the parts (TillLine), a line's full row a tap away — here, in place,
+ * because a correction is one page. What a sale does not have is the trace: each line says what it was
+ * ("was 3 crates", "was ₦9,500", "new"), what was taken off is listed with Put back, and the empties
+ * that went out and came back with it are set here and saved with the correction (0280) — a receipt
+ * corrected from three crates to two can no longer keep three "brought back".
  *
- * NOT A VOID AND A RE-KEY. The customer is holding a printed copy with this number on it and a
- * tracking link that has to keep resolving. Voiding loses both, loses the payment allocation, and
- * makes two documents out of one sale. The receipt keeps its id and gains a revision.
- *
- * THE CUSTOMER CANNOT BE CHANGED HERE, and that is deliberate: a receipt belongs to whoever it was
- * made out to, and moving it would move the debt with it. A WALK-IN is the exception — it has
- * nobody, and the server refuses a correction leaving money owing with no account to carry it, so
- * naming somebody is the only way to finish. Naming, not changing.
- *
- * THE FLOW: here, then the money, then why, then the receipt. The reason comes LAST because it is
- * about what was done, and until the money is settled nobody knows what that was.
+ * NOT A VOID AND A RE-KEY: the receipt keeps its number, its link and its payments, and gains a
+ * revision. THE CUSTOMER IS NOT CHANGED here (a walk-in may be named): a receipt belongs to whoever it
+ * was made out to, and moving it would move the debt. THE FLOW: here, the money, why, the receipt.
  */
 export default function AmendPage() {
   const nav = useNav();
@@ -50,15 +52,7 @@ export default function AmendPage() {
   const { store } = useAuth();
 
   const saleId = (location?.params?.id as string | undefined) ?? null;
-  const { draft, loaded, patchOrder, updateLine, removeLine, addLine } = useAmendDraft(saleId);
-  /*
-   * THE SHAPES, from the same place the till reads them.
-   *
-   * A first version mapped them into a shape of its own and the types caught it: `SaleUnit.baseQty`
-   * is a string and mine was a number. That mismatch is the small end of a real hazard — two
-   * answers to "what shapes does this item come in", differing on a detail nobody checks until a
-   * half-crate prices itself wrong.
-   */
+  const { draft, loaded, patch, patchOrder, updateLine, removeLine, addLine } = useAmendDraft(saleId);
   const productIds = (draft.order?.lines ?? []).map((l) => l.productId);
   const { shapes: saleUnits, ensure: ensureShapes } = useTillShapes(store?.id ?? null, productIds);
 
@@ -66,14 +60,17 @@ export default function AmendPage() {
   const finishedGuard = useFinishedGuard();
   const [scanning, setScanning] = useState(false);
   const [namingCustomer, setNamingCustomer] = useState(false);
+  // A line's full row, open in place (the till pushes its line page; a correction stays one page).
+  const [openKey, setOpenKey] = useState<string | null>(null);
 
-  /*
-   * A CUSTOMER CREATED FOR THIS CORRECTION IS NAMED ON IT.
-   *
-   * The form has always looked for `onCustomerForAmend` — and nothing ever provided it, so a walk-in
-   * named by creating somebody new came back to a correction still asking who it was for. The
-   * seller then found them in the picker and chose them again: the "second click".
-   */
+  // What its containers did before this correction: out, back — to trace and to carry forward.
+  const before = useLoadArea<SaleContainer[]>(() => saleEmpties(saleId!), [saleId], {
+    key: `sale-empties:${saleId ?? 'none'}`,
+    scope: LEDGERS_SCOPE,
+    whenNot: !saleId,
+  });
+
+  /* A customer created for this correction is named on it (see customer-form-page). */
   const nameRef = useRef<((customer: { id: string; name: string }) => void) | null>(null);
   nameRef.current = (customer) => patchOrder({ customerId: customer.id, customerName: customer.name });
   useEffect(() => {
@@ -87,18 +84,26 @@ export default function AmendPage() {
     };
   }, [nav]);
   const cancelAsk = useConfirm();
-  /*
-   * WHETHER THE DIALOG IS ON THE PAGE IS DECIDED HERE — "mounted means asked".
-   *
-   * `ConfirmDialog` opens itself on mount and its overlay swallows every tap behind it, so leaving
-   * one mounted puts an invisible sheet over a working screen. The till learned this the hard way.
-   */
   const [askCancel, setAskCancel] = useState(false);
-
-  if (!store) return null;
 
   const order = draft.order;
   const was = draft.was;
+  const lines = useMemo(() => order?.lines ?? [], [order?.lines]);
+
+  /** Containers going out now, per shape: a returnable line sends out its quantity (amend-reason-page). */
+  const outNow = useMemo(
+    () =>
+      containersGoingOut(lines, before.data ?? [], (pu) =>
+        Object.values(saleUnits).some((shapes) => shapes.some((u) => u.id === pu && u.isReturnable)),
+      ),
+    [lines, before.data, saleUnits],
+  );
+  const backNow = useMemo(
+    () => correctedBack(before.data ?? [], outNow, draft.emptiesBack ?? {}),
+    [before.data, outNow, draft.emptiesBack],
+  );
+
+  if (!store) return null;
 
   const status: PageStatus = !saleId
     ? { state: 'empty', title: 'No receipt chosen', body: 'Corrections are reached from a receipt.' }
@@ -113,12 +118,8 @@ export default function AmendPage() {
         : { state: 'ready' };
 
   const total = amendTotal(draft);
-  const lines = order?.lines ?? [];
   const emptied = lines.length === 0;
-
   const shapesFor = (productId: string) => saleUnits[productId] ?? [];
-
-  /** The parts this shape may be sold in, exactly as the till decides it. */
   const rulesFor = (productId: string, saleUnitId: string | null) => {
     const unit = shapesFor(productId).find((u) => u.id === saleUnitId);
     return {
@@ -129,27 +130,31 @@ export default function AmendPage() {
     };
   };
 
-  /**
-   * An item onto the receipt, in its default shape at its usual price.
-   *
-   * Its shapes are ASKED FOR first. They are fetched per item and this receipt's own items are the
-   * only ones loaded, so something added now has none yet — and a line with no shape cannot be
-   * priced, cannot offer its parts, and cannot say whether a crate goes out with it.
-   */
-  const put = async (product: { id: string; name: string }) => {
-    /*
-     * FINISHED? Correcting puts this receipt's old lines back on the shelf first, so what it sold of
-     * the item counts as there: a receipt that took the last crate may still say it.
-     */
+  /** What the receipt said for this item in this shape — the trace. */
+  const wasOf = (productId: string, saleUnitId: string | null) =>
+    (was?.lines ?? []).filter((l) => l.productId === productId && l.saleUnitId === saleUnitId);
+  const trace = (l: DraftLine): string | null => {
+    const old = wasOf(l.productId, l.saleUnitId);
+    if (old.length === 0) return 'New on this receipt';
+    const qty = old.reduce((n, o) => n + o.enteredQty, 0);
+    const bits: string[] = [];
+    if (Math.abs(qty - (Number(l.qty) || 0)) > 1e-9) {
+      bits.push(`was ${formatQtySpoken(qty)} ${shapeWord(String(qty), old[0].unitName ?? '').toLowerCase()}`);
+    }
+    if (Math.abs(old[0].unitPrice - (Number(l.unitPrice) || 0)) > 0.005) bits.push(`was ${formatMoney(old[0].unitPrice)} each`);
+    return bits.length ? bits.join(' · ') : null;
+  };
+  // Taken off: on the receipt before, in no line now.
+  const takenOff = (was?.lines ?? []).filter(
+    (o) => !lines.some((l) => l.productId === o.productId && l.saleUnitId === o.saleUnitId),
+  );
+
+  /** An item onto the receipt, in its first shape at its usual price — as the till puts it. */
+  const put = async (product: { id: string; name: string }, qty: number | null = null) => {
     const putBack = (was?.lines ?? [])
       .filter((l) => l.productId === product.id)
       .reduce((sum, l) => sum + (Number(l.baseQty) || 0), 0);
     if (!(await finishedGuard.allow(product, putBack))) return;
-    /*
-     * `ensure` hands the shapes BACK as well as caching them. Reading `saleUnits` straight after
-     * calling it would be reading the render that has not happened yet — the line would be added
-     * with no shape, no price and no answer about whether a crate goes out with it.
-     */
     const shapes = await ensureShapes(product.id);
     const first = shapes[0];
     addLine({
@@ -157,11 +162,10 @@ export default function AmendPage() {
       productId: product.id,
       productName: product.name,
       baseUnit: '',
-      qty: '1',
+      qty: String(qty ?? 1),
       packId: null,
       packName: null,
       packQty: null,
-      // Empty, not ₦0, when the shape has no price: ₦0 sells it for nothing without anybody deciding to.
       unitPrice: first?.price ?? '',
       containersOut: first?.isReturnable ? '1' : '0',
       depositCharged: '0',
@@ -171,30 +175,65 @@ export default function AmendPage() {
     });
   };
 
+  /** Put a taken-off line back, exactly as the receipt had it. */
+  const putBackLine = (o: (typeof takenOff)[number]) =>
+    addLine({
+      key: `${o.productId}-${o.saleUnitId ?? 'base'}-${Date.now().toString(36)}`,
+      productId: o.productId,
+      productName: o.productName,
+      baseUnit: '',
+      qty: String(o.enteredQty),
+      packId: null,
+      packName: null,
+      packQty: null,
+      unitPrice: String(o.unitPrice),
+      containersOut: String(o.containersOut),
+      depositCharged: '0',
+      saleUnitId: o.saleUnitId,
+      saleUnitName: o.unitName,
+      saleUnitBaseQty: o.enteredQty > 0 ? String(o.baseQty / o.enteredQty) : '1',
+    });
+
+  // The empties rows: every shape that went out before or goes out now.
+  const containerRows = (() => {
+    const known = new Map((before.data ?? []).map((c) => [c.productUnitId, c]));
+    const ids = new Set([...known.keys(), ...Object.keys(outNow)]);
+    return [...ids].map((id) => {
+      const c = known.get(id);
+      const line = lines.find((l) => l.saleUnitId === id);
+      const out = outNow[id] ?? 0;
+      const back = backNow[id] ?? 0;
+      return {
+        id,
+        name: c?.productName ?? line?.productName ?? '',
+        unitName: c?.unitName ?? line?.saleUnitName ?? '',
+        unitPlural: c?.unitPlural ?? (line?.saleUnitName ? `${line.saleUnitName}s` : ''),
+        out,
+        back,
+        // Older crates already recorded may stay; never more than that or what goes out now.
+        max: Math.max(out, Math.min(back, c?.cameBack ?? 0)),
+        was: c?.cameBack ?? 0,
+      };
+    }).filter((r) => r.out > 0 || r.back > 0 || r.was > 0);
+  })();
+
   return (
-    <PageScaffold layout="record" onBack={goBack} title="Correct this receipt" subtitle="What it should have said">
+    <PageScaffold
+      layout="record"
+      onBack={goBack}
+      title="Correct this receipt"
+      subtitle={was ? `#${was.saleId.slice(0, 8).toUpperCase()} · it said ${formatMoney(was.total)}` : 'What it should have said'}
+    >
       <PageState status={status}>
         {() =>
           order && (
             <>
-              <Explain label="What happens to the old copy?">
-                The receipt keeps its number, so the link you sent the customer still works. What it
-                said before is kept in full, and the new copy says it replaces the old one — because
-                somebody may still be holding that.
-              </Explain>
-
               {was && was.revision > 1 && (
-                <InfoPanel tone="info" title={`This is already revision ${was.revision}`}>
-                  It has been corrected before. Everything it has said is kept.
+                <InfoPanel tone="info" title={`Already corrected ${was.revision - 1} ${was.revision === 2 ? 'time' : 'times'}`}>
+                  Everything it has said is kept.
                 </InfoPanel>
               )}
 
-              {/*
-                WHOSE RECEIPT IT IS — shown, not offered.
-
-                A receipt belongs to whoever it was made out to. Changing that would move the debt
-                and the containers to somebody who never took them.
-              */}
               {order.customerId ? (
                 <p className={styles.who}>
                   For <strong>{order.customerName}</strong>
@@ -202,8 +241,8 @@ export default function AmendPage() {
               ) : (
                 <>
                   <InfoPanel tone="warning" title="Nobody is named on this receipt">
-                    It was sold over the counter. If your correction leaves money owing or containers
-                    out, there has to be somebody to owe it.
+                    It was sold over the counter. If your correction leaves money owing or containers out, there
+                    has to be somebody to owe it.
                   </InfoPanel>
                   <Button variant="secondary" fullWidth onClick={() => setNamingCustomer(true)}>
                     Add a customer to it
@@ -211,63 +250,115 @@ export default function AmendPage() {
                 </>
               )}
 
-              {/* ── The lines, edited exactly as they are at the till ─────────── */}
+              {/* ── The lines, as the till shows them, each with its trace ─────────── */}
               <div className={styles.lines}>
-                {lines.map((line) => (
-                  <SaleLineRow
-                    key={line.key}
-                    line={line}
-                    shapes={shapesFor(line.productId)}
-                    rules={rulesFor(line.productId, line.saleUnitId)}
-                    total={(Number(line.qty) || 0) * (Number(line.unitPrice) || 0)}
-                    belowCost={false}
-                    onPatch={(next) => updateLine(line.key, next)}
-                    onRemove={() => removeLine(line.key)}
-                    onStep={(direction) =>
-                      updateLine(line.key, {
-                        qty: String(Math.max(0, (Number(line.qty) || 0) + direction)),
-                      })
-                    }
-                    /*
-                     * No repricing on a correction. A bulk band is today's price list, and this
-                     * receipt was made on a day that has gone — quietly repricing a line the seller
-                     * did not touch would rewrite history to match this morning's prices.
-                     */
-                    onReprice={() => {}}
-                  />
-                ))}
+                {lines.map((line) => {
+                  const said = trace(line);
+                  const isNew = said === 'New on this receipt';
+                  return (
+                    <div key={line.key} className={`${styles.lineWrap} ${said ? (isNew ? styles.lineNew : styles.lineChanged) : ''}`}>
+                      {said && <p className={styles.trace}>{said}</p>}
+                      {openKey === line.key ? (
+                        <>
+                          <SaleLineRow
+                            line={line}
+                            shapes={shapesFor(line.productId)}
+                            rules={rulesFor(line.productId, line.saleUnitId)}
+                            total={(Number(line.qty) || 0) * (Number(line.unitPrice) || 0)}
+                            belowCost={false}
+                            onPatch={(next) => updateLine(line.key, next)}
+                            onRemove={() => removeLine(line.key)}
+                            onStep={(direction) =>
+                              updateLine(line.key, { qty: String(Math.max(0, (Number(line.qty) || 0) + direction)) })
+                            }
+                            // No repricing on a correction: this morning's price list is not that day's.
+                            onReprice={() => {}}
+                          />
+                          <button type="button" className={styles.done} onClick={() => setOpenKey(null)}>
+                            Done
+                          </button>
+                        </>
+                      ) : (
+                        <TillLine
+                          line={line}
+                          shapes={shapesFor(line.productId)}
+                          rules={rulesFor(line.productId, line.saleUnitId)}
+                          total={(Number(line.qty) || 0) * (Number(line.unitPrice) || 0)}
+                          belowCost={false}
+                          onPatch={(next) => updateLine(line.key, next as Partial<DraftLine>)}
+                          onRemove={() => removeLine(line.key)}
+                          onStep={(direction) =>
+                            updateLine(line.key, { qty: String(Math.max(0, (Number(line.qty) || 0) + direction)) })
+                          }
+                          onReprice={() => {}}
+                          onOpen={() => setOpenKey(line.key)}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
+
+              {/* What was on it and is not now — one tap back on. */}
+              {takenOff.length > 0 && (
+                <section className={styles.off} aria-label="Taken off this receipt">
+                  <h2 className={styles.sectionTitle}>Taken off</h2>
+                  <ul className={styles.offList}>
+                    {takenOff.map((o, i) => (
+                      <li key={`${o.productId}-${o.saleUnitId}-${i}`} className={styles.offRow}>
+                        <span className={styles.offWhat}>
+                          <s>{o.productName}</s>
+                          <span className={styles.offMeta}>
+                            {formatQtySpoken(o.enteredQty)} {shapeWord(String(o.enteredQty), o.unitName ?? '').toLowerCase()} ·{' '}
+                            {formatMoney(o.lineTotal)}
+                          </span>
+                        </span>
+                        <Button size="small" variant="secondary" onClick={() => putBackLine(o)}>
+                          Put back
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
 
               {emptied && (
                 <InfoPanel tone="warning" title="Nothing left on this receipt">
-                  Correcting it with no items cancels it. The stock goes back, the containers come
-                  off the customer, and anything paid becomes credit to them.
+                  Correcting it with no items cancels it. The stock goes back, the containers come off the
+                  customer, and anything paid becomes credit to them.
                 </InfoPanel>
               )}
 
-              {/* ── The two ways onto a receipt, the same two the till offers ─── */}
+              {/* ── The till's own box: "3 b/s", Enter, and the camera ─────────── */}
               <div className={styles.add}>
-                <Button variant="secondary" fullWidth onClick={() => setPicking(true)}>
-                  <PlusIcon /> Add an item
-                </Button>
-                <Button variant="secondary" fullWidth onClick={() => setScanning(true)}>
-                  <CameraIcon /> Scan a barcode
-                </Button>
+                <QuickAdd
+                  storeId={store.id}
+                  onAdd={(product, qty) => put({ id: product.id, name: product.name }, qty)}
+                  onScan={() => setScanning(true)}
+                />
+                <button type="button" className={styles.browse} onClick={() => setPicking(true)}>
+                  Browse all items
+                </button>
               </div>
+
+              {/* ── The empties that went out with it, and what came back ──────── */}
+              {order.customerId && containerRows.length > 0 && (
+                <section className={styles.empties} aria-label="Empties with this receipt">
+                  <h2 className={styles.sectionTitle}>Empties with this receipt</h2>
+                  <LoadArea area={before} what="its empties" compact>
+                    {() => (
+                      <ContainersBack
+                        rows={containerRows}
+                        onChange={(id, back) => patch({ emptiesBack: { ...(draft.emptiesBack ?? {}), [id]: back } })}
+                      />
+                    )}
+                  </LoadArea>
+                  <p className={styles.note}>Saved with the correction. A line sending out fewer can only have had that many of its own back.</p>
+                </section>
+              )}
 
               {was && (
                 <div className={styles.totals}>
-                  {/*
-                    THE WHOLE ARITHMETIC, not just the two ends of it.
-
-                    This showed "It said N5,000 / It should say N5,000" and nothing else, so a
-                    seller looking at a corrected receipt could not see WHICH part had moved —
-                    and when the two figures matched, could not tell whether that was right or
-                    whether their edit had failed to register.
-
-                    The steps only appear when there is more than one, because on a plain sale
-                    "Items" and "It should say" are the same number twice.
-                  */}
                   {(amendCharges(draft) > 0.005 || amendDeposits(draft) > 0.005) && (
                     <>
                       <div className={styles.totalRow}>
@@ -290,7 +381,6 @@ export default function AmendPage() {
                       )}
                     </>
                   )}
-
                   <div className={styles.totalRow}>
                     <span>It said</span>
                     <span>{formatMoney(was.total)}</span>
@@ -299,18 +389,20 @@ export default function AmendPage() {
                     <strong>It should say</strong>
                     <strong>{formatMoney(total)}</strong>
                   </div>
-                  {/*
-                    AND WHAT SITS BESIDE IT: the deposit put down with the sale, and what has been
-                    paid. "The correct receipt page should also load the breakdown." Changed on the
-                    next step, where each has its own cancel.
-                  */}
+                  {Math.abs(total - was.total) > 0.005 && (
+                    <div className={`${styles.totalRow} ${total > was.total ? styles.up : styles.down}`}>
+                      <span>Difference</span>
+                      <span>
+                        {total > was.total ? '+' : '−'}
+                        {formatMoney(Math.abs(total - was.total))}
+                      </span>
+                    </div>
+                  )}
                   {(was.depositTaken ?? 0) > 0.005 && (
                     <div className={styles.totalRow}>
                       <span>
                         Deposit put down with it
-                        {(was.depositUnpaid ?? 0) > 0.005
-                          ? ` (${formatMoney(was.depositUnpaid ?? 0)} not paid)`
-                          : ''}
+                        {(was.depositUnpaid ?? 0) > 0.005 ? ` (${formatMoney(was.depositUnpaid ?? 0)} not paid)` : ''}
                       </span>
                       <span>{formatMoney(was.depositTaken ?? 0)}</span>
                     </div>
@@ -323,18 +415,16 @@ export default function AmendPage() {
                   ))}
                 </div>
               )}
+
+              <Explain label="What happens to the old copy?">
+                The receipt keeps its number, so the link you sent the customer still works. What it said
+                before is kept in full, and the new copy says it replaces the old one.
+              </Explain>
             </>
           )
         }
       </PageState>
 
-      {/*
-        CORRECT PAYMENT, not Take payment.
-
-        The money is the next step, not this one — a correction routinely finds more owing and the
-        customer pays the difference standing there. Floating, in the same place the till puts its
-        own, because this screen IS the till and a seller's thumb is already there.
-      */}
       {order && !emptied && (
         <FloatingAmount
           who={order.customerName || 'this receipt'}
@@ -343,13 +433,6 @@ export default function AmendPage() {
           onClick={() => void nav.push('amend_payment_page', { id: saleId ?? '' })}
         />
       )}
-
-      {/*
-        AND WHEN IT HAS BEEN EMPTIED, the button says what it will actually do.
-
-        Sending somebody to a payment screen for a receipt that is about to be cancelled would be
-        the software pretending not to know.
-      */}
       {order && emptied && (
         <FloatingAmount
           who={order.customerName || 'this receipt'}
@@ -400,10 +483,6 @@ export default function AmendPage() {
         }}
       />
 
-      {/*
-        NAMING a walk-in, never moving a receipt to somebody else. The picker opens ON this page so
-        popping a pushed one cannot throw away the correction being built.
-      */}
       <CustomerPicker
         open={namingCustomer}
         onClose={() => setNamingCustomer(false)}

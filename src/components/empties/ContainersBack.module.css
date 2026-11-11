@@ -1,0 +1,126 @@
+.box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.quick {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+}
+
+.quickBtn {
+  min-height: 44px;
+  border: none;
+  border-radius: calc(var(--radius) - 4px);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.quickOn {
+  background: var(--surface);
+  color: var(--primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.row:first-child {
+  border-top: none;
+}
+
+.what {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.left {
+  color: var(--warning);
+  font-weight: 700;
+}
+
+.done {
+  color: var(--success);
+  font-weight: 700;
+}
+
+.was {
+  color: var(--text-muted);
+}
+
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.step:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.qty {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 48px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.qtyWord {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+}

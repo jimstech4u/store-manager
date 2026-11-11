@@ -5,6 +5,7 @@ import { PageScaffold } from '@/components/ui/PageScaffold';
 import { PageState, type PageStatus } from '@/components/ui/PageState';
 import { Button } from '@/components/ui/Button';
 import { Explain, InfoPanel } from '@/components/ui/Explain';
+import { ConfirmDialog, useConfirm } from '@/components/ui/Dialog';
 import { PrintPreview } from '@/components/settings/PrintPreview';
 import { useNav } from '@academix-admin/navigation-stack';
 import { CheckIcon, PlusIcon } from '@/components/ui/Icon';
@@ -165,6 +166,12 @@ export default function PrintingPage() {
   const logoInput = useRef<HTMLInputElement | null>(null);
   const [logoBusy, setLogoBusy] = useState(false);
   const [logoError, setLogoError] = useState<string | null>(null);
+  /*
+   * REMOVING THE LOGO ASKS FIRST (11 Nov): it sat one tap from Change, and a shop's logo was gone from
+   * every receipt with nothing to say it had happened. Mounted means asked.
+   */
+  const removeDialog = useConfirm();
+  const [askRemove, setAskRemove] = useState(false);
   const accounts = useBankAccounts(store?.id ?? null);
   const { can, canOpen } = usePermission();
   const editable = can('store.settings');
@@ -478,7 +485,7 @@ export default function PrintingPage() {
                         {logoUrl ? 'Change' : 'Add a logo'}
                       </Button>
                       {logoUrl && (
-                        <Button variant="ghost" size="small" disabled={!editable} onClick={() => void settings.patch({ receipt_logo_path: null })}>
+                        <Button variant="ghost" size="small" disabled={!editable} onClick={() => setAskRemove(true)}>
                           Remove
                         </Button>
                       )}
@@ -752,6 +759,20 @@ export default function PrintingPage() {
                 </section>
               )}
             </div>
+
+            {askRemove && (
+              <ConfirmDialog
+                controller={removeDialog}
+                title="Take the logo off your receipts?"
+                message="Every receipt, picture and PDF prints without it from now on. You can add it again any time."
+                confirmText="Yes, take it off"
+                onDismiss={() => setAskRemove(false)}
+                onConfirm={() => {
+                  setAskRemove(false);
+                  void settings.patch({ receipt_logo_path: null });
+                }}
+              />
+            )}
 
             {/* ── The receipt as it will print: beside the settings, under them on a phone ── */}
             <aside className={styles.previewCol} aria-labelledby="preview-head">

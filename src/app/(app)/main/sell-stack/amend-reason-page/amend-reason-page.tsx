@@ -15,6 +15,8 @@ import { useStackBack } from '@/hooks/useStackBack';
 import { useAuth } from '@/providers/AuthProvider';
 import { amendTotal, useAmendDraft } from '@/lib/stacks/amend-draft';
 import { amendSale, countsTouched } from '@/lib/stacks/amend';
+import { correctedBack, saleEmpties, setSaleEmptiesBack } from '@/lib/stacks/sale-empties';
+import { containersGoingOut } from '@/lib/empties-back';
 import { ConfirmDialog, useConfirm } from '@/components/ui/Dialog';
 import { formatMoney, messageOf } from '@/lib/format';
 import styles from './amend-reason-page.module.css';
@@ -97,6 +99,16 @@ export default function AmendReasonPage() {
     setState('busy');
     setFailure(null);
     try {
+      /*
+       * WHAT CAME BACK WITH IT, worked out from the receipt as it stands — before the correction
+       * rewrites its lines — and set once the correction lands (0280). A receipt sending out fewer
+       * crates can only have had that many of its own back.
+       */
+      const emptiesBefore = order.customerId && order.lines.length > 0 ? await saleEmpties(saleId).catch(() => null) : null;
+      const backTarget = emptiesBefore
+        ? correctedBack(emptiesBefore, containersGoingOut(order.lines, emptiesBefore), draft.emptiesBack ?? {})
+        : null;
+
       const result = await amendSale({
         goodsMoved,
         takeBack: draft.takeBack ?? [],
@@ -146,6 +158,19 @@ export default function AmendReasonPage() {
         });
         if (backErr) console.warn('change was not recorded as money back', backErr.message);
         accountsChanged();
+      }
+      // The empties, set to what the correction page said (0280).
+      if (backTarget && !result.voided) {
+        try {
+          const after = await saleEmpties(result.saleId);
+          const units = after
+            .filter((c) => backTarget[c.productUnitId] !== undefined && Math.abs(backTarget[c.productUnitId] - c.cameBack) > 1e-9)
+            .map((c) => ({ productUnitId: c.productUnitId, qty: Math.min(backTarget[c.productUnitId], Math.max(c.wentOut, c.cameBack)) }));
+          await setSaleEmptiesBack(result.saleId, units, { reason: `Receipt corrected: ${draft.reason.trim()}` });
+        } catch (e) {
+          // The correction stands; the empties can be set on the receipt itself.
+          console.warn('empties not set after the correction', e);
+        }
       }
       setState('idle');
       // Made: the next correction on this receipt starts from the receipt, not from this draft.

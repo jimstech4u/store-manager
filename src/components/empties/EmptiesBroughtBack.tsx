@@ -15,6 +15,8 @@ import {
 } from '@/lib/stacks/customer-ledgers';
 import { accountsChanged } from '@/lib/stacks/customer-account';
 import { messageOf } from '@/lib/format';
+import { saleEmpties, setSaleEmptiesBack, type SaleContainer } from '@/lib/stacks/sale-empties';
+import { ContainersBack } from './ContainersBack';
 import styles from './EmptiesBroughtBack.module.css';
 
 /**
@@ -117,6 +119,7 @@ export function EmptiesBroughtBack({
   const askingRef = useRef(onAsking);
   askingRef.current = onAsking;
   const asked = area.data === null ? null : lines.length;
+  // (On a receipt this is also told from `sale_empties` below, once that has been read.)
   useEffect(() => {
     askingRef.current?.(asked);
   }, [asked]);
@@ -156,6 +159,98 @@ export function EmptiesBroughtBack({
   };
 
   const words = (l: OwedLine) => `${l.said} ${l.label} ${l.unit.toLowerCase()}`;
+
+  /*
+   * THIS RECEIPT'S OWN CONTAINERS (0280): out, and back with − and +. All back is one tap, and so is
+   * None back — "they did not bring those back after all" — because the − goes below what was
+   * recorded, which is the undo. The block stays on the receipt once all is back, so it can be.
+   */
+  const saleArea = useLoadArea<SaleContainer[]>(() => saleEmpties(forSale!.id), [forSale?.id], {
+    key: `sale-empties:${forSale?.id ?? 'none'}`,
+    scope: LEDGERS_SCOPE,
+    whenNot: !forSale,
+    onFail: problem.show,
+  });
+  const [targets, setTargets] = useState<Record<string, number>>({});
+  useEffect(() => setTargets({}), [saleArea.data]);
+  const containers = saleArea.data ?? [];
+  const rowsBack = containers.map((c) => ({
+    id: c.productUnitId,
+    name: c.productName,
+    unitName: c.unitName,
+    unitPlural: c.unitPlural,
+    out: c.wentOut,
+    back: targets[c.productUnitId] ?? c.cameBack,
+    max: Math.max(c.wentOut, c.cameBack),
+    was: c.cameBack,
+  }));
+  const changes = rowsBack.filter((r) => Math.abs(r.back - r.was) > 1e-9);
+  const saveBack = async (wanted: Record<string, number>) => {
+    if (!forSale) return;
+    const units = containers
+      .filter((c) => wanted[c.productUnitId] !== undefined && Math.abs(wanted[c.productUnitId] - c.cameBack) > 1e-9)
+      .map((c) => ({ productUnitId: c.productUnitId, qty: wanted[c.productUnitId] }));
+    if (units.length === 0) return;
+    setBusy(true);
+    try {
+      await setSaleEmptiesBack(forSale.id, units, { atSale: Boolean(forSale.occurredAt) });
+      saleArea.reload();
+      area.reload();
+      all.reload();
+      onRecorded?.();
+    } catch (e) {
+      problem.show(messageOf(e, 'That could not be recorded.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (forSale && !withOlder) {
+    // Nothing went out with it and nothing older is out: nothing to ask.
+    if (saleArea.data !== null && containers.length === 0 && !hasOlder) return null;
+    const stillOut = rowsBack.reduce((n, r) => n + Math.max(r.out - r.back, 0), 0);
+    return (
+      <section className={styles.block} aria-label={title}>
+        <ProblemDialog problem={problem} title="Not recorded" />
+        <h2 className={styles.head}>{stillOut > 0 || containers.length === 0 ? title : 'Empties — all back'}</h2>
+        {hasOlder && (
+          <label className={styles.older}>
+            <input type="checkbox" checked={withOlder} onChange={(e) => setWithOlder(e.target.checked)} />
+            <span>Include what they had from before</span>
+          </label>
+        )}
+        <LoadArea area={saleArea} what="this receipt's empties" compact>
+          {() =>
+            containers.length === 0 ? null : (
+              <>
+                <ContainersBack
+                  rows={rowsBack}
+                  disabled={busy}
+                  onChange={(id, back) => setTargets((t) => ({ ...t, [id]: back }))}
+                  onAll={(wanted) => void saveBack(wanted)}
+                />
+                {changes.length > 0 && (
+                  <div className={styles.saveRow}>
+                    <Button variant="secondary" size="small" disabled={busy} onClick={() => setTargets({})}>
+                      Undo changes
+                    </Button>
+                    <Button
+                      size="small"
+                      busy={busy}
+                      busyLabel="Recording"
+                      onClick={() => void saveBack(Object.fromEntries(rowsBack.map((r) => [r.id, r.back])))}
+                    >
+                      Save
+                    </Button>
+                  </div>
+                )}
+              </>
+            )
+          }
+        </LoadArea>
+      </section>
+    );
+  }
 
   // On a receipt, a sale whose containers are all back — and nothing older out — has nothing to ask.
   if (forSale && area.data !== null && lines.length === 0 && !hasOlder) return null;

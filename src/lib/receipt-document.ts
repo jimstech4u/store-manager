@@ -90,6 +90,12 @@ export function receiptDocument(
   paper: SaleDetail,
   shopName: string,
   settings: { header: string | null; footer: string | null; logo?: PaperLogo | null } | null,
+  /**
+   * THIS RECEIPT'S OWN CONTAINERS (`sale_empties`, 0280): what went out with it and what came back
+   * with it, printed above "Still with you". "The return part on the receipt print": a customer handed
+   * crates back at the counter and the paper said nothing of it — only what they hold overall.
+   */
+  containers?: { name: string; unitName: string; unitPlural: string; out: number; back: number }[] | null,
 ): ReceiptImageInput {
   const { sale, customer, lines, payments, charges, corrected } = paper;
   const parts = paper.merged_parts ?? [];
@@ -283,6 +289,17 @@ export function receiptDocument(
         : owing > 0
           ? [{ label: 'Balance', value: formatMoney(owing), strong: true }]
           : []),
+      /*
+       * One short line per container: the item, then out/back. "Origin Bottle (60cl) crates" beside
+       * "2 out · 2 back" did not fit a roll's line and wrapped into three.
+       */
+      ...((containers ?? []).length > 0
+        ? [{ label: 'Empties (out/back)', value: '', strong: true }]
+        : []),
+      ...(containers ?? []).map((c) => ({
+        label: c.name,
+        value: `${formatQtySpoken(c.out)}/${formatQtySpoken(c.back)}`,
+      })),
       // What the customer still holds of the shop's. The crates are the half of an account that
       // gets disputed, precisely because nobody has anything in writing about them.
       ...(stillWithYou.length > 0

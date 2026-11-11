@@ -165,6 +165,12 @@ export interface EmptiesMove {
   productId: string | null;
   /** The receipt that sent them out (or whose void took them back) — null when none did (0155). */
   saleId: string | null;
+  /** How much of this move has been undone (0280). */
+  undone: number;
+  /** The move this row undoes ("not brought back after all"), when it is an undo. */
+  undoes: string | null;
+  /** A return or write-off that can still be taken back here. */
+  canUndo: boolean;
   /**
    * Which way this movement ran (0157).
    *
@@ -258,6 +264,9 @@ export async function emptiesLedger(customerId: string): Promise<EmptiesMove[]> 
     productId: (r.product_id as string | null) ?? null,
     saleId: (r.sale_id as string | null) ?? null,
     side: (r.side as 'they_hold' | 'we_hold') ?? 'they_hold',
+    undone: Number(r.undone) || 0,
+    undoes: (r.undoes as string | null) ?? null,
+    canUndo: Boolean(r.can_undo),
   }));
 }
 

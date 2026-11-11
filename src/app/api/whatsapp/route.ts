@@ -137,6 +137,25 @@ export async function POST(request: Request) {
  */
 const REPLY_BY_MS = 50_000;
 
+/** What a run that ran out of time had found, in words: "found New look and receipts #22BAA745, #D1746E61". */
+function soFar(trace: { tool: string; args: unknown; result: unknown }[]): string {
+  const names = new Set<string>();
+  const receipts = new Set<string>();
+  const looked = new Set<string>();
+  for (const t of trace) {
+    const r = (t.result ?? {}) as Record<string, unknown>;
+    for (const c of (Array.isArray(r.customers) ? r.customers : []) as { name?: string }[]) if (c.name) names.add(c.name);
+    for (const x of (Array.isArray(r.receipts) ? r.receipts : []) as { number?: string }[]) if (x.number) receipts.add(x.number);
+    if (!['find_customer', 'find_receipt', 'recent_receipts'].includes(t.tool)) looked.add(t.tool.replace(/_/g, ' '));
+  }
+  const bits = [
+    ...(names.size ? [`found ${[...names].slice(0, 3).join(', ')}`] : []),
+    ...(receipts.size ? [`receipts ${[...receipts].slice(0, 4).join(', ')}`] : []),
+    ...(looked.size ? [`looked at ${[...looked].slice(0, 3).join(', ')}`] : []),
+  ];
+  return bits.join(', ');
+}
+
 async function handle(msg: WaMessage, profileName: string | null, began = Date.now()) {
   const db = serviceDb();
   const tapped = msg.interactive?.button_reply?.title ??
@@ -395,6 +414,7 @@ async function handle(msg: WaMessage, profileName: string | null, began = Date.n
       '- A walk-in, or "no customer", means none: never attach a customer from earlier in the chat to a new sale they did not name one for.\n' +
       '- Never choose a customer, item or supplier for them. When it is unclear which, ask, and offer the names as options.\n' +
       '- An order of several items, or one built over several messages, goes on a working order (order_start, then order_set for each item): it is saved on the till with a code, so quantities and prices are never kept in your memory. Show it with order_show and sell it with order_sell. A single quick sale can still use propose_sale.\n' +
+      '- Empties (containers, crates) of a customer or a receipt: receipt_empties, never the statement. Give quantities, receipt by receipt, and what they hold by product group when asked. "They did not bring them back" (or "they did") is propose_receipt_empties_back on that receipt.\n' +
       '- An order list (a photo, typed, or forwarded from a customer): call order_add_list ONCE, straight away, with customer set to who it is for as they wrote it — for a typed or forwarded list set from_message true and do not copy the lines; for a photo or file pass every line in lines. No find_customer, order_start, find_items or order_set first, and never line by line. It finds the customer, opens their order, places what is plain and holds the rest. Then say how many went on and the total, and ask about the held lines (to_confirm) one at a time, offering the choices as options. Never guess a name, a quantity or a shape.\n' +
       '- When they tell you or correct what a written name means, call name_means so it is found next time (several items when it should always be asked, like Coke). Never teach a choice they made once among several.\n' +
       '- After a count shows a difference, ask what happened to it, using only the reasons count_status gives, then propose_settle_count with parts that add up to the whole difference.\n' +
@@ -437,12 +457,18 @@ async function handle(msg: WaMessage, profileName: string | null, began = Date.n
     run.stop = true;
     await closeIfEmpty(ctx).catch(() => false);
     const so = await workingSummary(ctx).catch(() => null);
+    /*
+     * AND WHEN NOTHING WAS SAVED, WHAT WAS FOUND (11 Nov). "Please send it again" threw away three
+     * lookups the owner then had to wait for twice; what was found is said, nothing was changed, and
+     * "continue" picks it up.
+     */
+    const found = soFar(run.trace);
     await reply(
       so
         ? `That is taking me longer than it should, so here is where it stands. ${so}\n\nSend *continue* and I will carry on.`
-        : 'That took me too long and I did not finish it. Please send it again, or in smaller parts.',
+        : `That is taking me longer than it should.${found ? ` So far I have ${found}.` : ''} Nothing has been changed.\n\nSend *continue* and I will finish it.`,
       { store_id: link.store_id, user_id: link.user_id, tools: { late: true, calls: run.trace, providers: run.providers, skipped: run.skipped, ms: Date.now() - began } },
-      so ? ['Continue', 'Show the order'] : [],
+      so ? ['Continue', 'Show the order'] : ['Continue'],
     );
     return;
   }
