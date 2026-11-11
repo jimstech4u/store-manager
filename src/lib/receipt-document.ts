@@ -95,7 +95,17 @@ export function receiptDocument(
    * with it, printed above "Still with you". "The return part on the receipt print": a customer handed
    * crates back at the counter and the paper said nothing of it — only what they hold overall.
    */
-  containers?: { name: string; unitName: string; unitPlural: string; out: number; back: number }[] | null,
+  containers?:
+    | {
+        name: string;
+        unitName: string;
+        unitPlural: string;
+        out: number;
+        back: number;
+        /** What came back in the shapes it came back in ("2 crates 9 bottles"), when not a whole count. */
+        backSaid?: string | null;
+      }[]
+    | null,
 ): ReceiptImageInput {
   const { sale, customer, lines, payments, charges, corrected } = paper;
   const parts = paper.merged_parts ?? [];
@@ -296,10 +306,18 @@ export function receiptDocument(
       ...((containers ?? []).length > 0
         ? [{ label: 'Empties (out/back)', value: '', strong: true }]
         : []),
-      ...(containers ?? []).map((c) => ({
-        label: c.name,
-        value: `${formatQtySpoken(c.out)}/${formatQtySpoken(c.back)}`,
-      })),
+      /*
+       * A PART BACK ("3 bottles of a crate", 11 Nov) on two short lines — "3/1/4" read as nonsense:
+       * the item with what went out, then what came back in the shapes it came back in.
+       */
+      ...(containers ?? []).flatMap((c) =>
+        c.backSaid
+          ? [
+              { label: c.name, value: `${formatQtySpoken(c.out)} out` },
+              { label: `  back ${c.backSaid}`, value: '' },
+            ]
+          : [{ label: c.name, value: `${formatQtySpoken(c.out)}/${formatQtySpoken(c.back)}` }],
+      ),
       // What the customer still holds of the shop's. The crates are the half of an account that
       // gets disputed, precisely because nobody has anything in writing about them.
       ...(stillWithYou.length > 0

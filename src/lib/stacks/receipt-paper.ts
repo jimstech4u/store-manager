@@ -68,6 +68,12 @@ export function useReceiptPaper(storeId: string | null) {
         .eq('store_id', storeId);
       if (error) throw error;
       invalidate(RECEIPT_PAPER_SCOPE);
+      /*
+       * AND EVERY COPY THAT PRINTS WITH IT (11 Nov). The till and the receipt keep the paper under
+       * 'store_settings' — and this told only its own scope, while `live-shop` skips this device's own
+       * writes. A logo taken off here kept printing on this device until the app was reopened.
+       */
+      invalidate('store_settings');
       await resource.reload();
     },
     [storeId, resource],

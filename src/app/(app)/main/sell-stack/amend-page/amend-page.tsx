@@ -24,7 +24,8 @@ import { findByBarcode } from '@/lib/stacks/mid-sale';
 import { amendCharges, amendDeposits, amendItems, amendTotal, useAmendDraft } from '@/lib/stacks/amend-draft';
 import { LEDGERS_SCOPE } from '@/lib/stacks/customer-ledgers';
 import { correctedBack, saleEmpties, type SaleContainer } from '@/lib/stacks/sale-empties';
-import { containersGoingOut } from '@/lib/empties-back';
+import { containersGoingOut, shapesOf } from '@/lib/empties-back';
+import { useSellingUnits } from '@/lib/stacks/selling-units';
 import { formatMoney, formatQtySpoken, shapeWord } from '@/lib/format';
 import type { DraftLine } from '@/lib/stacks/draft-orders';
 
@@ -55,6 +56,8 @@ export default function AmendPage() {
   const { draft, loaded, patch, patchOrder, updateLine, removeLine, addLine } = useAmendDraft(saleId);
   const productIds = (draft.order?.lines ?? []).map((l) => l.productId);
   const { shapes: saleUnits, ensure: ensureShapes } = useTillShapes(store?.id ?? null, productIds);
+  // Every shape each item comes in, so a crate can come back as "3 bottles".
+  const { units: sellingUnits } = useSellingUnits(store?.id ?? null);
 
   const [picking, setPicking] = useState(false);
   const finishedGuard = useFinishedGuard();
@@ -194,7 +197,7 @@ export default function AmendPage() {
       saleUnitBaseQty: o.enteredQty > 0 ? String(o.baseQty / o.enteredQty) : '1',
     });
 
-  // The empties rows: every shape that went out before or goes out now.
+  // The empties rows: every shape that went out before or goes out now — counted in bottles too.
   const containerRows = (() => {
     const known = new Map((before.data ?? []).map((c) => [c.productUnitId, c]));
     const ids = new Set([...known.keys(), ...Object.keys(outNow)]);
@@ -213,6 +216,7 @@ export default function AmendPage() {
         // Older crates already recorded may stay; never more than that or what goes out now.
         max: Math.max(out, Math.min(back, c?.cameBack ?? 0)),
         was: c?.cameBack ?? 0,
+        shapes: shapesOf(sellingUnits, id),
       };
     }).filter((r) => r.out > 0 || r.back > 0 || r.was > 0);
   })();

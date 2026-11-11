@@ -89,7 +89,8 @@ try {
   await top().getByRole('button', { name: 'See the receipt' }).first().evaluate((el) => el.click());
   await p.waitForTimeout(6000);
   const pageText = await top().innerText();
-  check('the receipt shows its empties out and back', /went out/.test(pageText) && /back/.test(pageText));
+  // The breakdown is folded (11 Nov): its dropdown says the totals, "0 of 8 crates back".
+  check('the receipt shows its empties out and back', /\bof [\d /]+ \w+ back\b/.test(pageText), (pageText.match(/[^\n]*\bof [\d /]+ \w+ back\b/) ?? [''])[0].trim());
   const paper = await top().locator('[aria-label="How this will print"]').first().innerText().catch(() => '');
   check(
     'the paper prints "Empties (out/back)", one line each',
@@ -104,9 +105,9 @@ try {
   console.log('  buttons:', (await top().getByRole('button').allInnerTexts()).map((t) => t.trim()).filter(Boolean).slice(0, 30).join(' | '));
   await shot('3-receipt');
   // The receipt's own empties: two buttons saying what they do, the recorded one ticked and shut.
-  const block = top().locator('section').filter({ has: p.getByRole('button', { name: /came back/ }) }).first();
+  const block = top().locator('section').filter({ has: p.getByRole('button', { name: /^(All|None) came back$/ }) }).first();
   await block.screenshot({ path: `${SHOTS}/3-receipt-empties.png` });
-  const ticked = await block.getByRole('button', { name: /came back/ }).evaluateAll((bs) => bs.map((b) => `${b.textContent.trim()}${b.disabled ? ' (shut)' : ''}`));
+  const ticked = await block.getByRole('button', { name: /^(All|None) came back$/ }).evaluateAll((bs) => bs.map((b) => `${b.textContent.trim()}${b.disabled ? ' (shut)' : ''}`));
   check('the empties are two buttons, the recorded answer ticked and shut', ticked.length === 2 && ticked.some((t) => /shut/.test(t)), ticked.join(' | '));
 
   // ── 4. Correcting it ──

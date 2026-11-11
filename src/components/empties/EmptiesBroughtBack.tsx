@@ -14,9 +14,11 @@ import {
   saleEmptiesOwed,
 } from '@/lib/stacks/customer-ledgers';
 import { accountsChanged } from '@/lib/stacks/customer-account';
-import { messageOf } from '@/lib/format';
+import { formatQtySpoken, messageOf } from '@/lib/format';
 import { saleEmpties, setSaleEmptiesBack, type SaleContainer } from '@/lib/stacks/sale-empties';
-import { ContainersBack } from './ContainersBack';
+import { useSellingUnits } from '@/lib/stacks/selling-units';
+import { shapesOf } from '@/lib/empties-back';
+import { ContainersBack, saidRow, type ContainerRow } from './ContainersBack';
 import styles from './EmptiesBroughtBack.module.css';
 
 /**
@@ -45,7 +47,9 @@ export function EmptiesBroughtBack({
   forSale = null,
   title = 'Did they bring any back?',
   onRecorded,
-  onAsking,
+  answered,
+  onAnswered,
+  onWorking,
 }: {
   storeId: string;
   customerId: string;
@@ -64,11 +68,15 @@ export function EmptiesBroughtBack({
   /** After anything is recorded — the receipt re-reads, so the paper says the new figure. */
   onRecorded?: () => void;
   /**
-   * Told how many kinds of container the question is still about — 0 once they are all back, null
-   * until it is known. The receipt waits on it before printing by itself, so "still with you" on
-   * the paper is the answer, not the question.
+   * AT THE COUNTER, THE QUESTION IS ASKED and the paper waits for its answer. "All came back", "None
+   * came back" and a saved part are each an answer — told here — so a part return no longer leaves
+   * the printing waiting on "all back" that will never come (11 Nov). Given with `answered`, which
+   * the receipt keeps: until it is true neither answer shows as ticked.
    */
-  onAsking?: (kinds: number | null) => void;
+  answered?: boolean;
+  onAnswered?: () => void;
+  /** Whether a save is under way, and how many rows are changed and not saved — the paper waits on both. */
+  onWorking?: (w: { busy: boolean; unsaved: number }) => void;
 }) {
   const nav = useNav();
   const problem = useProblem();
@@ -116,13 +124,11 @@ export function EmptiesBroughtBack({
   );
   const hasOlder = Boolean(forSale) && (withOlder || heldInAll - heldBySale > 1e-6);
   const lines = useMemo(() => rollUpOwed(rows), [rows]);
-  const askingRef = useRef(onAsking);
-  askingRef.current = onAsking;
-  const asked = area.data === null ? null : lines.length;
-  // (On a receipt this is also told from `sale_empties` below, once that has been read.)
-  useEffect(() => {
-    askingRef.current?.(asked);
-  }, [asked]);
+  const answeredRef = useRef(onAnswered);
+  answeredRef.current = onAnswered;
+  const workingRef = useRef(onWorking);
+  workingRef.current = onWorking;
+  const counterAsking = Boolean(onAnswered) && !answered;
 
   /* Mounted means asked — see ConfirmDialog. Which question: one line, or everything. */
   const [asking, setAsking] = useState<{ line: OwedLine | null } | null>(null);
@@ -151,6 +157,7 @@ export function EmptiesBroughtBack({
       area.reload();
       all.reload();
       onRecorded?.();
+      answeredRef.current?.();
     } catch (e) {
       problem.show(messageOf(e, 'That could not be recorded.'));
     } finally {
@@ -173,10 +180,12 @@ export function EmptiesBroughtBack({
   });
   const [targets, setTargets] = useState<Record<string, number>>({});
   /** What the last save did, said under the buttons, and what it was before — for its Undo. */
-  const [saved, setSaved] = useState<{ said: string; before: Record<string, number> } | null>(null);
+  const [saved, setSaved] = useState<{ said: string; before: Record<string, number> | null } | null>(null);
   useEffect(() => setTargets({}), [saleArea.data]);
   const containers = saleArea.data ?? [];
-  const rowsBack = containers.map((c) => ({
+  // The item's smaller shapes, so a crate can come back as "3 bottles".
+  const { units: sellingUnits } = useSellingUnits(forSale ? storeId : null);
+  const rowsBack: ContainerRow[] = containers.map((c) => ({
     id: c.productUnitId,
     name: c.productName,
     unitName: c.unitName,
@@ -185,8 +194,21 @@ export function EmptiesBroughtBack({
     back: targets[c.productUnitId] ?? c.cameBack,
     max: Math.max(c.wentOut, c.cameBack),
     was: c.cameBack,
+    shapes: shapesOf(sellingUnits ?? [], c.productUnitId),
   }));
-  const changes = rowsBack.filter((r) => Math.abs(r.back - r.was) > 1e-9);
+  const changes = rowsBack.filter((r) => Math.abs(r.back - (r.was ?? 0)) > 1e-6);
+  useEffect(() => {
+    workingRef.current?.({ busy, unsaved: changes.length });
+  }, [busy, changes.length]);
+
+  /** What is still with them, said the way it is counted: "1 crate 3 bottles", or a total of several. */
+  const sayLeft = (backOf: (r: ContainerRow) => number) => {
+    const left = rowsBack.map((r) => ({ r, n: Math.max(r.out - backOf(r), 0) })).filter((x) => x.n > 1e-6);
+    if (left.length === 0) return '';
+    if (left.length === 1) return saidRow(left[0].r, left[0].n);
+    const n = left.reduce((sum, x) => sum + x.n, 0);
+    return `${formatQtySpoken(n)} ${(containers[0]?.unitPlural || 'containers').toLowerCase()}`;
+  };
   const saveBack = async (wanted: Record<string, number>) => {
     if (!forSale) return;
     const units = containers
@@ -197,14 +219,14 @@ export function EmptiesBroughtBack({
     try {
       await setSaleEmptiesBack(forSale.id, units, { atSale: Boolean(forSale.occurredAt) });
       // Said in words: what came back now, and what is still with them.
-      const after = containers.map((c) => ({ c, back: wanted[c.productUnitId] ?? c.cameBack }));
-      const back = after.reduce((n, x) => n + Math.min(x.back, x.c.wentOut), 0);
-      const left = after.reduce((n, x) => n + Math.max(x.c.wentOut - x.back, 0), 0);
-      const unit = (containers[0]?.unitPlural || 'containers').toLowerCase();
+      const backOf = (r: ContainerRow) => wanted[r.id] ?? r.was ?? 0;
+      const left = sayLeft(backOf);
+      const none = rowsBack.every((r) => backOf(r) <= 1e-6);
       setSaved({
-        said: left <= 0 ? `Saved: all came back` : back <= 0 ? `Saved: none came back · ${left} ${unit} still with them` : `Saved: ${back} back · ${left} ${unit} still with them`,
+        said: !left ? 'Saved: all came back' : none ? `Saved: none came back · ${left} still with them` : `Saved: some came back · ${left} still with them`,
         before: Object.fromEntries(containers.map((c) => [c.productUnitId, c.cameBack])),
       });
+      answeredRef.current?.();
       saleArea.reload();
       area.reload();
       all.reload();
@@ -237,18 +259,30 @@ export function EmptiesBroughtBack({
                 <ContainersBack
                   rows={rowsBack}
                   saving={busy}
+                  asking={counterAsking}
                   onChange={(id, back) => {
                     setSaved(null);
                     setTargets((t) => ({ ...t, [id]: back }));
                   }}
                   onAll={(wanted) => void saveBack(wanted)}
+                  // Already so (a fresh sale is "none" until told otherwise): an answer, nothing to write.
+                  onAnswer={(which) => {
+                    const left = sayLeft((r) => r.was ?? 0);
+                    setSaved({
+                      said: which === 'all' || !left ? 'All came back' : `None came back · ${left} still with them`,
+                      before: null,
+                    });
+                    answeredRef.current?.();
+                  }}
                   status={
                     saved && changes.length === 0 ? (
                       <>
                         <span>✓ {saved.said}</span>
-                        <button type="button" disabled={busy} onClick={() => void saveBack(saved.before)}>
-                          Undo
-                        </button>
+                        {saved.before && (
+                          <button type="button" disabled={busy} onClick={() => void saveBack(saved.before!)}>
+                            Undo
+                          </button>
+                        )}
                       </>
                     ) : null
                   }

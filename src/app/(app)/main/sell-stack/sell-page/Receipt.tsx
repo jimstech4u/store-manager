@@ -38,10 +38,30 @@ import { EmptiesBroughtBack } from '@/components/empties/EmptiesBroughtBack';
 import { receiptDocument, type SaleDetail } from '@/lib/receipt-document';
 import { ChangeOwed } from '@/components/sell/ChangeOwed';
 import { autoPrintOn, useAutoPrint } from '@/lib/auto-print';
-import { paperLogo } from '@/lib/paper-logo';
+import { usePrintSettings } from '@/lib/stacks/print-settings';
+import { useSellingUnits } from '@/lib/stacks/selling-units';
+import { saidInShapes, shapesOf } from '@/lib/empties-back';
 import { saleEmpties, type SaleContainer } from '@/lib/stacks/sale-empties';
 import { useLoadArea } from '@/components/ui/LoadArea';
 import { LEDGERS_SCOPE } from '@/lib/stacks/customer-ledgers';
+
+/**
+ * A receipt's own containers as the paper prints them (0280): out, and back — a part back said in the
+ * shapes it came back in ("2 crates 9 bottles"), from the item's shapes when they are known.
+ */
+const paperContainers = (list: SaleContainer[] | null | undefined, units: Parameters<typeof shapesOf>[0] = []) =>
+  (list ?? [])
+    .filter((c) => c.wentOut > 0 || c.cameBack > 0)
+    .map((c) => ({
+      name: c.productName,
+      unitName: c.unitName,
+      unitPlural: c.unitPlural,
+      out: c.wentOut,
+      back: c.cameBack,
+      backSaid: Number.isInteger(Math.round(c.cameBack * 10000) / 10000)
+        ? null
+        : saidInShapes(c.cameBack, shapesOf(units, c.productUnitId), { name: c.unitName, plural: c.unitPlural }, formatQtySpoken),
+    }));
 
 /**
  * The printable receipt.
@@ -97,45 +117,33 @@ export function Receipt({
    * same on another till), keeping what is shown until the answer lands. And its error is no longer
    * stored WITH the receipt: a failed first read was cached as the receipt, with no way to ask again.
    */
-  const res = useResource<{
-    detail: SaleDetail;
-    shopName: string;
-    settings: { width: number; header: string | null; footer: string | null };
-  }>({
-    key: `receipt:v4:${saleId}`,
+  const res = useResource<{ detail: SaleDetail; shopName: string }>({
+    /*
+     * v5: THE SHOP'S PAPER IS NO LONGER KEPT INSIDE EACH RECEIPT (11 Nov). The header, footer and logo
+     * were read with the sale and stored with it, under the account figures' scope — which a change on
+     * the printing page never reaches. A logo taken off kept printing on every receipt opened before,
+     * until something about the customer's account moved. They come from `usePrintSettings` below,
+     * the one copy the printing page tells when it changes.
+     */
+    key: `receipt:v5:${saleId}`,
     scope: ACCOUNT_DERIVED_SCOPE,
     deps: [storeId],
     read: async () => {
       const supabase = getSupabase();
-      const [{ data: d, error: dErr }, { data: s }, { data: store }] = await Promise.all([
+      const [{ data: d, error: dErr }, { data: store }] = await Promise.all([
         supabase.rpc('sale_detail', { p_sale_id: saleId }),
-        supabase.rpc('ensure_store_settings', { p_store_id: storeId }),
         supabase.from('stores').select('name').eq('id', storeId).maybeSingle(),
       ]);
       if (dErr) throw dErr;
-
-      const row = (Array.isArray(s) ? s[0] : s) as
-        | {
-            printer_width_mm: string;
-            receipt_header: string | null;
-            receipt_footer: string | null;
-            receipt_logo_path: string | null;
-            receipt_logo_width_pct: number | null;
-          }
-        | null;
-
       return {
         detail: d as unknown as SaleDetail,
         shopName: (store as { name: string } | null)?.name ?? '',
-        settings: {
-          width: Number(row?.printer_width_mm ?? 80),
-          header: row?.receipt_header ?? null,
-          footer: row?.receipt_footer ?? null,
-          logo: paperLogo(row?.receipt_logo_path, row?.receipt_logo_width_pct),
-        },
       };
     },
   });
+  const paper = usePrintSettings(storeId);
+  // Every shape each item comes in, so a part back prints as "2 crates 9 bottles".
+  const { units: sellingUnits } = useSellingUnits(storeId);
 
   const detail = res.data?.detail ?? null;
   /*
@@ -147,7 +155,7 @@ export function Receipt({
     scope: LEDGERS_SCOPE,
   });
   const shopName = res.data?.shopName ?? '';
-  const settings = res.data?.settings ?? null;
+  const settings = paper.data ?? null;
 
   /*
    * HOW THIS DEVICE PRINTS, from the shop's own setting (0175) rather than from anything this
@@ -203,7 +211,21 @@ export function Receipt({
    * timer runs above the early returns (hooks cannot live below them) and calls it when it is due.
    */
   const { setting: auto } = useAutoPrint();
-  const [emptiesAsking, setEmptiesAsking] = useState<number | null>(null);
+  /*
+   * WHAT THE PAPER WAITS ON AT THE COUNTER (11 Nov) — the change and the empties, each ANSWERED.
+   *
+   * "The auto print flow after empties or change given back is now a problem of timing … we need a
+   * solution at volume." It waited for the empties to be ALL back — so a part return, or none, left it
+   * waiting on a button that said "None came back — print" — and it did not wait for the change at all,
+   * printing "owed" while the change was being counted out. Now each question has answers, and the
+   * paper goes when every question has one AND nothing is being saved or half-changed: a − tapped
+   * during the countdown stops it until that is saved. The paper itself is read again as it prints
+   * (`freshPayload`), so it says what was just saved, however fast the countdown.
+   */
+  const [emptiesAnswered, setEmptiesAnswered] = useState(false);
+  const [emptiesWork, setEmptiesWork] = useState<{ busy: boolean; unsaved: number }>({ busy: false, unsaved: 0 });
+  const [changeLater, setChangeLater] = useState(false);
+  const [changeBusy, setChangeBusy] = useState(false);
   const [autoPhase, setAutoPhase] = useState<'idle' | 'waiting' | 'counting' | 'done' | 'off'>('idle');
   const [left, setLeft] = useState(0);
   const printRef = useRef<(() => Promise<boolean>) | null>(null);
@@ -211,26 +233,38 @@ export function Receipt({
   autoPrintedRef.current = onAutoPrinted;
 
   const hasCustomer = Boolean(detail?.customer);
+  const live = Boolean(detail) && detail?.sale.status !== 'voided';
+  // What is still owed to them in change on this sale — the ChangeOwed block gives it.
+  const changeOwed = detail
+    ? Math.max(
+        (Number(detail.change?.owed ?? 0) || 0) -
+          (detail.change?.given ?? []).reduce((sum, g) => sum + (Number(g.amount) || 0), 0),
+        0,
+      )
+    : 0;
+  const askChange = emptiesAtCounter && live && changeOwed > 0.005 && !changeLater;
+  const askEmpties =
+    emptiesAtCounter &&
+    live &&
+    hasCustomer &&
+    !emptiesAnswered &&
+    (containers.data === null || containers.data.some((c) => c.wentOut > 0));
+  const waitingFor = [askChange ? 'the change' : null, askEmpties ? 'the empties' : null].filter(Boolean) as string[];
+  const working = changeBusy || emptiesWork.busy || emptiesWork.unsaved > 0;
   const autoWanted =
-    autoPrint &&
-    Boolean(detail) &&
-    printer.loaded &&
-    !printer.reconnecting &&
-    detail?.sale.status !== 'voided' &&
-    autoPrintOn(auto, route);
-  const emptiesOpen = emptiesAtCounter && hasCustomer && emptiesAsking !== 0;
+    autoPrint && live && printer.loaded && !printer.reconnecting && autoPrintOn(auto, route);
 
   useEffect(() => {
-    if (!autoWanted) return;
-    if (autoPhase === 'idle' || autoPhase === 'waiting') {
-      if (emptiesOpen) {
-        if (autoPhase !== 'waiting') setAutoPhase('waiting');
-        return;
-      }
+    if (!autoWanted || autoPhase === 'done' || autoPhase === 'off') return;
+    if (waitingFor.length > 0 || working) {
+      if (autoPhase !== 'waiting') setAutoPhase('waiting');
+      return;
+    }
+    if (autoPhase !== 'counting') {
       setLeft(auto.wait);
       setAutoPhase('counting');
     }
-  }, [autoWanted, emptiesOpen, autoPhase, auto.wait]);
+  }, [autoWanted, waitingFor.length, working, autoPhase, auto.wait]);
 
   useEffect(() => {
     if (autoPhase !== 'counting') return;
@@ -302,10 +336,28 @@ export function Receipt({
       shopName,
       settings,
       // The receipt's own empties, out and back, on the paper (0280).
-      (containers.data ?? [])
-        .filter((c) => c.wentOut > 0 || c.cameBack > 0)
-        .map((c) => ({ name: c.productName, unitName: c.unitName, unitPlural: c.unitPlural, out: c.wentOut, back: c.cameBack })),
+      paperContainers(containers.data, sellingUnits),
     );
+
+  /*
+   * THE PAPER READ AGAIN AS IT PRINTS (11 Nov). What is on screen re-reads after a save, but a
+   * countdown of 0 or 3 seconds can beat that re-read, and the paper said "still with you" for crates
+   * just handed in. So printing asks the server for the sale and its containers once more and prints
+   * that; slow or offline (four seconds), it prints what the screen shows.
+   */
+  const freshPayload = async () => {
+    try {
+      const read = Promise.all([getSupabase().rpc('sale_detail', { p_sale_id: saleId }), saleEmpties(saleId)]);
+      const [d, c] = await Promise.race([
+        read,
+        new Promise<never>((_, no) => setTimeout(() => no(new Error('slow')), 4000)),
+      ]);
+      if (d.error || !d.data) throw d.error ?? new Error('no receipt');
+      return receiptDocument(d.data as unknown as SaleDetail, shopName, settings, paperContainers(c, sellingUnits));
+    } catch {
+      return receiptPayload();
+    }
+  };
 
   /*
    * THE RECEIPT AS LINES — one description, read by the screen, the preview and the printer.
@@ -315,12 +367,6 @@ export function Receipt({
    * the single source of how they are set out.
    */
   const printedLines = receiptLines(receiptPayload(), printer.layout);
-  // What is still owed to them in change on this sale — the ChangeOwed block gives it.
-  const changeOwed = Math.max(
-    (Number(detail.change?.owed ?? 0) || 0) -
-      (detail.change?.given ?? []).reduce((sum, g) => sum + (Number(g.amount) || 0), 0),
-    0,
-  );
 
 
   /*
@@ -337,8 +383,9 @@ export function Receipt({
 
     setPrinting(true);
     try {
+      const payload = await freshPayload();
       if (route === 'direct') {
-        const canvas = await renderReceiptCanvas(receiptPayload(), width, printer.layout);
+        const canvas = await renderReceiptCanvas(payload, width, printer.layout);
         if (!canvas) throw new Error('Could not draw the receipt');
         await printer.print(canvas);
         setShareNote('Sent to the printer.');
@@ -351,11 +398,11 @@ export function Receipt({
        * smudged. ₦ becomes N (escpos-text.ts); no upload, no public URL. The share sheet when no
        * printer app answers.
        */
-      const went = await openPrinterAppWith(asInstruction(printedLines));
+      const went = await openPrinterAppWith(asInstruction(receiptLines(payload, printer.layout)));
       if (went) return true;
       setShareNote('No printer app answered. Pick your printer’s own app in the share sheet.');
 
-      const blob = await renderReceiptImage(receiptPayload(), width, printer.layout);
+      const blob = await renderReceiptImage(payload, width, printer.layout);
       if (!blob) throw new Error('Could not draw the receipt');
       const result = await shareImage(
         blob,
@@ -375,105 +422,133 @@ export function Receipt({
   };
   printRef.current = printNow;
 
+  /** Print now, by hand — and on to the next customer when this device says so. */
+  const printByHand = async () => {
+    setAutoPhase('done');
+    const went = await printNow();
+    if (went && autoWanted && auto.thenTill) autoPrintedRef.current?.();
+  };
+
   /*
    * THE QUESTIONS THAT CHANGE THE PAPER — change still owed to them, and the empties they brought
-   * back. At the counter they come FIRST, straight under the print banner and above the receipt:
-   * below it, a fifteen-line receipt had to be scrolled past to answer them, while the customer
-   * waited for the paper. Anywhere else (a receipt opened later) they stay under it.
+   * back. At the counter they come FIRST, above the receipt, under "Before it prints", and end in the
+   * one bar that prints: below the receipt, a fifteen-line receipt had to be scrolled past to answer
+   * them while the customer waited. Anywhere else (a receipt opened later) they stay under it.
    */
-  const counterQuestions = (
-    <>
-      {/*
-        EMPTIES THEY CARRIED IN, settled before the paper goes out.
-
-        "so receipt will not carry 'still with you' if they brought it already." Recorded at the
-        sale's moment and against the sale, so the receipt — which reads its containers as at the
-        sale — re-reads and prints the true figure, or none at all.
-      */}
-      {/* CHANGE OWED, given where it is read — before the paper goes out, or when they come back. */}
-      {sale.status !== 'voided' && changeOwed > 0.005 && (
-        <div data-print-no-print>
-          <ChangeOwed
-            storeId={storeId}
-            saleId={sale.id}
-            owed={changeOwed}
-            atSale={emptiesAtCounter}
-            onGiven={() => void res.reload()}
-          />
-        </div>
-      )}
-
-      {customer && sale.status !== 'voided' && (
-        <div data-print-no-print>
-          <EmptiesBroughtBack
-            storeId={storeId}
-            customerId={customer.id}
-            forSale={{
-              id: sale.id,
-              // At the counter: back at the sale's moment, so the paper is right before it prints.
-              occurredAt: emptiesAtCounter ? sale.occurred_at : null,
-            }}
-            title={emptiesAtCounter ? 'Did they bring any empties back?' : 'Empties from this receipt'}
-            onRecorded={() => void res.reload()}
-            onAsking={setEmptiesAsking}
-          />
-        </div>
-      )}
-    </>
+  const changeBlock = sale.status !== 'voided' && changeOwed > 0.005 && (
+    <ChangeOwed
+      storeId={storeId}
+      saleId={sale.id}
+      owed={changeOwed}
+      atSale={emptiesAtCounter}
+      onGiven={() => void res.reload()}
+      later={changeLater}
+      onLater={emptiesAtCounter ? () => setChangeLater(true) : undefined}
+      onBusy={setChangeBusy}
+    />
   );
+  /*
+   * EMPTIES THEY CARRIED IN, settled before the paper goes out — "so receipt will not carry 'still
+   * with you' if they brought it already." Recorded at the sale's moment and against the sale.
+   */
+  const emptiesBlock = customer && sale.status !== 'voided' && (
+    <EmptiesBroughtBack
+      storeId={storeId}
+      customerId={customer.id}
+      forSale={{
+        id: sale.id,
+        // At the counter: back at the sale's moment, so the paper is right before it prints.
+        occurredAt: emptiesAtCounter ? sale.occurred_at : null,
+      }}
+      title={emptiesAtCounter ? 'Did they bring any empties back?' : 'Empties from this receipt'}
+      onRecorded={() => void res.reload()}
+      answered={emptiesAnswered}
+      onAnswered={emptiesAtCounter ? () => setEmptiesAnswered(true) : undefined}
+      onWorking={setEmptiesWork}
+    />
+  );
+  const asksAnything = changeOwed > 0.005 || (hasCustomer && (containers.data ?? []).some((c) => c.wentOut > 0));
+  const waitingSaid = waitingFor.join(' and ');
+  const waitingLine =
+    waitingFor.length > 0
+      ? `Prints when ${waitingSaid} ${waitingFor.length > 1 || waitingFor[0] === 'the empties' ? 'are' : 'is'} answered`
+      : emptiesWork.unsaved > 0
+        ? 'Prints when the changes are saved'
+        : 'Prints when the save is done';
+
+  /*
+   * THE PRINT BAR — the one place that says what the paper is doing: waiting for which answer, counting
+   * down, printed. "Print now" is always there, so a queue is never held up by the countdown or by a
+   * question somebody chose not to answer.
+   */
+  const printBar = !live ? null : autoWanted ? (
+    autoPhase === 'counting' ? (
+      <div className={styles.auto} role="status">
+        <span className={styles.autoCount} aria-hidden="true">{left}</span>
+        <span className={styles.autoText}>
+          <strong>Printing{printer.printerName ? ` on ${printer.printerName}` : ''}</strong>
+          <span>in {left} {left === 1 ? 'second' : 'seconds'}</span>
+        </span>
+        <span className={styles.autoActions}>
+          <Button size="small" onClick={() => void printByHand()}>
+            Print now
+          </Button>
+          <Button size="small" variant="secondary" onClick={() => setAutoPhase('off')}>
+            Cancel
+          </Button>
+        </span>
+      </div>
+    ) : autoPhase === 'waiting' ? (
+      <div className={`${styles.auto} ${styles.autoWait}`} role="status">
+        <span className={styles.autoText}>
+          <strong>{waitingLine}</strong>
+          <span>Or print it as it is now.</span>
+        </span>
+        <span className={styles.autoActions}>
+          <Button size="small" busy={printing} busyLabel="Printing" onClick={() => void printByHand()}>
+            Print now
+          </Button>
+          <Button size="small" variant="secondary" onClick={() => setAutoPhase('off')}>
+            Don&rsquo;t print
+          </Button>
+        </span>
+      </div>
+    ) : autoPhase === 'done' || autoPhase === 'off' ? (
+      <div className={`${styles.auto} ${styles.autoDone}`} role="status">
+        <span className={styles.autoText}>
+          <strong>{autoPhase === 'done' ? (printing ? 'Printing…' : '✓ Printed') : 'Not printing by itself'}</strong>
+        </span>
+        <Button size="small" variant="secondary" busy={printing} busyLabel="Printing" onClick={() => void printNow()}>
+          {autoPhase === 'done' ? 'Print again' : 'Print'}
+        </Button>
+      </div>
+    ) : null
+  ) : emptiesAtCounter ? (
+    <div className={`${styles.auto} ${styles.autoDone}`}>
+      <span className={styles.autoText}>
+        <strong>{waitingFor.length > 0 ? `Still to answer: ${waitingSaid}` : 'Ready to print'}</strong>
+      </span>
+      <Button size="small" busy={printing} busyLabel="Printing" onClick={() => void printNow()}>
+        Print
+      </Button>
+    </div>
+  ) : null;
 
   return (
     <>
       {/*
-        THE RECEIPT, DRAWN FROM THE LINES THE PRINTER IS SENT.
-
-        This screen used to lay the receipt out in its own markup — a head, a meta block, a list of
-        lines, a totals table. It looked like a receipt and it was not the one that came out of the
-        printer: different wrapping, different rounding of where things sat, the unit price shown
-        here and not there. A shop comparing the screen with the paper found two documents, and
-        could not tell which was wrong.
-
-        So it renders `receiptLines`, the exact array `asInstruction` tags and sends. Monospaced,
-        at the same characters-per-line, because that is what a printer's built-in font is. There
-        is no second layout left to drift.
-
-        `data-print-root` stays: the browser's own print still reveals exactly this, so a shop on a
-        laptop prints the same document too.
+        THE RECEIPT, DRAWN FROM THE LINES THE PRINTER IS SENT — `receiptLines`, the exact array
+        `asInstruction` tags and sends, so there is no second layout to drift from the paper.
+        `data-print-root` stays: the browser's own print reveals exactly this.
       */}
-      {/*
-        PRINTING BY ITSELF — the countdown, and the empties question it waits on. Above the receipt,
-        where the eye already is when the sale is saved.
-      */}
-      {autoPhase === 'waiting' && (
-        <div className={`${styles.auto} ${styles.autoAsk}`} role="status" data-print-no-print>
-          <span className={styles.autoText}>
-            <strong>Say what empties came back, and it prints</strong>
-            <span>Just below. Nothing came back? Print now.</span>
-          </span>
-          <span className={styles.autoActions}>
-            <Button size="small" onClick={() => { setLeft(auto.wait); setAutoPhase('counting'); }}>
-              None came back — print
-            </Button>
-            <Button size="small" variant="secondary" onClick={() => setAutoPhase('off')}>
-              Don&rsquo;t print
-            </Button>
-          </span>
-        </div>
+      {emptiesAtCounter && (
+        <section className={styles.counter} aria-label="Before it prints" data-print-no-print>
+          {asksAnything && <h2 className={styles.counterHead}>Before it prints</h2>}
+          {changeBlock}
+          {emptiesBlock}
+          {printBar}
+        </section>
       )}
-      {autoPhase === 'counting' && (
-        <div className={styles.auto} role="status" data-print-no-print>
-          <span className={styles.autoCount} aria-hidden="true">{left}</span>
-          <span className={styles.autoText}>
-            <strong>Printing{printer.printerName ? ` on ${printer.printerName}` : ''}</strong>
-            <span>in {left} {left === 1 ? 'second' : 'seconds'}</span>
-          </span>
-          <Button size="small" variant="secondary" onClick={() => setAutoPhase('off')}>
-            Cancel
-          </Button>
-        </div>
-      )}
-
-      {emptiesAtCounter && counterQuestions}
 
       <div
         className={styles.receipt}
@@ -489,7 +564,12 @@ export function Receipt({
         </p>
       )}
 
-      {!emptiesAtCounter && counterQuestions}
+      {!emptiesAtCounter && (
+        <div data-print-no-print>
+          {changeBlock}
+          {emptiesBlock}
+        </div>
+      )}
 
       {/*
         TAKING IT BACK.

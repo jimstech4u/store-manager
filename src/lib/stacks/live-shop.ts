@@ -94,7 +94,7 @@ const REACHES: Record<string, string[]> = {
   supplier_empties: ['suppliers', 'yard'],
   empties_counts: ['yard'],
   store_units: ['catalog_flow', 'catalog_derived', 'product_shapes'],
-  store_settings: ['store_settings', 'settings_flow', 'low_stock'],
+  store_settings: ['store_settings', 'settings_flow', 'low_stock', 'receipt_paper'],
   product_low_stock_levels: ['catalog_derived', 'low_stock'],
   sale_charges: ['account_derived', 'money_flow'],
 

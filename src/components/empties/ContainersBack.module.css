@@ -36,6 +36,50 @@
   cursor: pointer;
 }
 
+/* The dropdown to the breakdown: a row of its own, the total beside it, a chevron that turns. */
+.more {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: var(--touch-comfortable, 44px);
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.more[aria-expanded='true'] {
+  border-style: solid;
+  border-color: var(--border);
+}
+
+.moreWhat {
+  flex: 1;
+  min-width: 0;
+  font-weight: 700;
+}
+
+.moreSum {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.chev {
+  flex: none;
+  transition: transform 0.15s ease;
+}
+
+.chevOpen {
+  transform: rotate(180deg);
+}
+
 .list {
   list-style: none;
   margin: 0;
@@ -45,10 +89,11 @@
   background: var(--surface);
 }
 
+/* One item: its name and figures, then a line per shape under them. */
 .row {
   display: flex;
-  align-items: center;
-  gap: var(--space-3);
+  flex-direction: column;
+  gap: var(--space-2);
   padding: var(--space-3);
   border-top: 1px solid var(--border);
 }
@@ -61,7 +106,6 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  flex: 1;
   min-width: 0;
 }
 
@@ -86,6 +130,26 @@
 }
 
 .was {
+  color: var(--text-muted);
+}
+
+/* As many shapes as the item has — one line each, so five shapes never run off a phone. */
+.shapes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1, 4px);
+}
+
+.shapeLine {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.shapeName {
+  font-size: var(--text-sm);
+  font-weight: 600;
   color: var(--text-muted);
 }
 
@@ -115,18 +179,22 @@
   cursor: default;
 }
 
-.qty {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  min-width: 48px;
+/* The figure, typed into when stepping would take too long. Reads as a number until it is tapped. */
+.qtyInput {
+  width: 5ch;
+  padding: 0;
+  border: none;
+  border-bottom: 1px dashed transparent;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-base);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  line-height: 1.1;
+  text-align: center;
 }
 
-.qtyWord {
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--text-muted);
+.qtyInput:focus {
+  outline: none;
+  border-bottom-color: var(--primary);
 }

@@ -125,7 +125,7 @@ try {
     await p.waitForTimeout(1500);
     const before = await printed();
     await openFresh(withCrates);
-    const ask = p.getByRole('status').filter({ hasText: /empties came back/ }).first();
+    const ask = p.getByRole('status').filter({ hasText: /Prints when the empties are answered/ }).first();
     await ask.waitFor({ timeout: 20000 });
     check(true, 'with crates out, it asks about the empties instead of counting down');
     const q = await p.getByText('Did they bring any empties back?').first().boundingBox();

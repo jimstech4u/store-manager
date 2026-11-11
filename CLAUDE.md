@@ -795,13 +795,16 @@ preview, the browser's print, the picture, the PDF, a paired printer and the age
 it. Pictures are loaded before drawing (`paperImageUrls`; `renderReceiptCanvas` in the browser,
 `whatsapp/paper.ts` on the server), because `drawDocument` is synchronous. The iPhone printer-app
 hand-off is text and leaves it out. A shop's logo was saved and drawn nowhere for weeks: a new reader
-of the header reads the logo with it.
+of the header reads the logo with it. The paper's settings live in ONE cached copy that prints
+(`usePrintSettings`, scope `store_settings`) — never inside a receipt's own cache — and a write on the
+printing page invalidates `store_settings` as well as its own scope: `live-shop` skips this device's own
+writes, so a logo taken off kept printing here until the app was reopened.
 
 **A receipt knows its own containers, and "came back" is set, not appended** (0280). `sale_empties`
 says per shape what went out with a receipt, what came back with it and what is still out; the ONE
 way to change "came back" is `set_sale_empties_back` (up records a return against the receipt, down
 undoes the newest returns — `undo_empties_move`, a new 'out' row pointing at the return it answers).
-The receipt (`ContainersBack`: All back / None back in one tap, − and +), the correction flow and the
+The receipt (`ContainersBack`), the correction flow and the
 agent (`receipt_empties`, `propose_receipt_empties_back`) all go through it. A correction carries
 "came back" forward by `correctedBack` (a receipt's own returns are capped at what it now sends out;
 older crates handed in with it stay) — `correct_sale` itself never touched returns recorded against
@@ -809,6 +812,17 @@ the receipt, which is how #D1746E61 kept three Amstel crates back against two ou
 sends containers is `containersGoingOut`, never a line's `containersOut` alone (receipts carry 0 there).
 More back than out is NOT by itself wrong: "include what they had from before" records older crates
 against the new receipt. `sale_empties_mismatches` lists the corrected ones that really are.
+
+**Empties are counted in every shape they come back in** (11 Nov). `ContainersBack`: All came back /
+None came back are the two one-tap answers; the per-item breakdown is folded under them ("Some came
+back? Count each item") and opens by itself only when a part is recorded or a count changed. Each item
+has one line per shape (`shapesOf`: the container, then every smaller shape of the product that fits
+it evenly, largest first — crates, half crates, packs, bottles), each with − / typed figure / +; counts
+carry (15 bottles of 12 is 1 crate 3 bottles). Only shapes that fit what went out are offered: half a
+crate sold is asked in bottles. The ledger keeps the figure in the container's shape (3 of 12 bottles is
+0.25); `splitShapes` rounds to the smallest shape first, because four decimal places make 23/24
+22.999. Said everywhere with `saidInShapes`; the paper prints a part as "N out" then "back 2 crates 9
+bottles".
 
 **Correcting a receipt is the till with a trace.** The till's own `QuickAdd` and `TillLine`; a line's
 full row opens in place; each line says what it was ("was 3 crates", "new"); what was taken off is
@@ -867,12 +881,18 @@ sheet from the till need `addOnTill(page, typed, name)` from `scripts/till.mjs`;
 and the Stock "Add an item you sell" button are unchanged. Moved so far: `probe-order-keeps-payments-ui`,
 `probe-product-save-stays-off-till-ui`, `shots-sell-flow`.
 
-**After a sale (the receipt, `fresh`)** the questions that change the paper — change owed, empties
-back — come BEFORE the receipt, then it prints by itself after this device's countdown
-(`lib/auto-print.ts`, set in Receipt and printer: on/off, wait 0/3/5/10, back to the till). It waits
-while the empties question is open; "None came back — print" answers it. Default: on, 3s, where the
-device prints in one step (a paired roll, the iPhone printer app); off where it would open the
-browser's print window. `probe-auto-print-ui` checks it without recording anything.
+**After a sale (the receipt, `fresh`)** "Before it prints" comes BEFORE the receipt: change owed, the
+empties, then the one print bar. It prints by itself after this device's countdown
+(`lib/auto-print.ts`, set in Receipt and printer: on/off, wait 0/3/5/10, back to the till) once every
+question has an ANSWER — change given, or "Give it later"; All / None came back, or a saved part — and
+nothing is saving or changed-but-unsaved (a − during the countdown stops it). It used to wait for the
+empties to be ALL back (a part return never printed) and not for the change at all (the paper said
+"owed" for change being handed over). "Print now" is always on the bar. Printing reads the sale and
+its containers again (`freshPayload`, 4s, else what is on screen), so the paper says what was just
+saved however short the countdown. Default: on, 3s, where the device prints in one step (a paired
+roll, the iPhone printer app); off where it would open the browser's print window. Without recording
+anything: `probe-auto-print-ui` (walk-in prints, cancel, waits on empties) and `probe-counter-print`
+(the questions, bottles, None as an answer, half a crate).
 
 **Take payment's customer gate** is one amber "Recording for" row with the reason, and the commit
 button becomes "Choose who this is for" — the rule (credit, crates, a deposit need a name) is
