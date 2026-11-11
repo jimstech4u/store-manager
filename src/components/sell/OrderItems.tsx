@@ -261,7 +261,8 @@ export function OrderItems({
       label: `${l.label} ${l.unit.toLowerCase()}`,
       value: l.said,
     });
-    if (stillWithYou.length === 0) return [{ label: 'Still with you', value: 'None' }];
+    // Nothing out: nothing printed. Paper speaks only of containers that have not come back (11 Nov).
+    if (stillWithYou.length === 0) return [];
     if (hadBefore.length === 0 || goingOut.length === 0) {
       return [
         {
@@ -443,7 +444,10 @@ export function OrderItems({
                       {empties.error ? ' (could not be read)' : ' (checking)'}
                     </span>
                   )}
-                  {showEmpties && empties.data && !customerId && (
+                  {showEmpties && empties.data && stillWithYou.length === 0 && (
+                    <span className={styles.checkNote}> (nothing is out, so nothing prints)</span>
+                  )}
+                  {showEmpties && empties.data && !customerId && stillWithYou.length > 0 && (
                     <span className={styles.checkNote}>
                       {' '}(this order only — add a customer to include what they had before)
                     </span>

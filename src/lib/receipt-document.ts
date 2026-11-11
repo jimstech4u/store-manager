@@ -118,6 +118,13 @@ export function receiptDocument(
    * function the empties pages use — so paper and screen cannot disagree.
    */
   const stillWithYou = rollUpOwed(owedRowsFromReceipt(paper.empties));
+  /*
+   * ONLY WHAT HAS NOT COME BACK (11 Nov): "receipt should only have empties record of any kind printed
+   * only for the one that hasn't come back." A container all back is no longer the customer's business
+   * on paper — "Turbo King 1/1" printed for a crate standing in the yard. One with some still out
+   * prints with what came back beside it.
+   */
+  const notBack = (containers ?? []).filter((c) => c.out - c.back > 1e-6);
   const paid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
   const owing = Number(sale.total) - paid;
   /*
@@ -303,14 +310,14 @@ export function receiptDocument(
        * One short line per container: the item, then out/back. "Origin Bottle (60cl) crates" beside
        * "2 out · 2 back" did not fit a roll's line and wrapped into three.
        */
-      ...((containers ?? []).length > 0
+      ...(notBack.length > 0
         ? [{ label: 'Empties (out/back)', value: '', strong: true }]
         : []),
       /*
        * A PART BACK ("3 bottles of a crate", 11 Nov) on two short lines — "3/1/4" read as nonsense:
        * the item with what went out, then what came back in the shapes it came back in.
        */
-      ...(containers ?? []).flatMap((c) =>
+      ...notBack.flatMap((c) =>
         c.backSaid
           ? [
               { label: c.name, value: `${formatQtySpoken(c.out)} out` },

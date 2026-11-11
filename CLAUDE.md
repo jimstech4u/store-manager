@@ -822,7 +822,10 @@ carry (15 bottles of 12 is 1 crate 3 bottles). Only shapes that fit what went ou
 crate sold is asked in bottles. The ledger keeps the figure in the container's shape (3 of 12 bottles is
 0.25); `splitShapes` rounds to the smallest shape first, because four decimal places make 23/24
 22.999. Said everywhere with `saidInShapes`; the paper prints a part as "N out" then "back 2 crates 9
-bottles".
+bottles". **Paper speaks only of containers that have not come back**: `receiptDocument` prints a
+receipt's own "Empties (out/back)" only for those with some still out, "Still with you" drops what is
+at nothing, and no paper prints "Still with you: None" (the All items page did). The customer's empties
+statement keeps its history and closing figure; an old version reprints as it was.
 
 **Correcting a receipt is the till with a trace.** The till's own `QuickAdd` and `TillLine`; a line's
 full row opens in place; each line says what it was ("was 3 crates", "new"); what was taken off is

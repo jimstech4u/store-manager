@@ -101,6 +101,8 @@ try {
   const more = top().locator('section[aria-label="Before it prints"]').getByRole('button', { name: /Count each item/ });
   check('the breakdown is folded under the two answers', (await more.count()) === 1 && (await more.getAttribute('aria-expanded')) === 'false', (await more.innerText()).replace(/\n/g, ' '));
   await shot('1-asking');
+  const paper1 = await top().locator('[aria-label="How this will print"]').first().innerText();
+  check('nothing back: the paper lists its empties', /Empties \(out\/back\)/.test(paper1));
   await more.click();
   await p.waitForTimeout(400);
   const bottleBoxes = await top().getByRole('textbox', { name: /^bottles of / }).count();
@@ -150,6 +152,8 @@ try {
   const tText = await trophy.innerText();
   check('the half crate is said in bottles', /6 bottles went out/.test(tText), tText.split('\n').slice(0, 2).join(' | '));
   check('no crate line for half a crate', (await trophy.getByRole('textbox', { name: /^crates of / }).count()) === 0 && (await trophy.getByRole('textbox', { name: /^bottles of / }).count()) === 1);
+  const paper5 = await top().locator('[aria-label="How this will print"]').first().innerText();
+  check('all back: the paper says nothing of this receipt’s empties', !/Empties \(out\/back\)/.test(paper5));
   await trophy.scrollIntoViewIfNeeded();
   await shot('5-half-crate');
 } catch (e) {
