@@ -546,7 +546,7 @@ export function splitPairs(line: string): string[] {
  */
 export function listFromText(text: string, who: string | null): (ListLine & { n: number | null })[] {
   const out: (ListLine & { n: number | null })[] = [];
-  for (const rawLine of text.replace(/[​-‍⁠﻿]/g, '').split(/\n/)) {
+  for (const rawLine of text.replace(/[\u200b-\u200d\u2060\ufeff]/g, '').split(/\n/)) {
     const numbered = rawLine.match(/^\s*(\d+)[.)]\s+/);
     let body = rawLine.replace(/^\s*(?:[-•*]|\d+[.)])\s+/, '').trim();
     if (who) {
