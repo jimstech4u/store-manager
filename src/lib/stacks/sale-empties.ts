@@ -57,3 +57,13 @@ export async function undoEmptiesMove(moveId: string, qty?: number | null, reaso
   if (error) throw error;
   accountsChanged();
 }
+
+/**
+ * WHAT CAME BACK AT THE SALE, per item (0281): returns against the receipt at or before its moment,
+ * less what was undone — rows shaped like `sale_detail.empties`, for the paper's out · in · left.
+ */
+export async function saleEmptiesIn(saleId: string): Promise<unknown[]> {
+  const { data, error } = await getSupabase().rpc('sale_empties_in', { p_sale_id: saleId });
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}

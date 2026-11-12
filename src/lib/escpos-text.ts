@@ -287,6 +287,23 @@ export function receiptLines(input: ReceiptImageInput, layout: ReceiptLayout): P
     }
 
     /*
+     * A FIGURE TOO WIDE TO SHARE A LINE (12 Nov): fewer than eight columns would be left for the words
+     * — Still with you's out · in · left at "9999(1/2)" is 29 letters, and a 58mm roll has 21 large
+     * ones. The words take their own line(s), and the figure goes under them, right-aligned: in this
+     * size when it fits the roll, else in the small letters, else wrapped. It depends on the figure's
+     * width alone, so rows whose figures are equally wide (a table's) are all placed alike and their
+     * columns stay one above the other.
+     */
+    if (cols(size) - right.length - 1 < 8) {
+      const words = labelSpans.map((s) => s.text).join('');
+      if (words.trim()) for (const row of wrap(words, cols(size))) one(size, row);
+      const at: TextSize = right.length <= cols(size) ? size : 'ss';
+      const pieces = right.length <= cols(at) ? [right] : wrap(right, cols(at));
+      for (const piece of pieces) one(at, ' '.repeat(Math.max(0, cols(at) - piece.length)) + piece);
+      return;
+    }
+
+    /*
      * IT DOES NOT FIT, so the label wraps INSIDE ITS OWN COLUMN and the number stays put.
      *
      * This used to wrap the label across the full width and then put the value alone on the next
@@ -297,7 +314,9 @@ export function receiptLines(input: ReceiptImageInput, layout: ReceiptLayout): P
      * and a maker's name is many, so giving them equal halves would wrap the name for no reason;
      * giving the words everything is what produced the stranded number.
      */
-    const labelCols = Math.max(4, Math.floor(cols(size) * 0.65));
+    // …and never so much that the figure is pushed off the edge: a wide figure ("8  3  5", Still with
+    // you's out · in · left) takes its own width and the words wrap in what is left (12 Nov).
+    const labelCols = Math.max(4, Math.min(Math.floor(cols(size) * 0.65), cols(size) - right.length - 1));
     const flat = labelSpans.map((s) => s.text).join('');
     const rows = wrap(flat, labelCols);
 

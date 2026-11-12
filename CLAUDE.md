@@ -822,10 +822,19 @@ carry (15 bottles of 12 is 1 crate 3 bottles). Only shapes that fit what went ou
 crate sold is asked in bottles. The ledger keeps the figure in the container's shape (3 of 12 bottles is
 0.25); `splitShapes` rounds to the smallest shape first, because four decimal places make 23/24
 22.999. Said everywhere with `saidInShapes`; the paper prints a part as "N out" then "back 2 crates 9
-bottles". **Paper speaks only of containers that have not come back**: `receiptDocument` prints a
-receipt's own "Empties (out/back)" only for those with some still out, "Still with you" drops what is
-at nothing, and no paper prints "Still with you: None" (the All items page did). The customer's empties
-statement keeps its history and closing figure; an old version reprints as it was.
+bottles". **A receipt has ONE empties section, "Still with you", each line out · in · left** (0281, 12 Nov).
+`left` is what they hold as at the sale (`sale_detail.empties`), `in` what came back at the sale
+(`sale_empties_in`: returns against the receipt dated at or before its moment, less undos), `out` the
+two together. Built by `stillWithYouLines` (empties-rollup) and printed by `stillWithYouRows`
+(receipt-document) — the receipt, the agent's PDF and the customer's link (`read_shared_receipt` adds
+`empties_in` and `empties_grouped`) all use them. By maker (`store_settings.receipt_empties_grouped`,
+the default) or item by item, chosen and previewed on the printing page; a part keeps its own line, so
+halves never add across beers. Only lines with something left; nothing when nothing is (no "Still with
+you: None" — the All items page printed one). A reading that cannot know what came in (receipts put
+together) prints `left` alone. **As at a moment, an undo counts at the date of what it undoes**
+(`customer_containers_as_at`): undos are made later, and a return undone after the sale still read as
+back on that sale's paper. The customer's empties statement keeps its history; an old version
+reprints as it was.
 
 **Correcting a receipt is the till with a trace.** The till's own `QuickAdd` and `TillLine`; a line's
 full row opens in place; each line says what it was ("was 3 crates", "new"); what was taken off is
@@ -896,6 +905,17 @@ saved however short the countdown. Default: on, 3s, where the device prints in o
 roll, the iPhone printer app); off where it would open the browser's print window. Without recording
 anything: `probe-auto-print-ui` (walk-in prints, cancel, waits on empties) and `probe-counter-print`
 (the questions, bottles, None as an answer, half a crate).
+
+**Settling restarts the countdown.** A tap anywhere in "Before it prints" while it counts starts
+it again from the top, so a short wait only runs out once the counter has gone quiet.
+
+**A library is reached through what it exposes, never its insides** (12 Nov audit). No
+`closest('.navstack-…')`, no `:global(.ax-…)`, no hashed CSS-module class in a selector. The page's
+scroller is navigation-stack's `pageScrollerOf(el)` (1.12.0); a header part is styled through
+`Header`'s `classNames`; an app element something must find carries its own `data-` mark
+(`data-customer-bar`). Hiding chrome while typing reads `html[data-ax-keyboard='open']` — the flag
+needs a focused field since 1.12.0 — and never listens to focus itself. Where a library cannot do it,
+change the library (USAGE_PATTERN.md's order), don't reach in.
 
 **Take payment's customer gate** is one amber "Recording for" row with the reason, and the commit
 button becomes "Choose who this is for" — the rule (credit, crates, a deposit need a name) is

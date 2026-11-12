@@ -39,29 +39,9 @@ import { receiptDocument, type SaleDetail } from '@/lib/receipt-document';
 import { ChangeOwed } from '@/components/sell/ChangeOwed';
 import { autoPrintOn, useAutoPrint } from '@/lib/auto-print';
 import { usePrintSettings } from '@/lib/stacks/print-settings';
-import { useSellingUnits } from '@/lib/stacks/selling-units';
-import { saidInShapes, shapesOf } from '@/lib/empties-back';
-import { saleEmpties, type SaleContainer } from '@/lib/stacks/sale-empties';
+import { saleEmpties, saleEmptiesIn, type SaleContainer } from '@/lib/stacks/sale-empties';
 import { useLoadArea } from '@/components/ui/LoadArea';
 import { LEDGERS_SCOPE } from '@/lib/stacks/customer-ledgers';
-
-/**
- * A receipt's own containers as the paper prints them (0280): out, and back — a part back said in the
- * shapes it came back in ("2 crates 9 bottles"), from the item's shapes when they are known.
- */
-const paperContainers = (list: SaleContainer[] | null | undefined, units: Parameters<typeof shapesOf>[0] = []) =>
-  (list ?? [])
-    .filter((c) => c.wentOut > 0 || c.cameBack > 0)
-    .map((c) => ({
-      name: c.productName,
-      unitName: c.unitName,
-      unitPlural: c.unitPlural,
-      out: c.wentOut,
-      back: c.cameBack,
-      backSaid: Number.isInteger(Math.round(c.cameBack * 10000) / 10000)
-        ? null
-        : saidInShapes(c.cameBack, shapesOf(units, c.productUnitId), { name: c.unitName, plural: c.unitPlural }, formatQtySpoken),
-    }));
 
 /**
  * The printable receipt.
@@ -142,8 +122,6 @@ export function Receipt({
     },
   });
   const paper = usePrintSettings(storeId);
-  // Every shape each item comes in, so a part back prints as "2 crates 9 bottles".
-  const { units: sellingUnits } = useSellingUnits(storeId);
 
   const detail = res.data?.detail ?? null;
   /*
@@ -153,6 +131,14 @@ export function Receipt({
   const containers = useLoadArea<SaleContainer[]>(() => saleEmpties(saleId), [saleId], {
     key: `sale-empties:${saleId}`,
     scope: LEDGERS_SCOPE,
+  });
+  /*
+   * WHAT CAME BACK AT THE SALE (0281), for the paper's out · in · left. Under the account figures'
+   * scope with the receipt itself: every empties write tells that scope, so the two re-read together.
+   */
+  const cameIn = useLoadArea<unknown[]>(() => saleEmptiesIn(saleId), [saleId], {
+    key: `sale-empties-in:${saleId}`,
+    scope: ACCOUNT_DERIVED_SCOPE,
   });
   const shopName = res.data?.shopName ?? '';
   const settings = paper.data ?? null;
@@ -335,8 +321,8 @@ export function Receipt({
       detail,
       shopName,
       settings,
-      // The receipt's own empties, out and back, on the paper (0280).
-      paperContainers(containers.data, sellingUnits),
+      // What came back at the sale: Still with you says out · in · left (0281).
+      cameIn.data ?? [],
     );
 
   /*
@@ -347,13 +333,13 @@ export function Receipt({
    */
   const freshPayload = async () => {
     try {
-      const read = Promise.all([getSupabase().rpc('sale_detail', { p_sale_id: saleId }), saleEmpties(saleId)]);
+      const read = Promise.all([getSupabase().rpc('sale_detail', { p_sale_id: saleId }), saleEmptiesIn(saleId)]);
       const [d, c] = await Promise.race([
         read,
         new Promise<never>((_, no) => setTimeout(() => no(new Error('slow')), 4000)),
       ]);
       if (d.error || !d.data) throw d.error ?? new Error('no receipt');
-      return receiptDocument(d.data as unknown as SaleDetail, shopName, settings, paperContainers(c, sellingUnits));
+      return receiptDocument(d.data as unknown as SaleDetail, shopName, settings, c);
     } catch {
       return receiptPayload();
     }
@@ -461,7 +447,10 @@ export function Receipt({
         occurredAt: emptiesAtCounter ? sale.occurred_at : null,
       }}
       title={emptiesAtCounter ? 'Did they bring any empties back?' : 'Empties from this receipt'}
-      onRecorded={() => void res.reload()}
+      onRecorded={() => {
+        void res.reload();
+        cameIn.reload();
+      }}
       answered={emptiesAnswered}
       onAnswered={emptiesAtCounter ? () => setEmptiesAnswered(true) : undefined}
       onWorking={setEmptiesWork}
@@ -542,7 +531,21 @@ export function Receipt({
         `data-print-root` stays: the browser's own print reveals exactly this.
       */}
       {emptiesAtCounter && (
-        <section className={styles.counter} aria-label="Before it prints" data-print-no-print>
+        <section
+          className={styles.counter}
+          aria-label="Before it prints"
+          data-print-no-print
+          /*
+           * STILL SETTLING, SO NOT YET (12 Nov): "the countdown should happen after empties or change
+           * has been settled … the solution is still a short timer starting at the right sequence." A
+           * tap anywhere in here while it counts starts it again from the top — a second line of older
+           * crates, a count being checked — so a short wait only runs out once the counter is quiet.
+           * The bar's own Print now and Cancel end the countdown anyway.
+           */
+          onPointerDownCapture={() => {
+            if (autoPhase === 'counting') setLeft(auto.wait);
+          }}
+        >
           {asksAnything && <h2 className={styles.counterHead}>Before it prints</h2>}
           {changeBlock}
           {emptiesBlock}

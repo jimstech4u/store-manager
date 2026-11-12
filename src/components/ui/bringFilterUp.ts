@@ -1,4 +1,4 @@
-import { scrollIntoViewBelow } from '@academix-admin/navigation-stack';
+import { pageScrollerOf, scrollIntoViewBelow } from '@academix-admin/navigation-stack';
 
 /**
  * A FILTER TAPPED BRINGS ITS RESULTS INTO VIEW.
@@ -60,8 +60,10 @@ export function bringFilterUp(row: HTMLElement | null) {
 
 /** The row itself or the nearest ancestor that is `position: sticky`, up to the page's scroller. */
 function pinnedAncestor(el: HTMLElement): HTMLElement | null {
+  // Up to the page's own scroller, as navigation-stack names it (1.12.0) — not by its class.
+  const page = pageScrollerOf(el);
   let node: HTMLElement | null = el;
-  while (node && !node.classList.contains('navstack-column-body') && node !== document.body) {
+  while (node && node !== page && node !== document.body) {
     if (getComputedStyle(node).position === 'sticky') return node;
     node = node.parentElement;
   }

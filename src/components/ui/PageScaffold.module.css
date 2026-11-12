@@ -126,7 +126,7 @@
    * The title over the content, not at the window's edge: the header's own row is held to the
    * page's width (plus the 28px the package insets it by) and centred, as the content is.
    */
-  .header :global(.ax-header__content) {
+  .header .headerContent {
     max-width: calc(var(--page-max) + 56px);
     margin-inline: auto;
   }

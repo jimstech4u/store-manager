@@ -9,8 +9,9 @@
  *      starts counting; Cancel stops it before anything prints.
  *   4. No container row was written for the receipt.
  *
- * Uses New look's #D1746E61 (none back since 11 Nov). Auto-print is turned on for this browser only,
- * with a 10-second wait, and cancelled.
+ * Reached through New look's #D1746E61, then opened on Arewa's #7D672009 (crates out, none back — the
+ * receipts move as crates come back: #D1746E61 was all back by 12 Nov). Auto-print is turned on for
+ * this browser only, with a 10-second wait, and cancelled.
  *
  *     node scripts/probe-counter-print.mjs [http://localhost:3100]
  */
@@ -32,9 +33,13 @@ const env = Object.fromEntries(
       return [l.slice(0, i).trim(), l.slice(i + 1).trim().replace(/^["']|["']$/g, '')];
     }),
 );
-const RECEIPT = 'd1746e61-e417-44e3-8dba-423c1bfbbab1';
+const NAV_RECEIPT = 'd1746e61-e417-44e3-8dba-423c1bfbbab1';
 const { createClient } = createRequire(process.cwd() + '/package.json')('@supabase/supabase-js');
 const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+const RECEIPT = (
+  await admin.from('sales').select('id').eq('store_id', '7138327c-c81c-4486-a97c-92207b48b64e')
+    .gte('id', '7d672009-0000-0000-0000-000000000000').lte('id', '7d672009-ffff-ffff-ffff-ffffffffffff')
+).data[0].id;
 const rowsFor = async () =>
   (await admin.from('customer_empties').select('id', { count: 'exact', head: true }).eq('ref_id', RECEIPT)).count;
 
@@ -84,7 +89,7 @@ try {
   const enc = (o) => 'p:' + Buffer.from(encodeURIComponent(JSON.stringify(o))).toString('base64');
   const dec = (seg) => JSON.parse(decodeURIComponent(Buffer.from(seg.slice(2), 'base64').toString()));
   const last = segs.length - 1;
-  check('the receipt on top is #D1746E61', segs[last].startsWith('p:') && dec(segs[last]).id === RECEIPT, JSON.stringify(dec(segs[last])));
+  check('the receipt on top is #D1746E61', segs[last].startsWith('p:') && dec(segs[last]).id === NAV_RECEIPT, JSON.stringify(dec(segs[last])));
   segs[last] = enc({ id: RECEIPT, fresh: '1' });
   url.searchParams.set('nav', segs.join('.'));
   await p.setViewportSize({ width: 420, height: 900 });
@@ -102,7 +107,10 @@ try {
   check('the breakdown is folded under the two answers', (await more.count()) === 1 && (await more.getAttribute('aria-expanded')) === 'false', (await more.innerText()).replace(/\n/g, ' '));
   await shot('1-asking');
   const paper1 = await top().locator('[aria-label="How this will print"]').first().innerText();
-  check('nothing back: the paper lists its empties', /Empties \(out\/back\)/.test(paper1));
+  await top().locator('[aria-label="How this will print"]').first().screenshot({ path: `${SHOTS}/paper.png` });
+  // One empties section (0281): Still with you, out · in · left; no "Empties (out/back)".
+  check('nothing back: Still with you as out · in · left', /Still with you[\s\S]{0,200}?out\s+in\s+left/.test(paper1) && !/Empties \(out\/back\)/.test(paper1),
+    paper1.split('\n').filter((l) => /Still with you|crate/i.test(l)).slice(0, 4).map((l) => l.trim()).join(' | '));
   await more.click();
   await p.waitForTimeout(400);
   const bottleBoxes = await top().getByRole('textbox', { name: /^bottles of / }).count();
@@ -153,7 +161,7 @@ try {
   check('the half crate is said in bottles', /6 bottles went out/.test(tText), tText.split('\n').slice(0, 2).join(' | '));
   check('no crate line for half a crate', (await trophy.getByRole('textbox', { name: /^crates of / }).count()) === 0 && (await trophy.getByRole('textbox', { name: /^bottles of / }).count()) === 1);
   const paper5 = await top().locator('[aria-label="How this will print"]').first().innerText();
-  check('all back: the paper says nothing of this receipt’s empties', !/Empties \(out\/back\)/.test(paper5));
+  check('all back: no second empties section', !/Empties \(out\/back\)/.test(paper5));
   await trophy.scrollIntoViewIfNeeded();
   await shot('5-half-crate');
 } catch (e) {

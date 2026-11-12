@@ -30,6 +30,8 @@ export interface ReceiptPaper {
   receipt_bank_account_id: string | null;
   receipt_logo_path: string | null;
   receipt_logo_width_pct: number;
+  /** Still with you by maker (true, the default) or item by item (0281). */
+  receipt_empties_grouped: boolean;
 }
 
 export function useReceiptPaper(storeId: string | null) {
@@ -40,7 +42,7 @@ export function useReceiptPaper(storeId: string | null) {
       .select(
         'printer_width_mm, receipt_header, receipt_footer, show_transfer_details, ' +
           'transfer_bank_name, transfer_account_no, transfer_account_name, ' +
-          'receipt_bank_account_id, receipt_logo_path, receipt_logo_width_pct',
+          'receipt_bank_account_id, receipt_logo_path, receipt_logo_width_pct, receipt_empties_grouped',
       )
       .eq('store_id', storeId)
       .single();

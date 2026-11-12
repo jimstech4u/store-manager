@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useInfiniteScrollObserver } from '@academix-admin/navigation-stack';
+import { pageScrollerOf, useInfiniteScrollObserver } from '@academix-admin/navigation-stack';
 import { useDemandState } from '@academix-admin/state-stack';
 import { useInvalidation } from '@academix-admin/state-stack';
 import { messageOf } from '@/lib/format';
@@ -504,7 +504,8 @@ export function useInfiniteScroll(
     hasMore: enabled && hasMore,
     loading,
     rootMargin,
-    root: () => (node.current?.closest('.navstack-column-body') as HTMLElement | null) ?? null,
+    // The page's scroller, as navigation-stack names it (1.12.0) — not by its class.
+    root: () => pageScrollerOf(node.current),
   });
 
   /*

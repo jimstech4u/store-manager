@@ -10,9 +10,15 @@ import type { PaperLogo } from '@/lib/share';
  * All items reads `print-settings:` in a narrower shape, and one key holds one shape.
  */
 export function usePrintSettings(storeId: string | null) {
-  // v2: with the logo.
-  return useResource<{ width: number; header: string | null; footer: string | null; logo: PaperLogo | null }>({
-    key: `print-paper:v2:${storeId ?? 'none'}`,
+  // v3: with how Still with you is said (0281).
+  return useResource<{
+    width: number;
+    header: string | null;
+    footer: string | null;
+    logo: PaperLogo | null;
+    emptiesGrouped: boolean;
+  }>({
+    key: `print-paper:v3:${storeId ?? 'none'}`,
     scope: 'store_settings',
     enabled: Boolean(storeId),
     read: async () => {
@@ -25,6 +31,7 @@ export function usePrintSettings(storeId: string | null) {
             receipt_footer: string | null;
             receipt_logo_path: string | null;
             receipt_logo_width_pct: number | null;
+            receipt_empties_grouped: boolean | null;
           }
         | null;
       return {
@@ -32,6 +39,7 @@ export function usePrintSettings(storeId: string | null) {
         header: row?.receipt_header ?? null,
         footer: row?.receipt_footer ?? null,
         logo: paperLogo(row?.receipt_logo_path, row?.receipt_logo_width_pct),
+        emptiesGrouped: row?.receipt_empties_grouped ?? true,
       };
     },
   });

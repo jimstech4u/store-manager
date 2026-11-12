@@ -44,6 +44,34 @@ import { usePermission } from '@/hooks/usePermission';
 import { autoPrintOn, useAutoPrint } from '@/lib/auto-print';
 import { printRouteOf } from '@/lib/print-document';
 import styles from './printing-page.module.css';
+import { stillWithYouLines, type OwedRow } from '@/lib/empties-rollup';
+import { stillWithYouRows } from '@/lib/receipt-document';
+
+/*
+ * THE PREVIEW'S CONTAINERS — a customer with two Nigerian Breweries beers (some brought back at the
+ * counter), a Guinness crate, and half a Goldberg crate: enough to show what "by maker" adds up and
+ * what keeps a line of its own.
+ */
+const sampleRow = (productName: string, group: [string, string], owed: number): OwedRow => ({
+  productId: productName,
+  productName,
+  productUnitId: `${productName}-crate`,
+  unitName: 'Crate',
+  unitPlural: 'Crates',
+  baseQty: 12,
+  groupId: group[0],
+  groupName: group[1],
+  owed,
+});
+const NBL: [string, string] = ['nbl', 'Nigerian Breweries'];
+const GUINNESS: [string, string] = ['guinness', 'Guinness Nigeria'];
+const SAMPLE_LEFT: OwedRow[] = [
+  sampleRow('Gulder 60cl', NBL, 3),
+  sampleRow('Star 60cl', NBL, 2),
+  sampleRow('Big Stout 60cl', GUINNESS, 1),
+  sampleRow('Goldberg 60cl', NBL, 0.5),
+];
+const SAMPLE_IN: OwedRow[] = [sampleRow('Gulder 60cl', NBL, 2), sampleRow('Star 60cl', NBL, 1)];
 
 /**
  * A line of the receipt's words, saved when the person leaves the box — not on every key, which
@@ -223,9 +251,10 @@ export default function PrintingPage() {
         { label: 'Left on this sale', value: '₦78,800' },
         { label: 'Owed before', value: '₦94,200' },
         { label: 'Total owed', value: '₦173,000', strong: true },
-        { label: 'Still with you', value: '', strong: true },
-        { label: 'Nigerian Breweries (NBL) crates', value: '5' },
-        { label: 'Goldberg 60cl crate', value: '0.5' },
+        // Still with you as the receipt prints it — by maker or item by item, as chosen below (0281).
+        ...stillWithYouRows(
+          stillWithYouLines(SAMPLE_LEFT, SAMPLE_IN, settings.data?.receipt_empties_grouped ?? true),
+        ),
       ],
       note: null,
       transferDetails: settings.data?.show_transfer_details
@@ -536,6 +565,36 @@ export default function PrintingPage() {
                     disabled={!editable}
                     onSave={(v) => void settings.patch({ receipt_footer: v })}
                   />
+
+                  {/*
+                    STILL WITH YOU, BY MAKER OR ITEM BY ITEM (0281, 12 Nov): "an empties setting to
+                    toggle and preview whether empties on the receipt should be single or grouped
+                    (default)". The preview beside this card changes with it.
+                  */}
+                  <p className={styles.label}>Empties on the receipt</p>
+                  <div className={styles.presets} role="group" aria-label="Empties on the receipt">
+                    {([
+                      [true, 'By maker'],
+                      [false, 'Each item'],
+                    ] as const).map(([grouped, said]) => (
+                      <button
+                        key={said}
+                        type="button"
+                        className={`${styles.preset} ${(settings.data!.receipt_empties_grouped ?? true) === grouped ? styles.presetActive : ''}`}
+                        onClick={() => editable && void settings.patch({ receipt_empties_grouped: grouped })}
+                        disabled={!editable}
+                        aria-pressed={(settings.data!.receipt_empties_grouped ?? true) === grouped}
+                      >
+                        {said}
+                      </button>
+                    ))}
+                  </div>
+                  <p className={styles.note}>
+                    {(settings.data.receipt_empties_grouped ?? true)
+                      ? 'Whole crates of one maker on one line: “Nigerian Breweries crate”. A part crate keeps its own line.'
+                      : 'Every item on its own line: “Gulder 60cl crate”, “Star 60cl crate”.'}{' '}
+                    Each line says what was out, what came in, and what is left.
+                  </p>
 
                   <label className={styles.toggle}>
                     <input

@@ -124,6 +124,8 @@ export function PageScaffold({
       actions={actions}
       rightContent={action}
       className={`${styles.header} ${headerScrolls ? styles.headerScrolls : ''} ${styles[layout]}`}
+      // The inner row (back, title, actions), reached through the package's own `classNames`.
+      classNames={{ content: styles.headerContent }}
     />
   );
 

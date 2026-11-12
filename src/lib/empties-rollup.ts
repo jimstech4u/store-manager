@@ -304,3 +304,64 @@ export function owedRowsFromReceipt(rows: unknown): OwedRow[] {
     owed: Number(r.owed) || 0,
   }));
 }
+
+/** One line of "Still with you" on the paper: what was out at the counter, what came in, what is left. */
+export interface StillWithYouLine {
+  label: string;
+  /** The container's name, singular: "crate". */
+  unit: string;
+  out: number;
+  in: number;
+  left: number;
+}
+
+/**
+ * STILL WITH YOU, AS OUT · IN · LEFT (0281, 12 Nov) — the receipt's one empties section.
+ *
+ * "Only one has to remain, which is still with you, but we make it (in/out) on the groups." `left` is
+ * what they hold as at the sale (`sale_detail.empties`), `in` what came back at the sale
+ * (`sale_empties_in`), and `out` the two together: everything that was with them at the counter.
+ *
+ * BY MAKER (`grouped`, the default) the whole crates of a maker are one line, as `rollUpOwed` adds
+ * them: two Gulder and two Star are four NBL crates. An item with any part in its figures keeps a line
+ * of its own — half a Goldberg crate and half a Gulder crate are not one crate anybody can hand back —
+ * so every line still reads out − in = left. ITEM BY ITEM (`grouped` false) each item is its own line.
+ *
+ * Only lines with something left: a container that has all come back is not the customer's business
+ * on paper (11 Nov). Most left first.
+ */
+export function stillWithYouLines(left: OwedRow[], cameIn: OwedRow[], grouped = true): StillWithYouLine[] {
+  const theirs = (r: OwedRow) => (r.side ?? 'they_hold') === 'they_hold';
+  const items = new Map<string, { row: OwedRow; left: number; in: number }>();
+  const add = (r: OwedRow, field: 'left' | 'in') => {
+    if (!theirs(r) || !(r.owed > 0)) return;
+    const k = sameThingKey(r);
+    const had = items.get(k) ?? { row: r, left: 0, in: 0 };
+    had[field] += r.owed;
+    items.set(k, had);
+  };
+  left.forEach((r) => add(r, 'left'));
+  cameIn.forEach((r) => add(r, 'in'));
+
+  const lines = new Map<string, StillWithYouLine>();
+  for (const { row: r, left: l, in: i } of items.values()) {
+    const whole = (n: number) => Math.abs(n - Math.round(n)) < 1e-6;
+    // By the maker only where `rollUpOwed` would: a container that holds many, every figure whole.
+    const byMaker = grouped && Boolean(r.groupId) && r.baseQty > 1 && whole(l) && whole(i);
+    const key = byMaker
+      ? `maker|${r.groupId}|${r.baseQty}|${r.unitPlural.toLowerCase()}`
+      : `item|${r.productId || r.productName}|${r.productUnitId}|${r.unitPlural.toLowerCase()}`;
+    const line = lines.get(key) ?? {
+      label: byMaker ? (r.groupName ?? r.productName) : r.productName,
+      unit: r.unitName,
+      out: 0,
+      in: 0,
+      left: 0,
+    };
+    line.in += i;
+    line.left += l;
+    line.out += l + i;
+    lines.set(key, line);
+  }
+  return [...lines.values()].filter((l) => l.left > 1e-6).sort((a, b) => b.left - a.left || a.label.localeCompare(b.label));
+}

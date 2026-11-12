@@ -92,10 +92,11 @@ try {
   // The breakdown is folded (11 Nov): its dropdown says the totals, "0 of 8 crates back".
   check('the receipt shows its empties out and back', /\bof [\d /]+ \w+ back\b/.test(pageText), (pageText.match(/[^\n]*\bof [\d /]+ \w+ back\b/) ?? [''])[0].trim());
   const paper = await top().locator('[aria-label="How this will print"]').first().innerText().catch(() => '');
+  // One empties section (0281): Still with you, each line out · in · left.
   check(
-    'the paper prints "Empties (out/back)", one line each',
-    /Empties \(out\/back\)/.test(paper) && /\d\/\d/.test(paper),
-    paper.split('\n').filter((l) => /\d\/\d/.test(l)).slice(0, 3).map((l) => l.trim()).join(' | '),
+    'the paper says Still with you as out · in · left, and nothing else of empties',
+    /Still with you[\s\S]{0,200}?out\s+in\s+left/.test(paper) && !/Empties \(out\/back\)/.test(paper),
+    paper.split('\n').filter((l) => /Still with you|crate/i.test(l)).slice(0, 4).map((l) => l.trim()).join(' | '),
   );
   const img = await top().locator('[aria-label="How this will print"] img').first().evaluate((i) => ({ done: i.complete, w: i.naturalWidth, src: i.src.slice(-40) })).catch(() => null);
   console.log('  logo on the paper:', JSON.stringify(img));

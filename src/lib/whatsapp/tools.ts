@@ -73,12 +73,12 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'receipt_empties',
     description:
-      "A customer's empties (containers): for each of their last receipts, every container with how many went out, came back and are still with them; and what they hold in all, by product group (maker). Use this for any empties or containers question, never the statement, which has no quantities.",
+      "A customer's empties (containers): for each of their last receipts, every container with how many went out, came back and are still with them, and the same added up by maker (still_with_them_by_group — use it for 'in group' / 'by maker'); and what they hold in all, by maker. Use this for any empties or containers question, never the statement, which has no quantities.",
     parameters: { type: 'object', properties: {
-      customer_id: { type: 'string' },
+      customer_id: { type: 'string', description: 'Their latest receipts. Not needed with sale_id.' },
       receipts: { type: 'number', description: 'How many of their latest receipts (default 3).' },
-      sale_id: { type: 'string', description: 'Instead, one receipt.' },
-    }, required: ['customer_id'] },
+      sale_id: { type: 'string', description: 'Instead, one receipt: its id, or its number as printed (55263EA9).' },
+    }, required: [] },
   },
   {
     name: 'receipt_link',
@@ -284,6 +284,7 @@ export async function paperOf(db: SupabaseClient, storeId: string) {
         receipt_footer?: string | null;
         receipt_logo_path?: string | null;
         receipt_logo_width_pct?: number | null;
+        receipt_empties_grouped?: boolean | null;
       }
     | null;
   return {
@@ -291,6 +292,8 @@ export async function paperOf(db: SupabaseClient, storeId: string) {
     header: row?.receipt_header ?? null,
     footer: row?.receipt_footer ?? null,
     logo: paperLogo(row?.receipt_logo_path, row?.receipt_logo_width_pct),
+    // Still with you by maker, or item by item (0281).
+    emptiesGrouped: row?.receipt_empties_grouped ?? true,
   };
 }
 
@@ -700,10 +703,27 @@ export async function runTool(
       };
     }
     case 'receipt_empties': {
-      const cid = String(args.customer_id ?? '');
+      let cid = String(args.customer_id ?? '');
       const n = Math.min(Math.max(Number(args.receipts) || 3, 1), 10);
-      const list = args.sale_id
-        ? [{ sale_id: String(args.sale_id), occurred_at: '' }]
+      /*
+       * A RECEIPT BY ITS NUMBER OR ITS ID, AND ITS CUSTOMER FROM IT (12 Nov). "Give me this in group"
+       * was asked of Arewa's #55263EA9: the model passed the number, then the id without a customer —
+       * and the total by maker, read for an empty customer id, failed each time. Seven lookups and 28
+       * seconds for one answer. The number is found in this shop; the customer comes with the receipt.
+       */
+      let saleRow: { id: string; occurred_at: string; store_customer_id: string | null } | null = null;
+      if (args.sale_id) {
+        const raw = String(args.sale_id).replace(/^#/, '').trim().toLowerCase();
+        const q = db.from('sales').select('id, occurred_at, store_customer_id').eq('store_id', storeId);
+        const { data: found } = /^[0-9a-f]{8}$/.test(raw)
+          ? await q.gte('id', `${raw}-0000-0000-0000-000000000000`).lte('id', `${raw}-ffff-ffff-ffff-ffffffffffff`).limit(1)
+          : await q.eq('id', raw).limit(1);
+        saleRow = (found ?? [])[0] ?? null;
+        if (!saleRow) return { error: 'That receipt is not in this shop. Use find_receipt or recent_receipts.' };
+        if (!cid && saleRow.store_customer_id) cid = saleRow.store_customer_id;
+      }
+      const list = saleRow
+        ? [{ sale_id: saleRow.id, occurred_at: saleRow.occurred_at }]
         : ((await rpc<Record<string, unknown>[] | null>('customer_statement', { p_store_customer_id: cid, p_limit: 20 })) ?? []).slice(0, n);
       const word = (c: Record<string, unknown>, q: number) => String(q === 1 ? c.unit_name : c.unit_plural).toLowerCase();
       const receipts = [];
@@ -716,8 +736,26 @@ export async function runTool(
          * A SENTENCE READY TO SAY, beside the ids a proposal needs. A model given a deep table of every
          * container answered New look's question with nothing at all (11 Nov); this it can pass on.
          */
+        /*
+         * AND BY MAKER, ready to say: "give me this in group" is answered from what is already here.
+         * What is still with them from this receipt, added up per maker, with the items under it.
+         */
+        const groups = new Map<string, { qty: number; unit: string; items: string[] }>();
+        for (const c of rows) {
+          const still = Number(c.still_out) || 0;
+          if (still <= 0) continue;
+          const g = String(c.group_name ?? c.product_name ?? 'Other');
+          const cur = groups.get(g) ?? { qty: 0, unit: String(c.unit_plural ?? ''), items: [] };
+          cur.qty += still;
+          cur.items.push(`${c.product_name} ${formatQtySpoken(still)}`);
+          groups.set(g, cur);
+        }
         receipts.push({
           sale_id: id,
+          still_with_them_by_group:
+            groups.size === 0
+              ? 'Nothing from this receipt is still with them.'
+              : [...groups.entries()].map(([g, v]) => `${g}: ${formatQtySpoken(v.qty)} ${v.unit.toLowerCase()} (${v.items.join(', ')})`),
           said:
             `${number}${date ? ` (${date})` : ''}: ` +
             (rows.length === 0
@@ -730,7 +768,7 @@ export async function runTool(
         });
       }
       // What they hold in all, by product group: the way the shop counts crates back to the maker.
-      const held = ((await rpc<Record<string, unknown>[] | null>('customer_empties_owed', { p_store_customer_id: cid })) ?? [])
+      const held = (cid ? ((await rpc<Record<string, unknown>[] | null>('customer_empties_owed', { p_store_customer_id: cid })) ?? []) : [])
         .filter((h) => Number(h.owed) > 0 && (h.side ?? 'they_hold') === 'they_hold');
       const byGroup = new Map<string, { items: string[]; qty: number; unit: string }>();
       for (const h of held) {
@@ -798,21 +836,13 @@ export async function runTool(
       } else if (kind === 'receipt') {
         const d = await rpc<SaleDetail | null>('sale_detail', { p_sale_id: String(args.sale_id ?? '') });
         if (!d) return { error: 'That receipt was not found.' };
-        // Its own empties, out and back, as the app's paper prints them (0280).
-        const cont = await rpc<Record<string, unknown>[] | null>('sale_empties', { p_sale_id: String(args.sale_id ?? '') }).catch(() => null);
+        // What came back at the sale, so Still with you says out · in · left as the app's paper does (0281).
+        const cameIn = await rpc<unknown[] | null>('sale_empties_in', { p_sale_id: String(args.sale_id ?? '') }).catch(() => null);
         doc = receiptDocument(
           d,
           shopName,
-          { header: paper.header, footer: paper.footer, logo: paper.logo },
-          (cont ?? [])
-            .filter((c) => Number(c.went_out) > 0 || Number(c.came_back) > 0)
-            .map((c) => ({
-              name: String(c.product_name),
-              unitName: String(c.unit_name),
-              unitPlural: String(c.unit_plural),
-              out: Number(c.went_out) || 0,
-              back: Number(c.came_back) || 0,
-            })),
+          { header: paper.header, footer: paper.footer, logo: paper.logo, emptiesGrouped: paper.emptiesGrouped },
+          cameIn ?? [],
         );
         filename = `receipt-${String(args.sale_id).slice(0, 8)}.pdf`;
       } else if (kind === 'payment') {
@@ -842,7 +872,7 @@ export async function runTool(
         const ids = Array.isArray(args.sale_ids) ? (args.sale_ids as string[]) : [];
         if (ids.length < 2) return { error: 'Which receipts should go together? Use recent_receipts.' };
         const d = await rpc<SaleDetail>('merged_receipts', { p_sale_ids: ids });
-        doc = receiptDocument(d, shopName, { header: paper.header, footer: paper.footer, logo: paper.logo });
+        doc = receiptDocument(d, shopName, { header: paper.header, footer: paper.footer, logo: paper.logo, emptiesGrouped: paper.emptiesGrouped });
         filename = 'receipts-together.pdf';
       } else if (kind === 'customers') {
         const { filter, amount, rows } = await filtered(args);

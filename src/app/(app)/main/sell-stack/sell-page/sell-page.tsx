@@ -6,7 +6,7 @@ import { PageScaffold } from '@/components/ui/PageScaffold';
 import { useStackBack } from '@/hooks/useStackBack';
 import { useLiveRefresh } from '@/hooks/useLiveRefresh';
 import { useWakeRefresh } from '@/hooks/useWakeRefresh';
-import { useNav, usePageLifecycle, scrollIntoViewBelow } from '@academix-admin/navigation-stack';
+import { useNav, usePageLifecycle, scrollIntoViewBelow, pageScrollerOf } from '@academix-admin/navigation-stack';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { InfoPanel } from '@/components/ui/Explain';
@@ -186,9 +186,9 @@ export default function SellPage() {
       if (!box) return;
       void scrollIntoViewBelow(box, {
         below: () =>
-          box
-            .closest('.navstack-column-body')
-            ?.querySelector<HTMLElement>('[class*="CustomerTabs_bar"]') ?? null,
+          // The page's scroller from navigation-stack (1.12.0), and the bar by its own mark — never
+          // the package's class name or a hashed CSS-module one.
+          pageScrollerOf(box)?.querySelector<HTMLElement>('[data-customer-bar]') ?? null,
       });
     });
   }, []);
@@ -212,9 +212,7 @@ export default function SellPage() {
         last && last.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING ? last : box;
       void scrollIntoViewBelow(el, {
         below: () =>
-          el
-            .closest('.navstack-column-body')
-            ?.querySelector<HTMLElement>('[class*="CustomerTabs_bar"]') ?? null,
+          pageScrollerOf(el)?.querySelector<HTMLElement>('[data-customer-bar]') ?? null,
       });
     });
   }, []);

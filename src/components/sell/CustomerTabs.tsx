@@ -193,7 +193,8 @@ export function CustomerTabs({
   }, [activeId, tabs.length, showActiveTab]);
 
   return (
-    <div className={styles.bar}>
+    // `data-customer-bar`: what the till brings things up under — its own mark, not a class name.
+    <div className={styles.bar} data-customer-bar>
       {/*
         Three rows, stacked.
 

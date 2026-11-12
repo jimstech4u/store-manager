@@ -1,5 +1,5 @@
 import { formatDate, formatDateTime, formatMoney, formatQtySpoken, pluralUnit } from '@/lib/format';
-import { owedRowsFromReceipt, rollUpOwed } from '@/lib/empties-rollup';
+import { owedRowsFromReceipt, rollUpOwed, stillWithYouLines, type StillWithYouLine } from '@/lib/empties-rollup';
 import type { PaperLogo, ReceiptImageInput } from '@/lib/share';
 
 /**
@@ -86,26 +86,63 @@ export interface SaleDetail {
  * picture and the PDF are made of. A function of the reading alone, so the receipt page and the
  * merged-receipts page (0254) print the same document in the same words.
  */
+/**
+ * A FIGURE IN THE TABLE, one unbroken word: "3(1/2)" — the shop's own way of writing it (12 Nov) —
+ * never "3 1/2", which in a row of three figures reads as two of them. No thousands comma: "9999(1/2)"
+ * is as wide as a figure gets here, and the comma was also what stopped "9,999.5" being spelled.
+ */
+export function tableFigure(n: number): string {
+  const v = Math.round(n * 10000) / 10000;
+  const whole = Math.floor(v + 1e-9);
+  const rest = v - whole;
+  const near = (a: number) => Math.abs(rest - a) < 1e-3;
+  const part = near(0.25) ? '1/4' : near(0.5) ? '1/2' : near(0.75) ? '3/4' : null;
+  if (rest < 1e-3) return String(whole);
+  if (!part) return String(Number(v.toFixed(2)));
+  return whole === 0 ? part : `${whole}(${part})`;
+}
+
+/**
+ * STILL WITH YOU ON PAPER: a head, then a line per container — three figures in fixed columns, so they
+ * stand under their heads on a roll in the printer's own (monospaced) letters: what was out, what
+ * came in, what is left. Nothing at all when nothing is left. Also what the printing page previews.
+ */
+export function stillWithYouRows(table: StillWithYouLine[]): { label: string; value: string; strong?: boolean }[] {
+  if (table.length === 0) return [];
+  /*
+   * EACH COLUMN AS WIDE AS ITS WIDEST FIGURE on this receipt, so "8 3 5" stays narrow and "9999(1/2)"
+   * still stands under its head. Every row's figures are then the same width, which is what lets the
+   * roll (`receiptLines`) place them all alike: beside the name, under it, or in the small letters
+   * when even a line of their own is too narrow (21 large letters on a 58mm roll).
+   */
+  const heads = ['out', 'in', 'left'];
+  const figures = table.map((l) => [tableFigure(l.out), tableFigure(l.in), tableFigure(l.left)]);
+  const widths = heads.map((h, i) => Math.max(h.length, ...figures.map((f) => f[i].length)));
+  const columns = (cells: string[]) => cells.map((c, i) => c.padStart(widths[i])).join(' ');
+  return [
+    // The heads on a line of their own: "Still with you" beside them did not fit a 58mm roll.
+    { label: 'Still with you', value: '', strong: true },
+    { label: '', value: columns(heads) },
+    ...table.map((l, k) => ({ label: `${l.label} ${l.unit.toLowerCase()}`, value: columns(figures[k]) })),
+  ];
+}
+
 export function receiptDocument(
   paper: SaleDetail,
   shopName: string,
-  settings: { header: string | null; footer: string | null; logo?: PaperLogo | null } | null,
+  settings: {
+    header: string | null;
+    footer: string | null;
+    logo?: PaperLogo | null;
+    /** Still with you by maker (the default) or item by item — the shop's choice (0281). */
+    emptiesGrouped?: boolean;
+  } | null,
   /**
-   * THIS RECEIPT'S OWN CONTAINERS (`sale_empties`, 0280): what went out with it and what came back
-   * with it, printed above "Still with you". "The return part on the receipt print": a customer handed
-   * crates back at the counter and the paper said nothing of it — only what they hold overall.
+   * WHAT CAME BACK AT THE SALE, per item (`sale_empties_in`, 0281) — rows shaped like `paper.empties`.
+   * Given, "Still with you" prints out · in · left; left out (a merged receipt, a reading that cannot
+   * know), it prints what is left alone.
    */
-  containers?:
-    | {
-        name: string;
-        unitName: string;
-        unitPlural: string;
-        out: number;
-        back: number;
-        /** What came back in the shapes it came back in ("2 crates 9 bottles"), when not a whole count. */
-        backSaid?: string | null;
-      }[]
-    | null,
+  emptiesIn?: unknown,
 ): ReceiptImageInput {
   const { sale, customer, lines, payments, charges, corrected } = paper;
   const parts = paper.merged_parts ?? [];
@@ -117,14 +154,20 @@ export function receiptDocument(
    * Goldberg and 2½ Gulder is "5 NBL crates, ½ Goldberg crate, ½ Gulder crate". Applied by the same
    * function the empties pages use — so paper and screen cannot disagree.
    */
-  const stillWithYou = rollUpOwed(owedRowsFromReceipt(paper.empties));
+  const grouped = settings?.emptiesGrouped ?? true;
+  const leftRows = owedRowsFromReceipt(paper.empties);
   /*
-   * ONLY WHAT HAS NOT COME BACK (11 Nov): "receipt should only have empties record of any kind printed
-   * only for the one that hasn't come back." A container all back is no longer the customer's business
-   * on paper — "Turbo King 1/1" printed for a crate standing in the yard. One with some still out
-   * prints with what came back beside it.
+   * ONE EMPTIES SECTION (0281, 12 Nov): "we get empties out and still with you, so only one has to
+   * remain, which is still with you, but we make it (in/out)". With what came in known, each line is
+   * out · in · left; by maker or item by item as the shop chose. Only lines with something left —
+   * a container all back is not the customer's business on paper (11 Nov).
    */
-  const notBack = (containers ?? []).filter((c) => c.out - c.back > 1e-6);
+  const table = emptiesIn !== undefined ? stillWithYouLines(leftRows, owedRowsFromReceipt(emptiesIn), grouped) : null;
+  const stillWithYou = table
+    ? []
+    : grouped
+      ? rollUpOwed(leftRows)
+      : rollUpOwed(leftRows.map((r) => ({ ...r, groupId: null, groupName: null })));
   const paid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
   const owing = Number(sale.total) - paid;
   /*
@@ -306,27 +349,9 @@ export function receiptDocument(
         : owing > 0
           ? [{ label: 'Balance', value: formatMoney(owing), strong: true }]
           : []),
-      /*
-       * One short line per container: the item, then out/back. "Origin Bottle (60cl) crates" beside
-       * "2 out · 2 back" did not fit a roll's line and wrapped into three.
-       */
-      ...(notBack.length > 0
-        ? [{ label: 'Empties (out/back)', value: '', strong: true }]
-        : []),
-      /*
-       * A PART BACK ("3 bottles of a crate", 11 Nov) on two short lines — "3/1/4" read as nonsense:
-       * the item with what went out, then what came back in the shapes it came back in.
-       */
-      ...notBack.flatMap((c) =>
-        c.backSaid
-          ? [
-              { label: c.name, value: `${formatQtySpoken(c.out)} out` },
-              { label: `  back ${c.backSaid}`, value: '' },
-            ]
-          : [{ label: c.name, value: `${formatQtySpoken(c.out)}/${formatQtySpoken(c.back)}` }],
-      ),
       // What the customer still holds of the shop's. The crates are the half of an account that
       // gets disputed, precisely because nobody has anything in writing about them.
+      ...(table ? stillWithYouRows(table) : []),
       ...(stillWithYou.length > 0
         ? [{ label: 'Still with you', value: '', strong: true }]
         : []),

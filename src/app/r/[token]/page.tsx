@@ -7,7 +7,7 @@ import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { useDemandState } from '@academix-admin/state-stack';
 import { getSupabase } from '@/lib/supabase/client';
 import { formatDateTime, formatMoney, formatQtySpoken, pluralUnit, shapeWord } from '@/lib/format';
-import { owedRowsFromReceipt, rollUpOwed } from '@/lib/empties-rollup';
+import { owedRowsFromReceipt, stillWithYouLines } from '@/lib/empties-rollup';
 import { asInstruction, defaultLayout, receiptLines } from '@/lib/escpos-text';
 import { dotsFor } from '@/lib/escpos';
 import { openPrinterAppWith } from '@/lib/print-handoff';
@@ -61,6 +61,10 @@ interface SharedReceipt {
   /** What is still out, grouped the way a shop counts it — by category, not by brand. */
   /** Everything still with the customer as at this sale — earlier receipts and this one (0149). */
   empties: unknown;
+  /** What came back at the sale, per item (0281) — Still with you says out · in · left. */
+  empties_in?: unknown;
+  /** Whether the shop says Still with you by maker (the default) or item by item (0281). */
+  empties_grouped?: boolean;
   /** What the customer owed once this sale was recorded, as at the sale (0149). */
   account?: { owed_after: string | number } | null;
   /** Grouped by method, because that is what somebody checks against their own record. */
@@ -165,8 +169,12 @@ export default function SharedReceiptPage({
 
   const { shop, sale, customer, lines, payments } = receipt;
   const charges = receipt.charges ?? [];
-  // The same rule as the till's copy: whole ones add across a maker, parts stay with their beer.
-  const empties = rollUpOwed(owedRowsFromReceipt(receipt.empties));
+  // The till's own lines (0281): out · in · left, by maker or item by item as the shop chose.
+  const empties = stillWithYouLines(
+    owedRowsFromReceipt(receipt.empties),
+    owedRowsFromReceipt(receipt.empties_in ?? []),
+    receipt.empties_grouped ?? true,
+  );
   const depositHeld = Number(receipt.deposit_total ?? 0);
   /*
    * The server's figure, not a sum of what this page happened to be sent.
@@ -411,13 +419,16 @@ export default function SharedReceiptPage({
           <div className={styles.totals}>
             <div className={styles.row}>
               <span className={styles.emptiesHead}>Still with you</span>
+              <span className={styles.value}>out · in · left</span>
             </div>
             {empties.map((e) => (
-              <div className={styles.row} key={`${e.label}-${e.unit}-${e.isPart}`}>
+              <div className={styles.row} key={`${e.label}-${e.unit}`}>
                 <span>
                   {e.label} {e.unit.toLowerCase()}
                 </span>
-                <span className={styles.value}>{e.said}</span>
+                <span className={styles.value}>
+                  {formatQtySpoken(e.out)} · {formatQtySpoken(e.in)} · <strong>{formatQtySpoken(e.left)}</strong>
+                </span>
               </div>
             ))}
           </div>
@@ -454,7 +465,12 @@ export default function SharedReceiptPage({
             fullWidth
             onClick={() => {
               const layout = defaultLayout(dotsFor(width));
-              const doc = receiptDocument(asDetail(), shop.name, { header: shop.header, footer: shop.footer });
+              const doc = receiptDocument(
+                asDetail(),
+                shop.name,
+                { header: shop.header, footer: shop.footer, emptiesGrouped: receipt.empties_grouped ?? true },
+                receipt.empties_in ?? [],
+              );
               void openPrinterAppWith(asInstruction(receiptLines(doc, layout))).then((went) => {
                 if (!went) setPrintNote('No printer app answered. Install the printer app on this phone, or use Save as PDF or print.');
               });
