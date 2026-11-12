@@ -455,10 +455,23 @@ export async function runAssistant(
         args = {};
       }
       let result: unknown;
-      try {
-        result = await call(tc.function.name, args);
-      } catch (e) {
-        result = { error: e instanceof Error ? e.message : String(e) };
+      /*
+       * THE SAME FAILED CALL IS NOT TRIED AGAIN (12 Nov). Olaoluwa's order sent one order_set that failed,
+       * then the very same twice more, and the minute ran out. Asked again, it gets the same refusal at
+       * once and is told to change the call or answer.
+       */
+      const failed = trace.find(
+        (t) => t.tool === tc.function.name && JSON.stringify(t.args) === JSON.stringify(args) &&
+          !!t.result && typeof t.result === 'object' && 'error' in (t.result as object),
+      );
+      if (failed) {
+        result = { error: `Already tried exactly this and it failed: ${String((failed.result as { error: unknown }).error)} Do not repeat it: change the call, or tell them what is wrong.` };
+      } else {
+        try {
+          result = await call(tc.function.name, args);
+        } catch (e) {
+          result = { error: e instanceof Error ? e.message : String(e) };
+        }
       }
       trace.push({ tool: tc.function.name, args, result });
       convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result).slice(0, 12000) });

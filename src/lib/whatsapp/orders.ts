@@ -27,7 +27,7 @@ export const ORDER_TOOLS: ToolDef[] = [
   {
     name: 'order_set',
     description:
-      'Put an item on the working order, or change one already on it: the quantity (0 takes it off), the shape, or the price. Always answer from the order this returns, never from memory.',
+      'Change ONE item on the working order: the quantity (0 takes it off), the shape, or the price. For several items, or answers to held lines, use order_add_list. Always answer from the order this returns, never from memory.',
     parameters: {
       type: 'object',
       properties: {
@@ -46,7 +46,9 @@ export const ORDER_TOOLS: ToolDef[] = [
       'Put a WHOLE LIST on the working order in one call — a typed order, a photo of one, a forwarded list. ' +
       'When the list is in their message (typed or forwarded), set from_message true and do NOT copy the lines: the shop reads them from the message itself. Only for a photo or file, pass every line in lines. Never one call per line. ' +
       'The shop matches each line itself (its taught words first, then the item search), places what is plain, and holds what is not (a name that fits several items or none, no quantity, a shape the item is not sold in) under to_confirm. ' +
-      'Answer from what it returns, then ask about the held lines one at a time.',
+      'Answer from what it returns, then ask about the held lines. ' +
+      'When they ANSWER the held lines (one or several, numbered as you asked them), call this again with from_message true and answers true: each answer settles its held line, and a name the shop did not know is learned. Never order_set answers one by one. ' +
+      '"pcs" means single ones (bottles): the shop turns them into the part of a crate they make.',
     parameters: {
       type: 'object',
       properties: {
@@ -56,6 +58,7 @@ export const ORDER_TOOLS: ToolDef[] = [
         },
         customer_id: { type: 'string', description: 'Instead of customer, when you already have the id.' },
         from_message: { type: 'boolean', description: 'True when the list is the text of their message: the lines are read from it here.' },
+        answers: { type: 'boolean', description: 'True when their message answers the held lines (to_confirm), in the order you asked them.' },
         lines: {
           type: 'array',
           items: {
@@ -187,7 +190,8 @@ async function linesOf(ctx: Ctx, draftId: string): Promise<Line[]> {
 /** The lines as `save_draft_order` takes them: the whole order, every time, as the till sends it. */
 async function save(ctx: Ctx, d: Draft | null, lines: Line[], customerId: string | null, label: string | null) {
   const shapes = new Map<string, Shape>();
-  for (const l of lines) for (const s of await shapesOf(ctx, l.product_id)) shapes.set(s.product_unit_id, s);
+  const all = await Promise.all([...new Set(lines.map((l) => l.product_id))].map((id) => shapesOf(ctx, id)));
+  for (const list of all) for (const s of list) shapes.set(s.product_unit_id, s);
   return rpc<string>(ctx, 'save_draft_order', {
     p_store_id: ctx.storeId,
     p_draft_id: d?.id ?? null,
@@ -214,11 +218,16 @@ async function save(ctx: Ctx, d: Draft | null, lines: Line[], customerId: string
 /** The order as saved, in words: what the model answers from. */
 async function view(ctx: Ctx, d: Draft) {
   const lines = await linesOf(ctx, d.id);
+  // Every line looked up together: one after another, eight lines were sixteen round trips per change.
+  const looked = await Promise.all(
+    lines.map(async (l) => {
+      const [p, shapes] = await Promise.all([product(ctx, l.product_id), shapesOf(ctx, l.product_id)]);
+      return { l, p, s: shapes.find((x) => x.product_unit_id === l.sale_unit_id) };
+    }),
+  );
   const items = [];
   const comingBack: string[] = [];
-  for (const l of lines) {
-    const p = await product(ctx, l.product_id);
-    const s = (await shapesOf(ctx, l.product_id)).find((x) => x.product_unit_id === l.sale_unit_id);
+  for (const { l, p, s } of looked) {
     if (s?.is_returnable) comingBack.push(s.unit_plural.toLowerCase());
     items.push({
       product_id: l.product_id,
@@ -361,16 +370,33 @@ export async function runOrder(ctx: Ctx, name: string, a: Args): Promise<unknown
   }
 
   if (name === 'order_set') {
-    const id = String(a.product_id ?? '');
+    /*
+     * THE NAMES MODELS REACH FOR (12 Nov). Olaoluwa's order sent item_id and quantity four times; each
+     * reached the database as an empty id ("invalid input syntax for type uuid"), the model tried the
+     * same again, and the minute ran out with nothing on the order.
+     */
+    const id = String(a.product_id ?? a.item_id ?? a.id ?? '').trim();
+    const rawQty = a.qty ?? a.quantity;
+    if (!/^[0-9a-f-]{36}$/i.test(id) || rawQty == null) {
+      return refuse('order_set takes product_id (the id from find_items) and qty (a number). For answers to held lines, or several items, use order_add_list.');
+    }
     const p = await product(ctx, id);
     if (!p) return refuse('That item was not found. Use find_items first.');
     const shapes = await shapesOf(ctx, id);
     const lines = await linesOf(ctx, d.id);
     const at = lines.findIndex((l) => l.product_id === id);
-    const shape = a.unit ? pick(shapes, a.unit, (s) => s.is_sold !== false)
-      : (at >= 0 ? shapes.find((s) => s.product_unit_id === lines[at].sale_unit_id) ?? null : null) ?? pick(shapes, null, (s) => s.is_sold !== false);
-    if (!shape) return refuse(`${p.name} is not sold in "${String(a.unit)}".`);
-    const qty = num(a.qty);
+    const asked = a.unit ? readLine({ written: `1 ${String(a.unit)}` }).unit ?? String(a.unit) : null;
+    const wanted = num(rawQty);
+    const got = asked
+      ? shapeFor(p.name, shapes, /^(pcs?|pieces?)$/i.test(String(a.unit)) ? 'piece' : String(a.unit), wanted)
+      : (() => {
+          const kept = at >= 0 ? shapes.find((s) => s.product_unit_id === lines[at].sale_unit_id) ?? null : null;
+          const s = kept ?? pick(shapes, null, (x) => x.is_sold !== false);
+          return s ? { shape: s, qty: wanted } : { why: `which shape: ${p.name} has none it is sold in` };
+        })();
+    if ('why' in got) return refuse(`${p.name}: ${got.why}. Ask them.`);
+    const shape = got.shape;
+    const qty = got.qty;
     if (qty > 0) {
       const wrongQty = sameSize(p.name, shapes, shape) ?? qtyAllowed(p.name, qty, shape);
       if (wrongQty) return refuse(wrongQty);
@@ -452,27 +478,47 @@ const FRACTIONS: Record<string, number> = { '½': 0.5, '¼': 0.25, '¾': 0.75 };
  * "Goldberg 2", "2 Goldberg", "Malta Guiness can 1", "Laqua - 20", "½ crate trophy": the number at
  * either end is how many, the rest is the item. Used when the model passed only what was written.
  */
+/*
+ * The number of a line. A fraction FIRST: tried the other way, "1/4 Fayrouz" read as 1 of "/4 Fayrouz".
+ */
+const NUM = '(\\d+\\/\\d+|\\d+(?:\\.\\d+)?|[½¼¾])';
+/**
+ * A shape written straight after the number: "5pcs", "6 pcs", "2 crates", "3ctn". "pcs" is the shop's
+ * word for single ones — DCC's "Desperado - 5pcs" was five bottles, a quarter of its crate of twenty,
+ * and went on the order as five crates (12 Nov) because the shape was dropped.
+ */
+const UNIT_AFTER = '(pcs?|pieces?|crates?|ctns?|cartons?|packs?|bottles?|btls?|cans?|trays?|bags?|sachets?)';
+const unitWord = (w: string): string => {
+  const u = w.toLowerCase().replace(/\.$/, '');
+  if (/^(pcs?|pieces?)$/.test(u)) return 'piece';
+  if (/^ctns?$/.test(u)) return 'carton';
+  if (/^btls?$/.test(u)) return 'bottle';
+  return u.replace(/s$/, '');
+};
+const numberOf = (t: string) => (t in FRACTIONS ? FRACTIONS[t] : t.includes('/') ? Number(t.split('/')[0]) / Number(t.split('/')[1]) : Number(t));
+
 export function readLine(raw: { written?: unknown; name?: unknown; qty?: unknown; unit?: unknown }): ListLine {
   // WhatsApp puts invisible joiners in front of list lines ("2. ⁠Buoda Banji"): they are not part of the name.
   const written = String(raw.written ?? '').replace(/[\u200b-\u200d\u2060\ufeff]/g, '').replace(/^\s*(?:[-•*]|\d+[.)])\s+/, '').trim();
-  const number = (t: string) => (t in FRACTIONS ? FRACTIONS[t] : t.includes('/') ? Number(t.split('/')[0]) / Number(t.split('/')[1]) : Number(t));
   let name = raw.name != null && String(raw.name).trim() !== '' ? String(raw.name).trim() : written;
   let qty = raw.qty != null && Number.isFinite(Number(raw.qty)) ? Number(raw.qty) : null;
+  // The shape after the number is read from what was WRITTEN, whatever the model passed: it passed
+  // "Desperado" and 5 for "Desperado - 5pcs", and the pcs was lost.
+  const after = written.match(new RegExp(`${NUM}\\s*${UNIT_AFTER}\\.?\\s*$`, 'i'));
+  let unit = raw.unit ? String(raw.unit) : after ? unitWord(after[2]) : null;
   if (qty === null || name === written) {
-    const NUM = '(\\d+(?:\\.\\d+)?|\\d+\\/\\d+|[½¼¾])';
-    const tail = written.match(new RegExp(`^(.*?)[\\s:x×-]*${NUM}\\s*$`, 'i'));
+    const tail = written.match(new RegExp(`^(.*?)[\\s:x×-]*${NUM}\\s*(?:${UNIT_AFTER}\\.?)?\\s*$`, 'i'));
     const head = written.match(new RegExp(`^${NUM}\\s*(?:x\\s*)?(.+)$`, 'i'));
     if (tail && tail[1].trim()) {
-      if (qty === null) qty = number(tail[2]);
+      if (qty === null) qty = numberOf(tail[2]);
       if (name === written) name = tail[1].trim();
     } else if (head && head[2].trim()) {
-      if (qty === null) qty = number(head[1]);
+      if (qty === null) qty = numberOf(head[1]);
       if (name === written) name = head[2].trim();
     }
   }
   // A shape said FIRST is the shape ("crates of trophy", "½ crate trophy"); said last it may be the
   // item's own name ("Malta Guiness can"), so that is left to the search.
-  let unit = raw.unit ? String(raw.unit) : null;
   const led = name.match(/^(crates?|packs?|cartons?|bottles?|pieces?|trays?|bags?|sachets?)\s+(?:of\s+)?(.+)$/i);
   if (led && !unit) {
     unit = led[1].replace(/s$/i, '');
@@ -481,7 +527,99 @@ export function readLine(raw: { written?: unknown; name?: unknown; qty?: unknown
   return { written: written || name, name: name.replace(/[\s:-]+$/, ''), qty, unit };
 }
 
+/**
+ * ONE LINE, SEVERAL ITEMS: "Mr v 30 American cooler 20" (12 Nov) is two lines written as one. Split
+ * only when the whole line is name-and-number pairs — "Goldberg 600ml 2" or "2 Mr V" are one item.
+ */
+export function splitPairs(line: string): string[] {
+  const pair = new RegExp(`(?:^|[\\s,;&]+)(?:and\\s+)?([A-Za-z][^\\d,;\\n]*?)[\\s:x×-]*${NUM}\\s*(?:${UNIT_AFTER}\\.?)?(?=[\\s,;&]|$)`, 'gi');
+  const found = [...line.matchAll(pair)];
+  if (found.length < 2) return [line];
+  if (line.replace(pair, '').replace(/[\s,;&.]+/g, '') !== '') return [line];
+  return found.map((m) => m[0].replace(/^[\s,;&]+(?:and\s+)?/i, '').trim());
+}
+
+/**
+ * The lines of a typed list, numbered as written ("1. 0.5 golberg bottle" is answer 1). The heading
+ * is not a line to sell ("Valuemart's order", "Prepare Arewa order", "For DCC"), and "For olaoluwa"
+ * in front of the first item is who it is for, not part of the item (12 Nov).
+ */
+export function listFromText(text: string, who: string | null): (ListLine & { n: number | null })[] {
+  const out: (ListLine & { n: number | null })[] = [];
+  for (const rawLine of text.replace(/[​-‍⁠﻿]/g, '').split(/\n/)) {
+    const numbered = rawLine.match(/^\s*(\d+)[.)]\s+/);
+    let body = rawLine.replace(/^\s*(?:[-•*]|\d+[.)])\s+/, '').trim();
+    if (who) {
+      const esc = who.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      body = body.replace(new RegExp(`^(?:(?:market|order|list|goods)\\s+)?for\\s+${esc}\\b[\\s,:;-]*`, 'i'), '').trim();
+    }
+    if (!body) continue;
+    for (const piece of splitPairs(body)) {
+      const l = readLine({ written: piece });
+      if (l.name === '') continue;
+      if (l.qty === null && (/\b(order|market|list)\b/i.test(l.name) || /^for\s/i.test(l.written))) continue;
+      out.push({ ...l, n: numbered ? Number(numbered[1]) : null });
+    }
+  }
+  return out;
+}
+
+/**
+ * THE SHAPE AND HOW MANY OF IT. "pcs" (single ones) is the item's single shape when it sells one;
+ * otherwise the part of a bigger shape it makes, when that part is sold: six Fayrouz of a crate of 24
+ * is a quarter crate, which is what the owner put on by hand. Anything else is asked, never rounded.
+ */
+export function shapeFor(
+  name: string, shapes: Shape[], unit: string | null, qty: number,
+): { shape: Shape; qty: number } | { why: string } {
+  const sold = (s: Shape) => s.is_sold !== false;
+  if (unit === 'piece') {
+    const named = shapes.find((s) => sold(s) && /^pieces?$/i.test(s.unit_name));
+    const single = named ?? shapes.find((s) => sold(s) && num(s.base_qty) === 1);
+    if (single) return { shape: single, qty };
+    const bigger = shapes.filter(sold).sort((a, b) => Number(b.is_default) - Number(a.is_default) || num(a.base_qty) - num(b.base_qty));
+    for (const s of bigger) {
+      const part = Math.round((qty / num(s.base_qty)) * 10000) / 10000;
+      if (part > 0 && !qtyAllowed(name, part, s)) return { shape: s, qty: part };
+    }
+    const s = bigger[0];
+    return {
+      why: s
+        ? `how many: ${qty} single ones of ${name} is ${Math.round((qty / num(s.base_qty)) * 100) / 100} of a ${s.unit_name.toLowerCase()} of ${num(s.base_qty)}, which is not an amount it is sold in`
+        : `which shape: ${name} is not sold in single ones`,
+    };
+  }
+  const shape = pick(shapes, unit, sold);
+  if (!shape) return { why: `which shape: ${name} is not sold in "${unit}"` };
+  return { shape, qty };
+}
+
 const words = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
+
+/**
+ * Does what was written fit this name, misspelt or run together? Every written word is in the name,
+ * or the written letters are found in the name's, in order, for at least three in four of them and
+ * starting with the same letter: "golberg" fits Goldberg, "Flyfish" Flying Fish, "fayrous" Fayrouz;
+ * "Bln" does not fit Berry Blast.
+ */
+export function fits(written: string, name: string): boolean {
+  const asked = words(written);
+  const have = words(name);
+  if (asked.length > 0 && asked.every((w) => have.some((h) => h.startsWith(w) || w.startsWith(h)))) return true;
+  const a = asked.join('');
+  const n = have.join('');
+  if (!a || !n || a[0] !== n[0]) return false;
+  let at = 0;
+  let got = 0;
+  for (const c of a) {
+    const k = n.indexOf(c, at);
+    if (k >= 0) {
+      got += 1;
+      at = k + 1;
+    }
+  }
+  return got / a.length >= 0.75;
+}
 
 /** Run `fn` over the list a few at a time: twenty-four lines at once is twenty-four searches at once. */
 async function inTurn<T, R>(items: T[], size: number, fn: (t: T) => Promise<R>): Promise<R[]> {
@@ -521,20 +659,39 @@ async function addList(ctx: Ctx, d: Draft, a: Args): Promise<unknown> {
    * (Valuemart's list: both NVIDIA models timed out mid-copy). The message is already here, so the
    * model only says so; a photo, which only it can read, still comes as lines.
    */
-  const fromText = (text: string) =>
-    text
-      .split(/\n/)
-      .map((w) => readLine({ written: w }))
-      // The heading ("Valuemart's order", "Prepare Arewa order") is not a line to sell.
-      .filter((l) => l.name !== '' && !(l.qty === null && /\b(order|market|list)\b/i.test(l.name)));
+  const who = d.label ?? (await customerName(ctx, d.store_customer_id));
   const raw = Array.isArray(a.lines) ? (a.lines as Record<string, unknown>[]) : [];
-  const lines = a.from_message && ctx.said?.now
-    ? fromText(ctx.said.now)
+  const lines: (ListLine & { n: number | null })[] = a.from_message && ctx.said?.now
+    ? listFromText(ctx.said.now, who)
     : typeof a.text === 'string'
-      ? fromText(a.text)
-      : raw.map(readLine).filter((l) => l.name !== '');
+      ? listFromText(a.text, who)
+      : raw.map((r, i) => ({ ...readLine(r), n: i + 1 })).filter((l) => l.name !== '');
   if (lines.length === 0) {
     return refuse('No lines were found. Set from_message true for a list in their message, or pass every line in lines.');
+  }
+
+  /*
+   * ANSWERS TO THE HELD LINES, ALL IN ONE CALL (12 Nov). DCC's four answers ("1. 0.5 golberg bottle
+   * 2. 0.5 trophy stout …") went through the model one find_items and one order_set at a time, ran
+   * out of the minute, and the four lines still read "to check". Answer n settles the n-th held line:
+   * it is matched like any line, and takes the held line's quantity when it says none.
+   */
+  const heldBefore = await heldLines(ctx);
+  const answering = a.answers === true && heldBefore.length > 0;
+  const answers = new Map<number, Held>();
+  if (answering) {
+    const taken = new Set<number>();
+    lines.forEach((l, i) => {
+      const k = (l.n ?? i + 1) - 1;
+      const h = heldBefore[k];
+      if (!h || taken.has(k)) return;
+      taken.add(k);
+      answers.set(i, h);
+      if (l.qty === null && h.qty != null) {
+        l.qty = num(h.qty);
+        if (!l.unit && h.unit) l.unit = h.unit;
+      }
+    });
   }
 
   const resolved = await inTurn(lines, 6, async (line): Promise<Placed | Held2> => {
@@ -546,12 +703,36 @@ async function addList(ctx: Ctx, d: Draft, a: Args): Promise<unknown> {
     let choices: string[] = [];
     if (meant.length === 1) id = meant[0].product_id;
     else if (meant.length > 1) choices = meant.map((m) => m.product_id);
-    else if (found.length === 1) id = String(found[0].id);
-    else if (found.length > 1) {
+    else if (found.length === 1) {
+      /*
+       * ONE RESULT IS NOT ONE ITEM WHEN IT HARDLY FITS (12 Nov). The search is forgiving, so "Bln"
+       * came back as Berry Blast alone, and went on the order — the owner meant Mr V. One result is
+       * placed only when what was written fits its name; otherwise it is offered, not chosen.
+       */
+      if (fits(line.name, found[0].name)) id = String(found[0].id);
+      else choices = [String(found[0].id)];
+    } else if (found.length > 1) {
       const asked = words(line.name);
       const full = found.filter((f) => asked.every((w) => words(f.name).includes(w)));
       if (full.length === 1) id = String(full[0].id);
       else choices = found.map((f) => String(f.id));
+    }
+    /*
+     * THE QUANTITY CAN SETTLE WHICH (12 Nov). "1/4 Fayrouz": the bottle's crate sells in quarters, the
+     * can's pack only in halves, so only one of them can be a quarter. Not a guess — the other cannot
+     * be sold that way. Two or more that could still are asked about.
+     */
+    if (!id && choices.length > 1 && line.qty !== null && line.qty > 0) {
+      // Every choice at once, and only its shapes: the name is not needed to know what it sells in.
+      const qty = line.qty;
+      const ok = await Promise.all(
+        choices.slice(0, 6).map(async (c) => {
+          const got = shapeFor('Item', await shapesOf(ctx, c), line.unit, qty);
+          return 'shape' in got && !qtyAllowed('Item', got.qty, got.shape);
+        }),
+      );
+      const fitting = choices.slice(0, 6).filter((_, k) => ok[k]);
+      if (fitting.length === 1) id = fitting[0];
     }
     if (!id) {
       return choices.length > 0
@@ -562,16 +743,17 @@ async function addList(ctx: Ctx, d: Draft, a: Args): Promise<unknown> {
     if (!p) return { kind: 'held', line, why: 'no item by that name' };
     if (line.qty === null || !(line.qty > 0)) return { kind: 'held', line, why: 'how many', choices: [id] };
     const shapes = await shapesOf(ctx, id);
-    const shape = pick(shapes, line.unit, (s) => s.is_sold !== false);
-    if (!shape) return { kind: 'held', line, why: `which shape: ${p.name} is not sold in "${line.unit}"`, choices: [id] };
-    const wrong = sameSize(p.name, shapes, shape) ?? qtyAllowed(p.name, line.qty, shape);
+    const got = shapeFor(p.name, shapes, line.unit, line.qty);
+    if ('why' in got) return { kind: 'held', line, why: got.why, choices: [id] };
+    const { shape, qty } = got;
+    const wrong = sameSize(p.name, shapes, shape) ?? qtyAllowed(p.name, qty, shape);
     if (wrong) return { kind: 'held', line, why: wrong, choices: [id] };
     const r = await rpc<{ suggested?: string | number | null } | null>(ctx, 'resolve_price', {
-      p_product_id: id, p_qty: line.qty, p_sale_unit_id: shape.product_unit_id, p_customer_id: d.store_customer_id,
+      p_product_id: id, p_qty: qty, p_sale_unit_id: shape.product_unit_id, p_customer_id: d.store_customer_id,
     });
     const price = r?.suggested != null ? num(r.suggested) : shape.price_per_unit != null ? num(shape.price_per_unit) : null;
     if (price === null) return { kind: 'held', line, why: `no price: what is the price per ${shape.unit_name.toLowerCase()}?`, choices: [id] };
-    return { kind: 'placed', line, productId: id, shape, qty: line.qty, price, name: p.name };
+    return { kind: 'placed', line, productId: id, shape, qty, price, name: p.name };
   });
 
   // Onto what is already on the order: the same item in the same shape is the same line, and a list
@@ -594,11 +776,55 @@ async function addList(ctx: Ctx, d: Draft, a: Args): Promise<unknown> {
   }
   if (touched.size > 0) await save(ctx, d, current, d.store_customer_id, d.label);
 
-  const held = (await heldLines(ctx)).filter((h) => !resolved.some((r) => sameLine(h.written, r.line.written)));
+  /*
+   * WHAT IS STILL HELD. A held line goes when it is written again, when it is answered, or when an
+   * item it was asked about among goes on (and it was the only line asking about that item). An
+   * answered line that is still unclear takes its place, so the numbers asked keep their order.
+   */
+  const settled = new Set<Held>();
+  resolved.forEach((r, i) => {
+    const asked = answers.get(i);
+    if (asked && r.kind === 'placed') settled.add(asked);
+  });
   for (const r of resolved) {
-    if (r.kind === 'held') held.push({ written: r.line.written, qty: r.line.qty, unit: r.line.unit, why: r.why, choices: r.choices });
+    if (r.kind !== 'placed') continue;
+    const askedAbout = heldBefore.filter((h) => h.choices?.includes(r.productId));
+    if (askedAbout.length === 1) settled.add(askedAbout[0]);
   }
+  const rewritten = (h: Held) => resolved.some((r) => sameLine(h.written, r.line.written));
+  const held: Held[] = [];
+  for (const h of heldBefore) {
+    if (settled.has(h)) continue;
+    // An answer still unclear takes the place of what it answered — even one that repeats it word for word.
+    const k = [...answers.entries()].find(([, v]) => v === h)?.[0];
+    const again = k !== undefined ? resolved[k] : undefined;
+    if (again && again.kind === 'held') {
+      held.push({ written: again.line.written, qty: again.line.qty, unit: again.line.unit, why: again.why, choices: again.choices });
+    } else if (!rewritten(h)) held.push(h);
+  }
+  resolved.forEach((r, i) => {
+    if (r.kind === 'held' && !answers.has(i)) held.push({ written: r.line.written, qty: r.line.qty, unit: r.line.unit, why: r.why, choices: r.choices });
+  });
   await keepHeld(ctx, held);
+
+  /*
+   * A NAME THE SHOP DID NOT KNOW, ANSWERED, IS LEARNED (12 Nov) — the owner's learning loop. "Gfblg"
+   * matched nothing; the answer said it is Goldberg Bottle; next time "Gfblg" finds it at once, here
+   * and in the app. Only a name that matched NOTHING: picking one of several is a choice made once.
+   */
+  const learned: string[] = [];
+  for (const [i, h] of answers) {
+    const r = resolved[i];
+    if (r.kind !== 'placed' || !/^no item/.test(h.why)) continue;
+    const phrase = readLine({ written: h.written }).name;
+    if (!phrase || sameLine(phrase, r.line.name)) continue;
+    try {
+      await rpc<number>(ctx, 'teach_product_name', { p_store_id: ctx.storeId, p_phrase: phrase, p_product_ids: [r.productId] });
+      learned.push(`"${phrase}" means ${r.name}`);
+    } catch {
+      // Learning is a help, never a reason the answer fails.
+    }
+  }
 
   const placed = resolved.filter((r): r is Placed => r.kind === 'placed');
   return {
@@ -607,6 +833,8 @@ async function addList(ctx: Ctx, d: Draft, a: Args): Promise<unknown> {
       placed: placed.length,
       held: resolved.length - placed.length,
       placed_lines: placed.map((r) => `${r.line.written} → ${say(r.qty, r.shape)} ${r.name}`),
+      ...(answering ? { answered: settled.size } : {}),
+      ...(learned.length > 0 ? { learned } : {}),
     },
     ...(await view(ctx, (await working(ctx)) ?? d)),
   };
