@@ -125,6 +125,24 @@
    */
   --nav-height: 74px;
   --safe-top:    env(safe-area-inset-top, 0px);
+
+  /*
+   * THE APP SHELL'S COLOURS (`@academix-admin/app-shell`, 13 Nov), from the theme's own tokens, so
+   * the tab bar and the sidebar follow a theme switch. The shadows and the floating button keep the
+   * values main/page.tsx used to pick per theme in JavaScript.
+   */
+  --ax-shell-bg:            var(--bg);
+  --ax-shell-surface:       var(--surface);
+  --ax-shell-border:        var(--border);
+  --ax-shell-accent:        var(--primary);
+  --ax-shell-accent-hover:  var(--primary-hover);
+  --ax-shell-accent-subtle: var(--primary-subtle);
+  --ax-shell-muted:         var(--text-muted);
+  --ax-shell-hover-bg:      var(--surface-sunken);
+  --ax-shell-on-accent:     #ffffff;
+  --ax-shell-bar-shadow:    0 -4px 20px rgba(0, 0, 0, 0.1);
+  --ax-shell-button-shadow: 0 6px 12px rgba(0, 0, 0, 0.25);
+  --fab-bg:                 #0b6252;
 }
 
 [data-theme='dark'] {
@@ -149,6 +167,10 @@
   --success-subtle: #12301d;
 
   --focus-ring:     var(--teal-200);
+
+  --ax-shell-bar-shadow:    0 -4px 20px rgba(0, 0, 0, 0.4);
+  --ax-shell-button-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+  --fab-bg:                 #0f7a66;
 }
 
 /* ── Reset ─────────────────────────────────────────────────────────────────────────── */

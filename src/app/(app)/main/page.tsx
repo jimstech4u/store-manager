@@ -1,19 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import styles from './page.module.css';
-import {
-  GroupNavigationStack,
-  popStackToRoot,
-  scrollBroadcaster,
-  useResizeToAvoidKeyboard,
-  useRevealTappedInRows,
-} from '@academix-admin/navigation-stack';
-import NavigationBar from '@academix-admin/navigation-bar';
-import SideBar from '@academix-admin/sidebar';
+import { AppShell, type AppShellTab } from '@academix-admin/app-shell';
 import { Logo } from '@/components/ui/Logo';
-import { useTheme } from '@/context/ThemeContext';
-import { reportNavBarState } from '@/providers/NavBarState';
 import { usePermission } from '@/hooks/usePermission';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePermissionsSettled } from '@/providers/PermissionsProvider';
@@ -27,17 +16,13 @@ import { SettingsStack } from './settings-stack/settings-stack';
 import { CustomerHome } from './customer-home';
 
 /**
- * The app shell: one navigation stack per tab, coordinated by GroupNavigationStack.
+ * The app shell: one navigation stack per tab, in `@academix-admin/app-shell`.
  *
- * Same structure academix-web uses, with three differences that came out of its experience:
- *
- *  1. Tabs are filtered by permission before the bar is built, so staff never see a tab that
+ *  1. Tabs are filtered by permission before the shell is built, so staff never see a tab that
  *     leads to a screen the database will refuse them.
- *  2. The tab list and its icons live in nav-config.tsx as data. academix-web declares the
- *     equivalent inline here, with each icon as a raw <path>, which buries the actual layout
- *     under ~150 lines of SVG.
- *  3. Colours come from CSS custom properties resolved at render, so the bar follows the theme
- *     (including a mid-session switch) rather than being handed two hard-coded hex values.
+ *  2. The tab list and its icons live in nav-config.tsx as data.
+ *  3. Colours come from the theme's `--ax-shell-*` variables (globals.css), so the bar and the
+ *     sidebar follow a mid-session theme switch rather than being handed hard-coded hex values.
  */
 
 /*
@@ -69,7 +54,6 @@ export default function MainPage() {
 }
 
 function MainShell() {
-  const { theme } = useTheme();
   const { can } = usePermission();
   const { store, user, session, stores } = useAuth();
 
@@ -77,7 +61,7 @@ function MainShell() {
    * `/main` IS EVERYONE'S HOME, and they are not all here for the same thing.
    *
    * A shopper gets their own screen: their orders, their basket, a way back to the shops. Below
-   * this line is the shop's app — five stacks in a tab group — and none of it means anything to
+   * this line is the shop's app — the stacks in a tab group — and none of it means anything to
    * somebody who came to buy a crate of drinks.
    *
    * Read from the session, which is already here, and only believed for somebody with no shop: a
@@ -92,211 +76,61 @@ function MainShell() {
   // shopper, who has no till and no shop for it to watch.
   useLiveShop(isShopper ? null : store?.id ?? null, user?.id ?? null);
 
-  const tabs = useMemo(() => TABS.filter((t) => !t.requires || can(t.requires)), [can]);
   /*
-   * The first tab is decided once, here — so the shell is not drawn until the permissions have
-   * answered (below). On a fresh sign-in they had not: Sell needs `sales.record`, the role stood in
-   * without it, the default fell to Stock, and the shop opened on Stock whenever the answer lost
-   * the race.
+   * Tabs are filtered by permission before the shell is built, so staff never see a tab that leads
+   * to a screen the database will refuse them. The first tab is decided once, here — so the shell is
+   * not drawn until the permissions have answered (MainPage).
    */
-  const [active, setActive] = useState(() => defaultTabFor(tabs));
-
-  // A permission change (or a store switch into a lesser role) can remove the tab currently
-  // shown. Falling back keeps the shell on something valid instead of rendering an empty frame.
-  const activeId = tabs.some((t) => t.id === active) ? active : defaultTabFor(tabs);
-
-  const navStack = useMemo(
-    () => new Map(tabs.map((t) => [t.id, STACK_COMPONENTS[t.id]] as const)),
-    [tabs],
+  const tabs: AppShellTab[] = useMemo(
+    () =>
+      TABS.filter((t) => !t.requires || can(t.requires)).map((t) => ({
+        id: t.id,
+        label: t.label,
+        icon: t.icon,
+        stack: STACK_COMPONENTS[t.id],
+      })),
+    [can],
   );
+  const [first] = useState(() => defaultTabFor(TABS.filter((t) => !t.requires || can(t.requires))));
 
-  const navKeys = useMemo(
-    () => tabs.map((t) => ({ id: t.id, text: t.label, svg: t.icon })),
-    [tabs],
-  );
-
-  const isDark = theme === 'dark';
-
-  /*
-   * A CARD TAPPED IN A SIDEWAYS ROW ENDS UP FULLY ON SCREEN — every row, on every page.
-   *
-   * "Any card clicked in a row list is scrolled into view … so we do not have a half-hanging
-   * selected card." Filter chips, period chips, report pickers, the orders' Show and When rows: one
-   * listener here rather than a copy in each. The Sell customer row keeps its own rule (it centres
-   * the active tab) and opts out with `data-no-reveal`.
-   */
-  useRevealTappedInRows();
-
-  /*
-   * THE KEYBOARD DOES NOT MOVE THE APP. "When keyboard is up, especially in iOS, it scatters all":
-   * Safari scrolled the whole document to make room, dragging the tab bar and the pills up over the
-   * keyboard and leaving a blank strip below. The document is held still and the shell follows the
-   * visible area instead (`.shell`, `ViewportInsetsProvider` in the root layout), so a page's own
-   * body is what scrolls the field into view — Flutter's `resizeToAvoidBottomInset`, academix-web's
-   * shell. Held for the shop's app only; a shopper's screen keeps the ordinary document scroll.
-   */
-  useResizeToAvoidKeyboard({ enabled: !isShopper });
-
-  // Their screen, not the shop's. Returned before the group mounts: five stacks a shopper can
-  // reach nothing in is five stacks' worth of work for a screen they will never see.
+  // Their screen, not the shop's. Returned before the shell mounts: stacks a shopper can reach
+  // nothing in are stacks' worth of work for a screen they will never see.
   if (isShopper) return <CustomerHome />;
 
   /*
-   * TWO NAVIGATORS FED THE SAME TABS, AND CSS PICKS ONE — JIMSteps' and academix-web's shell.
+   * THE SHOP'S APP, IN app-shell (13 Nov). One stack per tab, kept; the tab bar on a phone and the
+   * SideBar from 801px, fed the same tabs; the frame sized to what the keyboard leaves and the bar out
+   * of the way while typing; tap the open tab for its first page; Back stays in the tab. This used to
+   * be 250 lines wired here by hand, the same as JIMSteps', and is now the library's.
    *
-   * On a phone the tab bar at the foot. From 801px (a tablet on its side, a laptop) the SideBar at
-   * the left, and the pages take the rest of the width beside it, following it as it expands and
-   * collapses: every page lays itself out by its OWN width (`PageScaffold` is a container), so the
-   * same page is one column beside an open sidebar on a tablet and two beside a closed one.
-   *
-   * Tapping the tab already shown returns it to its first page, in either navigator (`onReselect`
-   * on both, sidebar 0.2.0).
+   * Colours come from the theme (`--ax-shell-*` in globals.css), so the shell follows a mid-session
+   * theme switch without re-rendering. The group id is `main-group`, as before, so a reload keeps
+   * every tab where it was.
    */
   return (
-    <div className={styles.shell}>
-      <div className={styles.row}>
-        <div className={styles.side}>
-          <SideBar
-            id="main-sidebar"
-            navKeys={navKeys}
-            activeId={activeId}
-            onChange={(id) => setActive(id)}
-            onReselect={(id) => popStackToRoot(id)}
-            logo={<Logo size={26} />}
-            backgroundColor={isDark ? '#171d1c' : '#ffffff'}
-            activeColor={isDark ? '#8fcbbe' : '#0b6252'}
-            inactiveColor={isDark ? '#a8b3b1' : '#4d5554'}
-            hoverColor={isDark ? '#a5d8cb' : '#0f7a66'}
-            borderRight={`1px solid ${isDark ? '#2a3231' : '#dde1e0'}`}
-            shadow="none"
-            // The tints in the app's own tokens, so they follow the theme (sidebar 0.2.0; they were
-            // white-on-dark, invisible on the light theme).
-            activeBackground="var(--primary-subtle)"
-            hoverBackground="var(--surface-sunken)"
-            dividerColor="var(--border)"
-            toggleColor="var(--text-muted)"
-            height="100%"
-            widthExpanded="232px"
-            widthCollapsed="68px"
-            textSize="15px"
-            iconSize="22px"
-            fontWeight={600}
-            className={styles.sidebar}
-          />
-        </div>
-      <div className={styles.stacks}>
-        <GroupNavigationStack
-          id="main-group"
-          current={activeId}
-          navStack={navStack}
-          onCurrentChange={setActive}
-          persist
-          /*
-           * The phone's Back pops the page of the tab on screen, as a native tab bar does. Tabs share
-           * one browser history, and the entry behind a deep page is often one another tab stamped —
-           * without this, Back on Stock's second page could arrive on Sell ("I pop on one page, I am
-           * on another tab"). At a tab's first page Back still goes where the browser goes.
-           */
-          backStaysInTab
-        />
-      </div>
-      </div>
-
-      <div className={styles.navWrap}>
-        <NavigationBar
-          navKeys={navKeys}
-          activeId={activeId}
-          onChange={(id) => setActive(id)}
-          // Tapping the tab you are already on returns that tab to its first page — the gesture
-          // every native tab bar has, and the fastest way out of a stack several pages deep.
-          onReselect={(id) => popStackToRoot(id)}
-          onScroll={(callback) => scrollBroadcaster.subscribe(callback)}
-          /*
-           * The bar reports its own state, and the shell publishes it.
-           *
-           * The sell screen's running total sits at the other end of the bar's line and has to
-           * follow it. It used to work that out for itself, which drifted, and then by sniffing
-           * the bar's CSS transition, which reached into the library's internals. The bar knows;
-           * this asks it.
-           */
-          onVisibilityChange={reportNavBarState}
-          /*
-           * `autohide`, the same configuration academix-web uses, colours aside.
-           *
-           * `float` was tried first and it SHRINKS the bar's height rather than moving it, which
-           * with a 0px shrink height collapses the tabs to nothing while scrolling — the tabs
-           * vanish in place instead of sliding away, and they are the app's primary navigation.
-           * `autohide` slides the whole bar down and brings it straight back on an upward scroll.
-           */
-          mode="autohide"
-          /*
-           * The bar exists only on a phone-width screen (navigation-bar 0.2.0). From 801px the
-           * SideBar is the navigation: the bar draws nothing, gives back the `--nav-height` it
-           * wrote on <body>, and reports itself hidden — so the floating pills drop to the corner.
-           */
-          media="(max-width: 800px)"
-          barBorderRadius="16px 16px 0 0"
-          barShadow={
-            isDark ? '0 -4px 20px rgba(0, 0, 0, 0.4)' : '0 -4px 20px rgba(0, 0, 0, 0.1)'
-          }
-          className={styles.nav}
-          activeColor={isDark ? '#8fcbbe' : '#0b6252'}
-          inactiveColor={isDark ? '#a8b3b1' : '#4d5554'}
-          hoverColor={isDark ? '#a5d8cb' : '#0f7a66'}
-          backgroundColor={isDark ? '#171d1c' : '#ffffff'}
-          // 74px against academix-web's 70: the label sits under the icon and this audience needs
-          // both to stay legible without crowding the touch target.
-          normalHeight="74px"
-          shrinkHeight="0px"
-          iconSize="22px"
-          textSize="12px"
-          fontWeight={600}
-          itemSpacing="8px"
-          paddingY="0px"
-          paddingX="0px"
-          breakpointSpacing={{ '800': '32px', '500': '24px', '0': '16px' }}
-          barBorderTop={`1px solid ${isDark ? '#2a3231' : '#dde1e0'}`}
-          /*
-           * The library's own floating button, configured as academix-web has it: a circular
-           * action at the left, riding above the bar and staying reachable once the bar hides.
-           *
-           * Tapping it brings the bar back — that behaviour belongs to the package, not to us.
-           * It is what makes `autohide` safe on a long page: the tabs can slide away without the
-           * navigation ever becoming unreachable.
-           *
-           * The sell screen's running total is NOT this. That is our own pill at the other end of
-           * the same line, because this slot holds one control and the two answer to different
-           * things.
-           */
-          floatingButton={
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              height="1.5em"
-              width="1.5em"
-              fill="none"
-              aria-hidden="true"
-            >
-              <path
-                d="M3 6h18M3 12h18M3 18h18"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          }
-          floatingButtonPosition="left"
-          floatingButtonBottom="16px"
-          floatingButtonPadding="16px"
-          floatingButtonColor={isDark ? '#0f7a66' : '#0b6252'}
-          floatingButtonTextColor="#ffffff"
-          floatingButtonRadius="50%"
-          floatingButtonShadow={
-            isDark ? '0 6px 12px rgba(0,0,0,0.4)' : '0 6px 12px rgba(0,0,0,0.25)'
-          }
-        />
-      </div>
-    </div>
+    <AppShell
+      id="main"
+      tabs={tabs}
+      defaultActive={first}
+      logo={<Logo size={26} />}
+      breakpoint={800}
+      navigationBar={{
+        // 74px against academix-web's 70: the label sits under the icon and this audience needs
+        // both to stay legible without crowding the touch target, often one-handed holding goods.
+        normalHeight: '74px',
+        /*
+         * The library's own floating button: a circular action at the left, riding above the bar and
+         * staying reachable once the bar hides — tapping it brings the bar back. The sell screen's
+         * running total is NOT this: it is our own pill at the other end of the line
+         * (`FloatingAmount`, which follows the bar through `useAppShellBar`).
+         */
+        floatingButton: (
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" height="1.5em" width="1.5em" fill="none" aria-hidden="true">
+            <path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ),
+        floatingButtonColor: 'var(--fab-bg)',
+      }}
+    />
   );
 }

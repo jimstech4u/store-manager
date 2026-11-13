@@ -30,6 +30,14 @@ wrong even by a session that reads nothing else.
   phone the moment it settles; a product or customer edit renames every list that names it.
 - The full pattern: `USAGE_PATTERN.md` → state-stack → *store-manager: `useResource`*.
 
+## The app shell is a library (13 Nov)
+
+`main/page.tsx` is `@academix-admin/app-shell`'s `AppShell`: tabs from `nav-config.tsx` filtered by
+permission, one stack per tab, bar/sidebar at 800px, keyboard-safe sizing, Back in the tab. Its colours
+are `--ax-shell-*` in globals.css (mapped to the theme tokens, both themes); the floating button is
+`--fab-bg`. Anything that rides the tab bar reads `useAppShellBar()` (FloatingAmount, FloatingAction).
+Change the frame in the library, not here. `scripts/probe-app-shell.mjs` clicks through it.
+
 ## Checks and monitoring (13 Nov)
 
 - **`npm run check`** = types + lint + unit tests; GitHub Actions runs the same on every push

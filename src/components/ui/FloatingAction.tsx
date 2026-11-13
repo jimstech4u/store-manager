@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, type ReactNode } from 'react';
-import { useNavBarState } from '@/providers/NavBarState';
+import { useAppShellBar } from '@academix-admin/app-shell';
 import { useScrollbarGutter } from '@/hooks/useScrollbarGutter';
 import styles from './FloatingAmount.module.css';
 
@@ -32,7 +32,7 @@ export function FloatingAction({
   onClick: () => void;
   disabled?: boolean;
 }) {
-  const bar = useNavBarState();
+  const bar = useAppShellBar();
   /*
    * Clear the page's scrollbar as well as the edge. A page slides in with a transform, which makes
    * its scroll box — scrollbar included — the thing `right` is measured from; without this the pill

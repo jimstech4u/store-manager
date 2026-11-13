@@ -13,12 +13,13 @@
     "check": "npm run typecheck && npm run lint && npm test"
   },
   "dependencies": {
+    "@academix-admin/app-shell": "^0.1.0",
     "@academix-admin/bottom-viewer": "^0.4.0",
     "@academix-admin/dialog-viewer": "^0.4.0",
     "@academix-admin/header": "^0.2.4",
     "@academix-admin/modal-sheet": "^0.3.1",
     "@academix-admin/navigation-bar": "^0.2.0",
-    "@academix-admin/navigation-stack": "^1.12.1",
+    "@academix-admin/navigation-stack": "^1.13.0",
     "@academix-admin/search-viewer": "^0.3.5",
     "@academix-admin/selection-viewer": "^0.5.7",
     "@academix-admin/sidebar": "^0.2.0",
