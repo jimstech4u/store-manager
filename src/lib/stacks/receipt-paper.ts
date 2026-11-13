@@ -69,13 +69,9 @@ export function useReceiptPaper(storeId: string | null) {
         .update(next)
         .eq('store_id', storeId);
       if (error) throw error;
+      // The till's and the receipt's copy of the paper go stale with it: `store_settings` is declared
+      // as made from the same row (invalidation.ts). Before that, a removed logo kept printing (11 Nov).
       invalidate(RECEIPT_PAPER_SCOPE);
-      /*
-       * AND EVERY COPY THAT PRINTS WITH IT (11 Nov). The till and the receipt keep the paper under
-       * 'store_settings' — and this told only its own scope, while `live-shop` skips this device's own
-       * writes. A logo taken off here kept printing on this device until the app was reopened.
-       */
-      invalidate('store_settings');
       await resource.reload();
     },
     [storeId, resource],

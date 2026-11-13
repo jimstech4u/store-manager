@@ -2,6 +2,17 @@
 
 import { StateStack } from '@academix-admin/state-stack';
 
+/*
+ * WHAT IS MADE FROM WHAT, DECLARED ONCE (state-stack 0.7.0, 13 Nov).
+ *
+ * The shop's `store_settings` row is cached twice: the printing page's paper (`receipt_paper`) and the
+ * till's and the receipt's copy (`store_settings`). A write to either makes the other stale. Writers
+ * used to have to remember both — the printing page invalidated only its own, and a removed logo went
+ * on printing (11 Nov). Declared here, beside `invalidate`, which every writer goes through.
+ */
+StateStack.core.scopeDependsOn('receipt_paper', ['store_settings']);
+StateStack.core.scopeDependsOn('store_settings', ['receipt_paper']);
+
 /**
  * Saying that something changed, without throwing away what is on screen.
  *
