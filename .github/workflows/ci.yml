@@ -1,0 +1,33 @@
+# Every push and pull request: types, lint and the unit tests of the shop's rules.
+#
+# Needs no secrets and touches no database: what needs the live shop stays in scripts/probe-*.mjs,
+# run by hand. Vercel builds and deploys on its own; this is the gate that says a change is sound
+# before anybody relies on that deploy.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Types
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Unit tests
+        run: npm test

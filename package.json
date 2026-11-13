@@ -7,7 +7,10 @@
     "prebuild": "node scripts/build-sw.mjs",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit -p .",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm run lint && npm test"
   },
   "dependencies": {
     "@academix-admin/bottom-viewer": "^0.4.0",
@@ -21,6 +24,7 @@
     "@academix-admin/sidebar": "^0.2.0",
     "@academix-admin/state-stack": "^0.6.3",
     "@napi-rs/canvas": "^0.1.65",
+    "@sentry/nextjs": "^11.10.0",
     "@supabase/supabase-js": "^2.112.3",
     "@zxing/browser": "^0.2.1",
     "@zxing/library": "^0.23.0",
@@ -43,6 +47,7 @@
     "eslint-plugin-react": "^7.37.5",
     "globals": "^16.3.0",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.36.0"
+    "typescript-eslint": "^8.36.0",
+    "vitest": "^2.1.9"
   }
 }
