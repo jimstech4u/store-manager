@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import { execFileSync } from "node:child_process";
+import { withSentryConfig } from "@sentry/nextjs/config";
 
 /*
  * WRITE THE SERVICE WORKER HERE, where it cannot be skipped.
@@ -59,6 +60,16 @@ const nextConfig: NextConfig = {
    */
   devIndicators: false,
   /*
+   * NO TRACING CODE IN THE PHONE'S DOWNLOAD (13 Nov). Sentry's browser tracing is 31 KB compressed of the
+   * 69 KB it added to the first load (265 KB before); the shop's phones are on weak data. Errors and logs
+   * still come from the phones; timing comes from the server, where the agent's slow steps are. Sentry's
+   * own `excludeTracing` would strip the server's too, so this is set for the browser build only.
+   */
+  webpack(config, { isServer, webpack }) {
+    if (!isServer) config.plugins.push(new webpack.DefinePlugin({ __SENTRY_TRACING__: false }));
+    return config;
+  },
+  /*
    * THE SERVER CANVAS AND ITS FONT, kept out of the bundle and shipped with the agent's route: the
    * agent draws the app's own paper on `@napi-rs/canvas` (a native module), in a bundled font.
    */
@@ -93,4 +104,26 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+/*
+ * SENTRY (13 Nov): errors from the phones and the server, `instrumentation*.ts`. Reports come in through
+ * `/monitoring` on this site, so the security policy (connect-src 'self') and ad blockers let them
+ * through. Readable stack traces need the build to upload source maps, which needs SENTRY_AUTH_TOKEN;
+ * without it the build skips the upload and the reports still arrive, minified.
+ */
+export default withSentryConfig(nextConfig, {
+  org: "store-developer",
+  project: "store-manager",
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: !process.env.CI,
+  tunnelRoute: "/monitoring",
+  widenClientFileUpload: true,
+  sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN },
+  telemetry: false,
+  // The shop's phones are on weak data: none of the SDK's debug text, and no Session Replay code, is shipped.
+  bundleSizeOptimizations: {
+    excludeDebugStatements: true,
+    excludeReplayShadowDom: true,
+    excludeReplayIframe: true,
+    excludeReplayWorker: true,
+  },
+});

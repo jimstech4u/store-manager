@@ -1,4 +1,5 @@
 import { after, NextResponse } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
 import { downloadMedia, markRead, sendChoices, sendText, signatureValid, whatsappConfigured } from '@/lib/whatsapp/meta';
 import { clientFor, serviceDb } from '@/lib/whatsapp/session';
 import { forWhatsApp, llmConfigured, runAssistant, transcribe, type Content, type Message } from '@/lib/whatsapp/llm';
@@ -106,6 +107,10 @@ export async function POST(request: Request) {
         await handle(w.msg, w.name, began);
       } catch (e) {
         console.error('whatsapp handle failed', e);
+        // Reported, not only logged: a reply that never came is a fault somebody has to hear about.
+        // The message's text and the phone number stay out of it.
+        Sentry.captureException(e, { tags: { area: 'whatsapp' } });
+        await Sentry.flush(2000).catch(() => false);
         // Kept with the conversation, so a reply that never came can be found afterwards.
         await serviceDb().from('whatsapp_messages').insert({
           direction: 'out', wa_phone: w.msg.from, kind: 'error', body: null,
